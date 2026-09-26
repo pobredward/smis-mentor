@@ -8,6 +8,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { getCampTabUrl } from '@/lib/campUtils';
 import { User } from '@/types';
+import { L } from '@smis-mentor/shared';
 
 interface NavItem {
   name: string;
@@ -181,7 +182,7 @@ const Header = () => {
       )
     }] : []),
     { 
-      name: isForeign ? 'Camp' : '캠프', 
+      name: L('nav.camp'), 
       path: campUrl,
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -190,7 +191,7 @@ const Header = () => {
       )
     },
     { 
-      name: isForeign ? 'My Page' : '마이페이지', 
+      name: L('common.myPage'), 
       path: '/profile',
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -25,6 +25,7 @@ import { TimetableView } from '../components/TimetableView';
 import { GuideDetail } from '../components/GuideDetail';
 import { TimetableEditor } from '../components/TimetableEditor';
 import { BookTable } from '../components/BookTable';
+import { L } from '@smis-mentor/shared';
 
 /** 고른 그룹은 캠프별로 기억한다 — 다른 탭 다녀와도 그대로 */
 const GROUP_KEY = (jobCodeId: string) => `SMIS_TIMETABLE_GROUP_${jobCodeId}`;
@@ -168,11 +169,9 @@ export function ScheduleScreen() {
   if (!activeJobCodeId) {
     return (
       <Empty
-        title={isForeign ? 'No camp selected' : '활성 캠프가 없습니다'}
+        title={L('schedule.noCampSelected')}
         body={
-          isForeign
-            ? 'Activate a camp on My Page to see its timetable.'
-            : '마이페이지에서 참여 중인 캠프를 활성화하면 시간표가 보입니다.'
+          L('schedule.activateACampOnMy')
         }
       />
     );

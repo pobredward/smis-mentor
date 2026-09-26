@@ -12,6 +12,7 @@ import {
   CommunityScreen,
 } from '../screens';
 import { useAuth } from '../context/AuthContext';
+import { L } from '@smis-mentor/shared';
 
 const Tab = createBottomTabNavigator<MainTabsParamList>();
 
@@ -67,7 +68,7 @@ export function MainTabs() {
           name="Camp"
           component={CampScreen}
           options={{
-            title: isForeign ? 'Camp' : '캠프',
+            title: L('nav.camp'),
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="school" size={size} color={color} />
             ),
@@ -79,7 +80,7 @@ export function MainTabs() {
             name="Community"
             component={CommunityScreen}
             options={{
-              title: isForeign ? 'Board' : '게시판',
+              title: L('nav.board'),
               tabBarIcon: ({ color, size }) => (
                 <Ionicons name="newspaper-outline" size={size} color={color} />
               ),
@@ -90,7 +91,7 @@ export function MainTabs() {
           name="Profile"
           component={ProfileScreen}
           options={{
-            title: isForeign ? 'My Page' : '마이페이지',
+            title: L('common.myPage'),
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="person" size={size} color={color} />
             ),

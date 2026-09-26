@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import { logger } from '@smis-mentor/shared';
+import { logger, L } from '@smis-mentor/shared';
 import { getTaskById } from '@/lib/taskService';
 
 export async function generateMetadata({ 
@@ -13,8 +13,8 @@ export async function generateMetadata({
     
     if (!task) {
       return {
-        title: '업무를 찾을 수 없습니다 - SMIS 멘토',
-        description: '요청하신 업무를 찾을 수 없습니다.',
+        title: L('misc.taskNotFoundSmisMentor'),
+        description: L('misc.theRequestedTaskCouldNot'),
       };
     }
 
@@ -31,7 +31,7 @@ export async function generateMetadata({
     const url = `https://www.smis-mentor.com/camp/tasks/${taskId}`;
 
     return {
-      title: `${task.title} - SMIS 멘토 업무`,
+      title: L('misc.smisMentorTask', { v0: task.title }),
       description: description,
       openGraph: {
         title: task.title,
@@ -58,8 +58,8 @@ export async function generateMetadata({
   } catch (error) {
     logger.error('메타데이터 생성 오류:', error);
     return {
-      title: '업무 로딩 중 - SMIS 멘토',
-      description: '업무 정보를 불러오는 중입니다.',
+      title: L('misc.loadingTaskSmisMentor'),
+      description: L('misc.loadingTaskInformation'),
     };
   }
 }

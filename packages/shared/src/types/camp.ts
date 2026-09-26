@@ -1,3 +1,4 @@
+import { localizeLabels } from '../i18n';
 import type { CampLodging } from './lodging';
 import type { TimetableClassColumn } from './campTimetable';
 import type { TimetableGuide } from './timetableGuide';
@@ -346,13 +347,13 @@ export const MANAGER_ACTION_TYPES = [
 
 export type ManagerActionType = typeof MANAGER_ACTION_TYPES[number];
 
-export const MANAGER_ACTION_LABELS: Record<ManagerActionType, string> = {
+export const MANAGER_ACTION_LABELS: Record<ManagerActionType, string> = localizeLabels({
   medication: '💊 약 복용 지시',
   call:       '📞 전화할게요',
   visit:      '🚶 직접 확인 갈게요',
   escort:     '🚌 데리러 와주세요',
   confirmed:  '✅ 현장 확인 완료',
-};
+});
 
 export interface ManagerActionResponse {
   respondedAt: Timestamp;

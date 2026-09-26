@@ -32,6 +32,9 @@ interface UserData {
   userId: string;
   name: string;
   email: string;
+  role?: string;
+  /** 화면·알림 언어 (설정에서 고름) */
+  locale?: 'ko' | 'en';
   pushTokens?: {
     [token: string]: {
       platform: string;
@@ -366,12 +369,14 @@ async function sendTaskReminderNotifications(task: Task, userIds: string[]): Pro
         Expo.isExpoPushToken(token)
       );
 
+      // 받는 사람 언어 — 설정에서 고른 언어, 없으면 원어민은 영어 (web·mobile shared/i18n 의 push.taskReminder* 와 같은 문구)
+      const english = userData.locale ? userData.locale === 'en' : (userData.role === 'foreign' || userData.role === 'foreign_temp');
       for (const token of tokens) {
         messages.push({
           to: token,
           sound: 'default',
-          title: '🔔 업무 알림',
-          body: `"${task.title}" 업무를 확인해주세요.`,
+          title: english ? '🔔 Task Reminder' : '🔔 업무 알림',
+          body: english ? `Please check the task "${task.title}".` : `"${task.title}" 업무를 확인해주세요.`,
           data: {
             type: 'task-reminder',
             taskId: task.id,

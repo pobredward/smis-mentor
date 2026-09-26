@@ -6,6 +6,8 @@ import { getTaskTargetUsers, getTaskCompletionStatus, sortUsersByName, missedSum
 import { formatTime, formatDuration } from '@/lib/taskService';
 import { remindTaskViaApi } from '@/lib/taskApi';
 import toast from 'react-hot-toast';
+import { currentIntlLocale } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 interface TaskDetailModalProps {
   task: Task;
@@ -53,7 +55,7 @@ export default function TaskDetailModal({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
   
-  const dateStr = task.date.toDate().toLocaleDateString('ko-KR', {
+  const dateStr = task.date.toDate().toLocaleDateString(currentIntlLocale(), {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -83,12 +85,12 @@ export default function TaskDetailModal({
       // 관리자는 전체, 부매니저는 자기 그룹 미완료자에게만 (서버가 판단)
       const data = await remindTaskViaApi(task.id);
       const missed = missedSummary(data.missed);
-      if (data.sent > 0) toast.success(`${data.sent}명에게 알림을 보냈습니다.`);
-      else if (!missed) toast('알림을 보낼 미완료자가 없습니다.');
+      if (data.sent > 0) toast.success(L('task.notificationSentToPeople', { v0: data.sent }));
+      else if (!missed) toast(L('task.noIncompletePeopleToNotify'));
       if (missed) toast(`🔕 ${missed}`, { duration: 8000 });
     } catch (error: unknown) {
       console.error('푸시 알림 전송 실패:', error);
-      toast.error(error instanceof Error && error.message ? error.message : '알림 전송에 실패했습니다.');
+      toast.error(error instanceof Error && error.message ? error.message : L('task.failedToSendTheNotification'));
     } finally {
       setIsSendingReminder(false);
     }
@@ -103,13 +105,13 @@ export default function TaskDetailModal({
         <div className="bg-white rounded-xl shadow-xl max-w-lg w-full my-8" onClick={e => e.stopPropagation()}>
           {/* 헤더 - 더 작게 */}
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900">업무 상세</h3>
+            <h3 className="text-lg font-semibold text-gray-900">{L('task.taskDetails')}</h3>
             <div className="flex items-center gap-2">
               {onShare && (
                 <button
                   onClick={onShare}
                   className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                  title="링크 복사"
+                  title={L('task.copyLink')}
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
@@ -156,7 +158,7 @@ export default function TaskDetailModal({
 
             {/* 대상 역할 */}
             <div>
-              <h5 className="text-xs font-semibold text-gray-600 mb-1.5">대상 역할</h5>
+              <h5 className="text-xs font-semibold text-gray-600 mb-1.5">{L('common.targetRoles')}</h5>
               <div className="flex flex-wrap gap-1.5">
                 {task.targetRoles.map((role: string) => (
                   <span
@@ -173,7 +175,7 @@ export default function TaskDetailModal({
             {/* 대상 그룹 */}
             {task.targetGroups && task.targetGroups.length > 0 && (
               <div>
-                <h5 className="text-xs font-semibold text-gray-600 mb-1.5">대상 그룹</h5>
+                <h5 className="text-xs font-semibold text-gray-600 mb-1.5">{L('common.targetGroups')}</h5>
                 <div className="flex flex-wrap gap-1.5">
                   {task.targetGroups.map(group => (
                     <span
@@ -190,7 +192,7 @@ export default function TaskDetailModal({
             {/* 설명 */}
             {task.description && (
               <div>
-                <h5 className="text-xs font-semibold text-gray-600 mb-1.5">상세 설명</h5>
+                <h5 className="text-xs font-semibold text-gray-600 mb-1.5">{L('common.description')}</h5>
                 <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{task.description}</p>
               </div>
             )}
@@ -198,7 +200,7 @@ export default function TaskDetailModal({
             {/* 링크 (최우선) */}
             {linkAttachments.length > 0 && (
               <div>
-                <h5 className="text-xs font-semibold text-gray-600 mb-1.5">링크</h5>
+                <h5 className="text-xs font-semibold text-gray-600 mb-1.5">{L('common.links')}</h5>
                 <div className="space-y-1.5">
                   {linkAttachments.map((attachment, idx) => (
                     <a
@@ -228,7 +230,7 @@ export default function TaskDetailModal({
             {/* 이미지 */}
             {imageAttachments.length > 0 && (
               <div>
-                <h5 className="text-xs font-semibold text-gray-600 mb-1.5">이미지</h5>
+                <h5 className="text-xs font-semibold text-gray-600 mb-1.5">{L('common.images')}</h5>
                 <div className="space-y-2">
                   {imageAttachments.map((attachment, idx) => (
                     <div key={idx}>
@@ -259,7 +261,7 @@ export default function TaskDetailModal({
             {/* 기타 파일 */}
             {otherAttachments.length > 0 && (
               <div>
-                <h5 className="text-xs font-semibold text-gray-600 mb-1.5">첨부파일</h5>
+                <h5 className="text-xs font-semibold text-gray-600 mb-1.5">{L('common.attachments')}</h5>
                 <div className="space-y-1.5">
                   {otherAttachments.map((attachment, idx) => (
                     <a
@@ -293,10 +295,10 @@ export default function TaskDetailModal({
             {showStatus && totalCount > 0 && (
               <div className="border-t pt-4">
                 <div className="flex items-center justify-between mb-3">
-                  <h5 className="text-sm font-semibold text-gray-900">완료 현황{scopeLabel ? <span className="ml-1 text-xs font-medium text-gray-500">· {scopeLabel}</span> : null}</h5>
+                  <h5 className="text-sm font-semibold text-gray-900">{L('task.completion')}{scopeLabel ? <span className="ml-1 text-xs font-medium text-gray-500">· {scopeLabel}</span> : null}</h5>
                   <div className="flex items-center gap-2">
                     <span className="text-lg font-bold text-blue-600">
-                      {sortedCompletedUsers.length}/{totalCount}명
+                      {sortedCompletedUsers.length}/{totalCount}{L('common.people2')}
                     </span>
                     <span className="text-xs text-gray-500 font-medium">
                       ({completionRate}%)
@@ -320,7 +322,7 @@ export default function TaskDetailModal({
                 {sortedCompletedUsers.length > 0 && (
                   <div className="mb-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <h6 className="text-sm font-semibold text-green-700">✓ 완료 ({sortedCompletedUsers.length}명)</h6>
+                      <h6 className="text-sm font-semibold text-green-700">{L('task.done2')}{sortedCompletedUsers.length}{L('common.people')}</h6>
                     </div>
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3 max-h-60 overflow-y-auto">
                       <div className="flex flex-wrap gap-2">
@@ -347,7 +349,7 @@ export default function TaskDetailModal({
                 {sortedIncompleteUsers.length > 0 && (
                   <div className="mb-4">
                     <div className="flex items-center gap-2 mb-2">
-                      <h6 className="text-sm font-semibold text-red-700">✗ 미완료 ({sortedIncompleteUsers.length}명)</h6>
+                      <h6 className="text-sm font-semibold text-red-700">{L('task.notDone')}{sortedIncompleteUsers.length}{L('common.people')}</h6>
                     </div>
                     <div className="bg-red-50 border border-red-200 rounded-lg p-3 max-h-60 overflow-y-auto">
                       <div className="flex flex-wrap gap-2">
@@ -379,8 +381,8 @@ export default function TaskDetailModal({
                           <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
                         </svg>
                         <div>
-                          <p className="font-medium mb-0.5">미완료자에게 푸시 알림을 보낼 수 있습니다</p>
-                          <p className="text-blue-600">업무 리마인더가 모바일 앱으로 전송됩니다</p>
+                          <p className="font-medium mb-0.5">{L('task.youCanSendAPush')}</p>
+                          <p className="text-blue-600">{L('task.taskRemindersAreSentTo')}</p>
                         </div>
                       </div>
                     </div>
@@ -392,14 +394,14 @@ export default function TaskDetailModal({
                       {isSendingReminder ? (
                         <>
                           <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-                          <span>전송 중...</span>
+                          <span>{L('task.sending')}</span>
                         </>
                       ) : (
                         <>
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                           </svg>
-                          <span>미완료자 {sortedIncompleteUsers.length}명에게 알림 보내기</span>
+                          <span>{L('task.notDone2')} {sortedIncompleteUsers.length}{L('task.peopleSendReminder')}</span>
                         </>
                       )}
                     </button>
@@ -411,8 +413,8 @@ export default function TaskDetailModal({
                   <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
                     <span className="text-2xl">🎉</span>
                     <div className="text-sm">
-                      <p className="font-semibold text-green-900">모든 대상자가 완료했습니다!</p>
-                      <p className="text-green-700 text-xs">수고하셨습니다</p>
+                      <p className="font-semibold text-green-900">{L('task.everyoneHasCompletedIt')}</p>
+                      <p className="text-green-700 text-xs">{L('task.greatJob')}</p>
                     </div>
                   </div>
                 )}
@@ -428,19 +430,19 @@ export default function TaskDetailModal({
                   onClick={onCopy}
                   className="flex-1 px-3 py-1.5 text-sm bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors font-medium"
                 >
-                  복사
+                  {L('task.copy2')}
                 </button>
                 <button
                   onClick={onEdit}
                   className="flex-1 px-3 py-1.5 text-sm bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium"
                 >
-                  수정
+                  {L('task.edit')}
                 </button>
                 <button
                   onClick={onDelete}
                   className="flex-1 px-3 py-1.5 text-sm bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors font-medium"
                 >
-                  삭제
+                  {L('common.delete')}
                 </button>
               </>
             ) : (
@@ -448,7 +450,7 @@ export default function TaskDetailModal({
                 onClick={onClose}
                 className="w-full px-3 py-1.5 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
               >
-                닫기
+                {L('common.close')}
               </button>
             )}
           </div>
@@ -464,21 +466,21 @@ export default function TaskDetailModal({
           <button
             onClick={() => setSelectedImage(null)}
             className="absolute top-4 right-4 text-white/80 hover:text-white text-4xl leading-none w-12 h-12 flex items-center justify-center rounded-full hover:bg-white/10 transition-all z-10"
-            aria-label="닫기"
+            aria-label={L('common.close')}
           >
             ×
           </button>
           <div className="relative max-w-7xl max-h-full w-full h-full flex items-center justify-center">
             <img
               src={selectedImage}
-              alt="확대 이미지"
+              alt={L('common.enlargedImage')}
               className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
               onClick={(e) => e.stopPropagation()}
               loading="eager"
             />
           </div>
           <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 text-white/60 text-sm">
-            클릭하여 닫기
+            {L('task.clickToClose')}
           </div>
         </div>
       )}

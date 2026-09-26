@@ -82,8 +82,7 @@ import {
   FEVER_THRESHOLDS,
   classifyFever,
   isFeverLevel,
-  dosesForProgressLog,
-} from '@smis-mentor/shared';
+  dosesForProgressLog, L, dataLabel, isEnglishUI, localizeLabels } from '@smis-mentor/shared';
 import type {
   PatientRecord,
   PatientType,
@@ -151,12 +150,12 @@ const HOSPITAL_STATUS_COLOR: Record<HospitalStatus, { bg: string; text: string }
 
 const FIXED_GROUP_ORDER = ['junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter', 'common', 'short1', 'short2', 'short3', 'short4', 'manager'] as const;
 
-const GROUP_DISPLAY_NAMES: Record<string, string> = {
+const GROUP_DISPLAY_NAMES: Record<string, string> = localizeLabels({
   junior: '주니어', middle: '미들', senior: '시니어',
   spring: '스프링', summer: '서머', autumn: '어텀', winter: '원터',
   common: '공통', short1: '단기1', short2: '단기2', short3: '단기3', short4: '단기4',
   manager: '매니저',
-};
+});
 
 const GROUP_BG_COLORS: Record<string, string> = {
   spring: '#fefce8', junior: '#fefce8',
@@ -208,8 +207,8 @@ const usePatientInventory = () => useContext(PatientInventoryContext);
 
 
 const QUICK_ACTION_OPTIONS = [
-  { id: '직접조치',   label: '직접 조치 예정', color: '#3b82f6', desc: '조치사항대로 직접 조치할게요' },
-  { id: '매니저대기', label: '매니저 대기',    color: '#f97316', desc: '매니저 판단이 필요해요' },
+  { id: '직접조치',   get label() { return L('patient.willHandleDirectly'); }, color: '#3b82f6', get desc() { return L('patient.iLlHandleItAs'); } },
+  { id: '매니저대기', get label() { return L('patient.waitingForManager'); },    color: '#f97316', get desc() { return L('patient.needsAManagerSDecision'); } },
 ] as const;
 type QuickActionId = typeof QUICK_ACTION_OPTIONS[number]['id'];
 
@@ -259,7 +258,7 @@ function isMedTimeOff(
 function formatMedPeriod(sched: MedicationSchedule): string {
   if (sched.endDateAuto) {
     const start = sched.startDate + (sched.firstTime ? ` (${sched.firstTime}~)` : '');
-    return `${start} ~ 캠프끝`;
+    return L('patient.campEnd3', { v0: start });
   }
   const start = sched.startDate + (sched.firstTime ? ` (${sched.firstTime}~)` : '');
   const end = sched.endDate + (sched.lastTime ? ` (~${sched.lastTime})` : '');
@@ -575,7 +574,7 @@ export function PatientScreen() {
   const handleSubmit = useCallback(async () => {
     if (!campCode || !userData) return;
     if (!form.studentName.trim() || !form.symptom.trim()) {
-      Alert.alert('입력 오류', '이름과 증상은 필수입니다.');
+      Alert.alert(L('patient.inputError'), L('patient.nameAndSymptomsAreRequired'));
       return;
     }
     setSubmitting(true);
@@ -651,10 +650,10 @@ export function PatientScreen() {
 
   const handleDelete = useCallback((id: string, name: string) => {
     const target = records.find(r => r.id === id);
-    Alert.alert('삭제 확인', `"${name}" 환자 기록을 삭제하시겠습니까?`, [
-      { text: '취소', style: 'cancel' },
+    Alert.alert(L('common.confirmDelete'), L('patient.deleteThePatientRecordFor', { v0: name }), [
+      { text: L('common.cancel'), style: 'cancel' },
       // 기록 삭제 시 남아 있는 약 복용 수량은 재고에 복구
-      { text: '삭제', style: 'destructive', onPress: async () => {
+      { text: L('common.delete'), style: 'destructive', onPress: async () => {
         await deletePatientRecord(db, id, target && campCode
           ? { campCode, currentDoses: target.medicationDoses ?? [], by: userData?.name ?? '', studentName: target.studentName }
           : undefined);
@@ -684,9 +683,9 @@ export function PatientScreen() {
   const handleRemoveProgressLog = useCallback(async (record: PatientRecord, logIndex: number) => {
     const logs = record.progressLogs ?? [];
     if (logs.length === 0) return;
-    Alert.alert('삭제 확인', '이 경과 기록을 삭제할까요? (함께 기록한 약 복용은 재고에 복구됩니다)', [
-      { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: async () => {
+    Alert.alert(L('common.confirmDelete'), L('patient.deleteThisProgressEntryMedication'), [
+      { text: L('common.cancel'), style: 'cancel' },
+      { text: L('common.delete'), style: 'destructive', onPress: async () => {
         await removeProgressLog(db, record.id, logs, logIndex,
           campCode ? { campCode, currentDoses: record.medicationDoses ?? [], by: userData?.name ?? '', studentName: record.studentName } : undefined);
         if (record.medicationDoses?.length) syncDoseStock(record.id, campCode);
@@ -827,7 +826,7 @@ export function PatientScreen() {
   if (!activeJobCodeId) {
     return (
       <View style={styles.centered}>
-        <Text style={styles.emptyText}>활성 캠프를 선택해주세요.</Text>
+        <Text style={styles.emptyText}>{L('patient.pleaseSelectAnActiveCamp')}</Text>
       </View>
     );
   }
@@ -841,12 +840,12 @@ export function PatientScreen() {
         <View style={styles.mainTabRow}>
           {(['환자 현황', '약복용명단'] as const).map(tab => (
             <TouchableOpacity
-              key={tab}
+              key={dataLabel(tab)}
               style={[styles.mainTab, mainTab === tab && styles.mainTabActive]}
               onPress={() => setMainTab(tab)}
             >
               <Text style={[styles.mainTabText, mainTab === tab && styles.mainTabTextActive]}>
-                {tab}
+                {dataLabel(tab)}
               </Text>
               {tab === '약복용명단' && medicationRecords.length > 0 && (
                 <View style={styles.tabBadge}>
@@ -862,7 +861,7 @@ export function PatientScreen() {
           <View style={styles.headerTop}>
             <View style={styles.headerLeft}>
               <View style={styles.headerTitleRow}>
-                <Text style={styles.headerTitle}>환자 관리</Text>
+                <Text style={styles.headerTitle}>{L('patient.patientCare')}</Text>
                 {myPendingCount > 0 && (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>{myPendingCount}</Text>
@@ -870,29 +869,29 @@ export function PatientScreen() {
                 )}
               </View>
               <View style={styles.pillRow}>
-                {counts.최초보고 > 0 && <Pill label="최초보고" count={counts.최초보고} color="#6b7280" />}
-                {counts.중간보고 > 0 && <Pill label="중간보고" count={counts.중간보고} color="#1d4ed8" />}
-                {counts.내원예정 > 0 && <Pill label="내원예정" count={counts.내원예정} color="#b91c1c" />}
-                {counts.격리 > 0 && <Pill label="격리" count={counts.격리} color="#7c3aed" />}
-                {counts.active === 0 && <Text style={styles.emptySmall}>현재 환자 없음</Text>}
+                {counts.최초보고 > 0 && <Pill label={L('data.progFirstReport')} count={counts.최초보고} color="#6b7280" />}
+                {counts.중간보고 > 0 && <Pill label={L('data.progMidReport')} count={counts.중간보고} color="#1d4ed8" />}
+                {counts.내원예정 > 0 && <Pill label={L('data.hospitalPlanned')} count={counts.내원예정} color="#b91c1c" />}
+                {counts.격리 > 0 && <Pill label={L('data.ptIsolation')} count={counts.격리} color="#7c3aed" />}
+                {counts.active === 0 && <Text style={styles.emptySmall}>{L('patient.noCurrentPatients')}</Text>}
               </View>
             </View>
             <TouchableOpacity style={styles.quickReportBtn} onPress={() => setShowQuickReport(true)}>
               <Ionicons name="add" size={14} color="#fff" />
-              <Text style={styles.quickReportBtnText}>최초보고</Text>
+              <Text style={styles.quickReportBtnText}>{L('data.progFirstReport')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.headerTop}>
             <View style={styles.headerLeft}>
-              <Text style={styles.headerTitle}>약복용명단</Text>
+              <Text style={styles.headerTitle}>{L('patient.medicationList')}</Text>
               <Text style={styles.subHeaderSub}>
-                {medicationRecords.length > 0 ? `총 ${medicationRecords.length}명 복용 중` : '복용 중인 학생 없음'}
+                {medicationRecords.length > 0 ? L('patient.studentsOnMedication', { v0: medicationRecords.length }) : L('patient.noStudentsOnMedication')}
               </Text>
             </View>
             <TouchableOpacity style={styles.addBtnDisabled} disabled>
               <Ionicons name="add" size={14} color="#9ca3af" />
-              <Text style={styles.addBtnDisabledText}>명단추가</Text>
+              <Text style={styles.addBtnDisabledText}>{L('patient.addToList')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -907,7 +906,7 @@ export function PatientScreen() {
               style={styles.searchInput}
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholder="이름·증상·반 검색"
+              placeholder={L('patient.searchNameSymptomClass')}
               placeholderTextColor="#9ca3af"
             />
             {searchQuery.length > 0 && (
@@ -955,7 +954,7 @@ export function PatientScreen() {
                 {groupKey ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: borderColor }}>
                     <Text style={{ fontSize: 13, fontWeight: '700', color: textColor }}>{groupDisplayName}</Text>
-                    <Text style={{ fontSize: 11, color: textColor, opacity: 0.6 }}>{groupTotal}명</Text>
+                    <Text style={{ fontSize: 11, color: textColor, opacity: 0.6 }}>{groupTotal}{L('common.people2')}</Text>
                   </View>
                 ) : null}
                 {classes.map(([className, classRecords], ci) => (
@@ -997,9 +996,9 @@ export function PatientScreen() {
           }}
           ListEmptyComponent={() => (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>현재 환자가 없습니다.</Text>
+              <Text style={styles.emptyText}>{L('patient.thereAreNoCurrentPatients')}</Text>
               <TouchableOpacity onPress={() => setShowQuickReport(true)}>
-                <Text style={styles.emptyAction}>최초보고 하기</Text>
+                <Text style={styles.emptyAction}>{L('patient.submitFirstReport2')}</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -1010,7 +1009,7 @@ export function PatientScreen() {
                 onPress={() => setShowResolved(v => !v)}
               >
                 <Ionicons name="checkmark-circle" size={16} color="#22c55e" />
-                <Text style={styles.resolvedTitle}>완치 기록</Text>
+                <Text style={styles.resolvedTitle}>{L('patient.recoveredRecords')}</Text>
                 <View style={styles.resolvedCount}>
                   <Text style={styles.resolvedCountText}>{filteredResolved.length}</Text>
                 </View>
@@ -1131,7 +1130,7 @@ const CLASS_TIMES_M: MedicationTime[] = ['조식후', '중식후', '석식후'];
 
 /** 반 이름 표시용: "OnePiece" → "OnePiece반" */
 const fmtClassM = (name: string) =>
-  name === '반 미배정' || name.endsWith('반') ? name : `${name}반`;
+  name === '반 미배정' ? dataLabel(name) : isEnglishUI() ? name : name.endsWith('반') ? name : `${name}반`;
 
 /** grade 문자열("3F", "4M")에서 성별: F=0(여, 위), M=1(남, 아래) */
 const genderOrderM = (grade?: string) => (grade?.endsWith('F') ? 0 : 1);
@@ -1183,7 +1182,7 @@ function MedicationListView({
     return (
       <View style={styles.centered}>
         <Text style={{ fontSize: 40, marginBottom: 8 }}>💊</Text>
-        <Text style={styles.emptyText}>오늘 복용 예정 약이 없습니다.</Text>
+        <Text style={styles.emptyText}>{L('patient.noMedicationScheduledForToday')}</Text>
       </View>
     );
   }
@@ -1238,22 +1237,22 @@ function MedicationListView({
     return cmp !== 0 ? cmp : a.studentName.localeCompare(b.studentName, 'ko');
   });
 
-  const roomLabel = selectedTime && ROOM_TIMES_M.includes(selectedTime) ? selectedTime : '기상후 · 취침전';
-  const classLabel = selectedTime && CLASS_TIMES_M.includes(selectedTime) ? selectedTime : '조식후 · 중식후 · 석식후';
+  const roomLabel = selectedTime && ROOM_TIMES_M.includes(selectedTime) ? selectedTime : L('patient.afterWakingBeforeBed2');
+  const classLabel = selectedTime && CLASS_TIMES_M.includes(selectedTime) ? selectedTime : L('patient.afterBreakfastLunchDinner2');
 
   return (
     <ScrollView showsVerticalScrollIndicator={false}>
       <Modal visible={!!confirmPending} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 24 }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, gap: 12 }}>
-            <Text style={{ fontSize: 16, fontWeight: '700', textAlign: 'center', color: '#111827' }}>복용 완료 확인</Text>
+            <Text style={{ fontSize: 16, fontWeight: '700', textAlign: 'center', color: '#111827' }}>{L('patient.confirmDoseTaken')}</Text>
             <Text style={{ fontSize: 12, color: '#6b7280', textAlign: 'center', lineHeight: 18 }}>
-              {confirmPending ? `${confirmPending.record.studentName} 학생의 ${confirmPending.medName} ${confirmPending.time} 복용을 완료로 기록할까요?` : ''}
+              {confirmPending ? L('patient.markSDoseAsTaken', { v0: confirmPending.record.studentName, v1: confirmPending.medName, v2: confirmPending.time }) : ''}
             </Text>
-            <Text style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>정말 복용을 완료하셨습니까?</Text>
+            <Text style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center' }}>{L('patient.didTheStudentReallyTake')}</Text>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <TouchableOpacity style={[styles.editBtn, { flex: 1 }]} onPress={() => setConfirmPending(null)}>
-                <Text style={styles.editBtnText}>취소</Text>
+                <Text style={styles.editBtnText}>{L('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ flex: 1, backgroundColor: '#22c55e', borderRadius: 8, padding: 10, alignItems: 'center' }}
@@ -1262,7 +1261,7 @@ function MedicationListView({
                   setConfirmPending(null);
                 }}
               >
-                <Text style={{ color: '#fff', fontWeight: '700' }}>✓ 완료 확인</Text>
+                <Text style={{ color: '#fff', fontWeight: '700' }}>{L('patient.confirm')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1276,17 +1275,17 @@ function MedicationListView({
       {/* 시간대별 현황 헤더 */}
       <View style={[styles.medHeader, { margin: 12, borderRadius: 12, padding: 12, gap: 8 }]}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontWeight: '700', color: '#374151', fontSize: 12 }}>시간대별 복용 현황</Text>
+          <Text style={{ fontWeight: '700', color: '#374151', fontSize: 12 }}>{L('patient.dosesByTime')}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             {selectedTime && (
               <TouchableOpacity
                 onPress={() => setSelectedTime(null)}
                 style={{ backgroundColor: '#f3f4f6', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3 }}
               >
-                <Text style={{ fontSize: 10, color: '#6b7280' }}>전체 ✕</Text>
+                <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('patient.all')}</Text>
               </TouchableOpacity>
             )}
-            <Text style={{ color: '#9ca3af', fontSize: 10 }}>{records.length}명</Text>
+            <Text style={{ color: '#9ca3af', fontSize: 10 }}>{records.length}{L('common.people2')}</Text>
           </View>
         </View>
         {/* 5개 시간대 타일 */}
@@ -1299,7 +1298,7 @@ function MedicationListView({
             if (prog.none) {
               return (
                 <View key={time} style={{ flex: 1, alignItems: 'center', gap: 2, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f9fafb', paddingVertical: 8, opacity: 0.5 }}>
-                  <Text style={{ fontSize: 9, color: '#d1d5db', fontWeight: '600' }}>{time}</Text>
+                  <Text style={{ fontSize: 9, color: '#d1d5db', fontWeight: '600' }}>{dataLabel(time)}</Text>
                   <Text style={{ fontSize: 9, color: '#d1d5db' }}>-</Text>
                 </View>
               );
@@ -1319,15 +1318,15 @@ function MedicationListView({
                   transform: [{ scale: isSelected ? 1.04 : 1 }],
                 }}
               >
-                <Text style={{ fontSize: 9, fontWeight: '700', color: prog.allDone && !isSelected ? '#16a34a' : meta.text }}>{time}</Text>
+                <Text style={{ fontSize: 9, fontWeight: '700', color: prog.allDone && !isSelected ? '#16a34a' : meta.text }}>{dataLabel(time)}</Text>
                 <Text style={{ fontSize: 13, fontWeight: '800', color: prog.allDone && !isSelected ? '#16a34a' : meta.text }}>
                   {prog.done}/{prog.total}
                 </Text>
                 {prog.allDone
-                  ? <Text style={{ fontSize: 8, color: '#16a34a' }}>✓완료</Text>
+                  ? <Text style={{ fontSize: 8, color: '#16a34a' }}>{L('patient.done4')}</Text>
                   : isSelected
-                    ? <Text style={{ fontSize: 8, color: meta.text, opacity: 0.7 }}>●선택</Text>
-                    : <Text style={{ fontSize: 8, color: '#d1d5db' }}>탭</Text>
+                    ? <Text style={{ fontSize: 8, color: meta.text, opacity: 0.7 }}>{L('patient.selected2')}</Text>
+                    : <Text style={{ fontSize: 8, color: '#d1d5db' }}>{L('patient.tap')}</Text>
                 }
               </TouchableOpacity>
             );
@@ -1337,11 +1336,11 @@ function MedicationListView({
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#818cf8' }} />
-            <Text style={{ fontSize: 9, color: '#6366f1' }}>방담당</Text>
+            <Text style={{ fontSize: 9, color: '#6366f1' }}>{L('patient.roomLead')}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#f97316' }} />
-            <Text style={{ fontSize: 9, color: '#ea580c' }}>반담당</Text>
+            <Text style={{ fontSize: 9, color: '#ea580c' }}>{L('patient.classLead')}</Text>
           </View>
         </View>
       </View>
@@ -1351,9 +1350,9 @@ function MedicationListView({
         <View>
           <View style={{ backgroundColor: '#eef2ff', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#c7d2fe', paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#818cf8' }} />
-            <Text style={{ fontWeight: '700', color: '#4f46e5', fontSize: 11 }}>방 담당</Text>
+            <Text style={{ fontWeight: '700', color: '#4f46e5', fontSize: 11 }}>{L('patient.roomLead2')}</Text>
             <Text style={{ color: '#6366f1', fontSize: 10 }}>{roomLabel}</Text>
-            <Text style={{ marginLeft: 'auto', color: '#6366f1', fontSize: 10 }}>{roomRecords.length}명</Text>
+            <Text style={{ marginLeft: 'auto', color: '#6366f1', fontSize: 10 }}>{roomRecords.length}{L('common.people2')}</Text>
           </View>
           <View style={{ paddingHorizontal: 12, paddingTop: 8, gap: 8 }}>
             {roomRecords.map(record => (
@@ -1382,9 +1381,9 @@ function MedicationListView({
         <View style={{ marginTop: 8 }}>
           <View style={{ backgroundColor: '#fff7ed', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#fed7aa', paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#f97316' }} />
-            <Text style={{ fontWeight: '700', color: '#c2410c', fontSize: 11 }}>반 담당</Text>
+            <Text style={{ fontWeight: '700', color: '#c2410c', fontSize: 11 }}>{L('patient.classLead2')}</Text>
             <Text style={{ color: '#ea580c', fontSize: 10 }}>{classLabel}</Text>
-            <Text style={{ marginLeft: 'auto', color: '#ea580c', fontSize: 10 }}>{classRecords.length}명</Text>
+            <Text style={{ marginLeft: 'auto', color: '#ea580c', fontSize: 10 }}>{classRecords.length}{L('common.people2')}</Text>
           </View>
           <View style={{ paddingHorizontal: 12, paddingTop: 8, gap: 8 }}>
             {classRecords.map(record => (
@@ -1469,19 +1468,19 @@ function MedPatientCard({
           )}
           {record.roomNumber && (
             <View style={{ backgroundColor: '#f9fafb', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
-              <Text style={{ color: '#6b7280', fontSize: 10 }}>{record.roomNumber}호</Text>
+              <Text style={{ color: '#6b7280', fontSize: 10 }}>{record.roomNumber}{L('students.text')}</Text>
             </View>
           )}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           {responsibleName && (
             <View style={{ backgroundColor: accentBg, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-              <Text style={{ color: accentColor, fontSize: 10, fontWeight: '600' }}>담당: {responsibleName}</Text>
+              <Text style={{ color: accentColor, fontSize: 10, fontWeight: '600' }}>{L('patient.assigned')} {responsibleName}</Text>
             </View>
           )}
           <View style={{ backgroundColor: allDone ? '#dcfce7' : accentBg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
             <Text style={{ color: allDone ? '#166534' : accentColor, fontSize: 10, fontWeight: '700' }}>
-              {allDone ? '완료 ✓' : `${todayDone}/${todayTotal}회`}
+              {allDone ? L('patient.done') : L('patient.doses', { v0: todayDone, v1: todayTotal })}
             </Text>
           </View>
         </View>
@@ -1498,12 +1497,12 @@ function MedPatientCard({
                 <Text style={{ color: accentColor, fontWeight: '700', fontSize: 11 }}>{sched.name}</Text>
                 {sched.endDateAuto && (
                   <View style={{ backgroundColor: '#fff7ed', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1, borderWidth: 1, borderColor: '#fed7aa' }}>
-                    <Text style={{ color: '#c2410c', fontSize: 9 }}>📌캠프끝</Text>
+                    <Text style={{ color: '#c2410c', fontSize: 9 }}>{L('patient.campEnd2')}</Text>
                   </View>
                 )}
                 {sched.daysPerWeek && (
                   <View style={{ backgroundColor: '#f9fafb', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1, borderWidth: 1, borderColor: '#e5e7eb' }}>
-                    <Text style={{ color: '#6b7280', fontSize: 9 }}>주{sched.daysPerWeek}일</Text>
+                    <Text style={{ color: '#6b7280', fontSize: 9 }}>{L('patient.wk')}{sched.daysPerWeek}{L('patient.d')}</Text>
                   </View>
                 )}
               </View>
@@ -1513,7 +1512,7 @@ function MedPatientCard({
                   style={{ backgroundColor: skipToday ? '#e5e7eb' : '#f9fafb', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3, borderWidth: 1, borderColor: skipToday ? '#d1d5db' : '#e5e7eb' }}
                 >
                   <Text style={{ color: skipToday ? '#374151' : '#9ca3af', fontSize: 9, fontWeight: '600' }}>
-                    {skipToday ? '휴약일 ✕' : '휴약일'}
+                    {skipToday ? L('patient.skipDay2') : L('patient.skipDay')}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -1521,7 +1520,7 @@ function MedPatientCard({
             {/* 휴약일이면 안내, 아니면 버튼 */}
             {skipToday ? (
               <View style={{ backgroundColor: '#f3f4f6', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: '#e5e7eb' }}>
-                <Text style={{ color: '#6b7280', fontSize: 10 }}>💤 오늘은 휴약일입니다</Text>
+                <Text style={{ color: '#6b7280', fontSize: 10 }}>{L('patient.noDoseTodaySkipDay')}</Text>
               </View>
             ) : (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
@@ -1541,7 +1540,7 @@ function MedPatientCard({
                         }}
                       >
                         {checked && <Text style={{ color: '#fff', fontSize: 10, marginRight: 2 }}>✓</Text>}
-                        <Text style={[styles.medTimeBtnText, checked && { color: '#fff' }]}>{time}</Text>
+                        <Text style={[styles.medTimeBtnText, checked && { color: '#fff' }]}>{dataLabel(time)}</Text>
                       </TouchableOpacity>
                       {checked && checkerName && (
                         <Text style={{ fontSize: 8, color: '#9ca3af', marginTop: 2 }}>{checkerName}</Text>
@@ -1555,7 +1554,7 @@ function MedPatientCard({
               <View style={{ marginTop: 6 }}>
                 <TouchableOpacity onPress={() => togglePhotoPanel(sched.idx)}>
                   <Text style={{ fontSize: 10, color: accentColor, fontWeight: '600' }}>
-                    {openPhotoIdxs.has(sched.idx) ? '▾ 약 사진 숨기기' : '▸ 약 사진 보기'}
+                    {openPhotoIdxs.has(sched.idx) ? L('patient.hideMedicationPhotos') : L('patient.viewMedicationPhotos2')}
                   </Text>
                 </TouchableOpacity>
                 {openPhotoIdxs.has(sched.idx) && (
@@ -1758,7 +1757,7 @@ function PatientCard({
   };
 
   const elapsed = daysElapsedM(record.visitDate);
-  const elapsedLabel = elapsed === 0 ? '오늘' : elapsed === 1 ? '어제' : `${elapsed}일째`;
+  const elapsedLabel = elapsed === 0 ? L('common.today') : elapsed === 1 ? L('common.yesterday') : L('patient.day', { v0: elapsed });
   const elapsedColor = elapsed >= 3 ? '#f97316' : elapsed >= 1 ? '#ca8a04' : '#9ca3af';
 
   const medInfo = useMemo(() => {
@@ -1795,12 +1794,12 @@ function PatientCard({
         <View style={[styles.progressDot, { backgroundColor: progressStyle.dot }]} />
         {showDeleteConfirm ? (
           <View style={styles.deleteConfirmBox}>
-            <Text style={{ fontSize: 11, color: '#b91c1c', fontWeight: '600' }}>정말 삭제할까요?</Text>
+            <Text style={{ fontSize: 11, color: '#b91c1c', fontWeight: '600' }}>{L('patient.reallyDelete')}</Text>
             <TouchableOpacity style={styles.deleteConfirmBtn} onPress={onDelete}>
-              <Text style={{ fontSize: 10, color: '#fff', fontWeight: '700' }}>삭제</Text>
+              <Text style={{ fontSize: 10, color: '#fff', fontWeight: '700' }}>{L('common.delete')}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setShowDeleteConfirm(false)}>
-              <Text style={{ fontSize: 10, color: '#6b7280' }}>취소</Text>
+              <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -1819,12 +1818,12 @@ function PatientCard({
               </View>
             )}
             {record.classMentor && (
-              <Text style={{ fontSize: 10, color: '#6b7280' }}>담임 {record.classMentor}</Text>
+              <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('patient.homeroom')} {record.classMentor}</Text>
             )}
             {record.unitMentor && (
-              <Text style={{ fontSize: 10, color: '#6b7280' }}>유닛 {record.unitMentor}</Text>
+              <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('students.unit')} {record.unitMentor}</Text>
             )}
-            {record.roomNumber && <Text style={styles.roomText}>{record.roomNumber}호</Text>}
+            {record.roomNumber && <Text style={styles.roomText}>{record.roomNumber}{L('students.text')}</Text>}
           </View>
           {/* 2행: 증상 */}
           <Text style={styles.cardSymptom} numberOfLines={1}>{record.symptom}</Text>
@@ -1833,12 +1832,12 @@ function PatientCard({
               .filter(t => t !== '처치전' && t !== '단순처치')
               .map(t => (
                 <View key={t} style={[styles.typeTag, { backgroundColor: TYPE_COLOR[t]?.bg ?? '#f3f4f6' }]}>
-                  <Text style={[styles.typeTagText, { color: TYPE_COLOR[t]?.text ?? '#374151' }]}>{t}</Text>
+                  <Text style={[styles.typeTagText, { color: TYPE_COLOR[t]?.text ?? '#374151' }]}>{dataLabel(t)}</Text>
                 </View>
               ))}
             <View style={[styles.progressBadge, { backgroundColor: progressStyle.bg }]}>
               <Text style={[styles.progressBadgeText, { color: progressStyle.text }]}>
-                {record.progressStatus ?? '최초보고'}
+                {record.progressStatus ?? L('data.progFirstReport')}
               </Text>
             </View>
             {record.temperature != null && (
@@ -1853,7 +1852,7 @@ function PatientCard({
               const hs = HOSPITAL_STATUS_COLOR[latest.hospitalStatus];
               return (
                 <View style={{ backgroundColor: hs.bg, borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
-                  <Text style={{ fontSize: 9, color: hs.text, fontWeight: '600' }}>{latest.hospitalStatus}</Text>
+                  <Text style={{ fontSize: 9, color: hs.text, fontWeight: '600' }}>{dataLabel(latest.hospitalStatus)}</Text>
                 </View>
               );
             })()}
@@ -1866,7 +1865,7 @@ function PatientCard({
             )}
             {parentContactPending && (
               <View style={{ backgroundColor: '#fdf2f8', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
-                <Text style={{ fontSize: 9, color: '#be185d', fontWeight: '600' }}>부모연락↑</Text>
+                <Text style={{ fontSize: 9, color: '#be185d', fontWeight: '600' }}>{L('patient.parentContact')}</Text>
               </View>
             )}
           </View>
@@ -1887,11 +1886,11 @@ function PatientCard({
           const isActive = activeTab === tab;
           return (
             <TouchableOpacity
-              key={tab}
+              key={dataLabel(tab)}
               style={[styles.tab, isActive && styles.tabActive]}
               onPress={() => handleTabClick(tab)}
             >
-              <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{tab}</Text>
+              <Text style={[styles.tabText, isActive && styles.tabTextActive]}>{dataLabel(tab)}</Text>
               {hasAlert && <View style={styles.tabDot} />}
             </TouchableOpacity>
           );
@@ -1994,9 +1993,9 @@ function ProgressTabMobile({
   const [showAssigneeList, setShowAssigneeList] = useState(false);
 
   const handleAddLog = () => {
-    if (logDoses.some(d => !d.itemId || !d.groupId)) { Alert.alert('확인 필요', '약·처치 물품 사용에서 약과 그룹을 모두 선택하거나 빈 줄을 삭제해주세요.'); return; }
+    if (logDoses.some(d => !d.itemId || !d.groupId)) { Alert.alert(L('patient.checkNeeded'), L('patient.inMedicationSupplyUseSelect')); return; }
     if (logStatus === '중간보고' && (!nextCheckTime || !nextCheckAssigneeName)) {
-      Alert.alert('입력 필요', '중간보고 시 다음 체크 시간과 담당자를 지정해주세요.');
+      Alert.alert(L('profile.incomplete'), L('patient.forAnUpdateSetThe'));
       return;
     }
     // 체온 수치가 있으면 공통 기준(FEVER_THRESHOLDS)으로 자동 판정, 없으면 선택한 단계
@@ -2064,19 +2063,19 @@ function ProgressTabMobile({
     <View style={{ gap: 12 }}>
       <View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-          <Text style={styles.sectionLabel}>경과 기록</Text>
+          <Text style={styles.sectionLabel}>{L('patient.progressLog')}</Text>
           <TouchableOpacity onPress={() => setShowForm(true)}>
-            <Text style={{ fontSize: 11, color: '#2563eb', fontWeight: '600' }}>+ 보고 추가</Text>
+            <Text style={{ fontSize: 11, color: '#2563eb', fontWeight: '600' }}>{L('patient.addReport')}</Text>
           </TouchableOpacity>
         </View>
 
         {showForm && (
           <TabFormModalMobile
-            title="경과 보고 추가"
+            title={L('patient.addProgressReport')}
             icon="📋"
             onClose={() => setShowForm(false)}
             onSubmit={handleAddLog}
-            submitLabel="기록 추가"
+            submitLabel={L('patient.addEntry')}
             submitColor={logStatus === '완치' ? '#22c55e' : '#3b82f6'}
           >
             {/* 보고 유형 */}
@@ -2086,7 +2085,7 @@ function ProgressTabMobile({
                 return (
                   <TouchableOpacity key={s} onPress={() => setLogStatus(s)}
                     style={{ flex: 1, paddingVertical: 6, borderRadius: 8, alignItems: 'center', backgroundColor: logStatus === s ? col.dot : '#f3f4f6', borderWidth: 1, borderColor: logStatus === s ? col.dot : '#e5e7eb' }}>
-                    <Text style={{ fontSize: 11, fontWeight: '700', color: logStatus === s ? '#fff' : '#6b7280' }}>{s}</Text>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: logStatus === s ? '#fff' : '#6b7280' }}>{dataLabel(s)}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -2095,7 +2094,7 @@ function ProgressTabMobile({
             {logStatus !== '완치' && (
               <>
                 <View>
-                  <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>현재 위치</Text>
+                  <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.currentLocation2')}</Text>
                   {/* 위치 모드 버튼 */}
                   <View style={{ flexDirection: 'row', gap: 6, marginBottom: 6 }}>
                     {([
@@ -2131,16 +2130,16 @@ function ProgressTabMobile({
                     value={logLocation}
                     onChangeText={setLogLocation}
                     placeholder={
-                      logLocationMode === '휴식' ? '예) 110호, 휴게실' :
-                      logLocationMode === '격리' ? '예) 격리실 214호' :
-                      '예) 330호, 환자방'
+                      logLocationMode === '휴식' ? L('patient.eGRoom110Lounge2') :
+                      logLocationMode === '격리' ? L('patient.eGIsolationRoom2142') :
+                      L('patient.eGRoom330Sick')
                     }
                     placeholderTextColor="#9ca3af"
                     style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]}
                   />
                 </View>
                 <View>
-                  <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>열감</Text>
+                  <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.fever2')}</Text>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
                     {FEVER_OPTIONS.map(f => (
                       <TouchableOpacity key={f}
@@ -2155,7 +2154,7 @@ function ProgressTabMobile({
                         // 체온 입력 시 공통 기준으로 단계 자동 판정 (최초보고와 같은 기준)
                         setLogFever(classifyFever(v) ?? '');
                       }}
-                      placeholder="체온 (37.8)" placeholderTextColor="#9ca3af" keyboardType="decimal-pad"
+                      placeholder={L('patient.temperature378')} placeholderTextColor="#9ca3af" keyboardType="decimal-pad"
                       style={[styles.formInput, { flex: 1, minWidth: 80, fontSize: 12, paddingVertical: 5 }]} />
                   </View>
                   {(() => {
@@ -2164,35 +2163,35 @@ function ProgressTabMobile({
                     const color = level === '고열' ? '#dc2626' : level === '미열' ? '#ea580c' : '#16a34a';
                     return (
                       <Text style={{ fontSize: 10, fontWeight: '600', color, marginTop: 4 }}>
-                        {parseFloat(logFeverDirect).toFixed(1)}℃ → {level === '고열' ? '⚠️ 고열' : level === '미열' ? '🌡 미열' : '✅ 정상'}
-                        <Text style={{ color: '#9ca3af', fontWeight: '400' }}> (미열 {FEVER_THRESHOLDS.slight}℃ 이상 · 고열 {FEVER_THRESHOLDS.high}℃ 이상)</Text>
+                        {parseFloat(logFeverDirect).toFixed(1)}℃ → {level === '고열' ? L('patient.highFever') : level === '미열' ? L('patient.mildFever') : L('patient.normal')}
+                        <Text style={{ color: '#9ca3af', fontWeight: '400' }}> {L('patient.mildFever2')} {FEVER_THRESHOLDS.slight}{L('patient.orHigherHighFever')} {FEVER_THRESHOLDS.high}{L('patient.orHigher')}</Text>
                       </Text>
                     );
                   })()}
                 </View>
                 <View>
-                  <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>증상</Text>
-                  <TextInput value={logSymptom} onChangeText={setLogSymptom} placeholder="현재 증상" placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
+                  <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.symptoms4')}</Text>
+                  <TextInput value={logSymptom} onChangeText={setLogSymptom} placeholder={L('patient.currentSymptoms')} placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
                 </View>
               </>
             )}
 
             {logStatus === '중간보고' && (
               <View style={{ backgroundColor: '#fffbeb', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#fde68a', gap: 8 }}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#b45309' }}>⏰ 다음 체크 지정</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#b45309' }}>{L('patient.scheduleNextCheck')}</Text>
                 <View>
-                  <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>체크 시간</Text>
+                  <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.checkTime')}</Text>
                   <TextInput value={nextCheckTime}
                     onChangeText={v => { const raw = v.replace(/\D/g, '').slice(0, 4); setNextCheckTime(raw.length >= 3 ? `${raw.slice(0, 2)}:${raw.slice(2)}` : raw); }}
                     placeholder="1430 → 14:30" placeholderTextColor="#9ca3af" keyboardType="number-pad"
                     style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
                 </View>
                 <View>
-                  <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>담당자</Text>
+                  <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.assignee')}</Text>
                   <TextInput value={nextCheckQuery || nextCheckAssigneeName}
                     onChangeText={v => { setNextCheckQuery(v); setShowAssigneeList(true); }}
                     onFocus={() => setShowAssigneeList(true)}
-                    placeholder="이름 검색" placeholderTextColor="#9ca3af"
+                    placeholder={L('patient.searchName')} placeholderTextColor="#9ca3af"
                     style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
                   {showAssigneeList && assigneeCandidates.length > 0 && (
                     <View style={{ borderWidth: 1, borderColor: '#fde68a', borderRadius: 8, backgroundColor: '#fff', marginTop: 3 }}>
@@ -2200,7 +2199,7 @@ function ProgressTabMobile({
                         <TouchableOpacity key={u.userId}
                           style={{ paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#fef3c7' }}
                           onPress={() => { setNextCheckAssigneeId(u.userId); setNextCheckAssigneeName(u.name); setNextCheckQuery(''); setShowAssigneeList(false); }}>
-                          <Text style={{ fontSize: 12, color: '#374151' }}>{u.name}{u.userId === currentUserId ? ' (나)' : ''}</Text>
+                          <Text style={{ fontSize: 12, color: '#374151' }}>{u.name}{u.userId === currentUserId ? L('patient.me') : ''}</Text>
                         </TouchableOpacity>
                       ))}
                     </View>
@@ -2223,14 +2222,14 @@ function ProgressTabMobile({
             )}
 
             <View>
-              <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>메모 (선택)</Text>
-              <TextInput value={logNote} onChangeText={setLogNote} placeholder="추가 메모" placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
+              <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.noteOptional')}</Text>
+              <TextInput value={logNote} onChangeText={setLogNote} placeholder={L('patient.additionalNotes2')} placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
             </View>
           </TabFormModalMobile>
         )}
 
         {logs.length === 0 ? (
-          <Text style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', paddingVertical: 12 }}>경과 기록이 없습니다.</Text>
+          <Text style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', paddingVertical: 12 }}>{L('patient.noProgressEntries')}</Text>
         ) : (
           <View style={{ paddingLeft: 12 }}>
             {logs.map(({ log, isSynthetic, rawIndex }, i) => {
@@ -2239,15 +2238,15 @@ function ProgressTabMobile({
               let nextCheckLabel = '';
               if (nextCheckDate) {
                 const diffMin = Math.round((nextCheckDate.getTime() - Date.now()) / 60000);
-                if (diffMin < 0) nextCheckLabel = `${Math.abs(diffMin)}분 지남`;
-                else if (diffMin < 60) nextCheckLabel = `${diffMin}분 후`;
+                if (diffMin < 0) nextCheckLabel = L('patient.minOverdue', { v0: Math.abs(diffMin) });
+                else if (diffMin < 60) nextCheckLabel = L('patient.inMin', { v0: diffMin });
                 else nextCheckLabel = `${String(nextCheckDate.getHours()).padStart(2, '0')}:${String(nextCheckDate.getMinutes()).padStart(2, '0')}`;
               }
               return (
                 <View key={i} style={{ marginBottom: 10, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: col.line }}>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
                     <View style={{ backgroundColor: col.bg, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
-                      <Text style={{ fontSize: 10, fontWeight: '700', color: col.text }}>{log.status}</Text>
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: col.text }}>{dataLabel(log.status)}</Text>
                     </View>
                     <Text style={{ fontSize: 10, color: '#6b7280' }}>{log.loggedBy}</Text>
                     <Text style={{ fontSize: 10, color: '#9ca3af' }}>{formatDate(log.loggedAt)}</Text>
@@ -2287,7 +2286,7 @@ function ProgressTabMobile({
                       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
                         {doses.map(d => (
                           <View key={d.id} style={{ backgroundColor: '#ecfdf5', borderWidth: 1, borderColor: '#d1fae5', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 2 }}>
-                            <Text style={{ fontSize: 10, color: '#047857' }}>💊 {doseLabel(d)} {d.quantity}{d.unit ?? '개'} · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}</Text>
+                            <Text style={{ fontSize: 10, color: '#047857' }}>💊 {doseLabel(d)} {d.quantity}{d.unit ?? L('patient.pcs')} · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}</Text>
                           </View>
                         ))}
                       </View>
@@ -2350,24 +2349,24 @@ function MedicationDoseEditorMobile({ doses, onChange, medicines, groups, givenB
     <View style={{ backgroundColor: '#ecfdf5', borderRadius: 10, borderWidth: 1, borderColor: '#a7f3d0', padding: 10, gap: 8 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 11, fontWeight: '700', color: '#065f46' }}>💊 약·처치 물품 사용</Text>
-          <Text style={{ fontSize: 9, color: '#047857' }}>실제로 먹이거나 쓴 경우만 기록 — 저장 시 그룹 재고 자동 차감</Text>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: '#065f46' }}>{L('patient.medicationSupplyUse2')}</Text>
+          <Text style={{ fontSize: 9, color: '#047857' }}>{L('patient.logOnlyWhatWasActually2')}</Text>
         </View>
         <TouchableOpacity onPress={addRow} disabled={!canAdd}
           style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: canAdd ? '#059669' : '#e5e7eb' }}>
-          <Text style={{ fontSize: 11, fontWeight: '700', color: canAdd ? '#fff' : '#9ca3af' }}>+ 추가</Text>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: canAdd ? '#fff' : '#9ca3af' }}>{L('patient.add')}</Text>
         </TouchableOpacity>
       </View>
 
       {studentNote ? (
-        <Text style={{ fontSize: 10, color: '#be123c', backgroundColor: '#fff1f2', borderRadius: 6, padding: 6 }}>⚠️ 학생 정보 — {studentNote}</Text>
+        <Text style={{ fontSize: 10, color: '#be123c', backgroundColor: '#fff1f2', borderRadius: 6, padding: 6 }}>{L('patient.studentInfo2')} {studentNote}</Text>
       ) : null}
 
       {!canAdd && (
         <Text style={{ fontSize: 10, color: '#b45309', backgroundColor: '#fffbeb', borderRadius: 6, padding: 6 }}>
           {medicines.length === 0
-            ? '등록된 약·처치 물품이 없습니다. 재고 탭에서 관리자가 품목을 등록하면 선택할 수 있습니다.'
-            : '재고 그룹이 없습니다. 재고 탭에서 관리자가 그룹(Spring 등)을 등록해주세요.'}
+            ? L('patient.noMedicationCareItemsRegistered2')
+            : L('patient.noInventoryGroupsAskAn')}
         </Text>
       )}
 
@@ -2406,13 +2405,13 @@ function DoseRowMobile({ dose: d, idx, doses, medicines, groups, past, onUpdate,
       {picking || !item ? (
         <View style={{ gap: 6 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <TextInput value={query} onChangeText={setQuery} placeholder="약·물품 검색 (타이레놀, 감기, 밴드…)" placeholderTextColor="#9ca3af"
+            <TextInput value={query} onChangeText={setQuery} placeholder={L('patient.searchItemsTylenolColdMedicine')} placeholderTextColor="#9ca3af"
               style={[styles.formInput, { flex: 1, fontSize: 12, paddingVertical: 6 }]} />
-            {item && <TouchableOpacity onPress={() => setPicking(false)}><Text style={{ fontSize: 11, color: '#6b7280' }}>취소</Text></TouchableOpacity>}
+            {item && <TouchableOpacity onPress={() => setPicking(false)}><Text style={{ fontSize: 11, color: '#6b7280' }}>{L('common.cancel')}</Text></TouchableOpacity>}
             <TouchableOpacity onPress={onRemove} style={{ padding: 2 }}><Text style={{ fontSize: 12 }}>🗑️</Text></TouchableOpacity>
           </View>
           {candidates.length === 0 ? (
-            <Text style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', paddingVertical: 12 }}>검색 결과가 없습니다.</Text>
+            <Text style={{ fontSize: 11, color: '#9ca3af', textAlign: 'center', paddingVertical: 12 }}>{L('students.noResults')}</Text>
           ) : (
             <ScrollView style={{ maxHeight: 220 }} nestedScrollEnabled keyboardShouldPersistTaps="handled"
               contentContainerStyle={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, overflow: 'hidden' }}>
@@ -2433,9 +2432,9 @@ function DoseRowMobile({ dose: d, idx, doses, medicines, groups, past, onUpdate,
                     </View>
                     <View style={{ alignItems: 'flex-end' }}>
                       <Text style={{ fontSize: 11, fontWeight: '700', color: d.groupId && gStock <= 0 ? '#dc2626' : '#374151' }}>
-                        {d.groupId ? `${d.groupName ?? ''} ${gStock}` : `전체 ${getTotalStock(m)}`}<Text style={{ fontSize: 9, color: '#9ca3af' }}>{m.unit}</Text>
+                        {d.groupId ? `${d.groupName ?? ''} ${gStock}` : L('patient.total', { v0: getTotalStock(m) })}<Text style={{ fontSize: 9, color: '#9ca3af' }}>{dataLabel(m.unit)}</Text>
                       </Text>
-                      {d.groupId ? <Text style={{ fontSize: 9, color: '#9ca3af' }}>전체 {getTotalStock(m)}{m.unit}</Text> : null}
+                      {d.groupId ? <Text style={{ fontSize: 9, color: '#9ca3af' }}>{L('common.all')} {getTotalStock(m)}{dataLabel(m.unit)}</Text> : null}
                     </View>
                   </TouchableOpacity>
                 );
@@ -2446,7 +2445,7 @@ function DoseRowMobile({ dose: d, idx, doses, medicines, groups, past, onUpdate,
       ) : (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <TouchableOpacity onPress={() => setPicking(true)} style={{ flex: 1 }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: '#065f46' }}>{itemLabel(item)} <Text style={{ fontSize: 10, fontWeight: '400', color: '#6b7280' }}>변경</Text></Text>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#065f46' }}>{itemLabel(item)} <Text style={{ fontSize: 10, fontWeight: '400', color: '#6b7280' }}>{L('patient.change')}</Text></Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={onRemove} style={{ padding: 2 }}><Text style={{ fontSize: 12 }}>🗑️</Text></TouchableOpacity>
         </View>
@@ -2458,7 +2457,7 @@ function DoseRowMobile({ dose: d, idx, doses, medicines, groups, past, onUpdate,
           style={{ width: 26, height: 26, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontSize: 14, color: '#374151' }}>−</Text>
         </TouchableOpacity>
-        <Text style={{ minWidth: 40, textAlign: 'center', fontSize: 12, fontWeight: '700', color: '#111827' }}>{d.quantity}{d.unit ?? '개'}</Text>
+        <Text style={{ minWidth: 40, textAlign: 'center', fontSize: 12, fontWeight: '700', color: '#111827' }}>{d.quantity}{d.unit ?? L('patient.pcs')}</Text>
         <TouchableOpacity onPress={() => onUpdate({ quantity: d.quantity + 1 })}
           style={{ width: 26, height: 26, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center' }}>
           <Text style={{ fontSize: 14, color: '#374151' }}>+</Text>
@@ -2476,9 +2475,9 @@ function DoseRowMobile({ dose: d, idx, doses, medicines, groups, past, onUpdate,
         </ScrollView>
       </View>
       <TextInput value={d.memo ?? ''} onChangeText={v => onUpdate({ memo: v })}
-        placeholder="메모 (예: 식사 후 복용)" placeholderTextColor="#9ca3af"
+        placeholder={L('patient.noteEGTakeAfter')} placeholderTextColor="#9ca3af"
         style={[styles.formInput, { fontSize: 11, paddingVertical: 5 }]} />
-      {incomplete && <Text style={{ fontSize: 10, color: '#b45309' }}>약·물품과 사용한 그룹을 선택해주세요</Text>}
+      {incomplete && <Text style={{ fontSize: 10, color: '#b45309' }}>{L('patient.selectTheItemAndThe')}</Text>}
       {warnings.map((w, i) => (
         <Text key={i} style={{ fontSize: 10, fontWeight: w.level === 'warn' ? '700' : '400', color: w.level === 'warn' ? '#b91c1c' : '#1d4ed8', backgroundColor: w.level === 'warn' ? '#fef2f2' : 'transparent', borderRadius: 4, padding: w.level === 'warn' ? 4 : 0 }}>
           {w.level === 'warn' ? '⚠️ ' : 'ℹ️ '}{w.message}
@@ -2488,7 +2487,7 @@ function DoseRowMobile({ dose: d, idx, doses, medicines, groups, past, onUpdate,
       {item?.description ? <Text style={{ fontSize: 10, color: '#4b5563' }}>ℹ️ {item.description}</Text> : null}
       {item && d.groupId ? (
         <Text style={{ fontSize: 10, color: groupStock - d.quantity < 0 ? '#dc2626' : '#6b7280', fontWeight: groupStock - d.quantity < 0 ? '600' : '400' }}>
-          재고 {d.groupName} {groupStock}{d.unit ?? '개'} · 전체 {total}{d.unit ?? '개'}{groupStock - d.quantity < 0 ? ' — 기록상 부족 (저장 가능, 실사 필요 표시)' : ''}
+          {L('nav.inventory')} {d.groupName} {groupStock}{d.unit ?? L('patient.pcs')} {L('patient.total2')} {total}{d.unit ?? L('patient.pcs')}{groupStock - d.quantity < 0 ? L('patient.shortOnRecordCanSave') : ''}
         </Text>
       ) : null}
     </View>
@@ -2523,21 +2522,21 @@ function DoseHistoryMobile({ record, currentUserName }: { record: PatientRecord;
     commit(next);
   };
   const removeDose = (id: string) => {
-    Alert.alert('삭제 확인', '이 약 복용 기록을 삭제할까요? 해당 수량은 재고에 복구됩니다.', [
-      { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: () => commit((record.medicationDoses ?? []).filter(d => d.id !== id)) },
+    Alert.alert(L('common.confirmDelete'), L('patient.deleteThisMedicationRecordThe'), [
+      { text: L('common.cancel'), style: 'cancel' },
+      { text: L('common.delete'), style: 'destructive', onPress: () => commit((record.medicationDoses ?? []).filter(d => d.id !== id)) },
     ]);
   };
 
   return (
     <View style={{ backgroundColor: '#f0fdf4', borderRadius: 10, borderWidth: 1, borderColor: '#d1fae5', padding: 10, marginTop: 10 }}>
-      <Text style={{ fontSize: 11, fontWeight: '700', color: '#065f46', marginBottom: 6 }}>💊 투약 내역 <Text style={{ color: '#9ca3af', fontWeight: '400' }}>({doses.length}건 · 시간순)</Text></Text>
+      <Text style={{ fontSize: 11, fontWeight: '700', color: '#065f46', marginBottom: 6 }}>{L('patient.medicationHistory')} <Text style={{ color: '#9ca3af', fontWeight: '400' }}>({doses.length}{L('patient.entriesByTime')}</Text></Text>
       <View style={{ gap: 4 }}>
         {doses.map(d => (
           <View key={d.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#fff', borderRadius: 6, borderWidth: 1, borderColor: '#d1fae5', paddingHorizontal: 8, paddingVertical: 5 }}>
             <Text style={{ fontSize: 10, color: '#9ca3af', width: 34 }}>{d.givenAt ? formatTime(d.givenAt) : ''}</Text>
             <View style={{ backgroundColor: d.source === 'initial' ? '#f3f4f6' : '#eff6ff', borderRadius: 3, paddingHorizontal: 4, paddingVertical: 1 }}>
-              <Text style={{ fontSize: 9, color: d.source === 'initial' ? '#4b5563' : '#2563eb' }}>{d.source === 'initial' ? '최초' : '경과'}</Text>
+              <Text style={{ fontSize: 9, color: d.source === 'initial' ? '#4b5563' : '#2563eb' }}>{d.source === 'initial' ? L('patient.initial') : L('patient.progress')}</Text>
             </View>
             <Text numberOfLines={1} style={{ flex: 1, fontSize: 11, color: '#1f2937' }}>
               <Text style={{ fontWeight: '700' }}>{doseLabel(d)}</Text> · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}
@@ -2546,7 +2545,7 @@ function DoseHistoryMobile({ record, currentUserName }: { record: PatientRecord;
               style={{ width: 22, height: 22, borderRadius: 5, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center', opacity: busy || d.quantity <= 1 ? 0.4 : 1 }}>
               <Text style={{ fontSize: 12, color: '#374151' }}>−</Text>
             </TouchableOpacity>
-            <Text style={{ minWidth: 30, textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#111827' }}>{d.quantity}{d.unit ?? '개'}</Text>
+            <Text style={{ minWidth: 30, textAlign: 'center', fontSize: 11, fontWeight: '700', color: '#111827' }}>{d.quantity}{d.unit ?? L('patient.pcs')}</Text>
             <TouchableOpacity disabled={busy} onPress={() => changeQty(d.id, 1)}
               style={{ width: 22, height: 22, borderRadius: 5, borderWidth: 1, borderColor: '#e5e7eb', alignItems: 'center', justifyContent: 'center', opacity: busy ? 0.4 : 1 }}>
               <Text style={{ fontSize: 12, color: '#374151' }}>+</Text>
@@ -2565,7 +2564,7 @@ function DoseHistoryMobile({ record, currentUserName }: { record: PatientRecord;
 // 경과·내원·복용약·부모연락 모두 동일한 껍데기 사용
 
 function TabFormModalMobile({
-  title, icon, onClose, onSubmit, submitLabel = '저장', submitColor = '#3b82f6', children,
+  title, icon, onClose, onSubmit, submitLabel = L('common.save'), submitColor = '#3b82f6', children,
 }: {
   title: string;
   icon?: string;
@@ -2603,7 +2602,7 @@ function TabFormModalMobile({
               <View style={{ flexDirection: 'row', gap: 8, padding: 12, borderTopWidth: 1, borderTopColor: '#f3f4f6' }}>
                 <TouchableOpacity onPress={onClose}
                   style={{ flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center', backgroundColor: '#f3f4f6' }}>
-                  <Text style={{ fontSize: 12, color: '#6b7280', fontWeight: '600' }}>취소</Text>
+                  <Text style={{ fontSize: 12, color: '#6b7280', fontWeight: '600' }}>{L('common.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={onSubmit}
                   style={{ flex: 2, paddingVertical: 9, borderRadius: 10, alignItems: 'center', backgroundColor: submitColor }}>
@@ -2642,10 +2641,10 @@ function IsolationManageMobile({
 
   return (
     <View style={{ backgroundColor: '#f5f3ff', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#ddd6fe' }}>
-      <Text style={{ fontSize: 12, fontWeight: '700', color: '#5b21b6', marginBottom: 10 }}>🏠 격리 관리</Text>
+      <Text style={{ fontSize: 12, fontWeight: '700', color: '#5b21b6', marginBottom: 10 }}>{L('patient.isolationCare')}</Text>
 
       {/* 주기 체크 */}
-      <Text style={{ fontSize: 11, fontWeight: '600', color: '#6d28d9', marginBottom: 6 }}>주기 체크</Text>
+      <Text style={{ fontSize: 11, fontWeight: '600', color: '#6d28d9', marginBottom: 6 }}>{L('patient.scheduledChecks')}</Text>
       <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
         {[30, 60, 120].map(min => (
           <TouchableOpacity
@@ -2664,13 +2663,13 @@ function IsolationManageMobile({
         completing === s.id ? (
           <View key={s.id} style={{ backgroundColor: '#fff', borderRadius: 8, padding: 10, marginBottom: 6 }}>
             <Text style={{ color: '#6d28d9', fontSize: 11, fontWeight: '600', marginBottom: 6 }}>
-              {formatTime(s.scheduledAt)} 체크 완료
+              {formatTime(s.scheduledAt)} {L('patient.checkDone')}
             </Text>
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 6 }}>
               <TextInput
                 value={checkTemp}
                 onChangeText={setCheckTemp}
-                placeholder="체온"
+                placeholder={L('patient.temperature')}
                 keyboardType="decimal-pad"
                 placeholderTextColor="#9ca3af"
                 style={{ flex: 1, borderWidth: 1, borderColor: '#ddd6fe', borderRadius: 6, padding: 8, fontSize: 12 }}
@@ -2682,14 +2681,14 @@ function IsolationManageMobile({
                     style={{ backgroundColor: checkStatus === o ? '#7c3aed' : '#f3f4f6', borderRadius: 4, paddingVertical: 4, paddingHorizontal: 6, marginBottom: 2 }}
                     onPress={() => setCheckStatus(o)}
                   >
-                    <Text style={{ color: checkStatus === o ? '#fff' : '#374151', fontSize: 10, fontWeight: '600' }}>{o}</Text>
+                    <Text style={{ color: checkStatus === o ? '#fff' : '#374151', fontSize: 10, fontWeight: '600' }}>{dataLabel(o)}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <TouchableOpacity style={[styles.editBtn, { flex: 1 }]} onPress={() => setCompleting(null)}>
-                <Text style={styles.editBtnText}>취소</Text>
+                <Text style={styles.editBtnText}>{L('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={{ flex: 1, backgroundColor: '#7c3aed', borderRadius: 8, padding: 8, alignItems: 'center' }}
@@ -2699,7 +2698,7 @@ function IsolationManageMobile({
                   setCheckTemp(''); setCheckStatus('동일'); setCheckNote('');
                 }}
               >
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>저장</Text>
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{L('common.save')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2712,7 +2711,7 @@ function IsolationManageMobile({
               style={{ backgroundColor: '#7c3aed', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4 }}
               onPress={() => setCompleting(s.id)}
             >
-              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>체크 완료</Text>
+              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{L('patient.checkDone')}</Text>
             </TouchableOpacity>
           </View>
         )
@@ -2720,13 +2719,13 @@ function IsolationManageMobile({
 
       {done.length > 0 && (
         <View style={{ marginTop: 6 }}>
-          <Text style={{ color: '#9ca3af', fontSize: 10, fontWeight: '600', marginBottom: 4 }}>완료 기록</Text>
+          <Text style={{ color: '#9ca3af', fontSize: 10, fontWeight: '600', marginBottom: 4 }}>{L('patient.completedChecks')}</Text>
           {done.map(s => (
             <View key={s.id} style={{ flexDirection: 'row', gap: 6, marginBottom: 2 }}>
               <Text style={{ color: '#22c55e', fontSize: 10 }}>✓</Text>
               <Text style={{ color: '#6b7280', fontSize: 10 }}>{formatTime(s.scheduledAt)}</Text>
               {s.temperature && <Text style={{ color: '#f97316', fontSize: 10 }}>{s.temperature}°C</Text>}
-              {s.status && <Text style={{ color: '#6b7280', fontSize: 10, fontWeight: '600' }}>{s.status}</Text>}
+              {s.status && <Text style={{ color: '#6b7280', fontSize: 10, fontWeight: '600' }}>{dataLabel(s.status)}</Text>}
             </View>
           ))}
         </View>
@@ -2734,7 +2733,7 @@ function IsolationManageMobile({
 
       {/* 레거시 복귀 기준 */}
       <View style={{ marginTop: 10 }}>
-        <Text style={{ fontSize: 11, fontWeight: '600', color: '#6d28d9', marginBottom: 6 }}>격리 해제 기준</Text>
+        <Text style={{ fontSize: 11, fontWeight: '600', color: '#6d28d9', marginBottom: 6 }}>{L('patient.isolationReleaseCriteria')}</Text>
         {ISOLATION_RETURN_LABELS.map((label, i) => {
           const checked = record.isolationReturnChecks?.[i] ?? false;
           return (
@@ -2747,7 +2746,7 @@ function IsolationManageMobile({
                 {checked && <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>✓</Text>}
               </View>
               <Text style={{ flex: 1, fontSize: 11, color: checked ? '#6d28d9' : '#374151', textDecorationLine: checked ? 'line-through' : 'none' }}>
-                {label}
+                {dataLabel(label)}
               </Text>
             </TouchableOpacity>
           );
@@ -2776,10 +2775,10 @@ function ReturnCriteriaMobile({
   return (
     <View style={{ backgroundColor: allDone ? '#f0fdf4' : '#fffbeb', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: allDone ? '#bbf7d0' : '#fde68a' }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <Text style={{ fontSize: 12, fontWeight: '700', color: allDone ? '#166534' : '#92400e' }}>복귀 판단 기준</Text>
+        <Text style={{ fontSize: 12, fontWeight: '700', color: allDone ? '#166534' : '#92400e' }}>{L('patient.returnToClassCriteria')}</Text>
         {allDone && (
           <View style={{ backgroundColor: '#dcfce7', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 }}>
-            <Text style={{ color: '#166534', fontSize: 10, fontWeight: '700' }}>✓ 복귀 가능</Text>
+            <Text style={{ color: '#166534', fontSize: 10, fontWeight: '700' }}>{L('patient.canReturn')}</Text>
           </View>
         )}
       </View>
@@ -2795,7 +2794,7 @@ function ReturnCriteriaMobile({
               {checked && <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>✓</Text>}
             </View>
             <Text style={{ flex: 1, fontSize: 11, color: checked ? '#9ca3af' : '#374151', textDecorationLine: checked ? 'line-through' : 'none' }}>
-              {label}
+              {dataLabel(label)}
             </Text>
           </TouchableOpacity>
         );
@@ -2819,9 +2818,9 @@ function HospitalTabMobile({ record, campUsers, allRecords, onUpdateVisits }: {
   const hospitalSubmitRef = useRef<(() => void) | null>(null);
 
   const handleDeleteVisit = (idx: number) => {
-    Alert.alert('삭제 확인', `${idx + 1}차 내원 기록을 삭제할까요?`, [
-      { text: '취소', style: 'cancel' },
-      { text: '삭제', style: 'destructive', onPress: () => onUpdateVisits(visits.filter((_, i) => i !== idx)) },
+    Alert.alert(L('common.confirmDelete'), L('patient.deleteHospitalVisit', { v0: idx + 1 }), [
+      { text: L('common.cancel'), style: 'cancel' },
+      { text: L('common.delete'), style: 'destructive', onPress: () => onUpdateVisits(visits.filter((_, i) => i !== idx)) },
     ]);
   };
 
@@ -2844,38 +2843,38 @@ function HospitalTabMobile({ record, campUsers, allRecords, onUpdateVisits }: {
   return (
     <View style={{ gap: 8 }}>
       {visits.length === 0 && !showForm ? (
-        <Text style={{ color: '#9ca3af', fontSize: 12, textAlign: 'center', paddingVertical: 12 }}>내원 기록이 없습니다.</Text>
+        <Text style={{ color: '#9ca3af', fontSize: 12, textAlign: 'center', paddingVertical: 12 }}>{L('patient.noHospitalVisits')}</Text>
       ) : (
         visits.map((visit, idx) => (
           <View key={visit.visitId} style={{ backgroundColor: '#fff', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#fed7aa' }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-              <Text style={{ color: '#c2410c', fontSize: 11, fontWeight: '700' }}>{idx + 1}차 내원 · {visit.hospitalStatus}</Text>
+              <Text style={{ color: '#c2410c', fontSize: 11, fontWeight: '700' }}>{idx + 1}{L('patient.visit2')} {dataLabel(visit.hospitalStatus)}</Text>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <TouchableOpacity onPress={() => { setEditingIdx(idx); setShowForm(true); }}>
-                  <Text style={{ fontSize: 11, color: '#6b7280' }}>수정</Text>
+                  <Text style={{ fontSize: 11, color: '#6b7280' }}>{L('task.edit')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => handleDeleteVisit(idx)}>
                   <Text style={{ fontSize: 11 }}>🗑️</Text>
                 </TouchableOpacity>
               </View>
             </View>
-            {visit.transportSlot && <Text style={{ fontSize: 11, color: '#374151' }}>방식: {visit.transportSlot}</Text>}
-            {visit.departureTime && <Text style={{ fontSize: 11, color: '#374151' }}>출발: {visit.departureTime}</Text>}
-            {visit.driver && <Text style={{ fontSize: 11, color: '#374151' }}>운전: {visit.driver}</Text>}
-            {visit.escort && <Text style={{ fontSize: 11, color: '#374151' }}>인솔: {visit.escort}</Text>}
+            {visit.transportSlot && <Text style={{ fontSize: 11, color: '#374151' }}>{L('patient.method')} {dataLabel(visit.transportSlot)}</Text>}
+            {visit.departureTime && <Text style={{ fontSize: 11, color: '#374151' }}>{L('patient.departure')} {visit.departureTime}</Text>}
+            {visit.driver && <Text style={{ fontSize: 11, color: '#374151' }}>{L('patient.driver')} {visit.driver}</Text>}
+            {visit.escort && <Text style={{ fontSize: 11, color: '#374151' }}>{L('students.escort')} {visit.escort}</Text>}
             {(isActiveEscortVisit(visit, viewer?.name) || viewer?.role === 'admin') && visit.hospitalStatus !== '필요없음' && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={{ fontSize: 11, color: '#374151' }}>주민번호:</Text>
+                <Text style={{ fontSize: 11, color: '#374151' }}>{L('patient.id')}</Text>
                 <EscortSsn recordId={record.id} auto={isActiveEscortVisit(visit, viewer?.name)} />
               </View>
             )}
-            {visit.hospitalName && <Text style={{ fontSize: 11, color: '#374151' }}>병원: {visit.hospitalName}</Text>}
+            {visit.hospitalName && <Text style={{ fontSize: 11, color: '#374151' }}>{L('patient.hospital')} {visit.hospitalName}</Text>}
             {visit.hospitalStatus === '내원예정' && (
               <TouchableOpacity
                 style={{ backgroundColor: '#22c55e', borderRadius: 8, padding: 8, alignItems: 'center', marginTop: 8 }}
                 onPress={() => onUpdateVisits(visits.map((v, i) => i === idx ? { ...v, hospitalStatus: '내원완료' as HospitalStatus } : v))}
               >
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>내원 완료 처리</Text>
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{L('patient.markVisitComplete')}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -2886,17 +2885,17 @@ function HospitalTabMobile({ record, campUsers, allRecords, onUpdateVisits }: {
         onPress={() => { setEditingIdx(-1); setShowForm(true); }}
       >
         <Text style={{ color: '#ef4444', fontSize: 12, fontWeight: '600' }}>
-          + {visits.length === 0 ? '내원예정 등록' : '재내원 추가'}
+          + {visits.length === 0 ? L('patient.registerPlannedVisit') : L('patient.addAnotherVisit')}
         </Text>
       </TouchableOpacity>
 
       {showForm && (
         <TabFormModalMobile
-          title={editingIdx >= 0 ? '내원 정보 수정' : '내원예정 등록'}
+          title={editingIdx >= 0 ? L('patient.editVisitInfo') : L('patient.registerPlannedVisit')}
           icon="🏥"
           onClose={() => { setShowForm(false); setEditingIdx(-1); }}
           onSubmit={() => hospitalSubmitRef.current?.()}
-          submitLabel={editingIdx >= 0 ? '수정 완료' : '등록'}
+          submitLabel={editingIdx >= 0 ? L('common.saveChanges') : L('common.register')}
           submitColor="#f97316"
         >
           <HospitalScheduleFormMobile
@@ -2986,29 +2985,29 @@ function HospitalScheduleFormMobile({
 
   return (
     <View style={{ gap: 8 }}>
-      <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 2 }}>내원 방식</Text>
+      <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 2 }}>{L('patient.transport')}</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
         {TRANSPORT_SLOTS.map(s => (
           <TouchableOpacity key={s} onPress={() => handleSlotChange(s)}
             style={{ paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, backgroundColor: transportSlot === s ? '#f97316' : '#fff', borderWidth: 1, borderColor: '#fed7aa' }}>
-            <Text style={{ fontSize: 11, fontWeight: '600', color: transportSlot === s ? '#fff' : '#6b7280' }}>{s}</Text>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: transportSlot === s ? '#fff' : '#6b7280' }}>{dataLabel(s)}</Text>
           </TouchableOpacity>
         ))}
       </View>
-      <Text style={{ fontSize: 10, color: '#6b7280' }}>출발 시간 (24시간)</Text>
+      <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('patient.departureTime24h')}</Text>
       <TextInput value={departureTime}
         onChangeText={v => { const raw = v.replace(/[^\d:]/g, ''); if (/^\d{4}$/.test(raw)) setDepartureTime(`${raw.slice(0, 2)}:${raw.slice(2)}`); else setDepartureTime(raw); }}
-        placeholder="예) 14:30" placeholderTextColor="#9ca3af" maxLength={5}
+        placeholder={L('patient.eG1430')} placeholderTextColor="#9ca3af" maxLength={5}
         style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
       {isCar && (
         <>
-          <Text style={{ fontSize: 10, color: '#6b7280' }}>운전자</Text>
-          <UserSearchInputMobile value={driver} onChange={setDriver} campUsers={campUsers} placeholder="운전자 검색" />
+          <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('patient.driver2')}</Text>
+          <UserSearchInputMobile value={driver} onChange={setDriver} campUsers={campUsers} placeholder={L('patient.searchDriver')} />
         </>
       )}
-      <Text style={{ fontSize: 10, color: '#6b7280' }}>인솔자</Text>
-      <UserSearchInputMobile value={escort} onChange={setEscort} campUsers={campUsers} placeholder="인솔자 검색" />
-      <Text style={{ fontSize: 10, color: '#6b7280' }}>병원 이름</Text>
+      <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('patient.escort')}</Text>
+      <UserSearchInputMobile value={escort} onChange={setEscort} campUsers={campUsers} placeholder={L('patient.searchEscort')} />
+      <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('patient.hospitalName')}</Text>
       {presets.length > 0 && (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
           {presets.map(name => (
@@ -3018,14 +3017,14 @@ function HospitalScheduleFormMobile({
           ))}
         </View>
       )}
-      <TextInput value={hospitalName} onChangeText={setHospitalName} placeholder="병원 이름 직접 입력" placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
-      <Text style={{ fontSize: 10, color: '#6b7280' }}>학부모 보고자</Text>
-      <TextInput value={parentReporter} onChangeText={setParentReporter} placeholder="보고자" placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
-      <Text style={{ fontSize: 10, color: '#6b7280' }}>학부모 보고 방식</Text>
+      <TextInput value={hospitalName} onChangeText={setHospitalName} placeholder={L('patient.enterHospitalName')} placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
+      <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('patient.parentReporter2')}</Text>
+      <TextInput value={parentReporter} onChangeText={setParentReporter} placeholder={L('patient.reporter2')} placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
+      <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('patient.parentReportMethod')}</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
         {PARENT_REPORT_METHODS.map(m => (
           <TouchableOpacity key={m} onPress={() => setParentReportMethod(m)} style={{ paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, backgroundColor: parentReportMethod === m ? '#f97316' : '#fff', borderWidth: 1, borderColor: '#fed7aa' }}>
-            <Text style={{ fontSize: 11, color: parentReportMethod === m ? '#fff' : '#6b7280' }}>{m}</Text>
+            <Text style={{ fontSize: 11, color: parentReportMethod === m ? '#fff' : '#6b7280' }}>{dataLabel(m)}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -3100,23 +3099,23 @@ function TransportBoardMobile({ allRecords }: { allRecords: PatientRecord[] }) {
   return (
     <View style={{ backgroundColor: '#fff7ed', borderRadius: 12, borderWidth: 1, borderColor: '#fed7aa', marginBottom: 12, overflow: 'hidden' }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#fed7aa' }}>
-        <Text style={{ fontSize: 11, fontWeight: '700', color: '#c2410c' }}>🚗 내원 차량 현황</Text>
+        <Text style={{ fontSize: 11, fontWeight: '700', color: '#c2410c' }}>{L('patient.hospitalTransport')}</Text>
       </View>
       {bySlot.map(({ slot, rows }, i) => (
         <View key={slot} style={{ paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: i < bySlot.length - 1 ? 1 : 0, borderBottomColor: '#fed7aa' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: '#ea580c' }}>{slot}</Text>
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#ea580c' }}>{dataLabel(slot)}</Text>
             {rows[0]?.driver && (
-              <Text style={{ fontSize: 11, color: '#374151' }}>운전 <Text style={{ fontWeight: '600' }}>{rows[0].driver}</Text></Text>
+              <Text style={{ fontSize: 11, color: '#374151' }}>{L('patient.driver3')} <Text style={{ fontWeight: '600' }}>{rows[0].driver}</Text></Text>
             )}
           </View>
           <View style={{ gap: 3 }}>
             {rows.map((g, ri) => (
               <Text key={ri} style={{ fontSize: 11, color: '#374151', lineHeight: 16 }}>
-                <Text style={{ fontWeight: '700', color: '#111827' }}>{g.escort || '인솔자 미정'}</Text>
+                <Text style={{ fontWeight: '700', color: '#111827' }}>{g.escort || L('patient.escortTbd')}</Text>
                 {' '}<Text style={{ color: '#c2410c' }}>({g.students.join(', ')})</Text>
                 {g.hospitalName ? <Text style={{ color: '#6b7280' }}> : {g.hospitalName}</Text> : null}
-                {g.departureTime ? <Text style={{ fontSize: 10, color: '#9ca3af' }}> · {g.departureTime} 출발</Text> : null}
+                {g.departureTime ? <Text style={{ fontSize: 10, color: '#9ca3af' }}> · {g.departureTime} {L('patient.departs')}</Text> : null}
               </Text>
             ))}
           </View>
@@ -3200,11 +3199,11 @@ function MedicationTabMobile({
         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
           {sched.category && (
             <View style={{ backgroundColor: '#fde68a', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginRight: 6 }}>
-              <Text style={{ fontSize: 9, color: '#92400e', fontWeight: '700' }}>{sched.category}</Text>
+              <Text style={{ fontSize: 9, color: '#92400e', fontWeight: '700' }}>{dataLabel(sched.category)}</Text>
             </View>
           )}
           <Text style={{ color: '#c2410c', fontSize: 12, fontWeight: '700', flex: 1 }}>{sched.name}</Text>
-          <Text style={{ color: '#f97316', fontSize: 10 }}>{done}/{total}회</Text>
+          <Text style={{ color: '#f97316', fontSize: 10 }}>{done}/{total}{L('patient.x2')}</Text>
           <TouchableOpacity onPress={() => openEdit(idx)} style={{ marginLeft: 8 }}>
             <Text style={{ fontSize: 12 }}>✏️</Text>
           </TouchableOpacity>
@@ -3218,7 +3217,7 @@ function MedicationTabMobile({
         </View>
         {/* 기간 */}
         <Text style={{ color: '#9ca3af', fontSize: 10, marginBottom: 6 }}>
-          {formatMedPeriod(sched)}{!isActive && ' (오늘 복용일 아님)'}
+          {formatMedPeriod(sched)}{!isActive && L('patient.noDoseToday')}
         </Text>
         {sched.memo ? <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 6 }}>📝 {sched.memo}</Text> : null}
         {/* 복용 시간 버튼 */}
@@ -3232,7 +3231,7 @@ function MedicationTabMobile({
                 <TouchableOpacity key={time} disabled={off} style={[styles.medTimeBtn, checked && styles.medTimeBtnDone, off && { opacity: 0.35 }]}
                   onPress={() => onCheck(idx, time, checked)}>
                   {checked && <Text style={{ color: '#fff', fontSize: 10 }}>✓ </Text>}
-                  <Text style={[styles.medTimeBtnText, checked && { color: '#fff' }]}>{time}</Text>
+                  <Text style={[styles.medTimeBtnText, checked && { color: '#fff' }]}>{dataLabel(time)}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -3241,13 +3240,13 @@ function MedicationTabMobile({
         {/* 삭제 확인 */}
         {confirmDeleteIdx === idx && (
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, borderTopWidth: 1, borderTopColor: '#fed7aa', paddingTop: 8 }}>
-            <Text style={{ flex: 1, fontSize: 11, color: '#374151' }}>정말 삭제할까요?</Text>
+            <Text style={{ flex: 1, fontSize: 11, color: '#374151' }}>{L('patient.reallyDelete')}</Text>
             <TouchableOpacity onPress={() => setConfirmDeleteIdx(null)} style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: '#f3f4f6' }}>
-              <Text style={{ fontSize: 11, color: '#6b7280' }}>취소</Text>
+              <Text style={{ fontSize: 11, color: '#6b7280' }}>{L('common.cancel')}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => { onRemoveSchedule?.(idx); setConfirmDeleteIdx(null); }}
               style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, backgroundColor: '#ef4444' }}>
-              <Text style={{ fontSize: 11, color: '#fff', fontWeight: '700' }}>삭제</Text>
+              <Text style={{ fontSize: 11, color: '#fff', fontWeight: '700' }}>{L('common.delete')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -3259,33 +3258,33 @@ function MedicationTabMobile({
     <View style={{ gap: 6 }}>
       <TouchableOpacity onPress={openAdd}
         style={{ borderWidth: 1, borderStyle: 'dashed', borderColor: '#fed7aa', borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}>
-        <Text style={{ color: '#f97316', fontSize: 12, fontWeight: '600' }}>+ 복용약 추가</Text>
+        <Text style={{ color: '#f97316', fontSize: 12, fontWeight: '600' }}>{L('patient.addMedication3')}</Text>
       </TouchableOpacity>
 
       {showForm && (
         <TabFormModalMobile
-          title={editingIdx !== null ? '약 수정' : '복용약 추가'}
+          title={editingIdx !== null ? L('patient.editMedication') : L('patient.addMedication2')}
           icon="💊"
           onClose={() => { setShowForm(false); setEditingIdx(null); }}
           onSubmit={handleSubmit}
-          submitLabel={editingIdx !== null ? '수정 완료' : '추가'}
+          submitLabel={editingIdx !== null ? L('common.saveChanges') : L('task.add')}
           submitColor="#f97316"
         >
           {/* 약 이름 */}
           <View>
-            <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>약 이름 *</Text>
+            <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.medicationName2')}</Text>
             <TextInput value={formData.name} onChangeText={v => setFormData(f => ({ ...f, name: v }))}
-              placeholder="약 이름 입력" placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
+              placeholder={L('patient.enterMedicationName')} placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
           </View>
 
           {/* 종류 */}
           <View>
-            <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>종류</Text>
+            <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.type')}</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
               {MEDICATION_CATEGORIES.map(cat => (
                 <TouchableOpacity key={cat} onPress={() => setFormData(f => ({ ...f, category: f.category === cat ? undefined : cat }))}
                   style={{ paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, backgroundColor: formData.category === cat ? '#f97316' : '#f3f4f6' }}>
-                  <Text style={{ fontSize: 11, color: formData.category === cat ? '#fff' : '#6b7280', fontWeight: '600' }}>{cat}</Text>
+                  <Text style={{ fontSize: 11, color: formData.category === cat ? '#fff' : '#6b7280', fontWeight: '600' }}>{dataLabel(cat)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -3293,12 +3292,12 @@ function MedicationTabMobile({
 
           {/* 복용 시간 */}
           <View>
-            <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>복용 시간 * (중복 선택)</Text>
+            <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.doseTimesMultiple')}</Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
               {MEDICATION_TIMES.map(t => (
                 <TouchableOpacity key={t} onPress={() => toggleTime(t)}
                   style={{ paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, backgroundColor: formData.times.includes(t) ? '#f97316' : '#f3f4f6' }}>
-                  <Text style={{ fontSize: 11, color: formData.times.includes(t) ? '#fff' : '#6b7280', fontWeight: '600' }}>{t}</Text>
+                  <Text style={{ fontSize: 11, color: formData.times.includes(t) ? '#fff' : '#6b7280', fontWeight: '600' }}>{dataLabel(t)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -3306,30 +3305,30 @@ function MedicationTabMobile({
 
           {/* 복용 기간 */}
           <View>
-            <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>복용 기간</Text>
+            <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.duration')}</Text>
             <TouchableOpacity onPress={() => setFormData(f => ({ ...f, endDateAuto: !f.endDateAuto, lastTime: undefined }))}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
               <View style={{ width: 16, height: 16, borderRadius: 3, borderWidth: 1.5, borderColor: formData.endDateAuto ? '#f97316' : '#d1d5db', backgroundColor: formData.endDateAuto ? '#f97316' : '#fff', alignItems: 'center', justifyContent: 'center' }}>
                 {formData.endDateAuto && <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>✓</Text>}
               </View>
-              <Text style={{ fontSize: 12, color: '#374151', fontWeight: '500' }}>캠프 끝까지</Text>
+              <Text style={{ fontSize: 12, color: '#374151', fontWeight: '500' }}>{L('patient.untilCampEnds')}</Text>
             </TouchableOpacity>
             {!formData.endDateAuto && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <TextInput value={dayCount} onChangeText={handleDayCount} keyboardType="number-pad"
                   style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, fontSize: 13, width: 52, textAlign: 'center', backgroundColor: '#fff', color: '#111827' }} />
-                <Text style={{ fontSize: 11, color: '#6b7280' }}>일  {formData.startDate} ~ {formData.endDate}</Text>
+                <Text style={{ fontSize: 11, color: '#6b7280' }}>{L('patient.d')}  {formData.startDate} ~ {formData.endDate}</Text>
               </View>
             )}
 
             {!formData.endDateAuto && formData.times.length > 0 && (
               <View style={{ marginTop: 8 }}>
-                <Text style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>시작 날 시작 시간</Text>
+                <Text style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>{L('patient.startTimeOnFirstDay2')}</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
                   {MEDICATION_TIMES.filter(t => formData.times.includes(t)).map(t => (
                     <TouchableOpacity key={t} onPress={() => setFormData(f => ({ ...f, firstTime: t }))}
                       style={{ paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, backgroundColor: formData.firstTime === t ? '#14b8a6' : '#f3f4f6' }}>
-                      <Text style={{ fontSize: 10, color: formData.firstTime === t ? '#fff' : '#6b7280', fontWeight: '600' }}>{t}부터</Text>
+                      <Text style={{ fontSize: 10, color: formData.firstTime === t ? '#fff' : '#6b7280', fontWeight: '600' }}>{dataLabel(t)}{L('patient.start')}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -3338,12 +3337,12 @@ function MedicationTabMobile({
 
             {!formData.endDateAuto && parseInt(dayCount) > 1 && formData.times.length > 0 && (
               <View style={{ marginTop: 6 }}>
-                <Text style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>마지막 날 마감 시간</Text>
+                <Text style={{ fontSize: 10, color: '#9ca3af', marginBottom: 4 }}>{L('patient.endTimeOnLastDay')}</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
                   {MEDICATION_TIMES.filter(t => formData.times.includes(t)).map(t => (
                     <TouchableOpacity key={t} onPress={() => setFormData(f => ({ ...f, lastTime: t }))}
                       style={{ paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, backgroundColor: formData.lastTime === t ? '#f97316' : '#f3f4f6' }}>
-                      <Text style={{ fontSize: 10, color: formData.lastTime === t ? '#fff' : '#6b7280', fontWeight: '600' }}>{t}까지</Text>
+                      <Text style={{ fontSize: 10, color: formData.lastTime === t ? '#fff' : '#6b7280', fontWeight: '600' }}>{dataLabel(t)}{L('patient.end')}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -3353,15 +3352,15 @@ function MedicationTabMobile({
 
           {/* 메모 */}
           <View>
-            <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>메모</Text>
+            <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('common.memo')}</Text>
             <TextInput value={formData.memo ?? ''} onChangeText={v => setFormData(f => ({ ...f, memo: v }))}
-              placeholder="예: 식후 30분, 물 충분히" placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
+              placeholder={L('patient.eG30MinAfter')} placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
           </View>
         </TabFormModalMobile>
       )}
 
       {schedules.length === 0 && !showForm && (
-        <Text style={{ color: '#9ca3af', fontSize: 12, textAlign: 'center', paddingVertical: 8 }}>복용약 일정이 없습니다.</Text>
+        <Text style={{ color: '#9ca3af', fontSize: 12, textAlign: 'center', paddingVertical: 8 }}>{L('patient.noMedicationSchedule')}</Text>
       )}
 
       {/* 약 카드 목록 */}
@@ -3443,23 +3442,23 @@ function PatientFormModal({
         <TouchableOpacity onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Ionicons name="close" size={24} color="#374151" />
         </TouchableOpacity>
-        <Text style={styles.modalTitle}>{editingId ? '환자 기록 수정' : '환자 기록 추가'}</Text>
+        <Text style={styles.modalTitle}>{editingId ? L('patient.editPatientRecord') : L('patient.addPatientRecord')}</Text>
         <TouchableOpacity
           onPress={onSubmit}
           disabled={submitting || !form.studentName.trim() || !form.symptom.trim()}
           style={[styles.modalSaveBtn, (submitting || !form.studentName.trim() || !form.symptom.trim()) && styles.modalSaveBtnDisabled]}
         >
-          {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.modalSaveBtnText}>저장</Text>}
+          {submitting ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.modalSaveBtnText}>{L('common.save')}</Text>}
         </TouchableOpacity>
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 16 }} keyboardShouldPersistTaps="handled">
         {/* 학생 정보 */}
         <View style={styles.formSection}>
-          <Text style={styles.formSectionTitle}>학생 정보</Text>
+          <Text style={styles.formSectionTitle}>{L('patient.studentInfo')}</Text>
           {/* 이름 검색 */}
           <View>
-            <Text style={styles.formLabel}>이름 *</Text>
+            <Text style={styles.formLabel}>{L('profile.name')}</Text>
             <TextInput
               value={studentSearch || form.studentName}
               onChangeText={v => {
@@ -3469,7 +3468,7 @@ function PatientFormModal({
                 setShowDropdown(true);
               }}
               onFocus={() => { if (!studentLocked) setShowDropdown(true); }}
-              placeholder="이름으로 검색..."
+              placeholder={L('patient.searchByName')}
               placeholderTextColor="#9ca3af"
               editable={!studentLocked}
               style={[styles.formInput, studentLocked && { backgroundColor: '#f9fafb', color: '#374151' }]}
@@ -3483,7 +3482,7 @@ function PatientFormModal({
                   setForm(f => ({ ...f, studentName: '', grade: '', className: '', classMentor: '', unitMentor: '', roomNumber: '' }));
                 }}
               >
-                <Text style={{ color: '#6b7280', fontSize: 11 }}>변경</Text>
+                <Text style={{ color: '#6b7280', fontSize: 11 }}>{L('patient.change')}</Text>
               </TouchableOpacity>
             )}
             {showDropdown && studentResults.length > 0 && !studentLocked && (
@@ -3496,7 +3495,7 @@ function PatientFormModal({
                   >
                     <Text style={{ fontSize: 13, fontWeight: '600', color: '#111827' }}>{s.name}</Text>
                     <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
-                      {s.grade}{s.gender ? s.gender : ''} · {s.className ?? '-'} · {s.roomNumber ? `${s.roomNumber}호` : '-'}
+                      {s.grade}{s.gender ? s.gender : ''} · {s.className ?? '-'} · {s.roomNumber ? L('lodging.roomV0', { v0: s.roomNumber }) : '-'}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -3506,17 +3505,17 @@ function PatientFormModal({
           {/* 자동 매핑 표시 (잠긴 상태) */}
           {studentLocked && (
             <View style={{ backgroundColor: '#f9fafb', borderRadius: 8, padding: 10, marginTop: 4 }}>
-              {form.grade && <Text style={{ fontSize: 11, color: '#6b7280' }}>학년: {form.grade}</Text>}
-              {form.className && <Text style={{ fontSize: 11, color: '#6b7280' }}>반: {form.className}</Text>}
-              {form.classMentor && <Text style={{ fontSize: 11, color: '#6b7280' }}>담임: {form.classMentor}</Text>}
-              {form.roomNumber && <Text style={{ fontSize: 11, color: '#6b7280' }}>방: {form.roomNumber}호</Text>}
+              {form.grade && <Text style={{ fontSize: 11, color: '#6b7280' }}>{L('patient.grade')} {form.grade}</Text>}
+              {form.className && <Text style={{ fontSize: 11, color: '#6b7280' }}>{L('students.class3')} {form.className}</Text>}
+              {form.classMentor && <Text style={{ fontSize: 11, color: '#6b7280' }}>{L('patient.homeroom2')} {form.classMentor}</Text>}
+              {form.roomNumber && <Text style={{ fontSize: 11, color: '#6b7280' }}>{L('students.room3')} {form.roomNumber}{L('students.text')}</Text>}
             </View>
           )}
         </View>
 
         {/* 유형 선택 */}
         <View style={styles.formSection}>
-          <Text style={styles.formSectionTitle}>유형 (복수 선택)</Text>
+          <Text style={styles.formSectionTitle}>{L('patient.typeMultiple2')}</Text>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {PATIENT_TYPES.map(t => {
               const selected = form.types.includes(t);
@@ -3527,7 +3526,7 @@ function PatientFormModal({
                   style={{ backgroundColor: selected ? col.bg : '#f3f4f6', borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: selected ? col.text + '40' : '#e5e7eb' }}
                   onPress={() => toggleType(t)}
                 >
-                  <Text style={{ color: selected ? col.text : '#6b7280', fontSize: 12, fontWeight: '600' }}>{t}</Text>
+                  <Text style={{ color: selected ? col.text : '#6b7280', fontSize: 12, fontWeight: '600' }}>{dataLabel(t)}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -3536,28 +3535,28 @@ function PatientFormModal({
 
         {/* 증상 */}
         <View style={styles.formSection}>
-          <Text style={styles.formSectionTitle}>증상 & 처치</Text>
-          <Text style={styles.formLabel}>증상 *</Text>
+          <Text style={styles.formSectionTitle}>{L('patient.symptomsCare')}</Text>
+          <Text style={styles.formLabel}>{L('patient.symptoms2')}</Text>
           <TextInput
             value={form.symptom}
             onChangeText={v => setField('symptom', v)}
-            placeholder="증상을 입력하세요"
+            placeholder={L('patient.enterSymptoms')}
             placeholderTextColor="#9ca3af"
             multiline
             style={[styles.formInput, { minHeight: 60 }]}
           />
-          <Text style={[styles.formLabel, { marginTop: 8 }]}>처치</Text>
+          <Text style={[styles.formLabel, { marginTop: 8 }]}>{L('patient.care')}</Text>
           <TextInput
             value={form.treatment}
             onChangeText={v => setField('treatment', v)}
-            placeholder="처치 내용"
+            placeholder={L('patient.careGiven')}
             placeholderTextColor="#9ca3af"
             multiline
             style={[styles.formInput, { minHeight: 60 }]}
           />
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.formLabel}>체온</Text>
+              <Text style={styles.formLabel}>{L('patient.temperature')}</Text>
               <TextInput
                 value={form.temperature}
                 onChangeText={v => setField('temperature', v)}
@@ -3568,11 +3567,11 @@ function PatientFormModal({
               />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.formLabel}>간단 투약</Text>
+              <Text style={styles.formLabel}>{L('patient.quickMedication')}</Text>
               <TextInput
                 value={form.medication}
                 onChangeText={v => setField('medication', v)}
-                placeholder="타이레놀"
+                placeholder={L('patient.tylenol')}
                 placeholderTextColor="#9ca3af"
                 style={styles.formInput}
               />
@@ -3582,7 +3581,7 @@ function PatientFormModal({
 
         {/* 경과 */}
         <View style={styles.formSection}>
-          <Text style={styles.formSectionTitle}>경과 상태</Text>
+          <Text style={styles.formSectionTitle}>{L('patient.progressStatus')}</Text>
           <View style={{ flexDirection: 'row', gap: 6 }}>
             {PROGRESS_STATUSES.map(s => {
               const isActive = form.progressStatus === s;
@@ -3593,7 +3592,7 @@ function PatientFormModal({
                   style={{ flex: 1, backgroundColor: isActive ? col.dot : '#f3f4f6', borderRadius: 8, padding: 6, alignItems: 'center' }}
                   onPress={() => setField('progressStatus', s)}
                 >
-                  <Text style={{ color: isActive ? '#fff' : '#6b7280', fontSize: 10, fontWeight: '700' }}>{s}</Text>
+                  <Text style={{ color: isActive ? '#fff' : '#6b7280', fontSize: 10, fontWeight: '700' }}>{dataLabel(s)}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -3603,8 +3602,8 @@ function PatientFormModal({
         {/* 격리방 */}
         {hasIsolation && (
           <View style={styles.formSection}>
-            <Text style={styles.formSectionTitle}>격리 정보</Text>
-            <Text style={styles.formLabel}>격리방 번호</Text>
+            <Text style={styles.formSectionTitle}>{L('patient.isolationInfo')}</Text>
+            <Text style={styles.formLabel}>{L('patient.isolationRoomNumber')}</Text>
             <TextInput
               value={form.isolationRoom}
               onChangeText={v => setField('isolationRoom', v)}
@@ -3618,11 +3617,11 @@ function PatientFormModal({
         {/* 약 스케줄 */}
         {hasMedType && (
           <View style={styles.formSection}>
-            <Text style={styles.formSectionTitle}>복용약 스케줄</Text>
+            <Text style={styles.formSectionTitle}>{L('patient.medicationSchedule')}</Text>
             {form.medSchedules.map((sched, idx) => (
               <View key={idx} style={{ backgroundColor: '#fff7ed', borderRadius: 10, padding: 10, marginBottom: 8 }}>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#c2410c' }}>약 #{idx + 1}</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#c2410c' }}>{L('patient.med')}{idx + 1}</Text>
                   <TouchableOpacity onPress={() => setForm(f => ({ ...f, medSchedules: f.medSchedules.filter((_, i) => i !== idx) }))}>
                     <Ionicons name="close-circle" size={18} color="#f97316" />
                   </TouchableOpacity>
@@ -3634,7 +3633,7 @@ function PatientFormModal({
                     updated[idx] = { ...updated[idx], name: v };
                     setField('medSchedules', updated);
                   }}
-                  placeholder="약 이름 (예: 타이레놀)"
+                  placeholder={L('patient.medicationNameEGTylenol2')}
                   placeholderTextColor="#9ca3af"
                   style={[styles.formInput, { marginBottom: 6 }]}
                 />
@@ -3653,14 +3652,14 @@ function PatientFormModal({
                           setField('medSchedules', updated);
                         }}
                       >
-                        <Text style={{ color: selected ? '#fff' : '#374151', fontSize: 11, fontWeight: '600' }}>{time}</Text>
+                        <Text style={{ color: selected ? '#fff' : '#374151', fontSize: 11, fontWeight: '600' }}>{dataLabel(time)}</Text>
                       </TouchableOpacity>
                     );
                   })}
                 </View>
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.formLabel}>시작일</Text>
+                    <Text style={styles.formLabel}>{L('patient.startDate')}</Text>
                     <TextInput
                       value={sched.startDate}
                       onChangeText={v => {
@@ -3674,7 +3673,7 @@ function PatientFormModal({
                     />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.formLabel}>종료일</Text>
+                    <Text style={styles.formLabel}>{L('patient.endDate')}</Text>
                     <TextInput
                       value={sched.endDate}
                       onChangeText={v => {
@@ -3694,18 +3693,18 @@ function PatientFormModal({
               style={{ borderWidth: 1, borderStyle: 'dashed', borderColor: '#fed7aa', borderRadius: 10, padding: 10, alignItems: 'center' }}
               onPress={addMedSchedule}
             >
-              <Text style={{ color: '#f97316', fontSize: 12, fontWeight: '600' }}>+ 약 스케줄 추가</Text>
+              <Text style={{ color: '#f97316', fontSize: 12, fontWeight: '600' }}>{L('patient.addMedicationSchedule')}</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* 메모 */}
         <View style={styles.formSection}>
-          <Text style={styles.formLabel}>메모</Text>
+          <Text style={styles.formLabel}>{L('common.memo')}</Text>
           <TextInput
             value={form.notes}
             onChangeText={v => setField('notes', v)}
-            placeholder="추가 메모"
+            placeholder={L('patient.additionalNotes2')}
             placeholderTextColor="#9ca3af"
             multiline
             style={[styles.formInput, { minHeight: 60 }]}
@@ -3724,18 +3723,18 @@ function PatientFormModal({
 
 // ── 부모연락 상수 ─────────────────────────────────────────────
 const REPORT_TYPE_OPTIONS_M: { id: ContactReportType; label: string; color: string }[] = [
-  { id: '최초보고', label: '최초보고', color: '#3b82f6' },
-  { id: '경과보고', label: '경과보고', color: '#f97316' },
-  { id: '내원예정', label: '내원예정', color: '#8b5cf6' },
-  { id: '내원결과', label: '내원결과', color: '#6366f1' },
-  { id: '완치보고', label: '완치보고', color: '#22c55e' },
+  { id: '최초보고', get label() { return L('data.progFirstReport'); }, color: '#3b82f6' },
+  { id: '경과보고', get label() { return L('patient.progressReport2'); }, color: '#f97316' },
+  { id: '내원예정', get label() { return L('data.hospitalPlanned'); }, color: '#8b5cf6' },
+  { id: '내원결과', get label() { return L('patient.hospitalResult'); }, color: '#6366f1' },
+  { id: '완치보고', get label() { return L('patient.recoveryReport3'); }, color: '#22c55e' },
 ];
 
 const METHOD_OPTIONS_M: { id: ContactMethod; label: string; emoji: string }[] = [
-  { id: '통화',   label: '통화',   emoji: '📞' },
-  { id: '문자',   label: '문자',   emoji: '💬' },
-  { id: '카카오', label: '카카오', emoji: '🟡' },
-  { id: '기타',   label: '기타',   emoji: '📝' },
+  { id: '통화',   get label() { return L('patient.call2'); },   emoji: '📞' },
+  { id: '문자',   get label() { return L('data.reportText'); },   emoji: '💬' },
+  { id: '카카오', get label() { return L('data.reportKakao'); }, emoji: '🟡' },
+  { id: '기타',   get label() { return L('data.other'); },   emoji: '📝' },
 ];
 
 // 부모연락 담당자: 지정된 담당자 > 반멘토 > '담임' 순서로 fallback
@@ -3760,27 +3759,27 @@ function orFallbackM(value: string | undefined): string {
 
 const SMS_PRESETS_M: { label: string; text: (r: PatientRecord) => string }[] = [
   {
-    label: '최초 보고',
+    get label() { return L('patient.firstReport'); },
     text: (r) =>
 `안녕하세요 어머님, ${getPresetSenderNameM(r)} 멘토입니다.\n\n증상: ${orFallbackM(r.symptom)}\n복용약: ${getPresetMedicationM(r)}\n조치: ${orFallbackM(r.treatment)}\n\n차도 없을 시 다시 연락드리겠습니다.`,
   },
   {
-    label: '경과 보고',
+    get label() { return L('patient.progressReport'); },
     text: (r) =>
 `안녕하세요 어머님, ${getPresetSenderNameM(r)} 멘토입니다.\n\n${r.studentName} 학생 상태가 많이 호전되었습니다.\n현재 정상적으로 생활하고 있으니 안심하세요.`,
   },
   {
-    label: '내원 예정',
+    get label() { return L('patient.plannedVisit'); },
     text: (r) =>
 `안녕하세요 어머님, ${getPresetSenderNameM(r)} 멘토입니다.\n\n${r.studentName} 학생 상태를 보다 정확히 확인하기 위해\n병원 진료를 받을 예정입니다.\n결과 확인 후 다시 연락드리겠습니다.`,
   },
   {
-    label: '내원 결과',
+    get label() { return L('patient.visitResult'); },
     text: (r) =>
 `안녕하세요 어머님, ${getPresetSenderNameM(r)} 멘토입니다.\n\n${r.studentName} 학생 병원 진료 결과를 안내드립니다.\n진단명: (직접 입력)\n처방: (직접 입력)\n\n추가 사항은 연락드리겠습니다.`,
   },
   {
-    label: '완치 보고',
+    get label() { return L('patient.recoveryReport2'); },
     text: (r) =>
 `안녕하세요 어머님, ${getPresetSenderNameM(r)} 멘토입니다.\n\n${r.studentName} 학생이 완전히 회복하여 정상 생활 중입니다.\n걱정 끼쳐드려 죄송합니다. 감사합니다.`,
   },
@@ -3832,25 +3831,25 @@ function ParentContactSectionMobile({
   const canEditAssignee = currentUserRole === 'admin' || isManagerOfThisGroup || currentUserId === record.parentContactAssigneeId;
 
   const contactorOptions: { label: string; name: string }[] = [
-    ...(record.classMentor ? [{ label: '반멘토', name: record.classMentor }] : []),
-    ...(record.unitMentor && record.unitMentor !== record.classMentor ? [{ label: '방멘토', name: record.unitMentor }] : []),
-    ...(groupManager ? [{ label: '그룹 매니저', name: groupManager.name }] : []),
-    ...(groupSubManager && groupSubManager.name !== groupManager?.name ? [{ label: '그룹 부매니저', name: groupSubManager.name }] : []),
-    ...(campManager && campManager.name !== groupManager?.name && campManager.name !== groupSubManager?.name ? [{ label: '캠프 매니저', name: campManager.name }] : []),
-    ...(currentUserName && ![record.classMentor, record.unitMentor, groupManager?.name, groupSubManager?.name, campManager?.name].includes(currentUserName) ? [{ label: '직접(나)', name: currentUserName }] : []),
+    ...(record.classMentor ? [{ label: L('patient.classMentor2'), name: record.classMentor }] : []),
+    ...(record.unitMentor && record.unitMentor !== record.classMentor ? [{ label: L('patient.roomMentor'), name: record.unitMentor }] : []),
+    ...(groupManager ? [{ label: L('patient.groupManager'), name: groupManager.name }] : []),
+    ...(groupSubManager && groupSubManager.name !== groupManager?.name ? [{ label: L('patient.groupSubManager'), name: groupSubManager.name }] : []),
+    ...(campManager && campManager.name !== groupManager?.name && campManager.name !== groupSubManager?.name ? [{ label: L('patient.campManager'), name: campManager.name }] : []),
+    ...(currentUserName && ![record.classMentor, record.unitMentor, groupManager?.name, groupSubManager?.name, campManager?.name].includes(currentUserName) ? [{ label: L('patient.myself'), name: currentUserName }] : []),
   ].filter((o, i, arr) => arr.findIndex(x => x.name === o.name) === i);
 
   // 검색어 있을 때만 드롭다운 표시
   const filteredUsers = campUsers.filter(u => u.name.includes(assigneeSearch.trim()));
 
   const handleRemoveLog = async (log: (typeof logs)[number]) => {
-    Alert.alert('연락 기록 삭제', '이 연락 기록을 삭제하시겠습니까?', [
-      { text: '취소', style: 'cancel' },
+    Alert.alert(L('patient.deleteContactLog'), L('patient.deleteThisContactLog'), [
+      { text: L('common.cancel'), style: 'cancel' },
       {
-        text: '삭제', style: 'destructive',
+        text: L('common.delete'), style: 'destructive',
         onPress: async () => {
           try { await removeParentContactLog(db, record.id, log); }
-          catch { Alert.alert('오류', '삭제 중 오류가 발생했습니다.'); }
+          catch { Alert.alert(L('common.error'), L('task.anErrorOccurredWhileDeleting')); }
         },
       },
     ]);
@@ -3881,7 +3880,7 @@ function ParentContactSectionMobile({
       // 예전에는 설치되지 않은 @react-native-clipboard 를 불러 늘 실패 → 알림창으로만 보였다
       await Clipboard.setStringAsync(text);
     } catch {
-      Alert.alert('📋 복사할 내용', text, [{ text: '닫기' }]);
+      Alert.alert(L('patient.textToCopy'), text, [{ text: L('common.close') }]);
     }
     setCopiedIdx(idx);
     setTimeout(() => setCopiedIdx(null), 1500);
@@ -3892,26 +3891,26 @@ function ParentContactSectionMobile({
       {/* 담당자 지정 */}
       <View style={{ borderRadius: 12, borderWidth: 1, borderColor: '#fbcfe8', backgroundColor: '#fdf2f8', padding: 12, gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ fontSize: 11, fontWeight: '700', color: '#9d174d', flex: 1 }}>📞 보호자 연락 담당</Text>
+          <Text style={{ fontSize: 11, fontWeight: '700', color: '#9d174d', flex: 1 }}>{L('patient.guardianContact')}</Text>
           {isCompleted && (
             <View style={{ backgroundColor: '#dcfce7', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 3 }}>
-              <Text style={{ fontSize: 9, color: '#166534', fontWeight: '700' }}>✓ 완치 보고 완료</Text>
+              <Text style={{ fontSize: 9, color: '#166534', fontWeight: '700' }}>{L('patient.recoveryReported')}</Text>
             </View>
           )}
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#9d174d' }}>👤 {effectiveAssigneeName || '미지정'}</Text>
-          {!record.parentContactAssigneeName && <Text style={{ fontSize: 10, color: '#f9a8d4' }}>(반멘토 기본)</Text>}
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#9d174d' }}>👤 {effectiveAssigneeName || L('data.unspecified')}</Text>
+          {!record.parentContactAssigneeName && <Text style={{ fontSize: 10, color: '#f9a8d4' }}>{L('patient.classMentorByDefault')}</Text>}
           {canEditAssignee && (
             <TouchableOpacity onPress={() => setShowAssigneeSearch(v => !v)} style={{ marginLeft: 'auto' as any }}>
-              <Text style={{ fontSize: 11, color: '#db2777' }}>변경</Text>
+              <Text style={{ fontSize: 11, color: '#db2777' }}>{L('patient.change')}</Text>
             </TouchableOpacity>
           )}
         </View>
         {showAssigneeSearch && (
           <View>
             <TextInput value={assigneeSearch} onChangeText={setAssigneeSearch}
-              placeholder="이름 검색..." placeholderTextColor="#9ca3af"
+              placeholder={L('students.searchByName')} placeholderTextColor="#9ca3af"
               style={[styles.formInput, { borderColor: '#fbcfe8' }]} />
             {assigneeSearch.trim() && filteredUsers.slice(0, 6).map(u => (
               <TouchableOpacity key={u.userId} onPress={() => handleAssignee(u)} disabled={assigneeSaving}
@@ -3927,14 +3926,14 @@ function ParentContactSectionMobile({
       <View style={{ borderRadius: 12, borderWidth: 1, borderColor: '#f3f4f6', backgroundColor: '#fff', padding: 12, gap: 8 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
           <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: '#374151' }}>프리셋 멘트</Text>
-            <Text style={{ fontSize: 10, color: '#9ca3af' }}>발신자: <Text style={{ fontWeight: '700', color: '#db2777' }}>{effectiveAssigneeName || '담임'}</Text> 멘토</Text>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#374151' }}>{L('patient.presetMessage')}</Text>
+            <Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('patient.from')} <Text style={{ fontWeight: '700', color: '#db2777' }}>{effectiveAssigneeName || L('patient.homeroom')}</Text> {L('common.roleMentor')}</Text>
           </View>
           <TouchableOpacity onPress={() => setPresetTab(presetTab === 'sms' ? null : 'sms')}
             style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, borderWidth: 1,
               borderColor: presetTab === 'sms' ? '#db2777' : '#e5e7eb',
               backgroundColor: presetTab === 'sms' ? '#db2777' : '#fff' }}>
-            <Text style={{ fontSize: 11, fontWeight: '700', color: presetTab === 'sms' ? '#fff' : '#6b7280' }}>💬 문자 프리셋</Text>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: presetTab === 'sms' ? '#fff' : '#6b7280' }}>{L('patient.textPresets')}</Text>
           </TouchableOpacity>
         </View>
         {presetTab === 'sms' && (
@@ -3949,7 +3948,7 @@ function ParentContactSectionMobile({
                       style={{ paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6,
                         backgroundColor: copiedIdx === i ? '#dcfce7' : '#fce7f3' }}>
                       <Text style={{ fontSize: 10, fontWeight: '700', color: copiedIdx === i ? '#166534' : '#db2777' }}>
-                        {copiedIdx === i ? '✓ 복사됨' : '복사'}
+                        {copiedIdx === i ? L('patient.copied') : L('task.copy2')}
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -3964,7 +3963,7 @@ function ParentContactSectionMobile({
       {/* 연락 기록 */}
       {logs.length > 0 && (
         <View style={{ gap: 6 }}>
-          <Text style={{ fontSize: 10, fontWeight: '700', color: '#9ca3af' }}>연락 기록</Text>
+          <Text style={{ fontSize: 10, fontWeight: '700', color: '#9ca3af' }}>{L('patient.contactLog')}</Text>
           {[...logs].reverse().map((log, i) => {
             const rt = REPORT_TYPE_OPTIONS_M.find(r => r.id === log.reportType);
             const mt = METHOD_OPTIONS_M.find(m => m.id === log.method);
@@ -3975,14 +3974,14 @@ function ParentContactSectionMobile({
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 4 }}>
                   {rt && (
                     <View style={{ backgroundColor: rt.color, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3 }}>
-                      <Text style={{ fontSize: 9, color: '#fff', fontWeight: '700' }}>{log.reportType}</Text>
+                      <Text style={{ fontSize: 9, color: '#fff', fontWeight: '700' }}>{dataLabel(log.reportType)}</Text>
                     </View>
                   )}
                   <View style={{ borderRadius: 6, paddingHorizontal: 6, paddingVertical: 3,
                     backgroundColor: log.method === '통화' ? '#eff6ff' : log.method === '문자' ? '#fdf2f8' : log.method === '카카오' ? '#fefce8' : '#f9fafb' }}>
                     <Text style={{ fontSize: 9, fontWeight: '700',
                       color: log.method === '통화' ? '#1d4ed8' : log.method === '문자' ? '#be185d' : log.method === '카카오' ? '#854d0e' : '#4b5563' }}>
-                      {mt?.emoji ?? '📝'} {log.method ?? '기타'}
+                      {mt?.emoji ?? '📝'} {log.method ?? L('data.other')}
                     </Text>
                   </View>
                   <Text style={{ fontSize: 11, fontWeight: '600', color: '#374151', flex: 1 }}>{log.contactedBy}</Text>
@@ -3993,7 +3992,7 @@ function ParentContactSectionMobile({
                     </TouchableOpacity>
                   )}
                 </View>
-                {log.isResolved && <Text style={{ fontSize: 10, color: '#16a34a', fontWeight: '700' }}>✓ 완치 보고</Text>}
+                {log.isResolved && <Text style={{ fontSize: 10, color: '#16a34a', fontWeight: '700' }}>{L('patient.recoveryReport')}</Text>}
               </View>
             );
           })}
@@ -4005,21 +4004,21 @@ function ParentContactSectionMobile({
         <>
           <TouchableOpacity style={{ paddingVertical: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: '#f9a8d4', borderRadius: 10, alignItems: 'center' }}
             onPress={() => setShowLogForm(true)}>
-            <Text style={{ color: '#db2777', fontSize: 12, fontWeight: '600' }}>+ 연락 기록 추가</Text>
+            <Text style={{ color: '#db2777', fontSize: 12, fontWeight: '600' }}>{L('patient.addContactLog2')}</Text>
           </TouchableOpacity>
 
           {showLogForm && (
             <TabFormModalMobile
-              title="연락 기록 추가"
+              title={L('patient.addContactLog')}
               icon="📞"
               onClose={() => setShowLogForm(false)}
               onSubmit={handleAddLog}
-              submitLabel={saving ? '저장 중...' : '저장'}
+              submitLabel={saving ? L('task.saving') : L('common.save')}
               submitColor="#db2777"
             >
               {/* ① 보고 유형 */}
               <View>
-                <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>① 보고 유형</Text>
+                <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.reportType')}</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
                   {REPORT_TYPE_OPTIONS_M.map(rt => (
                     <TouchableOpacity key={rt.id} onPress={() => setReportType(rt.id)}
@@ -4032,7 +4031,7 @@ function ParentContactSectionMobile({
 
               {/* ② 연락한 사람 */}
               <View>
-                <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>② 연락한 사람</Text>
+                <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.personContacted')}</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
                   {contactorOptions.map(opt => (
                     <TouchableOpacity key={opt.name} onPress={() => setContactorName(prev => prev === opt.name ? '' : opt.name)}
@@ -4048,13 +4047,13 @@ function ParentContactSectionMobile({
 
               {/* ③ 연락 방법 */}
               <View>
-                <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>③ 연락 방법</Text>
+                <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.contactMethod')}</Text>
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
                   {METHOD_OPTIONS_M.map(m => (
                     <TouchableOpacity key={m.id} onPress={() => setMethod(m.id)}
                       style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8, backgroundColor: method === m.id ? '#db2777' : '#f3f4f6' }}>
                       <Text style={{ fontSize: 12 }}>{m.emoji}</Text>
-                      <Text style={{ fontSize: 11, fontWeight: '600', color: method === m.id ? '#fff' : '#6b7280' }}>{m.label}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '600', color: method === m.id ? '#fff' : '#6b7280' }}>{dataLabel(m.label)}</Text>
                     </TouchableOpacity>
                   ))}
                 </View>
@@ -4177,7 +4176,7 @@ function QuickReportModalMobile({
 
   const handleSubmit = async () => {
     if (!canSubmit || submitting) return;
-    if (doses.some(d => !d.itemId || !d.groupId)) { Alert.alert('확인 필요', '약·처치 물품 사용에서 약과 그룹을 모두 선택하거나 빈 줄을 삭제해주세요.'); return; }
+    if (doses.some(d => !d.itemId || !d.groupId)) { Alert.alert(L('patient.checkNeeded'), L('patient.inMedicationSupplyUseSelect')); return; }
     setSubmitting(true);
     try {
       const feverLabel = feverLevel === 'normal' ? '정상' : feverLevel === 'slight' ? '미열' : '고열';
@@ -4204,8 +4203,8 @@ function QuickReportModalMobile({
       {/* 헤더 */}
       <View style={[styles.modalHeader, { borderTopLeftRadius: 16, borderTopRightRadius: 16 }]}>
         <View>
-          <Text style={styles.modalTitle}>🚑 환자 최초보고</Text>
-          <Text style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>보고자: {reporterName}</Text>
+          <Text style={styles.modalTitle}>{L('patient.firstPatientReport')}</Text>
+          <Text style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>{L('patient.reporter')} {reporterName}</Text>
         </View>
         <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
           <Ionicons name="close" size={22} color="#9ca3af" />
@@ -4216,13 +4215,13 @@ function QuickReportModalMobile({
 
         {/* ① 대상 */}
         <View>
-          <Text style={styles.formSectionTitle}>① 대상 *</Text>
+          <Text style={styles.formSectionTitle}>{L('patient.student')}</Text>
           <View style={{ position: 'relative' }}>
             <TextInput
               value={studentSearch || form.studentName}
               onChangeText={v => { if (!studentLocked) { setStudentSearch(v); setShowDropdown(true); } }}
               editable={!studentLocked}
-              placeholder="이름으로 검색..."
+              placeholder={L('patient.searchByName')}
               placeholderTextColor="#9ca3af"
               style={[styles.formInput, studentLocked && { backgroundColor: '#f9fafb', fontWeight: '600' }]}
             />
@@ -4232,7 +4231,7 @@ function QuickReportModalMobile({
               setStudentLocked(false); setStudentSearch('');
               setForm(f => ({ ...f, studentId: '', studentName: '', grade: '', className: '', classMentor: '', unitMentor: '', roomNumber: '' }));
             }}>
-              <Text style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>변경</Text>
+              <Text style={{ fontSize: 11, color: '#ef4444', marginTop: 4 }}>{L('patient.change')}</Text>
             </TouchableOpacity>
           )}
           {/* 드롭다운 */}
@@ -4242,7 +4241,7 @@ function QuickReportModalMobile({
                 <TouchableOpacity key={s.studentId} style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: '#f9fafb' }} onPress={() => selectStudent(s)}>
                   <Text style={{ fontWeight: '600', color: '#111827' }}>{s.name}</Text>
                   <Text style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
-                    {s.grade}{s.gender} · {fmtClassM(s.className ?? '')} · {s.roomNumber}호
+                    {s.grade}{s.gender} · {fmtClassM(s.className ?? '')} · {s.roomNumber}{L('students.text')}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -4253,15 +4252,15 @@ function QuickReportModalMobile({
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
               {form.grade && <View style={{ backgroundColor: '#f3f4f6', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4 }}><Text style={{ fontSize: 11, color: '#4b5563' }}>{form.grade}</Text></View>}
               {form.className && <View style={{ backgroundColor: '#eff6ff', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4 }}><Text style={{ fontSize: 11, color: '#1d4ed8' }}>{fmtClassM(form.className)}</Text></View>}
-              {form.roomNumber && <View style={{ backgroundColor: '#f3f4f6', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4 }}><Text style={{ fontSize: 11, color: '#4b5563' }}>{form.roomNumber}호</Text></View>}
-              {form.classMentor && <View style={{ backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4 }}><Text style={{ fontSize: 11, color: '#15803d' }}>담임 {form.classMentor}</Text></View>}
+              {form.roomNumber && <View style={{ backgroundColor: '#f3f4f6', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4 }}><Text style={{ fontSize: 11, color: '#4b5563' }}>{form.roomNumber}{L('students.text')}</Text></View>}
+              {form.classMentor && <View style={{ backgroundColor: '#f0fdf4', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 4 }}><Text style={{ fontSize: 11, color: '#15803d' }}>{L('patient.homeroom')} {form.classMentor}</Text></View>}
             </View>
           )}
         </View>
 
         {/* ② 현재 위치 */}
         <View>
-          <Text style={styles.formSectionTitle}>② 현재 위치</Text>
+          <Text style={styles.formSectionTitle}>{L('patient.currentLocation')}</Text>
           {/* 위치 모드 버튼 */}
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
             {([
@@ -4300,22 +4299,22 @@ function QuickReportModalMobile({
             value={form.location}
             onChangeText={v => setField('location', v)}
             placeholder={
-              form.locationMode === '휴식' ? '예: 110호, 휴게실...' :
-              form.locationMode === '격리' ? '예: 격리실 214호...' :
-              '예: 강당, 체육관, 교실...'
+              form.locationMode === '휴식' ? L('patient.eGRoom110Lounge') :
+              form.locationMode === '격리' ? L('patient.eGIsolationRoom214') :
+              L('patient.eGAuditoriumGymClassroom')
             }
             placeholderTextColor="#9ca3af"
             style={styles.formInput}
           />
-          <Text style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>숙소 방번호가 아닐 수 있으니 현재 있는 장소를 직접 입력해주세요</Text>
+          <Text style={{ fontSize: 10, color: '#9ca3af', marginTop: 4 }}>{L('patient.itMayNotBeTheir')}</Text>
         </View>
 
         {/* ③ 열감 */}
         <View>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <Text style={styles.formSectionTitle}>③ 열감</Text>
+            <Text style={styles.formSectionTitle}>{L('patient.fever')}</Text>
             <TouchableOpacity onPress={() => setShowFeverGuide(v => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Text style={{ fontSize: 11, color: '#3b82f6', fontWeight: '500' }}>🌡️ 체온계 사용법 {showFeverGuide ? '▲' : '▼'}</Text>
+              <Text style={{ fontSize: 11, color: '#3b82f6', fontWeight: '500' }}>{L('patient.howToUseTheThermometer')} {showFeverGuide ? '▲' : '▼'}</Text>
             </TouchableOpacity>
           </View>
 
@@ -4323,10 +4322,10 @@ function QuickReportModalMobile({
           {showFeverGuide && (
             <View style={{ marginBottom: 10, borderRadius: 12, borderWidth: 1, borderColor: '#bfdbfe', backgroundColor: '#eff6ff', padding: 12, gap: 8 }}>
               {[
-                { n: '1️⃣', t: '전원 버튼을 눌러주세요.' },
-                { n: '2️⃣', t: '화면에 L°C가 깜박이면 측정 준비 완료.' },
-                { n: '3️⃣', t: '겨드랑이 맨살에 체온계를 끼워야 합니다. 옷 안으로 넣어 "삐빅" 소리가 날 때까지 대고 있어주세요. (30초~1분)' },
-                { n: '4️⃣', t: '표시 온도가 깜박임을 멈추면 측정 완료.' },
+                { n: '1️⃣', t: L('patient.pressThePowerButton') },
+                { n: '2️⃣', t: L('patient.whenLCBlinksOn') },
+                { n: '3️⃣', t: L('patient.placeTheThermometerAgainstBare') },
+                { n: '4️⃣', t: L('patient.measurementIsDoneWhenThe') },
               ].map(({ n, t }) => (
                 <View key={n} style={{ flexDirection: 'row', gap: 8 }}>
                   <Text style={{ fontSize: 13 }}>{n}</Text>
@@ -4334,8 +4333,8 @@ function QuickReportModalMobile({
                 </View>
               ))}
               <View style={{ borderRadius: 8, backgroundColor: '#fefce8', borderWidth: 1, borderColor: '#fef08a', padding: 10, marginTop: 4 }}>
-                <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e', marginBottom: 4 }}>💡 추가 확인 방법</Text>
-                <Text style={{ fontSize: 11, color: '#92400e', lineHeight: 16 }}>이마·목 뒤도 손으로 짚으며 열감이 있는지 확인해주세요. 외부가 추우면 피부는 몸보다 차가울 수 있습니다.</Text>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e', marginBottom: 4 }}>{L('patient.alsoCheck')}</Text>
+                <Text style={{ fontSize: 11, color: '#92400e', lineHeight: 16 }}>{L('patient.alsoFeelTheForeheadAnd4')}</Text>
               </View>
             </View>
           )}
@@ -4343,9 +4342,9 @@ function QuickReportModalMobile({
           {/* 열감 단계 선택 */}
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
             {([
-              { id: 'normal' as const, label: '정상',  sub: FEVER_LEVEL_RANGES.정상, activeColor: '#22c55e' },
-              { id: 'slight' as const, label: '미열',  sub: FEVER_LEVEL_RANGES.미열, activeColor: '#f97316' },
-              { id: 'high'   as const, label: '고열',  sub: FEVER_LEVEL_RANGES.고열, activeColor: '#ef4444' },
+              { id: 'normal' as const, label: L('data.feverNormal'),  sub: FEVER_LEVEL_RANGES.정상, activeColor: '#22c55e' },
+              { id: 'slight' as const, label: L('data.feverSlight'),  sub: FEVER_LEVEL_RANGES.미열, activeColor: '#f97316' },
+              { id: 'high'   as const, label: L('data.feverHigh'),  sub: FEVER_LEVEL_RANGES.고열, activeColor: '#ef4444' },
             ]).map(opt => {
               const selected = feverLevel === opt.id;
               return (
@@ -4382,7 +4381,7 @@ function QuickReportModalMobile({
                     if (level === '고열') setFeverLevel('high');
                     else if (level === '미열') setFeverLevel('slight');
                   }}
-                  placeholder="잰 체온 (예: 37.8) — 안 쟀으면 비워두세요"
+                  placeholder={L('patient.measuredTemperatureEG37')}
                   placeholderTextColor="#9ca3af"
                   keyboardType="decimal-pad"
                   style={[styles.formInput, { paddingRight: 36 }]}
@@ -4391,7 +4390,7 @@ function QuickReportModalMobile({
               </View>
               <View style={{ borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: feverLevel === 'high' ? '#fef2f2' : '#fff7ed' }}>
                 <Text style={{ fontSize: 11, fontWeight: '700', color: feverLevel === 'high' ? '#dc2626' : '#ea580c' }}>
-                  {feverLevel === 'high' ? '⚠️ 고열' : '🌡 미열'}
+                  {feverLevel === 'high' ? L('patient.highFever') : L('patient.mildFever')}
                 </Text>
               </View>
             </View>
@@ -4400,10 +4399,10 @@ function QuickReportModalMobile({
           {/* 정상 시 추가 확인 안내 */}
           {feverLevel === 'normal' && (
             <View style={{ borderRadius: 12, borderWidth: 1, borderColor: '#fde68a', backgroundColor: '#fffbeb', padding: 12, marginTop: 4 }}>
-              <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e', marginBottom: 4 }}>✅ 정상 체온 — 아래 항목도 함께 확인해주세요</Text>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e', marginBottom: 4 }}>{L('patient.normalTemperaturePleaseCheckThe')}</Text>
               <Text style={{ fontSize: 11, color: '#92400e', lineHeight: 16 }}>
-                이마·목 뒤(동성일 시 옷 안까지)도 손으로 짚으며 열감이 있는지 확인해주세요.{'\n'}
-                외부가 추우면 드러나는 피부는 몸보다 차가울 수 있습니다.
+                {L('patient.alsoFeelTheForeheadAnd3')}{'\n'}
+                {L('patient.ifItSColdOutside')}
               </Text>
             </View>
           )}
@@ -4411,18 +4410,18 @@ function QuickReportModalMobile({
 
         {/* ④ 증상 */}
         <View>
-          <Text style={styles.formSectionTitle}>④ 증상 *</Text>
+          <Text style={styles.formSectionTitle}>{L('patient.symptoms3')}</Text>
 
           {/* 프리셋 검색 */}
           <TextInput
             value={symptomSearch}
             onChangeText={setSymptomSearch}
-            placeholder="증상 검색 (두통, 복통, 발열...)"
+            placeholder={L('patient.searchSymptomsHeadacheStomachacheFever')}
             placeholderTextColor="#9ca3af"
             style={[styles.formInput, { marginBottom: 8 }]}
           />
 
-          <Text style={{ fontSize: 10, color: '#9ca3af', marginBottom: 6 }}>여러 증상이 있으면 모두 선택하세요 (복수 선택)</Text>
+          <Text style={{ fontSize: 10, color: '#9ca3af', marginBottom: 6 }}>{L('patient.selectAllSymptomsThatApply')}</Text>
 
           {/* 프리셋 그리드 */}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
@@ -4450,14 +4449,14 @@ function QuickReportModalMobile({
           {/* 복통 위치 — 증상에 복통이 있을 때만 (복수 선택) */}
           {showPainSites && (
             <View style={{ borderRadius: 12, borderWidth: 1, borderColor: '#fde68a', backgroundColor: '#fffbeb', padding: 10, marginBottom: 8 }}>
-              <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e', marginBottom: 6 }}>🫃 복통 위치 <Text style={{ fontWeight: '400', color: '#b45309' }}>(여러 곳이면 모두 선택)</Text></Text>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e', marginBottom: 6 }}>{L('patient.stomachPainLocation')} <Text style={{ fontWeight: '400', color: '#b45309' }}>{L('patient.selectAllThatApply')}</Text></Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
                 {ABDOMINAL_PAIN_SITES.map(site => {
                   const on = painSites.includes(site);
                   return (
                     <TouchableOpacity key={site} onPress={() => togglePainSite(site)}
                       style={{ paddingHorizontal: 9, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: on ? '#f59e0b' : '#fde68a', backgroundColor: on ? '#f59e0b' : '#fff' }}>
-                      <Text style={{ fontSize: 11, fontWeight: '600', color: on ? '#fff' : '#92400e' }}>{site}</Text>
+                      <Text style={{ fontSize: 11, fontWeight: '600', color: on ? '#fff' : '#92400e' }}>{dataLabel(site)}</Text>
                     </TouchableOpacity>
                   );
                 })}
@@ -4472,7 +4471,7 @@ function QuickReportModalMobile({
               borderColor: guide.category === '응급' ? '#fca5a5' : '#bfdbfe',
               backgroundColor: guide.category === '응급' ? '#fef2f2' : '#eff6ff',
             }}>
-              <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827', marginBottom: 6 }}>{guide.emoji} {guide.label} 조치</Text>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827', marginBottom: 6 }}>{guide.emoji} {guide.label} {L('patient.care2')}</Text>
               <Text style={{ fontSize: 11, color: '#374151', marginBottom: 4 }}>🩺 {guide.treatment}</Text>
               {guide.medication !== '(약 불필요)' && (
                 <Text style={{ fontSize: 11, color: '#ea580c', marginBottom: 4 }}>💊 {guide.medication}</Text>
@@ -4487,18 +4486,18 @@ function QuickReportModalMobile({
           <TextInput
             value={form.symptom}
             onChangeText={v => setField('symptom', v)}
-            placeholder="프리셋에 없으면 직접 입력... (여러 개는 쉼표로 구분)"
+            placeholder={L('patient.ifNotInThePresets')}
             placeholderTextColor="#9ca3af"
             style={styles.formInput}
           />
           {symptomList.length > 0 && (
-            <Text style={{ fontSize: 10, color: '#2563eb', marginTop: 4 }}>선택된 증상: {formatSymptomText(symptomList, showPainSites ? painSites : [])}</Text>
+            <Text style={{ fontSize: 10, color: '#2563eb', marginTop: 4 }}>{L('patient.selectedSymptoms')} {formatSymptomText(symptomList, showPainSites ? painSites : [])}</Text>
           )}
         </View>
 
         {/* ⑤ 현재 상태 */}
         <View>
-          <Text style={styles.formSectionTitle}>⑤ 현재 상태</Text>
+          <Text style={styles.formSectionTitle}>{L('patient.currentStatus')}</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
             {QUICK_ACTION_OPTIONS.map(opt => {
               const isSelected = actionStatus === opt.id;
@@ -4532,7 +4531,7 @@ function QuickReportModalMobile({
 
         {/* ⑥ 약 복용 (실제로 먹인 경우) — 저장 시 재고 자동 차감 */}
         <View>
-          <Text style={styles.formSectionTitle}>⑥ 약·처치 물품 사용 <Text style={{ fontWeight: '400', color: '#9ca3af' }}>(선택)</Text></Text>
+          <Text style={styles.formSectionTitle}>{L('patient.medicationSupplyUse')} <Text style={{ fontWeight: '400', color: '#9ca3af' }}>{L('patient.optional')}</Text></Text>
           <MedicationDoseEditorMobile
             doses={doses}
             onChange={setDoses}
@@ -4554,7 +4553,7 @@ function QuickReportModalMobile({
         <TouchableOpacity onPress={handleSubmit} disabled={!canSubmit || submitting}
           style={{ borderRadius: 10, paddingVertical: 11, alignItems: 'center', backgroundColor: canSubmit && !submitting ? '#ef4444' : '#f3f4f6' }}>
           <Text style={{ fontWeight: '700', fontSize: 13, color: canSubmit && !submitting ? '#fff' : '#9ca3af' }}>
-            {submitting ? '보고 중...' : '🚑 최초보고 제출'}
+            {submitting ? L('patient.reporting') : L('patient.submitFirstReport')}
           </Text>
         </TouchableOpacity>
       </View>

@@ -5,7 +5,7 @@ import { Timestamp } from 'firebase/firestore';
 import ImageCropper from '@/components/common/ImageCropper';
 import MyEscortPanel from '@/components/camp/patient/MyEscortPanel';
 import EscortSsn from '@/components/camp/patient/EscortSsn';
-import { isActiveEscortVisit } from '@smis-mentor/shared';
+import { isActiveEscortVisit, L, dataLabel, isEnglishUI, localizeLabels } from '@smis-mentor/shared';
 import {
   SYMPTOM_GUIDES, getHospitalPresets, isKoreanStaff, ACTION_NOTE_PLACEHOLDER, ACTION_NOTE_EXAMPLE,
   makeMedTimeKey, schedActiveOn, isInDateRange, calcTotalDoses, todayDateKey as todayStr,
@@ -129,6 +129,7 @@ function syncDoseStock(recordId: string | undefined, campCode?: string | null) {
     .catch(e => console.warn('재고 정산 요청 실패 (다음 저장 때 다시 맞춰짐):', e));
 }
 import type { STSheetStudent } from '@/lib/stSheetService';
+import { currentIntlLocale } from '@smis-mentor/shared';
 
 // ==================== 매뉴얼 데이터 (하드코딩, 딜레이 없음) ====================
 
@@ -207,7 +208,7 @@ const CLASS_TIMES: MedicationTime[] = ['조식후', '중식후', '석식후'];
 
 /** 반 이름 표시용: "OnePiece" → "OnePiece반" (이미 '반'으로 끝나거나 미배정이면 그대로) */
 const fmtClass = (name: string) =>
-  name === '반 미배정' || name.endsWith('반') ? name : `${name}반`;
+  name === '반 미배정' ? dataLabel(name) : isEnglishUI() ? name : name.endsWith('반') ? name : `${name}반`;
 
 /** grade 문자열("3F", "4M" 등)에서 성별 추출: F=0(여, 위), M=1(남, 아래) */
 const genderOrder = (grade?: string) => (grade?.endsWith('F') ? 0 : 1);
@@ -473,7 +474,7 @@ export default function PatientContent() {
         studentId ? records.filter(r => r.studentId === studentId).flatMap(r => r.medicationDoses ?? []) : [],
       studentNote: (studentId) => {
         const st = students.find(x => x.studentId === studentId) as (STSheetStudent & { medication?: string; notes?: string }) | undefined;
-        const parts = [st?.medication && `복용약 ${st.medication}`, st?.notes && `특이사항 ${st.notes}`].filter(Boolean);
+        const parts = [st?.medication && L('patient.medication3', { v0: st.medication }), st?.notes && L('patient.notes2', { v0: st.notes })].filter(Boolean);
         return parts.length ? parts.join(' · ') : undefined;
       },
     };
@@ -533,12 +534,12 @@ export default function PatientContent() {
 
   // 그룹 순서 (고정 순서 기준, 알 수 없는 그룹은 뒤로)
   const FIXED_GROUP_ORDER = ['junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter', 'common', 'short1', 'short2', 'short3', 'short4', 'manager'];
-  const GROUP_DISPLAY_NAMES: Record<string, string> = {
+  const GROUP_DISPLAY_NAMES: Record<string, string> = localizeLabels({
     junior: '주니어', middle: '미들', senior: '시니어',
     spring: '스프링', summer: '서머', autumn: '어텀', winter: '원터',
     common: '공통', short1: '단기1', short2: '단기2', short3: '단기3', short4: '단기4',
     manager: '매니저',
-  };
+  });
   // 스프링/주니어=노랑, 서머/미들=초록, 어텀/시니어=보라, 원터=빨강, 단기=회색
   const GROUP_BG_COLORS: Record<string, string> = {
     spring:  'bg-yellow-50',  junior: 'bg-yellow-50',
@@ -769,7 +770,7 @@ export default function PatientContent() {
   }, [campCode, userData, editingId, form, records]);
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!confirm(`"${name}" 환자 기록을 삭제하시겠습니까?`)) return;
+    if (!confirm(L('patient.deleteThePatientRecordFor', { v0: name }))) return;
     const target = records.find(r => r.id === id);
     // 기록 삭제 시 남아 있는 약 복용 수량은 재고에 복구
     await deletePatientRecord(db, id, target && campCode
@@ -795,7 +796,7 @@ export default function PatientContent() {
   const handleRemoveProgressLog = useCallback(async (record: PatientRecord, logIndex: number) => {
     const logs = record.progressLogs ?? [];
     if (logs.length === 0) return;
-    if (!confirm('이 경과 기록을 삭제할까요? (함께 기록한 약 복용은 재고에 복구됩니다)')) return;
+    if (!confirm(L('patient.deleteThisProgressEntryMedication'))) return;
     await removeProgressLog(db, record.id, logs, logIndex,
       campCode ? { campCode, currentDoses: record.medicationDoses ?? [], by: userData?.name ?? '', studentName: record.studentName } : undefined);
     if (record.medicationDoses?.length) syncDoseStock(record.id, campCode);
@@ -989,7 +990,7 @@ export default function PatientContent() {
   if (!activeJobCodeId) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-4">
-        <p className="text-gray-600 font-medium">활성 캠프를 선택해주세요.</p>
+        <p className="text-gray-600 font-medium">{L('patient.pleaseSelectAnActiveCamp')}</p>
       </div>
     );
   }
@@ -1004,7 +1005,7 @@ export default function PatientContent() {
         <div className="flex border-b border-gray-100 -mx-4 px-4">
           {(['환자 현황', '약복용명단'] as const).map(tab => (
             <button
-              key={tab}
+              key={dataLabel(tab)}
               onClick={() => setMainTab(tab)}
               className={`relative flex-1 py-2.5 text-sm font-semibold transition-colors ${
                 mainTab === tab
@@ -1012,7 +1013,7 @@ export default function PatientContent() {
                   : 'text-gray-400 hover:text-gray-600'
               }`}
             >
-              {tab}
+              {dataLabel(tab)}
               {tab === '약복용명단' && medicationRecords.length > 0 && (
                 <span className="absolute top-1.5 right-2 min-w-[16px] h-4 rounded-full bg-orange-400 text-white text-[9px] font-bold flex items-center justify-center px-1">
                   {medicationRecords.length}
@@ -1027,7 +1028,7 @@ export default function PatientContent() {
           <div className="flex items-start justify-between py-3">
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-lg font-semibold text-gray-900">환자 관리</h1>
+                <h1 className="text-lg font-semibold text-gray-900">{L('patient.patientCare')}</h1>
                 {myPendingCount > 0 && (
                   <span className="flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold">
                     {myPendingCount}
@@ -1036,11 +1037,11 @@ export default function PatientContent() {
               </div>
               {/* 현황 뱃지 */}
               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                {counts.최초보고 > 0 && <StatusPill label="최초보고" count={counts.최초보고} color="gray" />}
-                {counts.중간보고 > 0 && <StatusPill label="중간보고" count={counts.중간보고} color="blue" />}
-                {counts.내원예정 > 0 && <StatusPill label="내원예정" count={counts.내원예정} color="red" />}
-                {counts.격리 > 0 && <StatusPill label="격리" count={counts.격리} color="purple" />}
-                {counts.active === 0 && <span className="text-xs text-gray-400">현재 환자 없음</span>}
+                {counts.최초보고 > 0 && <StatusPill label={L('data.progFirstReport')} count={counts.최초보고} color="gray" />}
+                {counts.중간보고 > 0 && <StatusPill label={L('data.progMidReport')} count={counts.중간보고} color="blue" />}
+                {counts.내원예정 > 0 && <StatusPill label={L('data.hospitalPlanned')} count={counts.내원예정} color="red" />}
+                {counts.격리 > 0 && <StatusPill label={L('data.ptIsolation')} count={counts.격리} color="purple" />}
+                {counts.active === 0 && <span className="text-xs text-gray-400">{L('patient.noCurrentPatients')}</span>}
               </div>
             </div>
             <button
@@ -1050,26 +1051,26 @@ export default function PatientContent() {
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              최초보고
+              {L('data.progFirstReport')}
             </button>
           </div>
         ) : (
           <div className="flex items-center justify-between py-3">
             <div>
-              <h1 className="text-lg font-semibold text-gray-900">약복용명단</h1>
+              <h1 className="text-lg font-semibold text-gray-900">{L('patient.medicationList')}</h1>
               <p className="text-xs text-gray-400 mt-0.5">
-                {medicationRecords.length > 0 ? `총 ${medicationRecords.length}명 복용 중` : '복용 중인 학생 없음'}
+                {medicationRecords.length > 0 ? L('patient.studentsOnMedication', { v0: medicationRecords.length }) : L('patient.noStudentsOnMedication')}
               </p>
             </div>
             <button
               disabled
               className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-400 text-sm font-bold rounded-lg flex-shrink-0 cursor-not-allowed"
-              title="준비 중"
+              title={L('patient.comingSoon')}
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              명단추가
+              {L('patient.addToList')}
             </button>
           </div>
         )}
@@ -1095,7 +1096,7 @@ export default function PatientContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
             <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-              placeholder="이름·증상·반 검색"
+              placeholder={L('patient.searchNameSymptomClass')}
               className="bg-transparent text-xs outline-none w-full text-gray-700 placeholder-gray-400"
             />
             {searchQuery && (
@@ -1138,9 +1139,9 @@ export default function PatientContent() {
             {/* 현재 환자 (그룹 → 반별) */}
             {activeByClass.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
-                <p className="text-gray-400 text-sm font-medium">현재 환자가 없습니다.</p>
+                <p className="text-gray-400 text-sm font-medium">{L('patient.thereAreNoCurrentPatients')}</p>
                 <button onClick={() => setShowQuickReport(true)} className="text-sm text-red-500 hover:text-red-600 font-medium">
-                  최초보고 하기
+                  {L('patient.submitFirstReport2')}
                 </button>
               </div>
             ) : (
@@ -1183,7 +1184,7 @@ export default function PatientContent() {
                         <div className={`flex items-center gap-2 px-3 py-1.5 border-b ${borderColor}`}>
                           {hasUrgent && <span className="text-[11px]">🚨</span>}
                           <span className={`text-[12px] font-bold ${textColor}`}>{groupDisplayName}</span>
-                          <span className={`text-[10px] font-medium ${textColor} opacity-60`}>{groupTotal}명</span>
+                          <span className={`text-[10px] font-medium ${textColor} opacity-60`}>{groupTotal}{L('common.people2')}</span>
                         </div>
                       )}
                       {/* 반별 ClassGroup */}
@@ -1246,7 +1247,7 @@ export default function PatientContent() {
                     <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span className="text-sm font-semibold text-gray-600">완치 기록</span>
+                    <span className="text-sm font-semibold text-gray-600">{L('patient.recoveredRecords')}</span>
                     <span className="text-xs bg-green-100 text-green-700 font-bold px-1.5 py-0.5 rounded-full">
                       {filteredResolved.length}
                     </span>
@@ -1627,7 +1628,7 @@ function PatientCard({
   const tabs: DetailTab[] = ['경과', '내원', '복용약', '부모연락'];
 
   const elapsed = daysElapsed(record.visitDate);
-  const elapsedLabel = elapsed === 0 ? '오늘' : elapsed === 1 ? '어제' : `${elapsed}일째`;
+  const elapsedLabel = elapsed === 0 ? L('common.today') : elapsed === 1 ? L('common.yesterday') : L('patient.day', { v0: elapsed });
 
   return (
     <div id={`patient-${record.id}`} className={
@@ -1643,21 +1644,21 @@ function PatientCard({
         {/* 삭제 버튼 — 오른쪽 상단 고정 */}
         {showDeleteConfirm ? (
           <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 bg-white border border-red-200 rounded-xl shadow-lg px-3 py-2">
-            <span className="text-[11px] text-red-700 font-semibold">정말 삭제할까요?</span>
+            <span className="text-[11px] text-red-700 font-semibold">{L('patient.reallyDelete')}</span>
             <button onClick={onDelete}
               className="text-[10px] font-bold text-white bg-red-500 hover:bg-red-600 px-2.5 py-1 rounded-lg transition-colors">
-              삭제
+              {L('common.delete')}
             </button>
             <button onClick={() => setShowDeleteConfirm(false)}
               className="text-[10px] text-gray-500 hover:text-gray-700 px-2 py-1">
-              취소
+              {L('common.cancel')}
             </button>
           </div>
         ) : (
           <button
             onClick={() => setShowDeleteConfirm(true)}
             className="absolute top-2 right-2 z-10 text-[10px] text-gray-300 hover:text-red-400 transition-colors px-1.5 py-0.5 rounded hover:bg-red-50"
-            title="기록 삭제"
+            title={L('patient.deleteRecord')}
           >
             🗑️
           </button>
@@ -1672,16 +1673,16 @@ function PatientCard({
               <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{fmtClass(record.className)}</span>
             )}
             {record.classMentor && (
-              <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">담임 {record.classMentor}</span>
+              <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{L('patient.homeroom')} {record.classMentor}</span>
             )}
             {record.unitMentor && (
-              <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">유닛 {record.unitMentor}</span>
+              <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{L('students.unit')} {record.unitMentor}</span>
             )}
             {record.roomNumber && (
-              <span className="text-xs text-gray-400">{record.roomNumber}호</span>
+              <span className="text-xs text-gray-400">{record.roomNumber}{L('students.text')}</span>
             )}
             {record.managerCheck && (
-              <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-medium">✓ 매니저</span>
+              <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-medium">{L('patient.manager')}</span>
             )}
           </div>
 
@@ -1696,11 +1697,11 @@ function PatientCard({
               .map(t => {
                 const ts = TYPE_STYLE[t as PatientType] ?? { bg: 'bg-gray-50', text: 'text-gray-600' };
                 return (
-                  <span key={t} className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${ts.bg} ${ts.text}`}>{t}</span>
+                  <span key={t} className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${ts.bg} ${ts.text}`}>{dataLabel(t)}</span>
                 );
               })}
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${progressStyle.badge}`}>
-              {record.progressStatus ?? '최초보고'}
+              {record.progressStatus ?? L('data.progFirstReport')}
             </span>
             {record.temperature != null && (
               <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
@@ -1711,7 +1712,7 @@ function PatientCard({
             )}
             {record.types.includes('격리') && record.isolationRoom && (
               <span className="text-[10px] bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded font-medium">
-                {record.isolationRoom}호 격리
+                {record.isolationRoom}{L('patient.isolation')}
               </span>
             )}
             {hospitalVisits.length > 0 && (() => {
@@ -1734,7 +1735,7 @@ function PatientCard({
             )}
             {parentContactPending && (
               <span className="text-[10px] bg-pink-50 text-pink-700 px-1.5 py-0.5 rounded font-medium">
-                부모연락↑
+                {L('patient.parentContact')}
               </span>
             )}
           </div>
@@ -1761,7 +1762,7 @@ function PatientCard({
           const isActive = activeTab === tab;
           return (
             <button
-              key={tab}
+              key={dataLabel(tab)}
               onClick={() => handleTabClick(tab)}
               className={`relative flex-1 py-2 text-[11px] font-semibold transition-colors ${
                 isActive
@@ -1769,7 +1770,7 @@ function PatientCard({
                   : 'text-gray-400 hover:text-gray-600'
               }`}
             >
-              {tab}
+              {dataLabel(tab)}
               {hasAlert && (
                 <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-400 rounded-full" />
               )}
@@ -1912,7 +1913,7 @@ function ProgressTab({
 
   const handleAddLog = () => {
     if (!logStatus) return;
-    if (logDoses.some(d => !d.itemId || !d.groupId)) { alert('약·처치 물품 사용에서 약과 그룹을 모두 선택하거나 빈 줄을 삭제해주세요.'); return; }
+    if (logDoses.some(d => !d.itemId || !d.groupId)) { alert(L('patient.inMedicationSupplyUseSelect')); return; }
     // 체온 수치가 있으면 공통 기준(FEVER_THRESHOLDS)으로 자동 판정, 없으면 선택한 단계
     const directTemp = parseFloat(logFeverDirect);
     const hasTemp = !isNaN(directTemp);
@@ -2002,13 +2003,13 @@ function ProgressTab({
       {/* 경과 타임라인 */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <p className="text-[11px] font-semibold text-gray-500">경과 기록</p>
+          <p className="text-[11px] font-semibold text-gray-500">{L('patient.progressLog')}</p>
           {!showForm && (
             <button
               onClick={() => setShowForm(true)}
               className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 px-2 py-0.5 rounded hover:bg-blue-50 transition-colors"
             >
-              + 보고 추가
+              {L('patient.addReport')}
             </button>
           )}
         </div>
@@ -2016,7 +2017,7 @@ function ProgressTab({
         {/* 보고 추가 모달 */}
         {showForm && (
           <TabFormModal
-            title="경과 보고 추가"
+            title={L('patient.addProgressReport')}
             icon="📋"
             onClose={() => setShowForm(false)}
             onSubmit={handleAddLog}
@@ -2037,7 +2038,7 @@ function ProgressTab({
 
             {logStatus !== '완치' && (
               <>
-                <FormRow label="현재 위치">
+                <FormRow label={L('patient.currentLocation2')}>
                   <div className="flex-1 space-y-1.5">
                     {/* 위치 모드 버튼 */}
                     <div className="flex gap-1">
@@ -2060,14 +2061,14 @@ function ProgressTab({
                     </div>
                     <input type="text" value={logLocation} onChange={e => setLogLocation(e.target.value)}
                       placeholder={
-                        logLocationMode === '휴식' ? '예) 110호, 휴게실' :
-                        logLocationMode === '격리' ? '예) 격리실 214호' :
-                        '예) 330호, 환자방'
+                        logLocationMode === '휴식' ? L('patient.eGRoom110Lounge2') :
+                        logLocationMode === '격리' ? L('patient.eGIsolationRoom2142') :
+                        L('patient.eGRoom330Sick')
                       }
                       className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-300 bg-white" />
                   </div>
                 </FormRow>
-                <FormRow label="열감">
+                <FormRow label={L('patient.fever2')}>
                   <div className="flex-1 space-y-1">
                     <div className="flex gap-1 flex-wrap">
                       {FEVER_OPTIONS.map(f => (
@@ -2087,7 +2088,7 @@ function ProgressTab({
                           const level = classifyFever(v);
                           setLogFever(level ?? '');
                         }}
-                        placeholder="체온 (37.8)"
+                        placeholder={L('patient.temperature378')}
                         className="flex-1 min-w-[70px] text-[11px] border border-gray-200 rounded px-2 py-0.5 outline-none focus:border-blue-300 bg-white" />
                     </div>
                     {(() => {
@@ -2097,16 +2098,16 @@ function ProgressTab({
                         <p className={`text-[10px] font-semibold ${
                           level === '고열' ? 'text-red-600' : level === '미열' ? 'text-orange-500' : 'text-green-600'
                         }`}>
-                          {parseFloat(logFeverDirect).toFixed(1)}℃ → {level === '고열' ? '⚠️ 고열' : level === '미열' ? '🌡 미열' : '✅ 정상'}
-                          <span className="text-gray-400 font-normal"> (미열 {FEVER_THRESHOLDS.slight}℃ 이상 · 고열 {FEVER_THRESHOLDS.high}℃ 이상)</span>
+                          {parseFloat(logFeverDirect).toFixed(1)}℃ → {level === '고열' ? L('patient.highFever') : level === '미열' ? L('patient.mildFever') : L('patient.normal')}
+                          <span className="text-gray-400 font-normal"> {L('patient.mildFever2')} {FEVER_THRESHOLDS.slight}{L('patient.orHigherHighFever')} {FEVER_THRESHOLDS.high}{L('patient.orHigher')}</span>
                         </p>
                       );
                     })()}
                   </div>
                 </FormRow>
-                <FormRow label="증상">
+                <FormRow label={L('patient.symptoms4')}>
                   <input type="text" value={logSymptom} onChange={e => setLogSymptom(e.target.value)}
-                    placeholder="현재 증상 요약"
+                    placeholder={L('patient.currentSymptomSummary')}
                     className="flex-1 text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-300 bg-white" />
                 </FormRow>
               </>
@@ -2114,20 +2115,20 @@ function ProgressTab({
 
             {logStatus === '중간보고' && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 p-2 space-y-1.5">
-                <p className="text-[10px] font-bold text-amber-700">⏰ 다음 체크 지정</p>
-                <FormRow label="체크 시간">
+                <p className="text-[10px] font-bold text-amber-700">{L('patient.scheduleNextCheck')}</p>
+                <FormRow label={L('patient.checkTime')}>
                   <input type="text" inputMode="numeric" value={nextCheckTime}
                     onChange={e => { const raw = e.target.value.replace(/\D/g, '').slice(0, 4); setNextCheckTime(raw.length >= 3 ? raw.slice(0, 2) + ':' + raw.slice(2) : raw); }}
                     placeholder="1430 → 14:30"
                     className="flex-1 text-[11px] border border-amber-200 rounded px-2 py-1 outline-none focus:border-amber-400 bg-white" />
                 </FormRow>
-                <FormRow label="담당자">
+                <FormRow label={L('patient.assignee')}>
                   <div className="relative flex-1">
                     <input type="text" value={nextCheckQuery}
                       onChange={e => { setNextCheckQuery(e.target.value); setShowNextCheckDropdown(true); }}
                       onFocus={() => setShowNextCheckDropdown(true)}
                       onBlur={() => setTimeout(() => setShowNextCheckDropdown(false), 150)}
-                      placeholder={nextCheckAssigneeName || '이름 검색'}
+                      placeholder={nextCheckAssigneeName || L('patient.searchName')}
                       className="w-full text-[11px] border border-amber-200 rounded px-2 py-1 outline-none focus:border-amber-400 bg-white" />
                     {nextCheckAssigneeName && !nextCheckQuery && (
                       <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-amber-700 font-semibold pointer-events-none">✓ {nextCheckAssigneeName}</span>
@@ -2140,7 +2141,7 @@ function ProgressTab({
                             <button key={u.userId} type="button"
                               onMouseDown={() => { setNextCheckAssigneeId(u.userId); setNextCheckAssigneeName(u.name); setNextCheckQuery(''); setShowNextCheckDropdown(false); }}
                               className={`w-full text-left px-2 py-1 text-[11px] hover:bg-amber-50 ${nextCheckAssigneeId === u.userId ? 'font-bold text-amber-700' : 'text-gray-700'}`}
-                            >{u.name}{u.userId === currentUserId ? ' (나)' : ''}</button>
+                            >{u.name}{u.userId === currentUserId ? L('patient.me') : ''}</button>
                           ))}
                       </div>
                     )}
@@ -2163,9 +2164,9 @@ function ProgressTab({
               />
             )}
 
-            <FormRow label="메모">
+            <FormRow label={L('common.memo')}>
               <input type="text" value={logNote} onChange={e => setLogNote(e.target.value)}
-                placeholder={logStatus === '완치' ? '완치 메모 (선택)' : '추가 메모 (선택)'}
+                placeholder={logStatus === '완치' ? L('patient.recoveryNoteOptional') : L('patient.additionalNoteOptional')}
                 className="flex-1 text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-blue-300 bg-white" />
             </FormRow>
           </TabFormModal>
@@ -2173,7 +2174,7 @@ function ProgressTab({
 
         {/* 타임라인 */}
         {logs.length === 0 ? (
-          <p className="text-[11px] text-gray-400 text-center py-3">경과 기록이 없습니다.</p>
+          <p className="text-[11px] text-gray-400 text-center py-3">{L('patient.noProgressEntries')}</p>
         ) : (
           <div className="relative pl-4">
             {/* 세로 타임라인 선 */}
@@ -2194,10 +2195,10 @@ function ProgressTab({
                     nextCheckOverdue = true;
                     const overdueMin = Math.abs(diffMin);
                     nextCheckLabel = overdueMin < 60
-                      ? `${overdueMin}분 지남`
-                      : `${Math.floor(overdueMin / 60)}시간 ${overdueMin % 60}분 지남`;
+                      ? L('patient.minOverdue', { v0: overdueMin })
+                      : L('patient.hMOverdue', { v0: Math.floor(overdueMin / 60), v1: overdueMin % 60 });
                   } else if (diffMin < 60) {
-                    nextCheckLabel = `${diffMin}분 후`;
+                    nextCheckLabel = L('patient.inMin', { v0: diffMin });
                   } else {
                     const h = String(nextCheckDate.getHours()).padStart(2, '0');
                     const m = String(nextCheckDate.getMinutes()).padStart(2, '0');
@@ -2211,7 +2212,7 @@ function ProgressTab({
                     <div className={`absolute -left-2.5 top-1.5 w-2 h-2 rounded-full ${style.dot} ring-2 ring-white`} />
                     <div className={`rounded-lg border ${style.line} bg-white p-2.5 space-y-1`}>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${style.badge}`}>{log.status}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${style.badge}`}>{dataLabel(log.status)}</span>
                         <span className="text-[10px] text-gray-500">{log.loggedBy}</span>
                         <span className="text-[10px] text-gray-400">{formatDate(log.loggedAt)}</span>
                         {/* 가상 최초보고(isSynthetic)는 삭제 불가, 실제 로그는 모두 삭제 가능 */}
@@ -2219,7 +2220,7 @@ function ProgressTab({
                           <button
                             onClick={() => onRemoveProgressLog(rawIndex)}
                             className="ml-auto text-[10px] text-gray-300 hover:text-red-400 transition-colors px-1"
-                            title="이 기록 삭제"
+                            title={L('patient.deleteThisEntry')}
                           >🗑️</button>
                         )}
                       </div>
@@ -2256,7 +2257,7 @@ function ProgressTab({
                           <div className="flex flex-wrap gap-1 mt-0.5">
                             {doses.map(d => (
                               <span key={d.id} className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-100 px-1.5 py-0.5 rounded">
-                                💊 {doseLabel(d)} {d.quantity}{d.unit ?? '개'} · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}
+                                💊 {doseLabel(d)} {d.quantity}{d.unit ?? L('patient.pcs')} · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}
                               </span>
                             ))}
                           </div>
@@ -2270,7 +2271,7 @@ function ProgressTab({
                         }`}>
                           <span className="text-[10px]">⏰</span>
                           <span className={`text-[10px] font-bold ${nextCheckOverdue ? 'text-red-600' : 'text-amber-700'}`}>
-                            다음 체크
+                            {L('patient.nextCheck2')}
                           </span>
                           {nextCheckLabel && (
                             <span className={`text-[10px] ${nextCheckOverdue ? 'text-red-500' : 'text-amber-600'}`}>
@@ -2283,7 +2284,7 @@ function ProgressTab({
                             </span>
                           )}
                           {nextCheckOverdue && (
-                            <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1 py-0.5 rounded ml-1">누락주의</span>
+                            <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1 py-0.5 rounded ml-1">{L('patient.watchForMisses')}</span>
                           )}
                         </div>
                       )}
@@ -2382,26 +2383,26 @@ function MedicationDoseEditor({ doses, onChange, medicines, groups, givenBy, com
     <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 space-y-2">
       <div className="flex items-center justify-between">
         <div>
-          <p className={`${textCls} font-bold text-emerald-800`}>💊 약·처치 물품 사용</p>
-          <p className="text-[10px] text-emerald-700/80">실제로 먹이거나 쓴 경우에만 기록 — 저장하면 해당 그룹 재고에서 자동으로 빠집니다</p>
+          <p className={`${textCls} font-bold text-emerald-800`}>{L('patient.medicationSupplyUse2')}</p>
+          <p className="text-[10px] text-emerald-700/80">{L('patient.logOnlyWhatWasActually')}</p>
         </div>
         <button type="button" onClick={addRow} disabled={!canAdd}
           className={`${textCls} font-bold px-2 py-1 rounded-lg transition-colors ${
             canAdd ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
           }`}>
-          + 추가
+          {L('patient.add')}
         </button>
       </div>
 
       {studentNote && (
-        <p className="text-[10px] text-rose-700 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1.5">⚠️ 학생 정보 — {studentNote}</p>
+        <p className="text-[10px] text-rose-700 bg-rose-50 border border-rose-100 rounded-lg px-2 py-1.5">{L('patient.studentInfo2')} {studentNote}</p>
       )}
 
       {!canAdd && (
         <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1.5">
           {medicines.length === 0
-            ? '등록된 약·처치 물품이 없습니다. 재고 탭에서 관리자가 품목을 등록하면 여기서 선택할 수 있습니다.'
-            : '재고 그룹이 없습니다. 재고 탭에서 관리자가 그룹(Spring 등)을 등록해주세요.'}
+            ? L('patient.noMedicationCareItemsRegistered')
+            : L('patient.noInventoryGroupsAskAn')}
         </p>
       )}
 
@@ -2421,12 +2422,12 @@ function MedicationDoseEditor({ doses, onChange, medicines, groups, givenBy, com
                 {item && itemThumb(item)
                   ? <img src={itemThumb(item)} alt="" className="w-5 h-5 rounded object-cover bg-gray-100 shrink-0" />
                   : <span className="w-5 h-5 rounded bg-gray-100 shrink-0 flex items-center justify-center text-[10px] text-gray-400">💊</span>}
-                <span className={`truncate ${d.itemId ? 'text-gray-900 font-semibold' : 'text-gray-400'}`}>{item ? itemLabel(item) : '약·물품 선택'}</span>
+                <span className={`truncate ${d.itemId ? 'text-gray-900 font-semibold' : 'text-gray-400'}`}>{item ? itemLabel(item) : L('patient.selectItem2')}</span>
                 <span className="ml-auto text-gray-300 shrink-0">🔍</span>
               </button>
               <div className="flex items-center gap-1">
                 <button type="button" onClick={() => update(idx, { quantity: Math.max(1, d.quantity - 1) })} className="w-6 h-6 rounded border border-gray-200 text-gray-500 hover:bg-gray-50">−</button>
-                <span className={`${textCls} w-9 text-center font-bold text-gray-800`}>{d.quantity}{d.unit ?? '개'}</span>
+                <span className={`${textCls} w-9 text-center font-bold text-gray-800`}>{d.quantity}{d.unit ?? L('patient.pcs')}</span>
                 <button type="button" onClick={() => update(idx, { quantity: d.quantity + 1 })} className="w-6 h-6 rounded border border-gray-200 text-gray-500 hover:bg-gray-50">+</button>
               </div>
               <select value={d.groupId}
@@ -2435,14 +2436,14 @@ function MedicationDoseEditor({ doses, onChange, medicines, groups, givenBy, com
                   if (g) update(idx, { groupId: g.id, groupName: g.name });
                 }}
                 className={`${inputCls} w-28 ${d.groupId ? 'border-emerald-200' : 'border-amber-300 text-gray-400'}`}>
-                <option value="">그룹 선택</option>
+                <option value="">{L('patient.selectGroup')}</option>
                 {groups.map(g => <option key={g.id} value={g.id}>{g.name}{item ? ` (${getGroupStock(item, g.id)})` : ''}</option>)}
               </select>
-              <button type="button" onClick={() => remove(idx)} className="text-gray-300 hover:text-red-500 px-1" title="삭제">🗑️</button>
+              <button type="button" onClick={() => remove(idx)} className="text-gray-300 hover:text-red-500 px-1" title={L('common.delete')}>🗑️</button>
             </div>
             <input type="text" value={d.memo ?? ''} onChange={e => update(idx, { memo: e.target.value })}
-              placeholder="메모 (예: 식사 후 복용)" className={`${inputCls} border-emerald-100 w-full`} />
-            {incomplete && <p className="text-[10px] text-amber-700">약·물품과 사용한 그룹을 선택해주세요</p>}
+              placeholder={L('patient.noteEGTakeAfter')} className={`${inputCls} border-emerald-100 w-full`} />
+            {incomplete && <p className="text-[10px] text-amber-700">{L('patient.selectTheItemAndThe')}</p>}
             {warnings.map((w, i) => (
               <p key={i} className={`text-[10px] ${w.level === 'warn' ? 'text-red-700 bg-red-50 border border-red-100 rounded px-1.5 py-1 font-semibold' : 'text-blue-700'}`}>
                 {w.level === 'warn' ? '⚠️ ' : 'ℹ️ '}{w.message}
@@ -2453,7 +2454,7 @@ function MedicationDoseEditor({ doses, onChange, medicines, groups, givenBy, com
               {item?.description && <span className="text-gray-600">ℹ️ {item.description}</span>}
               {item && d.groupId && (
                 <span className={groupStock - d.quantity < 0 ? 'text-red-600 font-semibold' : 'text-gray-500'}>
-                  재고 {d.groupName} {groupStock}{d.unit ?? '개'} · 전체 {total}{d.unit ?? '개'}{groupStock - d.quantity < 0 ? ' — 기록상 부족 (저장은 가능, 실사 필요로 표시)' : ''}
+                  {L('nav.inventory')} {d.groupName} {groupStock}{d.unit ?? L('patient.pcs')} {L('patient.total2')} {total}{d.unit ?? L('patient.pcs')}{groupStock - d.quantity < 0 ? L('patient.shortOnRecordCanStill') : ''}
                 </span>
               )}
             </div>
@@ -2510,16 +2511,16 @@ function MedicationItemPicker({ medicines, groups, groupId, compact, onPick, onC
       <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
         <div className="px-4 pt-4 pb-3 border-b border-gray-100 space-y-2">
           <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-gray-900">약 · 물품 선택</h3>
+            <h3 className="text-sm font-bold text-gray-900">{L('patient.selectItem')}</h3>
             <button type="button" onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600">✕</button>
           </div>
-          <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="물품명 검색 (예: 타이, 파스, 붕대)"
+          <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder={L('patient.searchItemsEGTylenol')}
             className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-400 bg-white" />
         </div>
 
         <div className="flex-1 overflow-y-auto">
           {results.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-10">검색 결과가 없습니다.</p>
+            <p className="text-sm text-gray-400 text-center py-10">{L('students.noResults')}</p>
           ) : (
             <div className="divide-y divide-gray-100">
               {results.map(m => {
@@ -2538,9 +2539,9 @@ function MedicationItemPicker({ medicines, groups, groupId, compact, onPick, onC
                       </span>
                       <span className="shrink-0 text-right">
                         <span className={`block text-[11px] font-bold ${groupId && gStock <= 0 ? 'text-red-600' : 'text-gray-700'}`}>
-                          {groupId ? `${groupName} ${gStock}` : `전체 ${getTotalStock(m)}`}<span className="text-[9px] text-gray-400 ml-0.5">{m.unit}</span>
+                          {groupId ? `${groupName} ${gStock}` : L('patient.total', { v0: getTotalStock(m) })}<span className="text-[9px] text-gray-400 ml-0.5">{dataLabel(m.unit)}</span>
                         </span>
-                        {groupId && <span className="block text-[9px] text-gray-400">전체 {getTotalStock(m)}{m.unit}</span>}
+                        {groupId && <span className="block text-[9px] text-gray-400">{L('common.all')} {getTotalStock(m)}{dataLabel(m.unit)}</span>}
                       </span>
                     </button>
 
@@ -2549,12 +2550,12 @@ function MedicationItemPicker({ medicines, groups, groupId, compact, onPick, onC
                         {m.dosageNote && <p className="text-[10px] text-emerald-900">📋 {m.dosageNote}</p>}
                         {m.description && <p className="text-[10px] text-gray-600">ℹ️ {m.description}</p>}
                         <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-bold text-gray-700">사용 수량</span>
+                          <span className="text-[11px] font-bold text-gray-700">{L('patient.quantityUsed')}</span>
                           <button type="button" onClick={() => setQty(v => Math.max(1, v - 1))} className="w-7 h-7 rounded border border-gray-200 bg-white text-gray-600">−</button>
-                          <span className="w-12 text-center text-sm font-bold text-gray-900">{qty}{m.unit}</span>
+                          <span className="w-12 text-center text-sm font-bold text-gray-900">{qty}{dataLabel(m.unit)}</span>
                           <button type="button" onClick={() => setQty(v => v + 1)} className="w-7 h-7 rounded border border-gray-200 bg-white text-gray-600">+</button>
                           <button type="button" onClick={() => onPick(m, qty)}
-                            className="ml-auto px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg">추가</button>
+                            className="ml-auto px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg">{L('task.add')}</button>
                         </div>
                       </div>
                     )}
@@ -2565,7 +2566,7 @@ function MedicationItemPicker({ medicines, groups, groupId, compact, onPick, onC
           )}
         </div>
         <div className={`px-4 py-2.5 border-t border-gray-100 ${compact ? 'text-[10px]' : 'text-[11px]'} text-gray-400`}>
-          재고 탭에 등록된 약·처치 물품만 고를 수 있습니다.
+          {L('patient.onlyMedicationCareItemsRegistered')}
         </div>
       </div>
     </div>
@@ -2599,26 +2600,26 @@ function DoseHistory({ record, currentUserName }: { record: PatientRecord; curre
     commit(next);
   };
   const removeDose = (id: string) => {
-    if (!confirm('이 약 복용 기록을 삭제할까요? 해당 수량은 재고에 복구됩니다.')) return;
+    if (!confirm(L('patient.deleteThisMedicationRecordThe'))) return;
     commit((record.medicationDoses ?? []).filter(d => d.id !== id));
   };
 
   return (
     <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-2.5">
-      <p className="text-[11px] font-semibold text-emerald-800 mb-1.5">💊 투약 내역 <span className="text-gray-400 font-normal">({doses.length}건 · 시간순)</span></p>
+      <p className="text-[11px] font-semibold text-emerald-800 mb-1.5">{L('patient.medicationHistory')} <span className="text-gray-400 font-normal">({doses.length}{L('patient.entriesByTime')}</span></p>
       <div className="space-y-1">
         {doses.map(d => (
           <div key={d.id} className="flex items-center gap-2 bg-white rounded border border-emerald-100 px-2 py-1 text-[11px]">
-            <span className="text-gray-400 w-10 shrink-0">{d.givenAt?.toDate ? d.givenAt.toDate().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false }) : ''}</span>
-            <span className={`text-[9px] px-1 rounded shrink-0 ${d.source === 'initial' ? 'bg-gray-100 text-gray-600' : 'bg-blue-50 text-blue-600'}`}>{d.source === 'initial' ? '최초' : '경과'}</span>
+            <span className="text-gray-400 w-10 shrink-0">{d.givenAt?.toDate ? d.givenAt.toDate().toLocaleTimeString(currentIntlLocale(), { hour: '2-digit', minute: '2-digit', hour12: false }) : ''}</span>
+            <span className={`text-[9px] px-1 rounded shrink-0 ${d.source === 'initial' ? 'bg-gray-100 text-gray-600' : 'bg-blue-50 text-blue-600'}`}>{d.source === 'initial' ? L('patient.initial') : L('patient.progress')}</span>
             <span className="flex-1 min-w-0 truncate text-gray-800"><b>{doseLabel(d)}</b> · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}</span>
             <div className="flex items-center gap-0.5 shrink-0">
               <button type="button" disabled={busy || d.quantity <= 1} onClick={() => changeQty(d.id, -1)}
                 className="w-5 h-5 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40">−</button>
-              <span className="w-8 text-center font-bold text-gray-800">{d.quantity}{d.unit ?? '개'}</span>
+              <span className="w-8 text-center font-bold text-gray-800">{d.quantity}{d.unit ?? L('patient.pcs')}</span>
               <button type="button" disabled={busy} onClick={() => changeQty(d.id, 1)}
                 className="w-5 h-5 rounded border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40">+</button>
-              <button type="button" disabled={busy} onClick={() => removeDose(d.id)} className="ml-1 text-gray-300 hover:text-red-500" title="삭제">🗑️</button>
+              <button type="button" disabled={busy} onClick={() => removeDose(d.id)} className="ml-1 text-gray-300 hover:text-red-500" title={L('common.delete')}>🗑️</button>
             </div>
           </div>
         ))}
@@ -2735,8 +2736,8 @@ function ManagerActionPanel({
     medication: {
       color: 'bg-green-500', border: 'border-green-200', bg: 'bg-green-50', textColor: 'text-green-800',
       desc: (a) => a.medicationName
-        ? `${a.medicationName}${a.medicationScheduledTime ? ` (${a.medicationScheduledTime})` : ''} 복용하세요`
-        : '약 복용하세요',
+        ? L('patient.pleaseTake', { v0: `${a.medicationName}${a.medicationScheduledTime ? ` (${a.medicationScheduledTime})` : ''}` })
+        : L('patient.pleaseTakeTheMedication'),
       needsResponse: true,
     },
     call: {
@@ -2746,7 +2747,7 @@ function ManagerActionPanel({
     },
     visit: {
       color: 'bg-purple-500', border: 'border-purple-200', bg: 'bg-purple-50', textColor: 'text-purple-800',
-      desc: (a) => `직접 확인하러 갈게요${a.scheduledTime ? ` (${a.scheduledTime}까지)` : ''}${a.meetingPlace ? ` — ${a.meetingPlace}` : ''} — 현 위치 알려주세요`,
+      desc: (a) => L('patient.iLlComeCheckTell', { v0: a.scheduledTime ? L('patient.by', { v0: a.scheduledTime }) : '', v1: a.meetingPlace ? ` — ${a.meetingPlace}` : '' }),
       needsResponse: true,
     },
     escort: {
@@ -2788,7 +2789,7 @@ function ManagerActionPanel({
                 <button
                   onClick={() => onComplete(action.id)}
                   className="text-[10px] bg-white border border-gray-200 text-gray-600 px-2 py-1 rounded-lg hover:bg-gray-50"
-                >완료</button>
+                >{L('task.done')}</button>
               )}
             </div>
 
@@ -2799,7 +2800,7 @@ function ManagerActionPanel({
                   onClick={() => { setRespondingId(action.id); setRespMedTime(now()); }}
                   className={`w-full py-2 text-xs font-bold text-white rounded-lg ${cfg.color} hover:opacity-90`}
                 >
-                  {action.actionType === 'medication' ? '✓ 복용 완료 보고' : '📍 현재 위치 전송'}
+                  {action.actionType === 'medication' ? L('patient.reportDoseTaken') : L('patient.sendCurrentLocation')}
                 </button>
               </div>
             )}
@@ -2810,22 +2811,22 @@ function ManagerActionPanel({
                 {action.actionType === 'medication' && (
                   <>
                     <input value={respMedName} onChange={e => setRespMedName(e.target.value)}
-                      placeholder="복용한 약 이름" className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none" />
+                      placeholder={L('patient.medicationTaken')} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none" />
                     <input type="time" value={respMedTime} onChange={e => setRespMedTime(e.target.value)}
                       className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none" />
                   </>
                 )}
                 {(action.actionType === 'visit' || action.actionType === 'escort') && (
                   <input value={respLocation} onChange={e => setRespLocation(e.target.value)}
-                    placeholder="현재 위치 (예: 207호, 운동장)" className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none" />
+                    placeholder={L('patient.currentLocationEGRoom')} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none" />
                 )}
                 <input value={respNote} onChange={e => setRespNote(e.target.value)}
-                  placeholder="추가 메모 (선택)" className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none" />
+                  placeholder={L('patient.additionalNoteOptional')} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none" />
                 <div className="flex gap-2">
                   <button onClick={() => setRespondingId(null)}
-                    className="flex-1 py-1.5 text-xs text-gray-500 bg-white border border-gray-200 rounded-lg">취소</button>
+                    className="flex-1 py-1.5 text-xs text-gray-500 bg-white border border-gray-200 rounded-lg">{L('common.cancel')}</button>
                   <button onClick={() => handleRespond(action.id)}
-                    className={`flex-1 py-1.5 text-xs text-white font-bold rounded-lg ${cfg.color}`}>전송</button>
+                    className={`flex-1 py-1.5 text-xs text-white font-bold rounded-lg ${cfg.color}`}>{L('task.send')}</button>
                 </div>
               </div>
             )}
@@ -2834,7 +2835,7 @@ function ManagerActionPanel({
             {responseReceived && (
               <div className="px-3 pb-3 border-t border-white/50 pt-2 space-y-2">
                 <div className="bg-white rounded-lg p-2 space-y-0.5">
-                  <p className="text-[10px] font-bold text-gray-700">✓ {action.response!.respondedBy} 응답</p>
+                  <p className="text-[10px] font-bold text-gray-700">✓ {action.response!.respondedBy} {L('patient.response')}</p>
                   {action.response!.medicationName && (
                     <p className="text-[10px] text-gray-600">💊 {action.response!.medicationName} {action.response!.medicationTime && `(${action.response!.medicationTime})`}</p>
                   )}
@@ -2851,46 +2852,46 @@ function ManagerActionPanel({
                   <button
                     onClick={() => setFollowUpId(action.id)}
                     className="w-full py-1.5 text-[11px] font-bold text-white bg-indigo-500 rounded-lg hover:bg-indigo-600"
-                  >후속조치 결정 →</button>
+                  >{L('patient.decideFollowUp2')}</button>
                 )}
 
                 {isIssuer && followUpId === action.id && (
                   <div className="bg-white rounded-lg p-2.5 space-y-2 border border-indigo-100">
-                    <p className="text-[11px] font-bold text-indigo-800">후속조치 결정</p>
+                    <p className="text-[11px] font-bold text-indigo-800">{L('patient.decideFollowUp')}</p>
 
                     {/* 내원 여부 */}
                     <div className="flex gap-2">
                       <button
                         onClick={() => setFuHospitalize(false)}
                         className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg border ${!fuHospitalize ? 'bg-green-500 text-white border-transparent' : 'bg-white text-gray-500 border-gray-200'}`}
-                      >내원 불필요</button>
+                      >{L('patient.noHospitalVisitNeeded')}</button>
                       <button
                         onClick={() => setFuHospitalize(true)}
                         className={`flex-1 py-1.5 text-[11px] font-bold rounded-lg border ${fuHospitalize ? 'bg-red-500 text-white border-transparent' : 'bg-white text-gray-500 border-gray-200'}`}
-                      >내원 필요</button>
+                      >{L('patient.hospitalVisitNeeded')}</button>
                     </div>
 
                     {/* 다음 체크 시간 */}
                     <div className="flex gap-2 items-center">
-                      <label className="text-[10px] text-gray-500 whitespace-nowrap">다음 체크</label>
+                      <label className="text-[10px] text-gray-500 whitespace-nowrap">{L('patient.nextCheck2')}</label>
                       <input type="time" value={fuNextTime} onChange={e => setFuNextTime(e.target.value)}
                         className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1 outline-none" />
                     </div>
 
                     {/* 다음 체크 담당자 */}
                     <input value={fuNextAssignee} onChange={e => setFuNextAssignee(e.target.value)}
-                      placeholder="다음 체크 담당자 (선택)" className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none" />
+                      placeholder={L('patient.nextCheckAssigneeOptional')} className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none" />
 
                     {/* 메모 */}
                     <textarea value={fuNote} onChange={e => setFuNote(e.target.value)}
-                      placeholder="지시 사항 메모" rows={2}
+                      placeholder={L('patient.instructionNote')} rows={2}
                       className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none resize-none" />
 
                     <div className="flex gap-2">
                       <button onClick={() => setFollowUpId(null)}
-                        className="flex-1 py-1.5 text-xs text-gray-500 bg-gray-100 rounded-lg">취소</button>
+                        className="flex-1 py-1.5 text-xs text-gray-500 bg-gray-100 rounded-lg">{L('common.cancel')}</button>
                       <button onClick={() => handleFollowUp(action.id)}
-                        className="flex-1 py-1.5 text-xs font-bold text-white bg-indigo-500 rounded-lg">결정 완료</button>
+                        className="flex-1 py-1.5 text-xs font-bold text-white bg-indigo-500 rounded-lg">{L('patient.done3')}</button>
                     </div>
                   </div>
                 )}
@@ -2900,7 +2901,7 @@ function ManagerActionPanel({
             {/* 매니저: 응답 불필요 액션도 응답 대기 표시 */}
             {waitingResponse && (
               <div className="px-3 pb-3">
-                <p className="text-[10px] text-gray-500 text-center animate-pulse">담당자 응답 대기 중...</p>
+                <p className="text-[10px] text-gray-500 text-center animate-pulse">{L('patient.waitingForAssigneeResponse')}</p>
               </div>
             )}
           </div>
@@ -2915,12 +2916,12 @@ function ManagerActionPanel({
               onClick={() => setShowIssuePicker(true)}
               className="w-full py-2 text-[11px] font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl border border-dashed border-gray-300 transition-colors"
             >
-              + 담당자에게 지시 보내기
+              {L('patient.sendInstructionToAssignee')}
             </button>
           ) : issuingType === null ? (
             <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-bold text-gray-700">지시 유형 선택</p>
+                <p className="text-xs font-bold text-gray-700">{L('patient.chooseInstructionType')}</p>
                 <button onClick={() => setShowIssuePicker(false)} className="text-gray-400 hover:text-gray-600 text-xs">✕</button>
               </div>
               <div className="grid grid-cols-1 gap-1.5">
@@ -2942,25 +2943,25 @@ function ManagerActionPanel({
             <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-bold text-blue-800">{MANAGER_ACTION_LABELS[issuingType]}</p>
-                <button onClick={() => setIssuingType(null)} className="text-blue-400 hover:text-blue-600 text-xs">← 뒤로</button>
+                <button onClick={() => setIssuingType(null)} className="text-blue-400 hover:text-blue-600 text-xs">{L('content.back')}</button>
               </div>
 
               {/* 지시 받을 담당자 (한국인 선생님만, 변경 시 담당자도 함께 바뀜) */}
               <div className="flex gap-2 items-center">
-                <label className="text-[10px] text-blue-700 whitespace-nowrap">담당자</label>
+                <label className="text-[10px] text-blue-700 whitespace-nowrap">{L('patient.assignee')}</label>
                 <UserSearchInput value={targetAssigneeName} onChange={setTargetAssigneeName}
-                  placeholder={record.assigneeName ? `현재: ${record.assigneeName}` : '담당자 이름 검색'} campUsers={assignableUsers} />
+                  placeholder={record.assigneeName ? L('patient.current', { v0: record.assigneeName }) : L('patient.searchAssigneeName')} campUsers={assignableUsers} />
               </div>
               {targetAssigneeName.trim() && targetAssigneeName.trim() !== (record.assigneeName ?? '') && assignableUsers.some(u => u.name === targetAssigneeName.trim()) && (
-                <p className="text-[10px] text-amber-700">전송 시 담당자가 {record.assigneeName || '미지정'} → {targetAssigneeName.trim()} 으로 변경됩니다.</p>
+                <p className="text-[10px] text-amber-700">{L('patient.onSendTheAssigneeChanges')} {record.assigneeName || L('data.unspecified')} → {targetAssigneeName.trim()} {L('patient.text4')}</p>
               )}
 
               {issuingType === 'medication' && (
                 <>
                   <input value={medName} onChange={e => setMedName(e.target.value)}
-                    placeholder="약 이름 (예: 타이레놀)" className="w-full text-xs border border-blue-200 rounded-lg px-2.5 py-1.5 outline-none bg-white" />
+                    placeholder={L('patient.medicationNameEGTylenol2')} className="w-full text-xs border border-blue-200 rounded-lg px-2.5 py-1.5 outline-none bg-white" />
                   <div className="flex gap-2 items-center">
-                    <label className="text-[10px] text-blue-700 whitespace-nowrap">복용 시각</label>
+                    <label className="text-[10px] text-blue-700 whitespace-nowrap">{L('patient.timeTaken')}</label>
                     <input type="time" value={medTime} onChange={e => setMedTime(e.target.value)}
                       className="flex-1 text-xs border border-blue-200 rounded-lg px-2 py-1 outline-none bg-white" />
                   </div>
@@ -2970,10 +2971,10 @@ function ManagerActionPanel({
               {(issuingType === 'visit' || issuingType === 'escort') && (
                 <>
                   <input value={meetingPlace} onChange={e => setMeetingPlace(e.target.value)}
-                    placeholder={issuingType === 'visit' ? '현재 위치 (어디 있나요?)' : '장소 (어디로 데리러 갈까요?)'}
+                    placeholder={issuingType === 'visit' ? L('patient.currentLocationWhereAreThey') : L('patient.placeWhereShouldWePick')}
                     className="w-full text-xs border border-blue-200 rounded-lg px-2.5 py-1.5 outline-none bg-white" />
                   <div className="flex gap-2 items-center">
-                    <label className="text-[10px] text-blue-700 whitespace-nowrap">도착 시각</label>
+                    <label className="text-[10px] text-blue-700 whitespace-nowrap">{L('patient.arrivalTime')}</label>
                     <input type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)}
                       className="flex-1 text-xs border border-blue-200 rounded-lg px-2 py-1 outline-none bg-white" />
                   </div>
@@ -2981,17 +2982,17 @@ function ManagerActionPanel({
               )}
 
               {issuingType === 'call' && (
-                <p className="text-[10px] text-blue-600">지시를 전송하면 담당자에게 전화 대기 알림이 갑니다.</p>
+                <p className="text-[10px] text-blue-600">{L('patient.sendingTheInstructionAlertsThe')}</p>
               )}
               {issuingType === 'confirmed' && (
-                <p className="text-[10px] text-blue-600">현장에서 직접 확인했음을 기록합니다.</p>
+                <p className="text-[10px] text-blue-600">{L('patient.recordsThatYouConfirmedIt')}</p>
               )}
 
               <div className="flex gap-2">
                 <button onClick={() => setShowIssuePicker(false)}
-                  className="flex-1 py-1.5 text-xs text-gray-500 bg-white border border-gray-200 rounded-lg">취소</button>
+                  className="flex-1 py-1.5 text-xs text-gray-500 bg-white border border-gray-200 rounded-lg">{L('common.cancel')}</button>
                 <button onClick={handleIssue}
-                  className="flex-1 py-1.5 text-xs font-bold text-white bg-blue-500 rounded-lg hover:bg-blue-600">전송</button>
+                  className="flex-1 py-1.5 text-xs font-bold text-white bg-blue-500 rounded-lg hover:bg-blue-600">{L('task.send')}</button>
               </div>
             </div>
           )}
@@ -3003,7 +3004,7 @@ function ManagerActionPanel({
         <details className="group">
           <summary className="cursor-pointer text-[10px] text-gray-400 hover:text-gray-600 list-none flex items-center gap-1">
             <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
-            완료된 지시 {doneActions.length}건
+            {L('patient.completedInstructions')} {doneActions.length}{L('home.text')}
           </summary>
           <div className="mt-1.5 space-y-1">
             {doneActions.map(action => {
@@ -3013,13 +3014,13 @@ function ManagerActionPanel({
                   <div className="flex items-center gap-2">
                     <span className="text-xs">{action.actionType === 'medication' ? '💊' : action.actionType === 'call' ? '📞' : action.actionType === 'visit' ? '🚶' : action.actionType === 'escort' ? '🚌' : '✅'}</span>
                     <p className={`text-[10px] font-semibold ${cfg.textColor}`}>{cfg.desc(action)}</p>
-                    <span className="ml-auto text-[9px] text-green-600 font-bold">완료</span>
+                    <span className="ml-auto text-[9px] text-green-600 font-bold">{L('task.done')}</span>
                   </div>
                   {action.response && (
                     <p className="text-[10px] text-gray-500">↳ {action.response.respondedBy}: {action.response.medicationName ?? action.response.currentLocation ?? action.response.note}</p>
                   )}
                   {action.followUp && (
-                    <p className="text-[10px] text-indigo-600">📋 {action.followUp.hospitalize ? '내원 필요' : '내원 불필요'}{action.followUp.nextCheckAt ? ` · 다음 체크 ${action.followUp.nextCheckAt}` : ''}{action.followUp.nextCheckAssignee ? ` (${action.followUp.nextCheckAssignee})` : ''}</p>
+                    <p className="text-[10px] text-indigo-600">📋 {action.followUp.hospitalize ? L('patient.hospitalVisitNeeded') : L('patient.noHospitalVisitNeeded')}{action.followUp.nextCheckAt ? L('patient.nextCheck', { v0: action.followUp.nextCheckAt }) : ''}{action.followUp.nextCheckAssignee ? ` (${action.followUp.nextCheckAssignee})` : ''}</p>
                   )}
                 </div>
               );
@@ -3091,19 +3092,19 @@ function IsolationManageSection({
   return (
     <div className="rounded-lg bg-purple-50 border border-purple-100 p-3 space-y-3">
       <div className="flex items-center justify-between">
-        <p className="text-xs font-semibold text-purple-800">🏠 격리 관리</p>
+        <p className="text-xs font-semibold text-purple-800">{L('patient.isolationCare')}</p>
       </div>
 
       {/* 담당자 지정 (매니저 전용) */}
       <div>
-        <p className="text-[11px] font-semibold text-purple-700 mb-1.5">담당 멘토</p>
+        <p className="text-[11px] font-semibold text-purple-700 mb-1.5">{L('patient.assignedMentor')}</p>
         {currentAssignee && (
           <div className="flex items-center gap-2 mb-1.5 bg-purple-100 rounded-lg px-2.5 py-1.5">
             <span className="text-[11px] font-bold text-purple-900">👤 {currentAssignee}</span>
             <button
               onClick={() => { setAssigneeSearch(''); setShowAssigneeDropdown(true); }}
               className="ml-auto text-[10px] text-purple-500 hover:text-purple-700 font-medium"
-            >변경</button>
+            >{L('patient.change')}</button>
           </div>
         )}
         <div className="relative">
@@ -3112,7 +3113,7 @@ function IsolationManageSection({
             value={assigneeSearch}
             onChange={e => { setAssigneeSearch(e.target.value); setShowAssigneeDropdown(true); }}
             onFocus={() => setShowAssigneeDropdown(true)}
-            placeholder={currentAssignee ? '담당자 변경 검색...' : '멘토 이름 검색...'}
+            placeholder={currentAssignee ? L('patient.searchToChangeAssignee') : L('patient.searchMentorName')}
             className="w-full text-xs border border-purple-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-purple-400 bg-white"
           />
           {showAssigneeDropdown && filteredMentors.length > 0 && (
@@ -3135,7 +3136,7 @@ function IsolationManageSection({
           )}
           {showAssigneeDropdown && assigneeSearch.trim() && filteredMentors.length === 0 && (
             <div className="absolute z-10 top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-0.5 px-3 py-2">
-              <p className="text-xs text-gray-400">검색 결과 없음</p>
+              <p className="text-xs text-gray-400">{L('patient.noResults')}</p>
             </div>
           )}
         </div>
@@ -3144,7 +3145,7 @@ function IsolationManageSection({
       {/* 주기 체크 스케줄 */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <p className="text-[11px] font-semibold text-purple-700">주기 체크</p>
+          <p className="text-[11px] font-semibold text-purple-700">{L('patient.scheduledChecks')}</p>
           {/* 빠른 스케줄 추가 버튼 */}
           <div className="flex gap-1">
             {[30, 60, 120].map(min => (
@@ -3161,20 +3162,20 @@ function IsolationManageSection({
 
         {/* 대기 중인 체크 */}
         {pending.length === 0 && (
-          <p className="text-[10px] text-purple-400">예정된 체크 없음</p>
+          <p className="text-[10px] text-purple-400">{L('patient.noScheduledChecks')}</p>
         )}
         {pending.map(s => (
           <div key={s.id}>
             {completing === s.id ? (
               <div className="bg-white rounded-lg border border-purple-200 p-2.5 space-y-2 mb-1.5">
-                <p className="text-[11px] font-semibold text-purple-700">{formatTime(s.scheduledAt)} 체크 완료 입력</p>
+                <p className="text-[11px] font-semibold text-purple-700">{formatTime(s.scheduledAt)} {L('patient.enterCheckResult')}</p>
                 <div className="flex gap-2">
                   <input
                     type="number"
                     step="0.1"
                     value={checkTemp}
                     onChange={e => setCheckTemp(e.target.value)}
-                    placeholder="체온 (예: 37.1)"
+                    placeholder={L('patient.temperatureEG371')}
                     className="flex-1 text-xs border border-purple-200 rounded px-2 py-1 outline-none"
                   />
                   <select
@@ -3182,21 +3183,21 @@ function IsolationManageSection({
                     onChange={e => setCheckStatus(e.target.value as IsolationCheckSchedule['status'])}
                     className="text-xs border border-purple-200 rounded px-2 py-1 outline-none bg-white"
                   >
-                    {CHECK_STATUS_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                    {CHECK_STATUS_OPTIONS.map(o => <option key={o} value={o}>{dataLabel(o)}</option>)}
                   </select>
                 </div>
                 <input
                   type="text"
                   value={checkNote}
                   onChange={e => setCheckNote(e.target.value)}
-                  placeholder="메모 (선택)"
+                  placeholder={L('patient.noteOptional')}
                   className="w-full text-xs border border-purple-200 rounded px-2 py-1 outline-none"
                 />
                 <div className="flex gap-2">
                   <button onClick={() => setCompleting(null)}
-                    className="flex-1 py-1 text-xs text-gray-500 bg-gray-100 rounded hover:bg-gray-200">취소</button>
+                    className="flex-1 py-1 text-xs text-gray-500 bg-gray-100 rounded hover:bg-gray-200">{L('common.cancel')}</button>
                   <button onClick={() => handleComplete(s.id)}
-                    className="flex-1 py-1 text-xs text-white bg-purple-500 rounded hover:bg-purple-600">저장</button>
+                    className="flex-1 py-1 text-xs text-white bg-purple-500 rounded hover:bg-purple-600">{L('common.save')}</button>
                 </div>
               </div>
             ) : (
@@ -3210,7 +3211,7 @@ function IsolationManageSection({
                   onClick={() => setCompleting(s.id)}
                   className="px-2 py-0.5 text-[10px] font-bold bg-purple-500 text-white rounded hover:bg-purple-600"
                 >
-                  체크 완료
+                  {L('patient.checkDone')}
                 </button>
               </div>
             )}
@@ -3220,7 +3221,7 @@ function IsolationManageSection({
         {/* 완료된 체크 기록 */}
         {done.length > 0 && (
           <div className="mt-1 space-y-1">
-            <p className="text-[10px] font-semibold text-gray-400">완료 기록</p>
+            <p className="text-[10px] font-semibold text-gray-400">{L('patient.completedChecks')}</p>
             {done.map(s => (
               <div key={s.id} className="flex items-center gap-2 text-[10px] text-gray-500">
                 <span className="text-green-600 font-bold">✓</span>
@@ -3232,7 +3233,7 @@ function IsolationManageSection({
                     s.status === '악화' ? 'bg-red-100 text-red-600' :
                     s.status === '호전' ? 'bg-green-100 text-green-600' :
                     'bg-gray-100 text-gray-600'
-                  }`}>{s.status}</span>
+                  }`}>{dataLabel(s.status)}</span>
                 )}
                 {s.checkedBy && <span>{s.checkedBy}</span>}
                 {s.note && <span className="text-gray-400 truncate max-w-[80px]">{s.note}</span>}
@@ -3269,11 +3270,11 @@ function ReturnCriteriaSection({
     }`}>
       <div className="flex items-center justify-between">
         <p className={`text-xs font-semibold ${allDone ? 'text-green-700' : 'text-amber-800'}`}>
-          복귀 판단 기준
+          {L('patient.returnToClassCriteria')}
         </p>
         {allDone && (
           <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">
-            ✓ 복귀 가능
+            {L('patient.canReturn')}
           </span>
         )}
       </div>
@@ -3284,7 +3285,7 @@ function ReturnCriteriaSection({
             <input type="checkbox" checked={checked}
               onChange={e => onReturnCriteriaCheck(i, e.target.checked)}
               className={`w-4 h-4 ${allDone ? 'accent-green-500' : 'accent-amber-500'}`} />
-            <span className={`text-xs ${checked ? 'line-through text-gray-400' : 'text-gray-700'}`}>{label}</span>
+            <span className={`text-xs ${checked ? 'line-through text-gray-400' : 'text-gray-700'}`}>{dataLabel(label)}</span>
           </label>
         );
       })}
@@ -3419,8 +3420,8 @@ function NextCheckBoard({ allRecords, currentUserId, currentUserName }: {
     <div className="rounded-xl border border-amber-200 bg-amber-50 overflow-hidden mb-2">
       <div className="flex items-center gap-1.5 px-3 py-2 border-b border-amber-200 bg-amber-100">
         <span className="text-[11px]">⏰</span>
-        <span className="text-[11px] font-bold text-amber-800">다음 체크 현황</span>
-        <span className="ml-auto text-[10px] text-amber-600">{items.length}명</span>
+        <span className="text-[11px] font-bold text-amber-800">{L('patient.upcomingChecks')}</span>
+        <span className="ml-auto text-[10px] text-amber-600">{items.length}{L('common.people2')}</span>
       </div>
       <div className="divide-y divide-amber-100">
         {items.map(item => {
@@ -3431,9 +3432,9 @@ function NextCheckBoard({ allRecords, currentUserId, currentUserName }: {
             const d = item.nextCheckAt.toDate();
             const abs = Math.abs(item.diffMin);
             if (item.isOverdue) {
-              timeLabel = abs < 60 ? `${abs}분 지남` : `${Math.floor(abs / 60)}시간 ${abs % 60}분 지남`;
+              timeLabel = abs < 60 ? L('patient.minOverdue', { v0: abs }) : L('patient.hMOverdue', { v0: Math.floor(abs / 60), v1: abs % 60 });
             } else if (item.diffMin < 60) {
-              timeLabel = `${item.diffMin}분 후`;
+              timeLabel = L('patient.inMin', { v0: item.diffMin });
             } else {
               const h = String(d.getHours()).padStart(2, '0');
               const m = String(d.getMinutes()).padStart(2, '0');
@@ -3449,13 +3450,13 @@ function NextCheckBoard({ allRecords, currentUserId, currentUserName }: {
               <div className="flex-1 min-w-0">
                 <span className="text-[11px] font-semibold text-gray-800">{item.studentName}</span>
                 {item.className && (
-                  <span className="ml-1.5 text-[10px] text-gray-500">{item.className}반</span>
+                  <span className="ml-1.5 text-[10px] text-gray-500">{item.className}{L('common.class')}</span>
                 )}
               </div>
               {/* 담당자 */}
               {item.nextCheckAssigneeName && (
                 <span className={`text-[10px] font-semibold ${isMine ? 'text-amber-700' : 'text-gray-600'}`}>
-                  {isMine ? '👤 내 담당' : `→ ${item.nextCheckAssigneeName}`}
+                  {isMine ? L('patient.mine') : `→ ${item.nextCheckAssigneeName}`}
                 </span>
               )}
               {/* 시간 뱃지 */}
@@ -3471,7 +3472,7 @@ function NextCheckBoard({ allRecords, currentUserId, currentUserName }: {
                 </span>
               )}
               {item.isOverdue && (
-                <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1 py-0.5 rounded">누락주의</span>
+                <span className="text-[9px] font-bold text-red-500 bg-red-100 px-1 py-0.5 rounded">{L('patient.watchForMisses')}</span>
               )}
             </div>
           );
@@ -3528,23 +3529,23 @@ function TransportBoard({ allRecords }: { allRecords: PatientRecord[] }) {
 
   return (
     <div className="rounded-xl border border-orange-200 bg-orange-50 p-3 mb-1">
-      <p className="text-[11px] font-bold text-orange-700 mb-2">🚗 내원 차량 현황</p>
+      <p className="text-[11px] font-bold text-orange-700 mb-2">{L('patient.hospitalTransport')}</p>
       <div className="space-y-2">
         {bySlot.map(({ slot, rows }) => (
           <div key={slot} className="bg-white rounded-lg border border-orange-100 p-2">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[11px] font-bold text-orange-600">{slot}</span>
+              <span className="text-[11px] font-bold text-orange-600">{dataLabel(slot)}</span>
               {rows[0]?.driver && (
-                <span className="text-[10px] text-gray-500">운전 <b className="text-gray-700">{rows[0].driver}</b></span>
+                <span className="text-[10px] text-gray-500">{L('patient.driver3')} <b className="text-gray-700">{rows[0].driver}</b></span>
               )}
             </div>
             <div className="space-y-0.5">
               {rows.map((g, i) => (
                 <p key={i} className="text-[11px] text-gray-700 leading-snug">
-                  <b className="text-gray-900">{g.escort || '인솔자 미정'}</b>
+                  <b className="text-gray-900">{g.escort || L('patient.escortTbd')}</b>
                   {' '}<span className="text-orange-700">({g.students.join(', ')})</span>
                   {g.hospitalName && <span className="text-gray-500"> : {g.hospitalName}</span>}
-                  {g.departureTime && <span className="text-[10px] text-gray-400"> · {g.departureTime} 출발</span>}
+                  {g.departureTime && <span className="text-[10px] text-gray-400"> · {g.departureTime} {L('patient.departs')}</span>}
                 </p>
               ))}
             </div>
@@ -3613,19 +3614,19 @@ function RestIsolationBoard({ allRecords }: { allRecords: PatientRecord[] }) {
 
   return (
     <div className="rounded-xl border border-purple-200 bg-purple-50 p-3 mb-1">
-      <p className="text-[11px] font-bold text-purple-700 mb-2">😴 휴식 및 격리 현황</p>
+      <p className="text-[11px] font-bold text-purple-700 mb-2">{L('patient.restingIsolation')}</p>
       <div className="space-y-2">
         {/* 휴식 */}
         {restEntries.length > 0 && (
           <div>
             <p className="text-[10px] font-bold text-amber-700 mb-1">
-              😴 휴식 중 <span className="ml-1 text-[10px] font-normal text-amber-600">{restEntries.length}명</span>
+              {L('patient.resting')} <span className="ml-1 text-[10px] font-normal text-amber-600">{restEntries.length}{L('common.people2')}</span>
             </p>
             <div className="flex flex-wrap gap-1">
               {restEntries.map((e, i) => (
                 <div key={i} className="bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
                   <span className="text-[11px] font-semibold text-gray-800">{e.studentName}</span>
-                  {e.className && <span className="text-[10px] text-gray-500 ml-1">{e.className}반</span>}
+                  {e.className && <span className="text-[10px] text-gray-500 ml-1">{e.className}{L('common.class')}</span>}
                   {e.location && <span className="text-[10px] text-amber-700 ml-1">📍 {e.location}</span>}
                 </div>
               ))}
@@ -3636,13 +3637,13 @@ function RestIsolationBoard({ allRecords }: { allRecords: PatientRecord[] }) {
         {isoEntries.length > 0 && (
           <div>
             <p className="text-[10px] font-bold text-purple-700 mb-1">
-              🏠 격리 중 <span className="ml-1 text-[10px] font-normal text-purple-600">{isoEntries.length}명</span>
+              {L('patient.isolated')} <span className="ml-1 text-[10px] font-normal text-purple-600">{isoEntries.length}{L('common.people2')}</span>
             </p>
             <div className="flex flex-wrap gap-1">
               {isoEntries.map((e, i) => (
                 <div key={i} className="bg-white border border-purple-200 rounded-lg px-2 py-1">
                   <span className="text-[11px] font-semibold text-gray-800">{e.studentName}</span>
-                  {e.className && <span className="text-[10px] text-gray-500 ml-1">{e.className}반</span>}
+                  {e.className && <span className="text-[10px] text-gray-500 ml-1">{e.className}{L('common.class')}</span>}
                   {e.location && <span className="text-[10px] text-purple-700 ml-1">📍 {e.location}</span>}
                 </div>
               ))}
@@ -3658,7 +3659,7 @@ function RestIsolationBoard({ allRecords }: { allRecords: PatientRecord[] }) {
 // 공통 탭 폼 모달 (경과·내원·복용약·부모연락 모두 동일 껍데기 사용)
 // ─────────────────────────────────────────────────────────────
 function TabFormModal({
-  title, icon, onClose, onSubmit, submitLabel = '저장', submitColor = 'blue', children,
+  title, icon, onClose, onSubmit, submitLabel = L('common.save'), submitColor = 'blue', children,
 }: {
   title: string;
   icon?: string;
@@ -3700,7 +3701,7 @@ function TabFormModal({
           <div className="flex gap-2 px-3.5 py-2.5 border-t border-gray-100 flex-shrink-0">
             <button onClick={onClose}
               className="flex-1 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-600 hover:bg-gray-50 transition font-medium">
-              취소
+              {L('common.cancel')}
             </button>
             <button onClick={onSubmit}
               className={`flex-[2] px-4 py-1.5 rounded-lg text-xs text-white font-bold transition ${colorMap[submitColor]}`}>
@@ -3796,37 +3797,37 @@ function HospitalScheduleForm({ onSubmit, onCancel, campUsers, allRecords, initi
   return (
     <div className="space-y-2">
       {/* 내원 방식 */}
-      <FormRow label="내원 방식">
+      <FormRow label={L('patient.transport')}>
         <div className="flex flex-wrap gap-1">
           {TRANSPORT_SLOTS.map(s => (
             <button key={s} type="button" onClick={() => handleSlotChange(s)}
               className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
                 transportSlot === s ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:border-orange-300'
-              }`}>{s}</button>
+              }`}>{dataLabel(s)}</button>
           ))}
         </div>
       </FormRow>
 
-      <FormRow label="출발 시간">
+      <FormRow label={L('patient.departureTime')}>
         <input type="text" inputMode="numeric" value={departureTime}
           onChange={e => { const raw = e.target.value.replace(/[^\d:]/g, ''); if (/^\d{4}$/.test(raw)) { setDepartureTime(`${raw.slice(0, 2)}:${raw.slice(2)}`); } else { setDepartureTime(raw); } }}
-          placeholder="예) 14:30" maxLength={5}
+          placeholder={L('patient.eG1430')} maxLength={5}
           className="flex-1 text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-300 bg-white" />
       </FormRow>
 
       {isCar && (
-        <FormRow label="운전자">
-          <UserSearchInput value={driver} onChange={setDriver} placeholder="이름 검색" campUsers={campUsers} />
+        <FormRow label={L('patient.driver2')}>
+          <UserSearchInput value={driver} onChange={setDriver} placeholder={L('patient.searchName')} campUsers={campUsers} />
         </FormRow>
       )}
 
-      <FormRow label="인솔자">
-        <UserSearchInput value={escort} onChange={setEscort} placeholder="이름 검색" campUsers={campUsers} />
+      <FormRow label={L('patient.escort')}>
+        <UserSearchInput value={escort} onChange={setEscort} placeholder={L('patient.searchName')} campUsers={campUsers} />
       </FormRow>
 
       {/* 병원 이름 */}
       <div>
-        <p className="text-[10px] text-gray-500 mb-1">병원 이름</p>
+        <p className="text-[10px] text-gray-500 mb-1">{L('patient.hospitalName')}</p>
         {(() => {
           const presets = getHospitalPresets(campCode ?? '');
           if (presets.length === 0) return null;
@@ -3841,21 +3842,21 @@ function HospitalScheduleForm({ onSubmit, onCancel, campUsers, allRecords, initi
             </div>
           );
         })()}
-        <input type="text" value={hospitalName} onChange={e => setHospitalName(e.target.value)} placeholder="직접 입력"
+        <input type="text" value={hospitalName} onChange={e => setHospitalName(e.target.value)} placeholder={L('patient.enterManually')}
           className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-300 bg-white" />
       </div>
 
-      <FormRow label="학부모 보고자">
-        <UserSearchInput value={parentReporter} onChange={setParentReporter} placeholder="이름 검색" campUsers={campUsers} />
+      <FormRow label={L('patient.parentReporter2')}>
+        <UserSearchInput value={parentReporter} onChange={setParentReporter} placeholder={L('patient.searchName')} campUsers={campUsers} />
       </FormRow>
 
-      <FormRow label="학부모 보고 방식">
+      <FormRow label={L('patient.parentReportMethod')}>
         <div className="flex gap-1 flex-wrap">
           {PARENT_REPORT_METHODS.map(m => (
             <button key={m} type="button" onClick={() => setParentReportMethod(m)}
               className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
                 parentReportMethod === m ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 border border-gray-200'
-              }`}>{m}</button>
+              }`}>{dataLabel(m)}</button>
           ))}
         </div>
       </FormRow>
@@ -3915,7 +3916,7 @@ function HospitalTab({ record, campUsers, allRecords, onAddVisit, onUpdateVisits
   };
 
   const handleDelete = (idx: number) => {
-    if (!confirm(`${idx + 1}차 내원 기록을 삭제할까요?`)) return;
+    if (!confirm(L('patient.deleteHospitalVisit', { v0: idx + 1 }))) return;
     onUpdateVisits(visits.filter((_, i) => i !== idx));
   };
 
@@ -3930,7 +3931,7 @@ function HospitalTab({ record, campUsers, allRecords, onAddVisit, onUpdateVisits
         }`}>
           {/* 헤더 */}
           <div className="flex items-center gap-2">
-            <p className="text-xs font-semibold text-gray-700 flex-shrink-0">{idx + 1}차 내원</p>
+            <p className="text-xs font-semibold text-gray-700 flex-shrink-0">{idx + 1}{L('patient.visit')}</p>
             <div className="flex gap-1 flex-1">
               {HOSPITAL_STATUSES.map(s => (
                 <button key={s} onClick={() => setVisitField(idx, 'hospitalStatus', s)}
@@ -3940,37 +3941,37 @@ function HospitalTab({ record, campUsers, allRecords, onAddVisit, onUpdateVisits
                       : s === '내원예정' ? 'bg-orange-500 text-white'
                       : 'bg-green-500 text-white'
                       : 'bg-white text-gray-400 border border-gray-200'
-                  }`}>{s}</button>
+                  }`}>{dataLabel(s)}</button>
               ))}
             </div>
             <button onClick={() => { setEditingIdx(idx); setShowForm(true); }}
-              className="text-[11px] text-gray-400 hover:text-orange-500 px-1" title="수정">✏️</button>
+              className="text-[11px] text-gray-400 hover:text-orange-500 px-1" title={L('task.edit')}>✏️</button>
             <button onClick={() => handleDelete(idx)}
-              className="text-[11px] text-gray-400 hover:text-red-500 px-1" title="삭제">🗑️</button>
+              className="text-[11px] text-gray-400 hover:text-red-500 px-1" title={L('common.delete')}>🗑️</button>
           </div>
 
           {/* 정보 요약 */}
           <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-            {visit.transportSlot && <span className="text-gray-500">방식: <b className="text-gray-700">{visit.transportSlot}</b></span>}
-            {visit.departureTime && <span className="text-gray-500">출발: <b className="text-gray-700">{visit.departureTime}</b></span>}
-            {visit.driver && <span className="text-gray-500">운전: <b className="text-gray-700">{visit.driver}</b></span>}
-            {visit.escort && <span className="text-gray-500">인솔: <b className="text-gray-700">{visit.escort}</b></span>}
+            {visit.transportSlot && <span className="text-gray-500">{L('patient.method')} <b className="text-gray-700">{dataLabel(visit.transportSlot)}</b></span>}
+            {visit.departureTime && <span className="text-gray-500">{L('patient.departure')} <b className="text-gray-700">{visit.departureTime}</b></span>}
+            {visit.driver && <span className="text-gray-500">{L('patient.driver')} <b className="text-gray-700">{visit.driver}</b></span>}
+            {visit.escort && <span className="text-gray-500">{L('students.escort')} <b className="text-gray-700">{visit.escort}</b></span>}
             {/* 병원 접수용 주민번호 — 인솔자 본인은 자동 표시, 관리자는 보기 버튼 */}
             {(isActiveEscortVisit(visit, viewerName) || viewerIsAdmin) && visit.hospitalStatus !== '필요없음' && (
-              <span className="text-gray-500 col-span-2">주민번호: <EscortSsn recordId={record.id} auto={isActiveEscortVisit(visit, viewerName)} /></span>
+              <span className="text-gray-500 col-span-2">{L('patient.id')} <EscortSsn recordId={record.id} auto={isActiveEscortVisit(visit, viewerName)} /></span>
             )}
-            {visit.hospitalName && <span className="text-gray-500 col-span-2">병원: <b className="text-gray-700">{visit.hospitalName}</b></span>}
-            {visit.parentReporter && <span className="text-gray-500">학부모 보고자: <b className="text-gray-700">{visit.parentReporter}</b></span>}
-            {visit.parentReportMethod && <span className="text-gray-500">보고 방식: <b className="text-gray-700">{visit.parentReportMethod}</b></span>}
+            {visit.hospitalName && <span className="text-gray-500 col-span-2">{L('patient.hospital')} <b className="text-gray-700">{visit.hospitalName}</b></span>}
+            {visit.parentReporter && <span className="text-gray-500">{L('patient.parentReporter')} <b className="text-gray-700">{visit.parentReporter}</b></span>}
+            {visit.parentReportMethod && <span className="text-gray-500">{L('patient.reportMethod')} <b className="text-gray-700">{dataLabel(visit.parentReportMethod)}</b></span>}
           </div>
 
           {/* 처방약 (내원완료 시) */}
           {visit.hospitalStatus === '내원완료' && (
             <div className="flex items-center gap-2">
-              <span className="text-[11px] text-gray-500 w-10 flex-shrink-0">처방</span>
+              <span className="text-[11px] text-gray-500 w-10 flex-shrink-0">{L('patient.prescription')}</span>
               <input type="text" value={visit.prescription ?? ''}
                 onChange={e => setVisitField(idx, 'prescription', e.target.value || undefined)}
-                onBlur={() => onUpdateVisits(visits)} placeholder="처방약"
+                onBlur={() => onUpdateVisits(visits)} placeholder={L('patient.prescribedMedication')}
                 className="flex-1 text-xs border border-gray-200 rounded px-2 py-1.5 bg-white outline-none focus:border-green-300" />
             </div>
           )}
@@ -3979,36 +3980,36 @@ function HospitalTab({ record, campUsers, allRecords, onAddVisit, onUpdateVisits
           {visit.hospitalStatus === '내원완료' && (
             <div className="rounded-lg bg-amber-50 border border-amber-100 p-2.5 space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-[11px] font-semibold text-amber-800">병원비 정산</p>
+                <p className="text-[11px] font-semibold text-amber-800">{L('patient.hospitalBill')}</p>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${visit.billing?.isPaid ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {visit.billing?.isPaid ? '정산 완료' : '미정산'}
+                  {visit.billing?.isPaid ? L('patient.settled') : L('patient.unsettled')}
                 </span>
               </div>
               <div className="flex gap-1">
                 {BILLING_METHODS.map(m => (
                   <button key={m} onClick={() => setBillingField(idx, 'method', m)}
-                    className={`flex-1 py-1 text-[11px] font-semibold rounded ${visit.billing?.method === m ? 'bg-amber-500 text-white' : 'bg-white text-gray-500 border border-gray-200'}`}>{m}</button>
+                    className={`flex-1 py-1 text-[11px] font-semibold rounded ${visit.billing?.method === m ? 'bg-amber-500 text-white' : 'bg-white text-gray-500 border border-gray-200'}`}>{dataLabel(m)}</button>
                 ))}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] text-gray-500 w-10 flex-shrink-0">금액</span>
+                <span className="text-[11px] text-gray-500 w-10 flex-shrink-0">{L('patient.amount')}</span>
                 <input type="number" value={visit.billing?.amount ?? ''}
                   onChange={e => setBillingField(idx, 'amount', e.target.value ? parseInt(e.target.value) : undefined)}
-                  onBlur={() => onUpdateVisits(visits)} placeholder="원"
+                  onBlur={() => onUpdateVisits(visits)} placeholder={L('patient.krw')}
                   className="flex-1 text-xs border border-gray-200 rounded px-2 py-1.5 bg-white outline-none focus:border-amber-300" />
               </div>
               {visit.billing?.method === '용돈봉투' && (
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-gray-500 w-10 flex-shrink-0">담당</span>
+                  <span className="text-[11px] text-gray-500 w-10 flex-shrink-0">{L('profile.role2')}</span>
                   <UserSearchInput value={visit.billing?.pocketMoneyHandler ?? ''}
                     onChange={v => setBillingField(idx, 'pocketMoneyHandler', v || undefined)}
-                    placeholder="차감 담당자" campUsers={campUsers} />
+                    placeholder={L('patient.deductedBy')} campUsers={campUsers} />
                 </div>
               )}
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={visit.billing?.isPaid ?? false}
                   onChange={e => setBillingField(idx, 'isPaid', e.target.checked)} className="accent-green-500" />
-                <span className="text-xs text-gray-600">정산 완료</span>
+                <span className="text-xs text-gray-600">{L('patient.settled')}</span>
               </label>
             </div>
           )}
@@ -4018,13 +4019,13 @@ function HospitalTab({ record, campUsers, allRecords, onAddVisit, onUpdateVisits
       {/* 등록 버튼 */}
       <button onClick={() => { setEditingIdx(-1); setShowForm(true); }}
         className="w-full py-1.5 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg border border-dashed border-orange-200 transition-colors">
-        + {visits.length === 0 ? '내원예정 등록' : '재내원 추가'}
+        + {visits.length === 0 ? L('patient.registerPlannedVisit') : L('patient.addAnotherVisit')}
       </button>
 
       {/* 등록/수정 모달 */}
       {showForm && (
         <TabFormModal
-          title={editingIdx >= 0 ? '내원 정보 수정' : '내원예정 등록'}
+          title={editingIdx >= 0 ? L('patient.editVisitInfo') : L('patient.registerPlannedVisit')}
           icon="🏥"
           onClose={() => { setShowForm(false); setEditingIdx(-1); }}
           onSubmit={() => hospitalSubmitRef.current?.()}
@@ -4074,8 +4075,8 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-2 text-center px-4">
         <div className="text-4xl mb-2">💊</div>
-        <p className="text-gray-500 text-sm font-medium">오늘 복용 예정 약이 없습니다.</p>
-        <p className="text-gray-400 text-xs">약복용 환자를 등록하면 여기에 표시됩니다.</p>
+        <p className="text-gray-500 text-sm font-medium">{L('patient.noMedicationScheduledForToday')}</p>
+        <p className="text-gray-400 text-xs">{L('patient.studentsOnMedicationWillAppear')}</p>
       </div>
     );
   }
@@ -4114,11 +4115,11 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
 
   // 시간대 메타 (담당 색상 포함)
   const TIME_META: Record<MedicationTime, { label: string; group: '방담당' | '반담당'; bg: string; text: string; border: string; selectedRing: string }> = {
-    '기상후':  { label: '기상후',  group: '방담당', bg: 'bg-indigo-50',  text: 'text-indigo-700', border: 'border-indigo-200', selectedRing: 'ring-2 ring-indigo-500' },
-    '조식후':  { label: '조식후',  group: '반담당', bg: 'bg-orange-50',  text: 'text-orange-700', border: 'border-orange-200', selectedRing: 'ring-2 ring-orange-500' },
-    '중식후':  { label: '중식후',  group: '반담당', bg: 'bg-orange-50',  text: 'text-orange-700', border: 'border-orange-200', selectedRing: 'ring-2 ring-orange-500' },
-    '석식후':  { label: '석식후',  group: '반담당', bg: 'bg-orange-50',  text: 'text-orange-700', border: 'border-orange-200', selectedRing: 'ring-2 ring-orange-500' },
-    '취침전':  { label: '취침전',  group: '방담당', bg: 'bg-indigo-50',  text: 'text-indigo-700', border: 'border-indigo-200', selectedRing: 'ring-2 ring-indigo-500' },
+    '기상후':  { label: L('data.medAfterWaking'),  group: '방담당', bg: 'bg-indigo-50',  text: 'text-indigo-700', border: 'border-indigo-200', selectedRing: 'ring-2 ring-indigo-500' },
+    '조식후':  { label: L('data.medAfterBreakfast'),  group: '반담당', bg: 'bg-orange-50',  text: 'text-orange-700', border: 'border-orange-200', selectedRing: 'ring-2 ring-orange-500' },
+    '중식후':  { label: L('data.medAfterLunch'),  group: '반담당', bg: 'bg-orange-50',  text: 'text-orange-700', border: 'border-orange-200', selectedRing: 'ring-2 ring-orange-500' },
+    '석식후':  { label: L('data.medAfterDinner'),  group: '반담당', bg: 'bg-orange-50',  text: 'text-orange-700', border: 'border-orange-200', selectedRing: 'ring-2 ring-orange-500' },
+    '취침전':  { label: L('data.medBeforeBed'),  group: '방담당', bg: 'bg-indigo-50',  text: 'text-indigo-700', border: 'border-indigo-200', selectedRing: 'ring-2 ring-indigo-500' },
   };
 
   // 실제 표시할 섹션 결정 (selectedTime 적용)
@@ -4143,7 +4144,7 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
     : '기상후 · 취침전';
   const classLabel = selectedTime && CLASS_TIMES.includes(selectedTime)
     ? selectedTime
-    : '조식후 · 중식후 · 석식후';
+    : L('patient.afterBreakfastLunchDinner2');
 
   return (
     <div className="flex flex-col h-full">
@@ -4154,7 +4155,7 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
           onClick={() => setLightboxUrl(null)}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightboxUrl} alt="약 사진 확대"
+          <img src={lightboxUrl} alt={L('patient.enlargeMedicationPhoto')}
             className="max-w-full max-h-full rounded-xl object-contain"
             onClick={e => e.stopPropagation()}
           />
@@ -4171,14 +4172,14 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-xs p-5 space-y-4">
             <div className="flex flex-col items-center gap-2 text-center">
               <span className="text-3xl">💊</span>
-              <p className="text-sm font-bold text-gray-800">복용 완료 확인</p>
+              <p className="text-sm font-bold text-gray-800">{L('patient.confirmDoseTaken')}</p>
               <p className="text-xs text-gray-500 leading-relaxed">
-                <span className="font-semibold text-gray-700">{confirmPending.record.studentName}</span> 학생의
+                <span className="font-semibold text-gray-700">{confirmPending.record.studentName}</span> {L('patient.text3')}
                 <br />
                 <span className="font-semibold text-orange-600">{confirmPending.medName}</span>{' '}
-                <span className="font-semibold text-blue-600">{confirmPending.time}</span> 복용을
+                <span className="font-semibold text-blue-600">{confirmPending.time}</span> {L('patient.dose')}
                 <br />
-                완료로 기록할까요?
+                {L('patient.markAsTaken')}
               </p>
             </div>
             <div className="flex gap-2">
@@ -4186,7 +4187,7 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
                 onClick={() => setConfirmPending(null)}
                 className="flex-1 py-2 text-sm text-gray-500 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium transition-colors"
               >
-                취소
+                {L('common.cancel')}
               </button>
               <button
                 onClick={() => {
@@ -4195,7 +4196,7 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
                 }}
                 className="flex-1 py-2 text-sm text-white bg-green-500 hover:bg-green-600 rounded-xl font-bold transition-colors"
               >
-                ✓ 완료 확인
+                {L('patient.confirm')}
               </button>
             </div>
           </div>
@@ -4205,17 +4206,17 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
       {/* 시간대별 현황판 */}
       <div className="bg-white border-b border-gray-100 px-4 pt-3 pb-2">
         <div className="flex items-center justify-between mb-2">
-          <p className="text-xs font-bold text-gray-700">시간대별 복용 현황</p>
+          <p className="text-xs font-bold text-gray-700">{L('patient.dosesByTime')}</p>
           <div className="flex items-center gap-2">
             {selectedTime && (
               <button
                 onClick={() => setSelectedTime(null)}
                 className="text-[9px] text-gray-500 bg-gray-100 hover:bg-gray-200 rounded px-1.5 py-0.5 transition"
               >
-                전체 보기 ✕
+                {L('patient.showAll')}
               </button>
             )}
-            <p className="text-[10px] text-gray-400">{today.replace(/-/g, '/')} · {records.length}명</p>
+            <p className="text-[10px] text-gray-400">{today.replace(/-/g, '/')} · {records.length}{L('common.people2')}</p>
           </div>
         </div>
         <div className="grid grid-cols-5 gap-1.5">
@@ -4251,10 +4252,10 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
                   {prog.done}/{prog.total}
                 </span>
                 {prog.allDone
-                  ? <span className="text-[9px] text-green-600">✓ 완료</span>
+                  ? <span className="text-[9px] text-green-600">{L('patient.done2')}</span>
                   : isSelected
-                    ? <span className={`text-[9px] ${meta.text} opacity-70`}>● 선택됨</span>
-                    : <span className="text-[9px] text-gray-300">탭</span>
+                    ? <span className={`text-[9px] ${meta.text} opacity-70`}>{L('patient.selected')}</span>
+                    : <span className="text-[9px] text-gray-300">{L('patient.tap')}</span>
                 }
               </button>
             );
@@ -4263,10 +4264,10 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
         {/* 담당별 범례 */}
         <div className="flex items-center gap-3 mt-1.5">
           <span className="flex items-center gap-1 text-[9px] text-indigo-500">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block" />방담당
+            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block" />{L('patient.roomLead')}
           </span>
           <span className="flex items-center gap-1 text-[9px] text-orange-500">
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />반담당
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />{L('patient.classLead')}
           </span>
         </div>
       </div>
@@ -4278,9 +4279,9 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
           <div>
             <div className="sticky top-0 z-10 bg-indigo-50 border-b border-indigo-100 px-4 py-2 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-indigo-400 inline-block" />
-              <span className="text-[11px] font-bold text-indigo-700">방 담당</span>
+              <span className="text-[11px] font-bold text-indigo-700">{L('patient.roomLead2')}</span>
               <span className="text-[10px] text-indigo-500">{roomLabel}</span>
-              <span className="ml-auto text-[10px] text-indigo-500">{roomRecords.length}명</span>
+              <span className="ml-auto text-[10px] text-indigo-500">{roomRecords.length}{L('common.people2')}</span>
             </div>
             <div className="p-3 space-y-2">
               {roomRecords.map(record => (
@@ -4306,9 +4307,9 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
           <div>
             <div className="sticky top-0 z-10 bg-orange-50 border-b border-orange-100 px-4 py-2 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />
-              <span className="text-[11px] font-bold text-orange-700">반 담당</span>
+              <span className="text-[11px] font-bold text-orange-700">{L('patient.classLead2')}</span>
               <span className="text-[10px] text-orange-500">{classLabel}</span>
-              <span className="ml-auto text-[10px] text-orange-500">{classRecords.length}명</span>
+              <span className="ml-auto text-[10px] text-orange-500">{classRecords.length}{L('common.people2')}</span>
             </div>
             <div className="p-3 space-y-2">
               {classRecords.map(record => (
@@ -4414,20 +4415,20 @@ function MedicationPatientCard({
             <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{fmtClass(record.className)}</span>
           )}
           {record.roomNumber && (
-            <span className="text-xs bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded">{record.roomNumber}호</span>
+            <span className="text-xs bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded">{record.roomNumber}{L('students.text')}</span>
           )}
         </div>
         <div className="flex items-center gap-1.5">
           {/* 담당자 표시 */}
           {responsibleName && (
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${accent.badge}`}>
-              담당: {responsibleName}
+              {L('patient.assigned')} {responsibleName}
             </span>
           )}
           {allDone ? (
-            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">완료 ✓</span>
+            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">{L('patient.done')}</span>
           ) : (
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${accent.badge}`}>{todayDone}/{todayTotal}회</span>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${accent.badge}`}>{todayDone}/{todayTotal}{L('patient.x2')}</span>
           )}
         </div>
       </div>
@@ -4465,10 +4466,10 @@ function MedicationPatientCard({
                   <span className={`text-[11px] font-semibold ${accent.name}`}>{sched.name}</span>
                   {/* 복용 패턴 배지 */}
                   {sched.endDateAuto && (
-                    <span className="text-[9px] bg-orange-50 text-orange-600 px-1 py-0.5 rounded border border-orange-200">📌캠프끝</span>
+                    <span className="text-[9px] bg-orange-50 text-orange-600 px-1 py-0.5 rounded border border-orange-200">{L('patient.campEnd2')}</span>
                   )}
                   {sched.daysPerWeek && (
-                    <span className="text-[9px] bg-gray-50 text-gray-500 px-1 py-0.5 rounded border border-gray-200">주{sched.daysPerWeek}일</span>
+                    <span className="text-[9px] bg-gray-50 text-gray-500 px-1 py-0.5 rounded border border-gray-200">{L('patient.wk')}{sched.daysPerWeek}{L('patient.d')}</span>
                   )}
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -4481,18 +4482,18 @@ function MedicationPatientCard({
                           ? 'bg-gray-200 text-gray-600 border-gray-300 hover:bg-gray-100'
                           : 'bg-white text-gray-400 border-gray-200 hover:border-gray-400 hover:text-gray-600'
                       }`}
-                      title={skipToday ? '휴약일 취소' : '오늘 휴약일 지정'}
+                      title={skipToday ? L('patient.cancelSkipDay') : L('patient.skipTodaySDose')}
                     >
-                      {skipToday ? '휴약일 ✕' : '휴약일'}
+                      {skipToday ? L('patient.skipDay2') : L('patient.skipDay')}
                     </button>
                   )}
-                  <span className="text-[10px] text-gray-400">전체 {sched.checkedTimes.length}/{calcTotalDoses(sched)}회</span>
+                  <span className="text-[10px] text-gray-400">{L('common.all')} {sched.checkedTimes.length}/{calcTotalDoses(sched)}{L('patient.x2')}</span>
                 </div>
               </div>
               {/* 휴약일이면 버튼 대신 안내 표시 */}
               {skipToday ? (
                 <div className="flex items-center gap-1.5 px-2 py-1.5 bg-gray-50 rounded-lg border border-gray-200">
-                  <span className="text-[10px] text-gray-500">💤 오늘은 휴약일입니다</span>
+                  <span className="text-[10px] text-gray-500">{L('patient.noDoseTodaySkipDay')}</span>
                 </div>
               ) : (
                 /* 해당 섹션 시간대 버튼만 표시 */
@@ -4507,9 +4508,9 @@ function MedicationPatientCard({
                         <span
                           className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border bg-gray-100 text-gray-300 border-gray-100 line-through cursor-not-allowed"
                           title={isStartDay && firstIdx >= 0 && MEDICATION_TIMES.indexOf(time) < firstIdx
-                            ? `${sched.firstTime}부터 복용`
-                            : `${sched.lastTime}까지 복용`}
-                        >{time}</span>
+                            ? L('patient.startsAt', { v0: sched.firstTime })
+                            : L('patient.until', { v0: sched.lastTime })}
+                        >{dataLabel(time)}</span>
                       </div>
                     );
                     return (
@@ -4556,7 +4557,7 @@ function MedicationPatientCard({
                 </div>
                 <span className="text-[9px] text-gray-400 flex-shrink-0 text-right whitespace-nowrap">
                   {sched.endDateAuto
-                    ? '📌캠프끝'
+                    ? L('patient.campEnd2')
                     : sched.lastTime
                       ? `~${sched.endDate} (${sched.lastTime})`
                       : `~${sched.endDate}`}
@@ -4575,7 +4576,7 @@ function MedicationPatientCard({
                       onClick={() => togglePhotoPanel(sched.idx)}
                       className="flex items-center gap-1.5 text-[10px] font-medium text-gray-400 hover:text-gray-600 transition-colors"
                     >
-                      <span>🖼️ 약 사진 보기</span>
+                      <span>{L('patient.viewMedicationPhotos')}</span>
                       <span className="px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 text-[9px] font-bold">
                         {photos.length}
                       </span>
@@ -4587,7 +4588,7 @@ function MedicationPatientCard({
                           <div key={pi} className="aspect-[3/4] rounded-lg overflow-hidden border border-gray-200 bg-gray-50 cursor-pointer"
                             onClick={() => onViewPhoto?.(url)}>
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={url} alt={`약 사진 ${pi + 1}`} className="w-full h-full object-cover" />
+                            <img src={url} alt={L('patient.medicationPhoto', { v0: pi + 1 })} className="w-full h-full object-cover" />
                           </div>
                         ))}
                       </div>
@@ -4623,7 +4624,7 @@ function extractCheckedDates(checkedTimes: string[]): string[] {
 function dateLabel(date: string, today: string): string {
   if (date === today) return '오늘';
   const diff = Math.round((new Date(today).getTime() - new Date(date).getTime()) / 86400000);
-  if (diff === 1) return '어제';
+  if (diff === 1) return L('common.yesterday');
   const [, mm, dd] = date.split('-');
   return `${mm}/${dd}`;
 }
@@ -4782,8 +4783,8 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
             <div className="px-4 pt-4 pb-2 border-b border-gray-100">
-              <p className="text-sm font-bold text-gray-800">🖼️ 약 사진 편집</p>
-              <p className="text-xs text-gray-400 mt-0.5">영역을 선택하거나 그대로 적용하세요</p>
+              <p className="text-sm font-bold text-gray-800">{L('patient.editMedicationPhoto')}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{L('patient.selectAnAreaOrApply')}</p>
             </div>
             <ImageCropperWrapper
               file={cropState.file}
@@ -4801,7 +4802,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
             />
             {photoUploading && (
               <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                <p className="text-sm text-gray-600 font-medium">업로드 중…</p>
+                <p className="text-sm text-gray-600 font-medium">{L('patient.uploading')}</p>
               </div>
             )}
           </div>
@@ -4815,7 +4816,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
           onClick={() => setLightboxUrl(null)}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightboxUrl} alt="약 사진 확대"
+          <img src={lightboxUrl} alt={L('patient.enlargeMedicationPhoto')}
             className="max-w-full max-h-full rounded-xl object-contain"
             onClick={e => e.stopPropagation()}
           />
@@ -4829,12 +4830,12 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
       {/* ── 약 추가/수정 모달 ─────────────────────────────── */}
       <button type="button" onClick={openAdd}
         className="w-full py-1.5 text-xs font-medium text-orange-600 bg-orange-50 hover:bg-orange-100 rounded-lg border border-dashed border-orange-300 transition-colors">
-        + 복용약 추가
+        {L('patient.addMedication3')}
       </button>
 
       {showForm && (
         <TabFormModal
-          title={editingIdx !== null ? '약 수정' : '복용약 추가'}
+          title={editingIdx !== null ? L('patient.editMedication') : L('patient.addMedication2')}
           icon="💊"
           onClose={() => { setShowForm(false); setEditingIdx(null); }}
           onSubmit={handleSubmit}
@@ -4843,55 +4844,55 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
         >
           {/* 약 이름 */}
           <div>
-            <p className="text-[10px] text-gray-500 mb-1">약 이름 <span className="text-gray-400">(선택)</span></p>
+            <p className="text-[10px] text-gray-500 mb-1">{L('patient.medicationName')} <span className="text-gray-400">{L('patient.optional')}</span></p>
             <input type="text" value={formData.name} onChange={e => setFormData(f => ({ ...f, name: e.target.value }))}
-              placeholder="약 이름 입력 (없으면 생략 가능)"
+              placeholder={L('patient.medicationNameOptional')}
               className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-400 bg-white" />
           </div>
 
           {/* 종류 */}
           <div>
-            <p className="text-[10px] text-gray-500 mb-1">종류</p>
+            <p className="text-[10px] text-gray-500 mb-1">{L('patient.type')}</p>
             <div className="flex flex-wrap gap-1">
               {MEDICATION_CATEGORIES.map(cat => (
                 <button key={cat} type="button"
                   onClick={() => setFormData(f => ({ ...f, category: f.category === cat ? undefined : cat }))}
                   className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
                     formData.category === cat ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}>{cat}</button>
+                  }`}>{dataLabel(cat)}</button>
               ))}
             </div>
           </div>
 
           {/* 복용 시간 */}
           <div>
-            <p className="text-[10px] text-gray-500 mb-1">복용 시간 * (중복 선택)</p>
+            <p className="text-[10px] text-gray-500 mb-1">{L('patient.doseTimesMultiple')}</p>
             <div className="flex flex-wrap gap-1">
               {MEDICATION_TIMES.map(t => (
                 <button key={t} type="button" onClick={() => toggleTime(t)}
                   className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
                     formData.times.includes(t) ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}>{t}</button>
+                  }`}>{dataLabel(t)}</button>
               ))}
             </div>
           </div>
 
           {/* 복용 기간 */}
           <div>
-            <p className="text-[10px] text-gray-500 mb-1">복용 기간</p>
+            <p className="text-[10px] text-gray-500 mb-1">{L('patient.duration')}</p>
             <div className="flex items-center gap-2 flex-wrap">
               <label className="flex items-center gap-1 cursor-pointer">
                 <input type="checkbox" checked={!!formData.endDateAuto}
                   onChange={e => setFormData(f => ({ ...f, endDateAuto: e.target.checked, lastTime: undefined }))}
                   className="w-3 h-3 accent-orange-500" />
-                <span className="text-[10px] text-gray-600 font-medium">캠프 끝까지</span>
+                <span className="text-[10px] text-gray-600 font-medium">{L('patient.untilCampEnds')}</span>
               </label>
               {!formData.endDateAuto && (
                 <>
                   <div className="flex items-center gap-1">
                     <input type="number" value={dayCount} min="1" max="30" onChange={e => handleDayCount(e.target.value)}
                       className="w-12 text-[11px] border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:border-orange-400 bg-white text-center" />
-                    <span className="text-[10px] text-gray-500">일</span>
+                    <span className="text-[10px] text-gray-500">{L('patient.d')}</span>
                   </div>
                   <span className="text-[10px] text-gray-400">{formData.startDate} ~ {formData.endDate}</span>
                 </>
@@ -4900,13 +4901,13 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
 
             {!formData.endDateAuto && formData.times.length > 0 && (
               <div className="mt-1.5">
-                <p className="text-[9px] text-gray-400 mb-1">시작 날({formData.startDate}) 시작 시간</p>
+                <p className="text-[9px] text-gray-400 mb-1">{L('patient.startTimeOnFirstDay')}{formData.startDate}{L('patient.text2')}</p>
                 <div className="flex flex-wrap gap-1">
                   {MEDICATION_TIMES.filter(t => formData.times.includes(t)).map(t => (
                     <button key={t} type="button" onClick={() => setFormData(f => ({ ...f, firstTime: t }))}
                       className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
                         formData.firstTime === t ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                      }`}>{t}부터</button>
+                      }`}>{dataLabel(t)}{L('patient.start')}</button>
                   ))}
                 </div>
               </div>
@@ -4914,13 +4915,13 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
 
             {!formData.endDateAuto && parseInt(dayCount) > 1 && formData.times.length > 0 && (
               <div className="mt-1.5">
-                <p className="text-[9px] text-gray-400 mb-1">마지막 날({formData.endDate}) 마감 시간</p>
+                <p className="text-[9px] text-gray-400 mb-1">{L('patient.lastDay')}{formData.endDate}{L('patient.endTime')}</p>
                 <div className="flex flex-wrap gap-1">
                   {MEDICATION_TIMES.filter(t => formData.times.includes(t)).map(t => (
                     <button key={t} type="button" onClick={() => setFormData(f => ({ ...f, lastTime: t }))}
                       className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
                         formData.lastTime === t ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                      }`}>{t}까지</button>
+                      }`}>{dataLabel(t)}{L('patient.end')}</button>
                   ))}
                 </div>
               </div>
@@ -4929,16 +4930,16 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
 
           {/* 메모 */}
           <div>
-            <p className="text-[10px] text-gray-500 mb-1">메모</p>
+            <p className="text-[10px] text-gray-500 mb-1">{L('common.memo')}</p>
             <input type="text" value={formData.memo ?? ''} onChange={e => setFormData(f => ({ ...f, memo: e.target.value }))}
-              placeholder="예: 식후 30분, 물 충분히"
+              placeholder={L('patient.eG30MinAfter')}
               className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-400 bg-white" />
           </div>
         </TabFormModal>
       )}
 
       {schedules.length === 0 && !showForm && (
-        <p className="text-xs text-gray-400 text-center py-2">복용약 일정이 없습니다.</p>
+        <p className="text-xs text-gray-400 text-center py-2">{L('patient.noMedicationSchedule')}</p>
       )}
 
       {/* 담당자 정보 요약 (약복용명단 탭에서만 표시) */}
@@ -4947,17 +4948,17 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
           {unitMentor && (
             <div className="flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block" />
-              <span className="text-[10px] text-indigo-600 font-medium">방담당</span>
+              <span className="text-[10px] text-indigo-600 font-medium">{L('patient.roomLead')}</span>
               <span className="text-[11px] font-bold text-indigo-800">{unitMentor}</span>
-              <span className="text-[9px] text-indigo-400">(기상후·취침전)</span>
+              <span className="text-[9px] text-indigo-400">{L('patient.afterWakingBeforeBed')}</span>
             </div>
           )}
           {classMentor && (
             <div className="flex items-center gap-1.5 bg-orange-50 border border-orange-100 rounded-lg px-2.5 py-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />
-              <span className="text-[10px] text-orange-600 font-medium">반담당</span>
+              <span className="text-[10px] text-orange-600 font-medium">{L('patient.classLead')}</span>
               <span className="text-[11px] font-bold text-orange-800">{classMentor}</span>
-              <span className="text-[9px] text-orange-400">(조식후·중식후·석식후)</span>
+              <span className="text-[9px] text-orange-400">{L('patient.afterBreakfastLunchDinner')}</span>
             </div>
           )}
         </div>
@@ -4996,7 +4997,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
         </div>
         {!isViewingToday && (
           <p className="text-[10px] text-orange-500 font-medium mt-1">
-            📅 {viewDate} 복용 기록 조회 중 — 과거 기록은 수정할 수 없습니다
+            📅 {viewDate} {L('patient.viewingPastRecordsTheyCan')}
           </p>
         )}
       </div>
@@ -5006,7 +5007,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
         <div className="space-y-2">
           {!compact && (
             <p className="text-[10px] font-bold text-orange-600 flex items-center gap-1">
-              ⏱ 기간 복용 <span className="font-normal text-gray-400">— 현황 탭 뱃지에도 표시됨</span>
+              {L('patient.fixedPeriod')} <span className="font-normal text-gray-400">{L('patient.alsoShownInTheStatus')}</span>
             </p>
           )}
           {tempSchedules.map(sched => renderSchedCard(sched, sched.idx))}
@@ -5018,7 +5019,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
         <div className="space-y-2">
           {!compact && (
             <p className="text-[10px] font-bold text-blue-600 flex items-center gap-1">
-              📌 상시 복용 <span className="font-normal text-gray-400">— 현황 탭 뱃지 미표시 (약복용명단에서만 관리)</span>
+              {L('patient.ongoing')} <span className="font-normal text-gray-400">{L('patient.notShownInTheStatus')}</span>
             </p>
           )}
           {dailySchedules.map(sched => renderSchedCard(sched, sched.idx, true))}
@@ -5036,9 +5037,9 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
     const hasRoomTime = sched.times.some(t => roomTimeSet.has(t));
     const hasClassTime = sched.times.some(t => !roomTimeSet.has(t));
     const responsibleLabel =
-      hasRoomTime && hasClassTime ? `방담당(${unitMentor ?? '-'}) · 반담당(${classMentor ?? '-'})` :
-      hasRoomTime ? `방담당 (${unitMentor ?? '-'})` :
-      hasClassTime ? `반담당 (${classMentor ?? '-'})` : '';
+      hasRoomTime && hasClassTime ? L('patient.roomLeadClassLead', { v0: unitMentor ?? '-', v1: classMentor ?? '-' }) :
+      hasRoomTime ? L('patient.roomLead3', { v0: unitMentor ?? '-' }) :
+      hasClassTime ? L('patient.classLead3', { v0: classMentor ?? '-' }) : '';
 
     const accentBg = isDaily ? 'bg-blue-50 border-blue-100' : 'bg-orange-50 border-orange-100';
     const accentBar = isDaily ? 'bg-blue-400' : 'bg-orange-400';
@@ -5069,7 +5070,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className={`text-[11px] font-semibold ${accentText}`}>{sched.name}</p>
               {sched.category && (
-                <span className="px-1.5 py-0.5 rounded-full bg-gray-100 text-[9px] text-gray-500 font-medium">{sched.category}</span>
+                <span className="px-1.5 py-0.5 rounded-full bg-gray-100 text-[9px] text-gray-500 font-medium">{dataLabel(sched.category)}</span>
               )}
             </div>
             {sched.memo && (
@@ -5081,11 +5082,11 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
             <button type="button"
               onClick={() => openEdit(idx)}
               className="p-1 rounded text-gray-400 hover:text-orange-500 hover:bg-orange-100 transition-colors text-[11px]"
-              title="수정">✏️</button>
+              title={L('task.edit')}>✏️</button>
             <button type="button"
-              onClick={() => { if (window.confirm(`"${sched.name}" 복용약을 삭제할까요?`)) onRemoveSchedule?.(idx); }}
+              onClick={() => { if (window.confirm(L('patient.deleteMedication', { v0: sched.name }))) onRemoveSchedule?.(idx); }}
               className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors text-[11px]"
-              title="삭제">🗑️</button>
+              title={L('common.delete')}>🗑️</button>
           </div>
         </div>
 
@@ -5094,7 +5095,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
           <span className="text-[10px] text-gray-400 flex items-center gap-1 flex-wrap">
             {/* 기간 표기: startDate(firstTime부터) ~ endDate(lastTime까지) */}
             {isDaily ? (
-              <span>📌 {sched.startDate}{sched.firstTime ? ` (${sched.firstTime}~)` : ''} ~ 캠프끝</span>
+              <span>📌 {sched.startDate}{sched.firstTime ? ` (${sched.firstTime}~)` : ''} {L('patient.campEnd')}</span>
             ) : (
               <span>
                 {sched.startDate}{sched.firstTime ? <span className="text-teal-500"> ({sched.firstTime}~)</span> : ''}
@@ -5102,9 +5103,9 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
                 {sched.endDate}{sched.lastTime ? <span className="text-orange-400"> (~{sched.lastTime})</span> : ''}
               </span>
             )}
-            {!isActiveOnDate && <span className="text-gray-300">(해당일 복용 없음)</span>}
+            {!isActiveOnDate && <span className="text-gray-300">{L('patient.noDoseThatDay')}</span>}
           </span>
-          <span className={`text-[10px] ${accentSub}`}>{totalDone}/{totalDoses}회 ({pct}%)</span>
+          <span className={`text-[10px] ${accentSub}`}>{totalDone}/{totalDoses}{L('patient.x')}{pct}%)</span>
         </div>
         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden mb-2">
           <div
@@ -5113,7 +5114,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
           />
         </div>
         {responsibleLabel && (
-          <p className="text-[10px] text-gray-500 mb-2">담당: {responsibleLabel}</p>
+          <p className="text-[10px] text-gray-500 mb-2">{L('patient.assigned')} {responsibleLabel}</p>
         )}
 
         {/* 복용 시간 버튼 */}
@@ -5128,7 +5129,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
               const disabledTitle = isTimeDisabledByFirstTime(time)
                 ? `${sched.firstTime}부터 복용`
                 : isTimeDisabledByLastTime(time)
-                  ? `${sched.lastTime}까지 복용`
+                  ? L('patient.until', { v0: sched.lastTime })
                   : undefined;
               return (
                 <button
@@ -5152,7 +5153,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
                 >
                   {checked && !disabled && <span>✓</span>}
                   {time}
-                  {!isViewingToday && checked && <span className="text-[9px] opacity-70">완료</span>}
+                  {!isViewingToday && checked && <span className="text-[9px] opacity-70">{L('task.done')}</span>}
                 </button>
               );
             })}
@@ -5172,7 +5173,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
                   onClick={() => togglePhotoPanel(idx)}
                   className="flex items-center gap-1.5 text-[10px] font-medium text-gray-500 hover:text-gray-700 transition-colors"
                 >
-                  <span>🖼️ 약 사진</span>
+                  <span>{L('patient.medicationPhotos')}</span>
                   {photos.length > 0 && (
                     <span className="px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 text-[9px] font-bold">
                       {photos.length}
@@ -5182,7 +5183,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
                 </button>
                 {onUploadMedPhoto && isOpen && (
                   <label className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium cursor-pointer bg-white text-gray-500 border border-dashed border-gray-300 hover:border-orange-400 hover:text-orange-600 transition-colors">
-                    + 사진 추가
+                    {L('patient.addPhoto')}
                     <input
                       type="file"
                       accept="image/*"
@@ -5208,7 +5209,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
               {isOpen && (
                 <div className="mt-1.5">
                   {photos.length === 0 ? (
-                    <p className="text-[10px] text-gray-300 text-center py-2">사진이 없습니다</p>
+                    <p className="text-[10px] text-gray-300 text-center py-2">{L('patient.noPhotos')}</p>
                   ) : (
                     <div className="grid grid-cols-3 gap-1.5">
                       {photos.map((url, pi) => (
@@ -5216,14 +5217,14 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={url}
-                            alt={`약 사진 ${pi + 1}`}
+                            alt={L('patient.medicationPhoto', { v0: pi + 1 })}
                             className="w-full h-full object-cover cursor-pointer"
                             onClick={() => setLightboxUrl(url)}
                           />
                           {onRemoveMedPhoto && (
                             <button
                               type="button"
-                              onClick={() => { if (window.confirm('이 사진을 삭제할까요?')) onRemoveMedPhoto(idx, url); }}
+                              onClick={() => { if (window.confirm(L('patient.deleteThisPhoto'))) onRemoveMedPhoto(idx, url); }}
                               className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                             >✕</button>
                           )}
@@ -5247,11 +5248,11 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
 
 // 보고 유형 정의
 const REPORT_TYPE_OPTIONS: { id: ContactReportType; label: string; color: string }[] = [
-  { id: '최초보고',  label: '최초보고',  color: 'bg-blue-500' },
-  { id: '경과보고',  label: '경과보고',  color: 'bg-orange-400' },
-  { id: '내원예정',  label: '내원예정',  color: 'bg-purple-500' },
-  { id: '내원결과',  label: '내원결과',  color: 'bg-indigo-500' },
-  { id: '완치보고',  label: '완치보고',  color: 'bg-green-500' },
+  { id: '최초보고',  get label() { return L('data.progFirstReport'); },  color: 'bg-blue-500' },
+  { id: '경과보고',  get label() { return L('patient.progressReport2'); },  color: 'bg-orange-400' },
+  { id: '내원예정',  get label() { return L('data.hospitalPlanned'); },  color: 'bg-purple-500' },
+  { id: '내원결과',  get label() { return L('patient.hospitalResult'); },  color: 'bg-indigo-500' },
+  { id: '완치보고',  get label() { return L('patient.recoveryReport3'); },  color: 'bg-green-500' },
 ];
 
 // 부모연락 담당자 이름: 지정된 담당자 > 반멘토 > '담임' 순서로 fallback
@@ -5277,7 +5278,7 @@ function orFallback(value: string | undefined, fallback = '없음'): string {
 
 const SMS_PRESETS: { label: string; reportType: ContactReportType; text: (r: PatientRecord) => string }[] = [
   {
-    label: '최초 보고',
+    get label() { return L('patient.firstReport'); },
     reportType: '최초보고',
     text: (r) =>
 `안녕하세요 어머님, ${getPresetSenderName(r)} 멘토입니다.
@@ -5289,7 +5290,7 @@ const SMS_PRESETS: { label: string; reportType: ContactReportType; text: (r: Pat
 차도 없을 시 다시 연락드리겠습니다.`,
   },
   {
-    label: '경과 보고',
+    get label() { return L('patient.progressReport'); },
     reportType: '경과보고',
     text: (r) =>
 `안녕하세요 어머님, ${getPresetSenderName(r)} 멘토입니다.
@@ -5298,7 +5299,7 @@ ${r.studentName} 학생 상태가 많이 호전되었습니다.
 현재 정상적으로 생활하고 있으니 안심하세요.`,
   },
   {
-    label: '내원 예정',
+    get label() { return L('patient.plannedVisit'); },
     reportType: '내원예정',
     text: (r) =>
 `안녕하세요 어머님, ${getPresetSenderName(r)} 멘토입니다.
@@ -5308,7 +5309,7 @@ ${r.studentName} 학생 상태를 보다 정확히 확인하기 위해
 결과 확인 후 다시 연락드리겠습니다.`,
   },
   {
-    label: '내원 결과',
+    get label() { return L('patient.visitResult'); },
     reportType: '내원결과',
     text: (r) =>
 `안녕하세요 어머님, ${getPresetSenderName(r)} 멘토입니다.
@@ -5320,7 +5321,7 @@ ${r.studentName} 학생 병원 진료 결과를 안내드립니다.
 추가 사항은 연락드리겠습니다.`,
   },
   {
-    label: '완치 보고',
+    get label() { return L('patient.recoveryReport2'); },
     reportType: '완치보고',
     text: (r) =>
 `안녕하세요 어머님, ${getPresetSenderName(r)} 멘토입니다.
@@ -5332,7 +5333,7 @@ ${r.studentName} 학생이 완전히 회복하여 정상 생활 중입니다.
 
 const CALL_PRESETS: { label: string; reportType: ContactReportType; text: (r: PatientRecord) => string }[] = [
   {
-    label: '최초 보고',
+    get label() { return L('patient.firstReport'); },
     reportType: '최초보고',
     text: (r) =>
 `"안녕하세요 어머님, ${getPresetSenderName(r)} 멘토입니다.
@@ -5345,7 +5346,7 @@ ${r.studentName} 학생 보호자분 맞으신가요?
 차도 없을 시 다시 연락드리겠습니다."`,
   },
   {
-    label: '내원 예정',
+    get label() { return L('patient.plannedVisit'); },
     reportType: '내원예정',
     text: (r) =>
 `"${r.studentName} 학생이 ${r.symptom} 증상이 있어
@@ -5353,7 +5354,7 @@ ${r.studentName} 학생 보호자분 맞으신가요?
 진료 후 결과를 다시 연락드릴게요."`,
   },
   {
-    label: '내원 결과',
+    get label() { return L('patient.visitResult'); },
     reportType: '내원결과',
     text: (r) =>
 `"${r.studentName} 학생 진료 결과를 안내드립니다.
@@ -5361,7 +5362,7 @@ ${r.studentName} 학생 보호자분 맞으신가요?
 당분간 경과를 지켜보겠습니다."`,
   },
   {
-    label: '완치 보고',
+    get label() { return L('patient.recoveryReport2'); },
     reportType: '완치보고',
     text: (r) =>
 `"${r.studentName} 학생이 완전히 회복되었습니다.
@@ -5370,10 +5371,10 @@ ${r.studentName} 학생 보호자분 맞으신가요?
 ];
 
 const METHOD_OPTIONS: { id: ContactMethod; label: string; emoji: string }[] = [
-  { id: '통화',   label: '통화',   emoji: '📞' },
-  { id: '문자',   label: '문자',   emoji: '💬' },
-  { id: '카카오', label: '카카오', emoji: '🟡' },
-  { id: '기타',   label: '기타',   emoji: '📝' },
+  { id: '통화',   get label() { return L('patient.call2'); },   emoji: '📞' },
+  { id: '문자',   get label() { return L('data.reportText'); },   emoji: '💬' },
+  { id: '카카오', get label() { return L('data.reportKakao'); }, emoji: '🟡' },
+  { id: '기타',   get label() { return L('data.other'); },   emoji: '📝' },
 ];
 
 function ParentContactSection({ record, campUsers, campGroups, currentUserId, currentUserName, currentUserRole }: {
@@ -5480,11 +5481,11 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
   };
 
   const handleRemoveLog = async (log: (typeof logs)[number]) => {
-    if (!confirm('이 연락 기록을 삭제하시겠습니까?')) return;
+    if (!confirm(L('patient.deleteThisContactLog'))) return;
     try {
       await removeParentContactLog(db, record.id, log);
     } catch {
-      alert('삭제 중 오류가 발생했습니다.');
+      alert(L('task.anErrorOccurredWhileDeleting'));
     }
   };
 
@@ -5501,23 +5502,23 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
 
   // 연락자 버튼 목록: 반멘토, 방멘토, 그룹매니저, 그룹부매니저, 캠프매니저, 본인
   const contactorOptions: { label: string; name: string }[] = [
-    ...(record.classMentor ? [{ label: '반멘토', name: record.classMentor }] : []),
+    ...(record.classMentor ? [{ label: L('patient.classMentor2'), name: record.classMentor }] : []),
     ...(record.unitMentor && record.unitMentor !== record.classMentor
-      ? [{ label: '방멘토', name: record.unitMentor }]
+      ? [{ label: L('patient.roomMentor'), name: record.unitMentor }]
       : []),
-    ...(groupManager ? [{ label: '그룹 매니저', name: groupManager.name }] : []),
+    ...(groupManager ? [{ label: L('patient.groupManager'), name: groupManager.name }] : []),
     ...(groupSubManager && groupSubManager.name !== groupManager?.name
-      ? [{ label: '그룹 부매니저', name: groupSubManager.name }]
+      ? [{ label: L('patient.groupSubManager'), name: groupSubManager.name }]
       : []),
     ...(campManager &&
       campManager.name !== groupManager?.name &&
       campManager.name !== groupSubManager?.name
-      ? [{ label: '캠프 매니저', name: campManager.name }]
+      ? [{ label: L('patient.campManager'), name: campManager.name }]
       : []),
     ...(currentUserName &&
       ![ record.classMentor, record.unitMentor, groupManager?.name, groupSubManager?.name, campManager?.name ]
         .includes(currentUserName)
-      ? [{ label: '직접(나)', name: currentUserName }]
+      ? [{ label: L('patient.myself'), name: currentUserName }]
       : []),
   ].filter((o, i, arr) => arr.findIndex(x => x.name === o.name) === i); // 중복 제거
 
@@ -5534,19 +5535,19 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
       {/* 담당자 지정 */}
       <div className="rounded-lg bg-pink-50 border border-pink-100 p-3 space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold text-pink-800">📞 보호자 연락 담당</p>
+          <p className="text-xs font-semibold text-pink-800">{L('patient.guardianContact')}</p>
           {isCompleted && (
-            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">✓ 완치 보고 완료</span>
+            <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">{L('patient.recoveryReported')}</span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm font-bold text-pink-800">👤 {effectiveAssigneeName || '미지정'}</span>
+          <span className="text-sm font-bold text-pink-800">👤 {effectiveAssigneeName || L('data.unspecified')}</span>
           {!record.parentContactAssigneeName && (
-            <span className="text-[10px] text-pink-400">(반멘토 기본)</span>
+            <span className="text-[10px] text-pink-400">{L('patient.classMentorByDefault')}</span>
           )}
           {canEditAssignee && (
             <button onClick={() => setShowAssigneeSearch(v => !v)}
-              className="text-[10px] text-pink-400 hover:text-pink-600 font-medium ml-auto">변경</button>
+              className="text-[10px] text-pink-400 hover:text-pink-600 font-medium ml-auto">{L('patient.change')}</button>
           )}
         </div>
         {showAssigneeSearch && (
@@ -5555,7 +5556,7 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
               type="text"
               value={assigneeSearch}
               onChange={e => setAssigneeSearch(e.target.value)}
-              placeholder="이름 검색..."
+              placeholder={L('students.searchByName')}
               className="w-full text-xs border border-pink-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-pink-400 bg-white"
             />
             {assigneeSearch.trim() && filteredUsers.length > 0 && (
@@ -5577,8 +5578,8 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
       <div className="rounded-lg bg-white border border-gray-100 p-3 space-y-2">
         <div className="flex items-center gap-2">
           <div>
-            <p className="text-xs font-semibold text-gray-700">프리셋 멘트</p>
-            <p className="text-[10px] text-gray-400">발신자: <span className="font-semibold text-pink-600">{effectiveAssigneeName || '담임'}</span> 멘토</p>
+            <p className="text-xs font-semibold text-gray-700">{L('patient.presetMessage')}</p>
+            <p className="text-[10px] text-gray-400">{L('patient.from')} <span className="font-semibold text-pink-600">{effectiveAssigneeName || L('patient.homeroom')}</span> {L('common.roleMentor')}</p>
           </div>
           <div className="flex gap-1 ml-auto">
             {(['sms', 'call'] as const).map(t => (
@@ -5586,7 +5587,7 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
                 className={`px-2 py-0.5 text-[11px] font-bold rounded-md border transition-colors ${
                   presetTab === t ? 'bg-pink-500 text-white border-pink-500' : 'bg-white text-gray-500 border-gray-200 hover:border-pink-300'
                 }`}>
-                {t === 'sms' ? '💬 문자' : '📞 통화'}
+                {t === 'sms' ? L('patient.text') : L('patient.call')}
               </button>
             ))}
           </div>
@@ -5604,7 +5605,7 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
                       className={`text-[10px] px-2 py-0.5 rounded font-bold transition-colors ${
                         copiedIdx === i ? 'bg-green-100 text-green-700' : 'bg-pink-50 text-pink-600 hover:bg-pink-100'
                       }`}>
-                      {copiedIdx === i ? '✓ 복사됨' : '복사'}
+                      {copiedIdx === i ? L('patient.copied') : L('task.copy2')}
                     </button>
                   </div>
                   <pre className="text-[10px] text-gray-600 whitespace-pre-wrap leading-relaxed">{txt}</pre>
@@ -5616,7 +5617,7 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
 
         {presetTab === 'call' && (
           <div className="space-y-2">
-            <p className="text-[10px] text-gray-400">통화 시 참고할 멘트입니다.</p>
+            <p className="text-[10px] text-gray-400">{L('patient.talkingPointsForTheCall')}</p>
             {CALL_PRESETS.map((p, i) => {
               const txt = p.text(record);
               const callIdx = 100 + i;
@@ -5628,7 +5629,7 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
                       className={`text-[10px] px-2 py-0.5 rounded font-bold transition-colors ${
                         copiedIdx === callIdx ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
                       }`}>
-                      {copiedIdx === callIdx ? '✓ 복사됨' : '복사'}
+                      {copiedIdx === callIdx ? L('patient.copied') : L('task.copy2')}
                     </button>
                   </div>
                   <pre className="text-[10px] text-gray-600 whitespace-pre-wrap leading-relaxed">{txt}</pre>
@@ -5642,7 +5643,7 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
       {/* 연락 기록 */}
       {logs.length > 0 && (
         <div className="space-y-1.5">
-          <p className="text-[10px] font-bold text-gray-500">연락 기록</p>
+          <p className="text-[10px] font-bold text-gray-500">{L('patient.contactLog')}</p>
           {[...logs].reverse().map((log, i) => {
             const rtDef = REPORT_TYPE_OPTIONS.find(r => r.id === log.reportType);
             // 삭제 권한: 기록을 추가한 본인 (contactedById) 또는 admin
@@ -5663,7 +5664,7 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
                     log.method === '카카오' ? 'bg-yellow-50 text-yellow-700' :
                     'bg-gray-50 text-gray-600'
                   }`}>
-                    {METHOD_OPTIONS.find(m => m.id === log.method)?.emoji ?? '📝'} {log.method ?? '기타'}
+                    {METHOD_OPTIONS.find(m => m.id === log.method)?.emoji ?? '📝'} {log.method ?? L('data.other')}
                   </span>
                   <span className="font-semibold text-gray-700">{log.contactedBy}</span>
                   <span className="text-gray-400 ml-auto text-[10px]">{formatDate(log.contactedAt)}</span>
@@ -5672,7 +5673,7 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
                     <button
                       onClick={() => handleRemoveLog(log)}
                       className="text-[10px] text-red-400 hover:text-red-600 font-medium ml-1"
-                      title="이 기록 삭제"
+                      title={L('patient.deleteThisEntry')}
                     >✕</button>
                   )}
                 </div>
@@ -5680,7 +5681,7 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
                   <p className="text-gray-600 leading-relaxed mt-1">{log.summary}</p>
                 )}
                 {log.isResolved && (
-                  <span className="text-[10px] text-green-600 font-bold mt-1 block">✓ 완치 보고</span>
+                  <span className="text-[10px] text-green-600 font-bold mt-1 block">{L('patient.recoveryReport')}</span>
                 )}
               </div>
             );
@@ -5693,12 +5694,12 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
         <div>
           <button onClick={() => setShowLogForm(true)}
             className="w-full py-2 text-xs font-medium text-pink-600 bg-pink-50 hover:bg-pink-100 rounded-lg border border-pink-100 transition-colors">
-            + 연락 기록 추가
+            {L('patient.addContactLog2')}
           </button>
 
           {showLogForm && (
             <TabFormModal
-              title="연락 기록 추가"
+              title={L('patient.addContactLog')}
               icon="📞"
               onClose={() => setShowLogForm(false)}
               onSubmit={handleAddLog}
@@ -5707,7 +5708,7 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
             >
               {/* ① 보고 유형 */}
               <div>
-                <p className="text-[10px] text-gray-500 mb-1">① 보고 유형</p>
+                <p className="text-[10px] text-gray-500 mb-1">{L('patient.reportType')}</p>
                 <div className="flex gap-1 flex-wrap">
                   {REPORT_TYPE_OPTIONS.map(rt => (
                     <button key={rt.id} onClick={() => { setReportType(rt.id); setIsResolved(rt.id === '완치보고'); }}
@@ -5720,7 +5721,7 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
 
               {/* ② 연락한 사람 */}
               <div>
-                <p className="text-[10px] text-gray-500 mb-1">② 연락한 사람</p>
+                <p className="text-[10px] text-gray-500 mb-1">{L('patient.personContacted')}</p>
                 <div className="flex gap-1 flex-wrap">
                   {contactorOptions.map(opt => (
                     <button key={opt.name} onClick={() => setContactorName(prev => prev === opt.name ? '' : opt.name)}
@@ -5736,13 +5737,13 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
 
               {/* ③ 연락 방법 */}
               <div>
-                <p className="text-[10px] text-gray-500 mb-1">③ 연락 방법</p>
+                <p className="text-[10px] text-gray-500 mb-1">{L('patient.contactMethod')}</p>
                 <div className="flex gap-1 flex-wrap">
                   {METHOD_OPTIONS.map(m => (
                     <button key={m.id} onClick={() => setMethod(m.id)}
                       className={`flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded transition-colors ${
                         method === m.id ? 'bg-pink-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                      }`}>{m.emoji} {m.label}</button>
+                      }`}>{m.emoji} {dataLabel(m.label)}</button>
                   ))}
                 </div>
               </div>
@@ -5784,8 +5785,8 @@ interface QuickReportForm {
 
 // 조치 상태 (최초보고 전용)
 const QUICK_ACTION_OPTIONS = [
-  { id: '직접조치',   label: '직접 조치 예정', color: 'bg-blue-500',   desc: '조치사항대로 직접 조치할게요' },
-  { id: '매니저대기', label: '매니저 대기',    color: 'bg-orange-500', desc: '매니저 판단이 필요해요' },
+  { id: '직접조치',   get label() { return L('patient.willHandleDirectly'); }, color: 'bg-blue-500',   get desc() { return L('patient.iLlHandleItAs'); } },
+  { id: '매니저대기', get label() { return L('patient.waitingForManager'); },    color: 'bg-orange-500', get desc() { return L('patient.needsAManagerSDecision'); } },
 ] as const;
 
 type QuickActionId = typeof QUICK_ACTION_OPTIONS[number]['id'];
@@ -5891,7 +5892,7 @@ function QuickReportModal({
 
   const handleSubmit = async () => {
     if (!canSubmit || submitting) return;
-    if (doses.some(d => !d.itemId || !d.groupId)) { alert('약·처치 물품 사용에서 약과 그룹을 모두 선택하거나 빈 줄을 삭제해주세요.'); return; }
+    if (doses.some(d => !d.itemId || !d.groupId)) { alert(L('patient.inMedicationSupplyUseSelect')); return; }
     setSubmitting(true);
     try {
       const actionPart = `[${actionStatus}]`;
@@ -5931,8 +5932,8 @@ function QuickReportModal({
         {/* 헤더 */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
-            <h2 className="text-base font-bold text-gray-900">🚑 환자 최초보고</h2>
-            <p className="text-[11px] text-gray-400 mt-0.5">보고자: {reporterName}</p>
+            <h2 className="text-base font-bold text-gray-900">{L('patient.firstPatientReport')}</h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">{L('patient.reporter')} {reporterName}</p>
           </div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -5945,7 +5946,7 @@ function QuickReportModal({
 
           {/* ① 대상 */}
           <div>
-            <p className="text-xs font-bold text-gray-700 mb-1.5">① 대상 *</p>
+            <p className="text-xs font-bold text-gray-700 mb-1.5">{L('patient.student')}</p>
             <div className="relative">
               <input
                 type="text"
@@ -5956,7 +5957,7 @@ function QuickReportModal({
                   setShowDropdown(true);
                 }}
                 readOnly={studentLocked}
-                placeholder="이름으로 검색..."
+                placeholder={L('patient.searchByName')}
                 className={`w-full border rounded-xl px-3 py-2.5 text-sm outline-none transition-colors ${
                   studentLocked ? 'bg-gray-50 border-gray-200 text-gray-800 font-semibold' : 'border-gray-200 focus:border-blue-400'
                 }`}
@@ -5967,7 +5968,7 @@ function QuickReportModal({
                   setStudentSearch('');
                   setForm(f => ({ ...f, studentId: '', studentName: '', grade: '', className: '', classMentor: '', unitMentor: '', roomNumber: '' }));
                 }} className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 hover:text-red-500">
-                  변경
+                  {L('patient.change')}
                 </button>
               )}
               {!studentLocked && showDropdown && studentResults.length > 0 && (
@@ -5978,7 +5979,7 @@ function QuickReportModal({
                       <span className="font-semibold text-gray-900">{s.name}</span>
                       <span className="text-xs text-gray-400">{s.grade}{s.gender === 'F' ? 'F' : 'M'}</span>
                       {s.className && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{fmtClass(s.className)}</span>}
-                      {s.roomNumber && <span className="text-xs text-gray-400">{s.roomNumber}호</span>}
+                      {s.roomNumber && <span className="text-xs text-gray-400">{s.roomNumber}{L('students.text')}</span>}
                     </button>
                   ))}
                 </div>
@@ -5989,15 +5990,15 @@ function QuickReportModal({
               <div className="flex flex-wrap gap-2 mt-2">
                 {form.grade && <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{form.grade}</span>}
                 {form.className && <span className="text-[11px] bg-blue-50 text-blue-700 px-2 py-1 rounded-full">{fmtClass(form.className)}</span>}
-                {form.roomNumber && <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{form.roomNumber}호</span>}
-                {form.classMentor && <span className="text-[11px] bg-green-50 text-green-700 px-2 py-1 rounded-full">담임 {form.classMentor}</span>}
+                {form.roomNumber && <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{form.roomNumber}{L('students.text')}</span>}
+                {form.classMentor && <span className="text-[11px] bg-green-50 text-green-700 px-2 py-1 rounded-full">{L('patient.homeroom')} {form.classMentor}</span>}
               </div>
             )}
           </div>
 
           {/* ② 위치 */}
           <div>
-            <p className="text-xs font-bold text-gray-700 mb-1.5">② 현재 위치</p>
+            <p className="text-xs font-bold text-gray-700 mb-1.5">{L('patient.currentLocation')}</p>
             {/* 위치 모드 선택 버튼 */}
             <div className="grid grid-cols-3 gap-2 mb-2">
               {([
@@ -6028,25 +6029,25 @@ function QuickReportModal({
               value={form.location}
               onChange={e => setField('location', e.target.value)}
               placeholder={
-                form.locationMode === '휴식' ? '예: 110호, 휴게실...' :
-                form.locationMode === '격리' ? '예: 격리실 214호...' :
-                '예: 강당, 체육관, 교실...'
+                form.locationMode === '휴식' ? L('patient.eGRoom110Lounge') :
+                form.locationMode === '격리' ? L('patient.eGIsolationRoom214') :
+                L('patient.eGAuditoriumGymClassroom')
               }
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400"
             />
-            <p className="text-[10px] text-gray-400 mt-1">숙소 방번호가 아닐 수 있으니 현재 있는 장소를 직접 입력해주세요</p>
+            <p className="text-[10px] text-gray-400 mt-1">{L('patient.itMayNotBeTheir')}</p>
           </div>
 
           {/* ③ 열감 */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <p className="text-xs font-bold text-gray-700">③ 열감</p>
+              <p className="text-xs font-bold text-gray-700">{L('patient.fever')}</p>
               <button
                 type="button"
                 onClick={() => setShowFeverGuide(p => !p)}
                 className="flex items-center gap-1 text-[10px] text-blue-500 hover:text-blue-700 font-medium"
               >
-                🌡️ 체온계 사용법 {showFeverGuide ? '▲' : '▼'}
+                {L('patient.howToUseTheThermometer')} {showFeverGuide ? '▲' : '▼'}
               </button>
             </div>
 
@@ -6055,23 +6056,23 @@ function QuickReportModal({
               <div className="mb-3 rounded-xl border border-blue-100 bg-blue-50/60 p-3 space-y-2 text-[11px] text-gray-700 leading-relaxed">
                 <div className="flex gap-2 items-start">
                   <span className="text-base shrink-0">1️⃣</span>
-                  <p>전원 버튼을 눌러주세요.</p>
+                  <p>{L('patient.pressThePowerButton')}</p>
                 </div>
                 <div className="flex gap-2 items-start">
                   <span className="text-base shrink-0">2️⃣</span>
-                  <p>화면에 <b>L°C</b>가 깜박이면 측정 준비 완료 (실내 온도 32°C 이상일 때).</p>
+                  <p>{L('patient.when')} <b>L°C</b>{L('patient.blinksOnTheScreenIt')}</p>
                 </div>
                 <div className="flex gap-2 items-start">
                   <span className="text-base shrink-0">3️⃣</span>
-                  <p><b>겨드랑이 맨살</b>에 체온계를 끼워야 합니다. 학생 옷 안으로 체온계를 넣어 <b>"삐빅" 소리가 날 때까지</b> 대고 있어주세요. (30초~1분 소요)</p>
+                  <p><b>{L('patient.bareArmpitSkin')}</b>{L('patient.theThermometerMustTouchIt')} <b>{L('patient.untilItBeeps')}</b> {L('patient.holdItInPlaceTakes')}</p>
                 </div>
                 <div className="flex gap-2 items-start">
                   <span className="text-base shrink-0">4️⃣</span>
-                  <p>표시 온도가 깜박임을 멈추면 측정 완료.</p>
+                  <p>{L('patient.measurementIsDoneWhenThe')}</p>
                 </div>
                 <div className="mt-1 rounded-lg bg-amber-50 border border-amber-100 px-3 py-2">
-                  <p className="font-semibold text-amber-800 mb-0.5">💡 추가 확인 방법</p>
-                  <p className="text-amber-700">이마·목 뒤(동성일 시 옷 안까지)도 손으로 짚으며 열감이 있는지 같이 확인해주세요. 외부가 추우면 외부에 드러나는 피부는 몸보다 차가울 수 있습니다.</p>
+                  <p className="font-semibold text-amber-800 mb-0.5">{L('patient.alsoCheck')}</p>
+                  <p className="text-amber-700">{L('patient.alsoFeelTheForeheadAnd2')}</p>
                 </div>
               </div>
             )}
@@ -6079,9 +6080,9 @@ function QuickReportModal({
             {/* 열감 단계 선택 — 정상 선택 시 체온 입력 불필요 */}
             <div className="grid grid-cols-3 gap-2 mb-2">
               {[
-                { id: 'normal',  label: '정상',  sub: FEVER_LEVEL_RANGES.정상, color: 'bg-green-500',  border: 'border-green-500' },
-                { id: 'slight',  label: '미열',  sub: FEVER_LEVEL_RANGES.미열, color: 'bg-orange-400', border: 'border-orange-400' },
-                { id: 'high',    label: '고열',  sub: FEVER_LEVEL_RANGES.고열, color: 'bg-red-500',    border: 'border-red-500' },
+                { id: 'normal',  label: L('data.feverNormal'),  sub: FEVER_LEVEL_RANGES.정상, color: 'bg-green-500',  border: 'border-green-500' },
+                { id: 'slight',  label: L('data.feverSlight'),  sub: FEVER_LEVEL_RANGES.미열, color: 'bg-orange-400', border: 'border-orange-400' },
+                { id: 'high',    label: L('data.feverHigh'),  sub: FEVER_LEVEL_RANGES.고열, color: 'bg-red-500',    border: 'border-red-500' },
               ].map(opt => {
                 const temp = parseFloat(form.temperature);
                 const selected =
@@ -6138,7 +6139,7 @@ function QuickReportModal({
                       if (level === '고열') setFeverLevel('high');
                       else if (level === '미열') setFeverLevel('slight');
                     }}
-                    placeholder="잰 체온 (예: 37.8) — 안 쟀으면 비워두세요"
+                    placeholder={L('patient.measuredTemperatureEG37')}
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400 pr-8"
                   />
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">°C</span>
@@ -6146,16 +6147,15 @@ function QuickReportModal({
                 <span className={`text-xs font-bold whitespace-nowrap px-2.5 py-1.5 rounded-lg ${
                   feverLevel === 'high' ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'
                 }`}>
-                  {feverLevel === 'high' ? '⚠️ 고열' : '🌡 미열'}
+                  {feverLevel === 'high' ? L('patient.highFever') : L('patient.mildFever')}
                 </span>
               </div>
             )}
             {feverLevel === 'normal' && (
               <div className="mt-1.5 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2.5 space-y-1">
-                <p className="text-[11px] font-bold text-amber-800">✅ 정상 체온 — 아래 항목도 함께 확인해주세요</p>
+                <p className="text-[11px] font-bold text-amber-800">{L('patient.normalTemperaturePleaseCheckThe')}</p>
                 <p className="text-[11px] text-amber-700 leading-relaxed">
-                  이마·목 뒤(동성일 시 옷 안까지)도 손으로 짚으며 열감이 있는지 확인해주세요.
-                  외부가 추우면 드러나는 피부는 몸보다 차가울 수 있습니다.
+                  {L('patient.alsoFeelTheForeheadAnd')}
                 </p>
               </div>
             )}
@@ -6163,7 +6163,7 @@ function QuickReportModal({
 
           {/* ④ 증상 */}
           <div>
-            <p className="text-xs font-bold text-gray-700 mb-1.5">④ 증상 *</p>
+            <p className="text-xs font-bold text-gray-700 mb-1.5">{L('patient.symptoms3')}</p>
 
             {/* 프리셋 검색 */}
             <div className="relative mb-2">
@@ -6171,7 +6171,7 @@ function QuickReportModal({
                 type="text"
                 value={symptomSearch}
                 onChange={e => setSymptomSearch(e.target.value)}
-                placeholder="증상 검색 (두통, 복통, 발열...)"
+                placeholder={L('patient.searchSymptomsHeadacheStomachacheFever')}
                 className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400 pr-8"
               />
               {symptomSearch && (
@@ -6179,7 +6179,7 @@ function QuickReportModal({
               )}
             </div>
 
-            <p className="text-[10px] text-gray-400 mb-1">여러 증상이 있으면 모두 선택하세요 (복수 선택)</p>
+            <p className="text-[10px] text-gray-400 mb-1">{L('patient.selectAllSymptomsThatApply')}</p>
 
             {/* 프리셋 그리드 */}
             <div className="grid grid-cols-4 gap-1.5 max-h-44 overflow-y-auto">
@@ -6204,7 +6204,7 @@ function QuickReportModal({
             {/* 복통 위치 — 증상에 복통이 있을 때만 (복수 선택) */}
             {showPainSites && (
               <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-2.5">
-                <p className="text-[11px] font-bold text-amber-800 mb-1.5">🫃 복통 위치 <span className="font-normal text-amber-700/80">(여러 곳이면 모두 선택)</span></p>
+                <p className="text-[11px] font-bold text-amber-800 mb-1.5">{L('patient.stomachPainLocation')} <span className="font-normal text-amber-700/80">{L('patient.selectAllThatApply')}</span></p>
                 <div className="flex flex-wrap gap-1.5">
                   {ABDOMINAL_PAIN_SITES.map(site => {
                     const on = painSites.includes(site);
@@ -6213,7 +6213,7 @@ function QuickReportModal({
                         className={`px-2 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${
                           on ? 'bg-amber-500 border-amber-500 text-white' : 'bg-white border-amber-200 text-amber-800 hover:bg-amber-100'
                         }`}>
-                        {site}
+                        {dataLabel(site)}
                       </button>
                     );
                   })}
@@ -6226,7 +6226,7 @@ function QuickReportModal({
               <div key={guide.label} className={`mt-2 rounded-xl p-3 border text-[11px] space-y-1 ${
                 guide.category === '응급' ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-100'
               }`}>
-                <p className="font-bold text-gray-800">{guide.emoji} {guide.label} 조치</p>
+                <p className="font-bold text-gray-800">{guide.emoji} {guide.label} {L('patient.care2')}</p>
                 <p className="text-gray-700">🩺 {guide.treatment}</p>
                 {guide.medication !== '(약 불필요)' && (
                   <p className="text-orange-700">💊 {guide.medication}</p>
@@ -6244,17 +6244,17 @@ function QuickReportModal({
               type="text"
               value={form.symptom}
               onChange={e => setField('symptom', e.target.value)}
-              placeholder="프리셋에 없으면 직접 입력... (여러 개는 쉼표로 구분)"
+              placeholder={L('patient.ifNotInThePresets')}
               className="w-full mt-2 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-blue-400"
             />
             {symptomList.length > 0 && (
-              <p className="text-[10px] text-blue-600 mt-1">선택된 증상: {formatSymptomText(symptomList, showPainSites ? painSites : [])}</p>
+              <p className="text-[10px] text-blue-600 mt-1">{L('patient.selectedSymptoms')} {formatSymptomText(symptomList, showPainSites ? painSites : [])}</p>
             )}
           </div>
 
           {/* ⑤ 현재 상태 */}
           <div>
-            <p className="text-xs font-bold text-gray-700 mb-1.5">⑤ 현재 상태</p>
+            <p className="text-xs font-bold text-gray-700 mb-1.5">{L('patient.currentStatus')}</p>
             <div className="grid grid-cols-2 gap-2">
               {QUICK_ACTION_OPTIONS.map(opt => (
                 <button key={opt.id} type="button"
@@ -6282,7 +6282,7 @@ function QuickReportModal({
 
           {/* ⑥ 약 복용 (실제로 먹인 경우) — 저장 시 재고 자동 차감 */}
           <div>
-            <p className="text-xs font-bold text-gray-700 mb-1.5">⑥ 약·처치 물품 사용 <span className="font-normal text-gray-400">(선택)</span></p>
+            <p className="text-xs font-bold text-gray-700 mb-1.5">{L('patient.medicationSupplyUse')} <span className="font-normal text-gray-400">{L('patient.optional')}</span></p>
             <MedicationDoseEditor
               doses={doses}
               onChange={setDoses}
@@ -6308,10 +6308,10 @@ function QuickReportModal({
                 : 'bg-gray-100 text-gray-400 cursor-not-allowed'
             }`}
           >
-            {submitting ? '보고 중...' : '🚑 최초보고 제출'}
+            {submitting ? L('patient.reporting') : L('patient.submitFirstReport')}
           </button>
           <p className="text-[10px] text-gray-400 text-center mt-2">
-            복용약·내원 등 상세 기록은 카드에서 추가할 수 있습니다
+            {L('patient.addMedicationHospitalVisitsAnd')}
           </p>
         </div>
 
@@ -6439,7 +6439,7 @@ function PatientFormModal({
         {/* 헤더 */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <h2 className="text-base font-bold text-gray-900">
-            {editingId ? '환자 기록 수정' : '환자 기록 추가'}
+            {editingId ? L('patient.editPatientRecord') : L('patient.addPatientRecord')}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 w-7 h-7 flex items-center justify-center">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -6450,10 +6450,10 @@ function PatientFormModal({
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* 학생 검색 + 정보 */}
-          <SectionBox title="학생 정보">
+          <SectionBox title={L('patient.studentInfo')}>
             {/* 이름 검색 */}
             <div ref={searchRef} className="relative">
-              <FormLabel label="이름 *" />
+              <FormLabel label={L('profile.name')} />
               <div className="relative">
                 <input
                   type="text"
@@ -6466,13 +6466,13 @@ function PatientFormModal({
                   }}
                   onFocus={() => { if (!studentLocked) setShowStudentDropdown(true); }}
                   readOnly={studentLocked}
-                  placeholder="이름으로 학생 검색..."
+                  placeholder={L('patient.searchStudentByName')}
                   className={`${inputCls} ${studentLocked ? 'bg-gray-50 text-gray-700 cursor-default pr-16' : ''}`}
                 />
                 {studentLocked && (
                   <button type="button" onClick={clearStudent}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 hover:text-red-500 font-medium px-1.5 py-0.5 rounded transition-colors">
-                    변경
+                    {L('patient.change')}
                   </button>
                 )}
               </div>
@@ -6482,9 +6482,9 @@ function PatientFormModal({
                     <button key={s.studentId} onClick={() => selectStudent(s)}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors flex items-center gap-2">
                       <span className="font-medium">{s.name}</span>
-                      <span className="text-xs text-gray-400">{s.grade}학년 {s.gender === 'F' ? '여' : '남'}</span>
+                      <span className="text-xs text-gray-400">{s.grade}{L('profile.year')} {s.gender === 'F' ? L('students.f') : L('students.m')}</span>
                       {s.className && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 rounded">{fmtClass(s.className)}</span>}
-                      {s.roomNumber && <span className="text-xs text-gray-400">{s.roomNumber}호</span>}
+                      {s.roomNumber && <span className="text-xs text-gray-400">{s.roomNumber}{L('students.text')}</span>}
                     </button>
                   ))}
                 </div>
@@ -6495,11 +6495,11 @@ function PatientFormModal({
             {studentLocked ? (
               <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 bg-gray-50 rounded-lg px-3 py-2.5">
                 {[
-                  { label: '학년/성별', value: form.grade },
-                  { label: '담당 반', value: form.className },
-                  { label: '반 멘토', value: form.classMentor },
-                  { label: '유닛 멘토', value: form.unitMentor },
-                  { label: '방 번호', value: form.roomNumber ? `${form.roomNumber}호` : '' },
+                  { label: L('students.gradeGender'), value: form.grade },
+                  { label: L('patient.class'), value: form.className },
+                  { label: L('patient.classMentor'), value: form.classMentor },
+                  { label: L('lodging.unitMentor'), value: form.unitMentor },
+                  { label: L('patient.roomNumber'), value: form.roomNumber ? `${form.roomNumber}호` : '' },
                 ].map(({ label, value }) => value ? (
                   <div key={label}>
                     <p className="text-[10px] text-gray-400 font-medium">{label}</p>
@@ -6510,31 +6510,31 @@ function PatientFormModal({
             ) : (
               <div className="grid grid-cols-2 gap-3 mt-3">
                 <div>
-                  <FormLabel label="학년/성별" />
+                  <FormLabel label={L('students.gradeGender')} />
                   <input type="text" value={form.grade}
                     onChange={e => setField('grade', e.target.value)}
                     placeholder="G5M" className={inputCls} />
                 </div>
                 <div>
-                  <FormLabel label="담당 반" />
+                  <FormLabel label={L('patient.class')} />
                   <input type="text" value={form.className}
                     onChange={e => setField('className', e.target.value)}
-                    placeholder="무브반" className={inputCls} />
+                    placeholder={L('patient.classA')} className={inputCls} />
                 </div>
                 <div>
-                  <FormLabel label="반 멘토" />
+                  <FormLabel label={L('patient.classMentor')} />
                   <input type="text" value={form.classMentor}
                     onChange={e => setField('classMentor', e.target.value)}
-                    placeholder="김멘토" className={inputCls} />
+                    placeholder={L('patient.mentorKim')} className={inputCls} />
                 </div>
                 <div>
-                  <FormLabel label="유닛 멘토" />
+                  <FormLabel label={L('lodging.unitMentor')} />
                   <input type="text" value={form.unitMentor}
                     onChange={e => setField('unitMentor', e.target.value)}
-                    placeholder="이멘토" className={inputCls} />
+                    placeholder={L('patient.mentorLee')} className={inputCls} />
                 </div>
                 <div>
-                  <FormLabel label="방 번호" />
+                  <FormLabel label={L('patient.roomNumber')} />
                   <input type="text" value={form.roomNumber}
                     onChange={e => setField('roomNumber', e.target.value)}
                     placeholder="201" className={inputCls} />
@@ -6545,7 +6545,7 @@ function PatientFormModal({
 
           {/* 유형 선택 (복합) */}
           <div>
-            <FormLabel label="유형 (복합 선택 가능) *" />
+            <FormLabel label={L('patient.typeMultiple')} />
             <div className="flex flex-wrap gap-1.5">
               {PATIENT_TYPES.map(t => {
                 const selected = form.types.includes(t);
@@ -6555,7 +6555,7 @@ function PatientFormModal({
                       selected ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
                     }`}
                   >
-                    {t}
+                    {dataLabel(t)}
                   </button>
                 );
               })}
@@ -6565,8 +6565,8 @@ function PatientFormModal({
           {/* ── 증상 가이드 (매뉴얼 즉시 표시) ── */}
           <div className="rounded-xl border border-blue-100 bg-blue-50/40 overflow-hidden">
             <div className="flex items-center justify-between px-3 pt-3 pb-2">
-              <p className="text-xs font-bold text-blue-800">📋 증상별 대처 가이드</p>
-              <span className="text-[10px] text-blue-500">선택 시 증상·처치 자동 입력</span>
+              <p className="text-xs font-bold text-blue-800">{L('patient.careGuideBySymptom')}</p>
+              <span className="text-[10px] text-blue-500">{L('patient.selectingFillsInSymptomsAnd')}</span>
             </div>
 
             {/* 카테고리 탭 */}
@@ -6584,7 +6584,7 @@ function PatientFormModal({
                       : 'text-gray-400 hover:text-gray-600'
                   }`}
                 >
-                  {cat === '내과' ? '🏥 내과' : cat === '외과' ? '🩹 외과' : '🚨 응급'}
+                  {cat === '내과' ? L('patient.internal') : cat === '외과' ? L('patient.external') : L('patient.emergency')}
                 </button>
               ))}
             </div>
@@ -6632,19 +6632,19 @@ function PatientFormModal({
                   </p>
                   {selectedGuide.category === '응급' && (
                     <span className="text-[10px] bg-red-500 text-white px-1.5 py-0.5 rounded font-bold ml-auto">
-                      즉시 119
+                      {L('patient.call119Now')}
                     </span>
                   )}
                 </div>
 
                 <div className="space-y-1.5">
                   <div>
-                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-0.5">처치</p>
+                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-0.5">{L('patient.care')}</p>
                     <p className="text-[11px] text-gray-700 leading-relaxed">{selectedGuide.treatment}</p>
                   </div>
                   {selectedGuide.medication !== '(약 불필요)' && (
                     <div>
-                      <p className="text-[10px] font-bold text-orange-500 uppercase tracking-wide mb-0.5">약품</p>
+                      <p className="text-[10px] font-bold text-orange-500 uppercase tracking-wide mb-0.5">{L('patient.medication2')}</p>
                       <p className="text-[11px] text-orange-700 font-medium">{selectedGuide.medication}</p>
                     </div>
                   )}
@@ -6671,7 +6671,7 @@ function PatientFormModal({
                   }))}
                   className="w-full py-1.5 text-[11px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg border border-blue-200 transition-colors"
                 >
-                  ↓ 증상·처치·약 덮어쓰기
+                  {L('patient.overwriteSymptomsCareMeds')}
                 </button>
               </div>
             )}
@@ -6679,21 +6679,21 @@ function PatientFormModal({
 
           {/* 증상 / 처치 / 체온 */}
           <div>
-            <FormLabel label="증상 *" />
+            <FormLabel label={L('patient.symptoms2')} />
             <input type="text" value={form.symptom}
               onChange={e => setField('symptom', e.target.value)}
-              placeholder="두통, 복통, 발열 38.5도" className={inputCls} />
+              placeholder={L('patient.headacheStomachacheFever385')} className={inputCls} />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <FormLabel label="처치" />
+              <FormLabel label={L('patient.care')} />
               <input type="text" value={form.treatment}
                 onChange={e => setField('treatment', e.target.value)}
-                placeholder="타이레놀 투여 후 안정" className={inputCls} />
+                placeholder={L('patient.stableAfterTylenol')} className={inputCls} />
             </div>
             <div>
-              <FormLabel label="체온 (°C)" />
+              <FormLabel label={L('patient.temperatureC')} />
               <input type="number" step="0.1" min="35" max="42"
                 value={form.temperature}
                 onChange={e => setField('temperature', e.target.value)}
@@ -6704,10 +6704,10 @@ function PatientFormModal({
           {/* 단순 투약 메모 (약복용 유형 아닐 때) */}
           {!hasMedType && (
             <div>
-              <FormLabel label="투약 메모" />
+              <FormLabel label={L('patient.medicationNote')} />
               <input type="text" value={form.medication}
                 onChange={e => setField('medication', e.target.value)}
-                placeholder="백초 1포" className={inputCls} />
+                placeholder={L('patient.n1PacketOfDigestiveMedicine')} className={inputCls} />
             </div>
           )}
 
@@ -6715,18 +6715,18 @@ function PatientFormModal({
           {hasMedType && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <FormLabel label="정기 복용 스케줄" />
+                <FormLabel label={L('patient.regularMedicationSchedule')} />
                 <button type="button" onClick={addMedSchedule}
                   className="text-xs text-blue-600 hover:text-blue-700 font-medium">
-                  + 약 추가
+                  {L('patient.addMedication')}
                 </button>
               </div>
               {form.medSchedules.map((sched, si) => (
                 <div key={si} className="rounded-lg border border-orange-200 bg-orange-50 p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-orange-700">약 {si + 1}</span>
+                    <span className="text-[11px] font-semibold text-orange-700">{L('patient.medication')} {si + 1}</span>
                     <button type="button" onClick={() => removeMedSchedule(si)}
-                      className="text-[11px] text-red-500 hover:text-red-600">삭제</button>
+                      className="text-[11px] text-red-500 hover:text-red-600">{L('common.delete')}</button>
                   </div>
                   <input type="text" value={sched.name}
                     onChange={e => {
@@ -6734,7 +6734,7 @@ function PatientFormModal({
                       updated[si] = { ...updated[si], name: e.target.value };
                       setField('medSchedules', updated);
                     }}
-                    placeholder="약 이름 (예: 타이레놀 500mg)" className={inputCls} />
+                    placeholder={L('patient.medicationNameEGTylenol')} className={inputCls} />
                   <div className="flex gap-1.5 flex-wrap">
                     {MEDICATION_TIMES.map(t => (
                       <button key={t} type="button" onClick={() => toggleMedTime(si, t)}
@@ -6743,13 +6743,13 @@ function PatientFormModal({
                             ? 'bg-orange-500 text-white border-orange-500'
                             : 'bg-white text-gray-500 border-gray-300 hover:border-orange-300'
                         }`}>
-                        {t}
+                        {dataLabel(t)}
                       </button>
                     ))}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <FormLabel label="시작일" />
+                      <FormLabel label={L('patient.startDate')} />
                       <input type="date" value={sched.startDate}
                         onChange={e => {
                           const updated = [...form.medSchedules];
@@ -6758,11 +6758,11 @@ function PatientFormModal({
                         }} className={inputCls} />
                     </div>
                     <div>
-                      <FormLabel label="종료일" />
+                      <FormLabel label={L('patient.endDate')} />
                       {sched.endDateAuto ? (
                         <div className="flex items-center h-9 px-2 rounded-lg border border-orange-300 bg-orange-50 text-xs text-orange-700 font-semibold gap-1">
                           <span>📌</span>
-                          <span>캠프 끝까지</span>
+                          <span>{L('patient.untilCampEnds')}</span>
                           {campEndDate && <span className="text-gray-400 font-normal ml-1">({campEndDate})</span>}
                         </div>
                       ) : (
@@ -6792,10 +6792,10 @@ function PatientFormModal({
                         }}
                         className="accent-orange-500"
                       />
-                      <span className="text-[11px] text-gray-600 font-medium">캠프 끝까지</span>
+                      <span className="text-[11px] text-gray-600 font-medium">{L('patient.untilCampEnds')}</span>
                     </label>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-[11px] text-gray-500">주</span>
+                      <span className="text-[11px] text-gray-500">{L('patient.wk')}</span>
                       <input
                         type="number"
                         min={1}
@@ -6809,7 +6809,7 @@ function PatientFormModal({
                         placeholder="7"
                         className="w-10 text-center text-[11px] border border-gray-300 rounded-md px-1 py-1"
                       />
-                      <span className="text-[11px] text-gray-500">일 복용 <span className="text-gray-400">(빈칸=매일)</span></span>
+                      <span className="text-[11px] text-gray-500">{L('patient.days')} <span className="text-gray-400">{L('patient.blankDaily')}</span></span>
                     </div>
                   </div>
                 </div>
@@ -6820,7 +6820,7 @@ function PatientFormModal({
           {/* 격리 정보 */}
           {hasIsolation && (
             <div>
-              <FormLabel label="격리방 번호" />
+              <FormLabel label={L('patient.isolationRoomNumber')} />
               <input type="text" value={form.isolationRoom}
                 onChange={e => setField('isolationRoom', e.target.value)}
                 placeholder="213" className={inputCls} />
@@ -6829,7 +6829,7 @@ function PatientFormModal({
 
           {/* 경과 상태 */}
           <div>
-            <FormLabel label="경과 상태" />
+            <FormLabel label={L('patient.progressStatus')} />
             <div className="flex gap-1.5 flex-wrap">
               {PROGRESS_STATUSES.map(s => (
                 <button key={s} type="button" onClick={() => setField('progressStatus', s)}
@@ -6839,7 +6839,7 @@ function PatientFormModal({
                       : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'
                   }`}
                 >
-                  {s}
+                  {dataLabel(s)}
                 </button>
               ))}
             </div>
@@ -6847,7 +6847,7 @@ function PatientFormModal({
 
           {/* 병원 내원 */}
           {hasHospital && (
-            <SectionBox title="병원 내원 (1차)" color="red">
+            <SectionBox title={L('patient.hospitalVisit1st')} color="red">
               {/* 내원 상태 */}
               <div className="flex gap-1.5 flex-wrap mb-2">
                 {HOSPITAL_STATUSES.map(s => (
@@ -6859,41 +6859,41 @@ function PatientFormModal({
                         : 'bg-green-500 text-white border-green-500'
                         : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
                     }`}>
-                    {s}
+                    {dataLabel(s)}
                   </button>
                 ))}
               </div>
               {form.hospitalStatus !== '필요없음' && (
                 <>
                   <div>
-                    <FormLabel label="인솔자" />
+                    <FormLabel label={L('patient.escort')} />
                     <input type="text" value={form.hospitalEscort}
                       onChange={e => setField('hospitalEscort', e.target.value)}
-                      placeholder="김매니저" className={inputCls} />
+                      placeholder={L('patient.managerKim')} className={inputCls} />
                   </div>
                   <div className="grid grid-cols-2 gap-2 mt-2">
                     <div>
-                      <FormLabel label="내원 날짜" />
+                      <FormLabel label={L('patient.visitDate')} />
                       <input type="date" value={form.hospitalDate}
                         onChange={e => setField('hospitalDate', e.target.value)} className={inputCls} />
                     </div>
                     <div>
-                      <FormLabel label="내원 시간" />
+                      <FormLabel label={L('patient.visitTime')} />
                       <input type="time" value={form.hospitalTime}
                         onChange={e => setField('hospitalTime', e.target.value)} className={inputCls} />
                     </div>
                   </div>
                   <div className="mt-2">
-                    <FormLabel label="처방약" />
+                    <FormLabel label={L('patient.prescribedMedication')} />
                     <input type="text" value={form.hospitalPrescription}
                       onChange={e => setField('hospitalPrescription', e.target.value)}
-                      placeholder="항생제 3일치" className={inputCls} />
+                      placeholder={L('patient.n3DaysOfAntibiotics')} className={inputCls} />
                   </div>
                   <div className="mt-2">
-                    <FormLabel label="메모" />
+                    <FormLabel label={L('common.memo')} />
                     <input type="text" value={form.hospitalNotes}
                       onChange={e => setField('hospitalNotes', e.target.value)}
-                      placeholder="특이사항" className={inputCls} />
+                      placeholder={L('patient.notes')} className={inputCls} />
                   </div>
                 </>
               )}
@@ -6901,7 +6901,7 @@ function PatientFormModal({
               {/* 내원완료 시 정산 */}
               {form.hospitalStatus === '내원완료' && (
                 <div className="mt-3 pt-3 border-t border-red-100">
-                  <FormLabel label="병원비 정산" />
+                  <FormLabel label={L('patient.hospitalBill')} />
                   <div className="flex gap-1.5 flex-wrap mb-2">
                     {BILLING_METHODS.map(m => (
                       <button key={m} type="button"
@@ -6911,7 +6911,7 @@ function PatientFormModal({
                             ? 'bg-amber-500 text-white border-amber-500'
                             : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'
                         }`}>
-                        {m}
+                        {dataLabel(m)}
                       </button>
                     ))}
                   </div>
@@ -6919,18 +6919,18 @@ function PatientFormModal({
                     <div className="space-y-2">
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <FormLabel label="금액 (원)" />
+                          <FormLabel label={L('patient.amountKrw')} />
                           <input type="number" value={form.billingAmount}
                             onChange={e => setField('billingAmount', e.target.value)}
                             placeholder="50000" className={inputCls} />
                         </div>
                         {form.billingMethod === '용돈봉투' && (
                           <div>
-                            <FormLabel label="차감 담당자" />
+                            <FormLabel label={L('patient.deductedBy')} />
                             <select value={form.billingPocketHandler}
                               onChange={e => setField('billingPocketHandler', e.target.value)}
                               className={inputCls}>
-                              <option value="">선택</option>
+                              <option value="">{L('task.optional')}</option>
                               {campUsers.map(u => (
                                 <option key={u.id} value={u.name}>{u.name}</option>
                               ))}
@@ -6942,13 +6942,13 @@ function PatientFormModal({
                         <input type="checkbox" checked={form.billingPaid}
                           onChange={e => setField('billingPaid', e.target.checked)}
                           className="accent-green-500" />
-                        정산 완료
+                        {L('patient.settled')}
                       </label>
                       <div>
-                        <FormLabel label="메모" />
+                        <FormLabel label={L('common.memo')} />
                         <input type="text" value={form.billingNotes}
                           onChange={e => setField('billingNotes', e.target.value)}
-                          placeholder="영수증 부모님 전달 예정" className={inputCls} />
+                          placeholder={L('patient.receiptToBeSentTo')} className={inputCls} />
                       </div>
                     </div>
                   )}
@@ -6958,10 +6958,10 @@ function PatientFormModal({
           )}
 
           {/* 담당자 지정 */}
-          <SectionBox title="담당자 지정">
+          <SectionBox title={L('patient.assignStaff')}>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <FormLabel label="처치 담당자" />
+                <FormLabel label={L('patient.careAssignee')} />
                 <select value={form.assigneeId}
                   onChange={e => {
                     const user = campUsers.find(u => u.id === e.target.value);
@@ -6972,14 +6972,14 @@ function PatientFormModal({
                     }));
                   }}
                   className={inputCls}>
-                  <option value="">미지정</option>
+                  <option value="">{L('data.unspecified')}</option>
                   {campUsers.map(u => (
                     <option key={u.id} value={u.id}>{u.name}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <FormLabel label="부모연락 담당자" />
+                <FormLabel label={L('patient.parentContactAssignee')} />
                 <select value={form.parentContactAssigneeId}
                   onChange={e => {
                     const user = campUsers.find(u => u.id === e.target.value);
@@ -6990,7 +6990,7 @@ function PatientFormModal({
                     }));
                   }}
                   className={inputCls}>
-                  <option value="">미지정</option>
+                  <option value="">{L('data.unspecified')}</option>
                   {campUsers.map(u => (
                     <option key={u.id} value={u.id}>{u.name}</option>
                   ))}
@@ -7002,9 +7002,9 @@ function PatientFormModal({
 
           {/* 메모 */}
           <div>
-            <FormLabel label="메모" />
+            <FormLabel label={L('common.memo')} />
             <textarea value={form.notes} onChange={e => setField('notes', e.target.value)}
-              placeholder="추가 메모 사항..." rows={2}
+              placeholder={L('patient.additionalNotes')} rows={2}
               className={`${inputCls} resize-none`} />
           </div>
         </div>
@@ -7013,12 +7013,12 @@ function PatientFormModal({
         <div className="flex gap-2 px-5 py-4 border-t border-gray-100">
           <button onClick={onClose}
             className="flex-1 py-2.5 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors">
-            취소
+            {L('common.cancel')}
           </button>
           <button onClick={onSubmit}
             disabled={submitting || !form.studentName.trim() || !form.symptom.trim()}
             className="flex-1 py-2.5 text-sm font-medium text-white bg-red-500 hover:bg-red-600 disabled:bg-gray-300 rounded-xl transition-colors">
-            {submitting ? '저장 중...' : editingId ? '수정 완료' : '추가하기'}
+            {submitting ? L('task.saving') : editingId ? L('content.done') : L('task.add2')}
           </button>
         </div>
       </div>

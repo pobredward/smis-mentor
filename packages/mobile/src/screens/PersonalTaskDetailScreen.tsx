@@ -22,6 +22,8 @@ import { formatTime, formatDuration } from '../services/taskService';
 import type { PersonalTask, TaskCategory } from '@smis-mentor/shared';
 import { RootStackParamList } from '../navigation/types';
 import { useAuth } from '../context/AuthContext';
+import { currentIntlLocale } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 type PersonalTaskDetailRouteProp = RouteProp<RootStackParamList, 'PersonalTaskDetail'>;
 type PersonalTaskDetailNavigationProp = NativeStackNavigationProp<RootStackParamList, 'PersonalTaskDetail'>;
@@ -44,7 +46,7 @@ export default function PersonalTaskDetailScreen() {
     try {
       const docSnap = await getDoc(doc(db, 'personalTasks', taskId));
       if (!docSnap.exists()) {
-        Alert.alert('오류', '개인 업무를 찾을 수 없습니다.');
+        Alert.alert(L('common.error'), L('task.personalTaskNotFound'));
         handleBack();
         return;
       }
@@ -63,7 +65,7 @@ export default function PersonalTaskDetailScreen() {
       }
     } catch (error) {
       logger.error('개인 업무 로드 오류:', error);
-      Alert.alert('오류', '업무를 불러오는 중 오류가 발생했습니다.');
+      Alert.alert(L('common.error'), L('common.anErrorOccurredWhileLoading'));
       handleBack();
     } finally {
       setLoading(false);
@@ -89,7 +91,7 @@ export default function PersonalTaskDetailScreen() {
       await loadTask();
     } catch (error) {
       logger.error('완료 토글 오류:', error);
-      Alert.alert('오류', '상태 변경 중 오류가 발생했습니다.');
+      Alert.alert(L('common.error'), L('task.anErrorOccurredWhileChanging'));
     }
   };
 
@@ -115,24 +117,24 @@ export default function PersonalTaskDetailScreen() {
     if (task.groupId) {
       // 그룹 업무: 이 날짜만 / 전체 삭제 선택지 제공
       Alert.alert(
-        '개인 업무 삭제',
-        '이 업무는 여러 날짜에 묶인 그룹 업무입니다.',
+        L('task.deletePersonalTask'),
+        L('task.thisTaskIsGroupedAcross'),
         [
-          { text: '취소', style: 'cancel' },
+          { text: L('common.cancel'), style: 'cancel' },
           {
-            text: '이 날짜만 삭제',
+            text: L('task.deleteThisDateOnly'),
             onPress: async () => {
               try {
                 await deletePersonalTask(task.id);
                 handleBack();
               } catch (error) {
                 logger.error('개인 업무 삭제 오류:', error);
-                Alert.alert('오류', '삭제 중 오류가 발생했습니다.');
+                Alert.alert(L('common.error'), L('task.anErrorOccurredWhileDeleting'));
               }
             },
           },
           {
-            text: '그룹 전체 삭제',
+            text: L('task.deleteWholeGroup'),
             style: 'destructive',
             onPress: async () => {
               try {
@@ -140,17 +142,17 @@ export default function PersonalTaskDetailScreen() {
                 handleBack();
               } catch (error) {
                 logger.error('개인 업무 그룹 삭제 오류:', error);
-                Alert.alert('오류', '삭제 중 오류가 발생했습니다.');
+                Alert.alert(L('common.error'), L('task.anErrorOccurredWhileDeleting'));
               }
             },
           },
         ]
       );
     } else {
-      Alert.alert('개인 업무 삭제', '이 개인 업무를 삭제하시겠습니까?', [
-        { text: '취소', style: 'cancel' },
+      Alert.alert(L('task.deletePersonalTask'), L('task.deleteThisPersonalTask'), [
+        { text: L('common.cancel'), style: 'cancel' },
         {
-          text: '삭제',
+          text: L('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -158,7 +160,7 @@ export default function PersonalTaskDetailScreen() {
               handleBack();
             } catch (error) {
               logger.error('개인 업무 삭제 오류:', error);
-              Alert.alert('오류', '삭제 중 오류가 발생했습니다.');
+              Alert.alert(L('common.error'), L('task.anErrorOccurredWhileDeleting'));
             }
           },
         },
@@ -170,7 +172,7 @@ export default function PersonalTaskDetailScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#7c3aed" />
-        <Text style={styles.loadingText}>로딩 중...</Text>
+        <Text style={styles.loadingText}>{L('task.loading')}</Text>
       </View>
     );
   }
@@ -178,7 +180,7 @@ export default function PersonalTaskDetailScreen() {
   if (!task) return null;
 
   const accentColor = category?.color ?? '#7c3aed';
-  const dateStr = task.date.toDate().toLocaleDateString('ko-KR', {
+  const dateStr = task.date.toDate().toLocaleDateString(currentIntlLocale(), {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -193,7 +195,7 @@ export default function PersonalTaskDetailScreen() {
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
-          <Text style={styles.backText}>뒤로</Text>
+          <Text style={styles.backText}>{L('common.back')}</Text>
         </TouchableOpacity>
 
         <View style={styles.headerActions}>
@@ -211,7 +213,7 @@ export default function PersonalTaskDetailScreen() {
                 task.isCompleted && styles.completeButtonTextActive,
               ]}
             >
-              {task.isCompleted ? '✓ 완료됨' : '완료 표시'}
+              {task.isCompleted ? L('common.completed') : L('misc.markComplete')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -223,7 +225,7 @@ export default function PersonalTaskDetailScreen() {
           {/* 개인 업무 배지 */}
           <View style={styles.personalBadge}>
             <Ionicons name="person-outline" size={12} color="#7c3aed" />
-            <Text style={styles.personalBadgeText}>나만 보이는 개인 업무</Text>
+            <Text style={styles.personalBadgeText}>{L('task.personalTaskVisibleOnlyTo')}</Text>
           </View>
 
           {/* 제목 */}
@@ -265,7 +267,7 @@ export default function PersonalTaskDetailScreen() {
             {!timeStr && durationStr && (
               <View style={styles.infoRow}>
                 <Ionicons name="time-outline" size={16} color="#6b7280" />
-                <Text style={styles.infoText}>예상 소요시간: {durationStr}</Text>
+                <Text style={styles.infoText}>{L('task.estimatedTime')} {durationStr}</Text>
               </View>
             )}
           </View>
@@ -273,7 +275,7 @@ export default function PersonalTaskDetailScreen() {
           {/* 메모 */}
           {task.description ? (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>메모</Text>
+              <Text style={styles.sectionLabel}>{L('common.memo')}</Text>
               <Text style={styles.description}>{task.description}</Text>
             </View>
           ) : null}
@@ -297,7 +299,7 @@ export default function PersonalTaskDetailScreen() {
                   { color: task.isCompleted ? accentColor : '#9ca3af' },
                 ]}
               >
-                {task.isCompleted ? '완료됨' : '미완료'}
+                {task.isCompleted ? L('task.completed') : L('task.notCompleted')}
               </Text>
             </View>
           </View>
@@ -311,14 +313,14 @@ export default function PersonalTaskDetailScreen() {
           style={[styles.actionButton, styles.editButton]}
           activeOpacity={0.8}
         >
-          <Text style={styles.editButtonText}>수정</Text>
+          <Text style={styles.editButtonText}>{L('task.edit')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={handleDelete}
           style={[styles.actionButton, styles.deleteButton]}
           activeOpacity={0.8}
         >
-          <Text style={styles.deleteButtonText}>삭제</Text>
+          <Text style={styles.deleteButtonText}>{L('common.delete')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

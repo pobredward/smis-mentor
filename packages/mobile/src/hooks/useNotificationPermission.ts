@@ -3,6 +3,7 @@ import { Alert, Linking, AppState, AppStateStatus } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Notifications from 'expo-notifications';
 import { logger } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 export type NotificationPermissionStatus = 'granted' | 'denied' | 'undetermined';
 
@@ -49,10 +50,8 @@ export function useNotificationPermission({ isForeign = false }: UseNotification
   const requestPermission = useCallback(async () => {
     if (permissionStatus === 'granted') {
       Alert.alert(
-        isForeign ? 'Notifications Enabled' : '알림 허용됨',
-        isForeign
-          ? 'Notifications are already enabled for this app.'
-          : '이미 알림이 허용되어 있습니다.'
+        L('settings.notificationsEnabled'),
+        L('settings.notificationsAreAlreadyEnabledFor')
       );
       return;
     }
@@ -64,13 +63,11 @@ export function useNotificationPermission({ isForeign = false }: UseNotification
         setPermissionStatus(granted ? 'granted' : 'denied');
         if (!granted) {
           Alert.alert(
-            isForeign ? 'Permission Denied' : '알림 권한 거부됨',
-            isForeign
-              ? 'You can enable notifications in your device settings.'
-              : '기기 설정에서 알림을 허용할 수 있습니다.',
+            L('settings.permissionDenied'),
+            L('settings.youCanEnableNotificationsIn'),
             [
-              { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
-              { text: isForeign ? 'Open Settings' : '설정 열기', onPress: () => Linking.openSettings() },
+              { text: L('common.cancel'), style: 'cancel' },
+              { text: L('common.openSettings'), onPress: () => Linking.openSettings() },
             ]
           );
         }
@@ -84,13 +81,11 @@ export function useNotificationPermission({ isForeign = false }: UseNotification
 
     // 이미 거부된 경우 → 시스템 설정으로 이동
     Alert.alert(
-      isForeign ? 'Enable Notifications' : '알림 허용하기',
-      isForeign
-        ? 'Notifications are currently blocked. Please enable them in your device settings.'
-        : '알림이 차단되어 있습니다. 기기 설정에서 알림을 허용해 주세요.',
+      L('settings.enableNotifications'),
+      L('settings.notificationsAreCurrentlyBlockedPlease'),
       [
-        { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
-        { text: isForeign ? 'Open Settings' : '설정 열기', onPress: () => Linking.openSettings() },
+        { text: L('common.cancel'), style: 'cancel' },
+        { text: L('common.openSettings'), onPress: () => Linking.openSettings() },
       ]
     );
   }, [permissionStatus, isForeign]);

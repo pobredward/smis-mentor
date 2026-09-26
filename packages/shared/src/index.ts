@@ -8,3 +8,4 @@ export * from './services';
 export * from './utils';
 export * from './constants';
 export * from './errors';
+export * from './i18n';

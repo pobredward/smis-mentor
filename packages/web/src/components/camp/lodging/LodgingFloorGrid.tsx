@@ -9,6 +9,7 @@ import {
   lodgingRoomTone,
   type LodgingBuilding,
   type LodgingRoomView,
+  L,
 } from '@smis-mentor/shared';
 
 interface Props {
@@ -90,7 +91,7 @@ export default function LodgingFloorGrid({
       className="flex items-start justify-center rounded-md bg-gray-200 pt-2 text-[10px] tracking-widest text-gray-500"
       style={{ ...at(1, 2), gridRow: `1 / span ${annexRows}`, writingMode: 'vertical-rl' }}
     >
-      {compact ? '' : '별관 복도'}
+      {compact ? '' : L('lodging.annexHallway')}
     </div>
   );
   cells.push(
@@ -99,7 +100,7 @@ export default function LodgingFloorGrid({
       className="z-[1] flex items-center justify-center rounded-md bg-blue-100 text-[10px] font-semibold text-blue-700"
       style={at(corridorRow, 1, 3)}
     >
-      {compact ? '' : '통로'}
+      {compact ? '' : L('lodging.passage')}
     </div>
   );
   cells.push(
@@ -117,8 +118,8 @@ export default function LodgingFloorGrid({
       className="flex min-h-[26px] items-center justify-between rounded-md bg-gray-200 px-2 text-[10px] tracking-widest text-gray-500"
       style={at(corridorRow, 5, COLS)}
     >
-      <span>{compact ? `${floor}F` : `${floor}층 본관 복도`}</span>
-      <span>{compact ? '' : '동쪽'}</span>
+      <span>{compact ? `${floor}F` : L('lodging.floorMainHallway', { v0: floor })}</span>
+      <span>{compact ? '' : L('lodging.east')}</span>
     </div>
   );
   if (floor === 1) {
@@ -129,7 +130,7 @@ export default function LodgingFloorGrid({
           className="flex items-center justify-center rounded-md border border-dashed border-gray-300 p-2 text-center text-[10px] text-gray-400"
           style={at(corridorRow - 1, 5, offU)}
         >
-          {compact ? '' : '로비·프런트 (미확인)'}
+          {compact ? '' : L('lodging.lobbyFrontDeskUnconfirmed')}
         </div>
       );
     if (offL > 0)

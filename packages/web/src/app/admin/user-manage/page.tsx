@@ -20,6 +20,7 @@ import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { JOB_EXPERIENCE_GROUP_ROLES, MENTOR_GROUP_ROLES, FOREIGN_GROUP_ROLES, LEGACY_GROUP_REVERSE_MAP, getGroupLabel, JobExperienceGroupRole } from '@smis-mentor/shared';
 import { authenticatedGet, authenticatedPost } from '@/lib/apiClient';
+import { L } from '@smis-mentor/shared';
 
 type EditFormData = {
   name?: string;
@@ -2042,12 +2043,12 @@ export default function UserManage() {
                         return (
                           <div className="mt-4 border-t pt-4">
                             <h3 className="text-base font-semibold mb-2">
-                              {isForeignUser ? 'Self Introduction' : '자기소개 및 지원동기'}
+                              {L('admin.selfIntroduction2')}
                             </h3>
                             <div className="space-y-2">
                               <div>
                                 <p className="text-xs text-gray-500 mb-1">
-                                  {isForeignUser ? 'Self Introduction' : '자기소개'}
+                                  {L('admin.selfIntroduction')}
                                 </p>
                                 <p className="text-sm text-gray-900 whitespace-pre-line bg-gray-50 p-2 rounded min-h-[60px]">
                                   {selectedUser.selfIntroduction || '-'}

@@ -17,6 +17,7 @@ import { useAuth } from '../context/AuthContext';
 import { CampCode } from '@smis-mentor/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { logger } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 interface FamilyListProps {
   campCode: CampCode;
@@ -41,7 +42,7 @@ export const FamilyList: React.FC<FamilyListProps> = ({ campCode, isForeign }) =
 
   const handleSync = async () => {
     if (!isAdmin) {
-      Alert.alert('권한 없음', '동기화는 관리자만 수행할 수 있습니다.');
+      Alert.alert(L('students.noPermission'), L('common.onlyAdministratorsCanSync'));
       return;
     }
     try {
@@ -49,11 +50,11 @@ export const FamilyList: React.FC<FamilyListProps> = ({ campCode, isForeign }) =
       await stSheetService.syncSTSheet(campCode);
       await queryClient.invalidateQueries({ queryKey: ['families', campCode] });
       await refetch();
-      Alert.alert('성공', '가족 데이터 동기화가 완료되었습니다.');
+      Alert.alert(L('common.success'), L('students.familyDataSyncComplete'));
     } catch (error) {
       logger.error('동기화 실패:', error);
-      const message = error instanceof Error ? error.message : '동기화에 실패했습니다.';
-      Alert.alert('동기화 실패', message);
+      const message = error instanceof Error ? error.message : L('common.syncFailed');
+      Alert.alert(L('students.syncFailed'), message);
     } finally {
       setSyncing(false);
     }
@@ -108,7 +109,7 @@ export const FamilyList: React.FC<FamilyListProps> = ({ campCode, isForeign }) =
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>가족 데이터 로딩 중...</Text>
+        <Text style={styles.loadingText}>{L('students.loadingFamilyData')}</Text>
       </View>
     );
   }
@@ -118,14 +119,14 @@ export const FamilyList: React.FC<FamilyListProps> = ({ campCode, isForeign }) =
       {/* 헤더 */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
-          {isForeign ? 'Family Roster' : '가족'}
+          {L('students.familyRoster')}
         </Text>
         <View style={styles.headerActions}>
           {isSearchExpanded ? (
             <View style={styles.searchContainer}>
               <TextInput
                 style={styles.searchInput}
-                placeholder="이름 검색..."
+                placeholder={L('students.searchByName')}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoFocus
@@ -153,7 +154,7 @@ export const FamilyList: React.FC<FamilyListProps> = ({ campCode, isForeign }) =
               disabled={syncing}
             >
               <Text style={styles.syncButtonText}>
-                {syncing ? '동기화 중...' : '동기화'}
+                {syncing ? L('students.syncing') : L('students.sync')}
               </Text>
             </TouchableOpacity>
           )}
@@ -163,8 +164,8 @@ export const FamilyList: React.FC<FamilyListProps> = ({ campCode, isForeign }) =
       {/* 요약 */}
       <View style={styles.summary}>
         <Text style={styles.summaryText}>
-          총 {filteredFamilies.length}가족 / 학생{' '}
-          {filteredFamilies.reduce((s, f) => s + f.students.length, 0)}명
+          {L('students.total')} {filteredFamilies.length}{L('students.familiesStudents2')}{' '}
+          {filteredFamilies.reduce((s, f) => s + f.students.length, 0)}{L('common.people2')}
         </Text>
       </View>
 
@@ -179,7 +180,7 @@ export const FamilyList: React.FC<FamilyListProps> = ({ campCode, isForeign }) =
           <View style={styles.empty}>
             <Ionicons name="people-outline" size={48} color="#cbd5e1" />
             <Text style={styles.emptyText}>
-              {searchQuery.trim() ? '검색 결과가 없습니다.' : '가족 데이터가 없습니다.'}
+              {searchQuery.trim() ? L('students.noResults') : L('students.noFamilyData')}
             </Text>
           </View>
         ) : (
@@ -191,7 +192,7 @@ export const FamilyList: React.FC<FamilyListProps> = ({ campCode, isForeign }) =
                 <View style={[styles.sectionHeader, { backgroundColor: color }]}>
                   <Text style={styles.sectionTitle}>{type}</Text>
                   <Text style={styles.sectionCount}>
-                    {list.length}가족 · 학생 {list.reduce((s, f) => s + f.students.length, 0)}명
+                    {list.length}{L('students.familiesStudents')} {list.reduce((s, f) => s + f.students.length, 0)}{L('common.people2')}
                   </Text>
                 </View>
                 {list.map(family => (
@@ -236,7 +237,7 @@ const FamilyCard = React.memo(({ family, isExpanded, onToggle, typeColor }: Fami
       <TouchableOpacity
         style={cardStyles.header}
         onPress={onToggle}
-        accessibilityLabel={`${family.familyId}번 가족 상세보기`}
+        accessibilityLabel={L('students.familyDetails', { v0: family.familyId })}
         accessibilityRole="button"
       >
         {/* 고유번호 배지 */}
@@ -258,7 +259,7 @@ const FamilyCard = React.memo(({ family, isExpanded, onToggle, typeColor }: Fami
 
         {/* 방호수 */}
         <View style={cardStyles.roomBadge}>
-          <Text style={cardStyles.roomBadgeText}>{roomDisplay}호</Text>
+          <Text style={cardStyles.roomBadgeText}>{roomDisplay}{L('students.text')}</Text>
         </View>
 
         <Ionicons
@@ -276,25 +277,25 @@ const FamilyCard = React.memo(({ family, isExpanded, onToggle, typeColor }: Fami
             <View key={parent.id} style={cardStyles.personSection}>
               <View style={cardStyles.personHeader}>
                 <View style={[cardStyles.personBadge, cardStyles.parentBadge]}>
-                  <Text style={cardStyles.personBadgeText}>부모{family.parents.length > 1 ? idx + 1 : ''}</Text>
+                  <Text style={cardStyles.personBadgeText}>{L('students.parents')}{family.parents.length > 1 ? idx + 1 : ''}</Text>
                 </View>
                 <Text style={cardStyles.personName}>{parent.name}</Text>
               </View>
               <View style={cardStyles.infoGrid}>
-                {parent.phone ? <InfoRow label="연락처" value={parent.phone} /> : null}
-                {parent.region ? <InfoRow label="지역" value={parent.region} /> : null}
-                {parent.email ? <InfoRow label="이메일" value={parent.email} /> : null}
+                {parent.phone ? <InfoRow label={L('students.contact')} value={parent.phone} /> : null}
+                {parent.region ? <InfoRow label={L('students.region')} value={parent.region} /> : null}
+                {parent.email ? <InfoRow label={L('students.email')} value={parent.email} /> : null}
                 {parent.nativeEnglish && parent.nativeEnglish !== '신청 X' && parent.nativeEnglish !== '-' ? (
-                  <InfoRow label="원어민 수업" value={parent.nativeEnglish} highlight />
+                  <InfoRow label={L('students.nativeTeacherClass')} value={parent.nativeEnglish} highlight />
                 ) : null}
-                {parent.ssn ? <InfoRow label="주민번호" value={parent.ssn} sensitive /> : null}
-                {parent.passportNumber ? <InfoRow label="여권번호" value={parent.passportNumber} /> : null}
-                {parent.passportName ? <InfoRow label="여권이름" value={parent.passportName} /> : null}
+                {parent.ssn ? <InfoRow label={L('common.idNumber')} value={parent.ssn} sensitive /> : null}
+                {parent.passportNumber ? <InfoRow label={L('students.passportNo')} value={parent.passportNumber} /> : null}
+                {parent.passportName ? <InfoRow label={L('students.passportName')} value={parent.passportName} /> : null}
                 {parent.passportExpiry && parent.passportExpiry !== '0000.00.00' ? (
-                  <InfoRow label="여권만료" value={parent.passportExpiry} />
+                  <InfoRow label={L('students.passportExpiry')} value={parent.passportExpiry} />
                 ) : null}
-                {parent.address ? <InfoRow label="주소" value={parent.address} wide /> : null}
-                {parent.notes ? <InfoRow label="기타" value={parent.notes} wide /> : null}
+                {parent.address ? <InfoRow label={L('profile.address')} value={parent.address} wide /> : null}
+                {parent.notes ? <InfoRow label={L('students.other')} value={parent.notes} wide /> : null}
               </View>
             </View>
           ))}
@@ -308,7 +309,7 @@ const FamilyCard = React.memo(({ family, isExpanded, onToggle, typeColor }: Fami
                   student.gender === 'M' ? cardStyles.studentBadgeMale : cardStyles.studentBadgeFemale
                 ]}>
                   <Text style={cardStyles.personBadgeText}>
-                    학생{family.students.length > 1 ? idx + 1 : ''}
+                    {L('push.forStudent')}{family.students.length > 1 ? idx + 1 : ''}
                   </Text>
                 </View>
                 <Text style={[
@@ -322,17 +323,17 @@ const FamilyCard = React.memo(({ family, isExpanded, onToggle, typeColor }: Fami
                 ) : null}
               </View>
               <View style={cardStyles.infoGrid}>
-                <InfoRow label="학년/성별" value={`${student.grade} · ${student.gender === 'M' ? '남' : '여'}`} />
-                {student.id ? <InfoRow label="학생ID" value={student.id} /> : null}
-                {student.parentPhone ? <InfoRow label="부모연락처" value={student.parentPhone} /> : null}
-                {student.ssn ? <InfoRow label="주민번호" value={student.ssn} sensitive /> : null}
-                {student.passportNumber ? <InfoRow label="여권번호" value={student.passportNumber} /> : null}
-                {student.passportName ? <InfoRow label="여권이름" value={student.passportName} /> : null}
+                <InfoRow label={L('students.gradeGender')} value={`${student.grade} · ${student.gender === 'M' ? L('students.male') : L('students.female')}`} />
+                {student.id ? <InfoRow label={L('students.studentId')} value={student.id} /> : null}
+                {student.parentPhone ? <InfoRow label={L('students.parentContact')} value={student.parentPhone} /> : null}
+                {student.ssn ? <InfoRow label={L('common.idNumber')} value={student.ssn} sensitive /> : null}
+                {student.passportNumber ? <InfoRow label={L('students.passportNo')} value={student.passportNumber} /> : null}
+                {student.passportName ? <InfoRow label={L('students.passportName')} value={student.passportName} /> : null}
                 {student.passportExpiry && student.passportExpiry !== '0000.00.00' ? (
-                  <InfoRow label="여권만료" value={student.passportExpiry} />
+                  <InfoRow label={L('students.passportExpiry')} value={student.passportExpiry} />
                 ) : null}
-                {student.medication ? <InfoRow label="건강정보" value={student.medication} wide /> : null}
-                {student.registrationSource ? <InfoRow label="등록처" value={student.registrationSource} /> : null}
+                {student.medication ? <InfoRow label={L('students.healthInfo')} value={student.medication} wide /> : null}
+                {student.registrationSource ? <InfoRow label={L('students.registeredVia')} value={student.registrationSource} /> : null}
               </View>
             </View>
           ))}

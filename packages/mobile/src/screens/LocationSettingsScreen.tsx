@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useLocationPermission } from '../hooks/useLocationPermission';
 import { LocationPermissionDisclosureModal } from '../components/LocationPermissionDisclosureModal';
+import { L } from '@smis-mentor/shared';
 
 export function LocationSettingsScreen() {
   const { userData } = useAuth();
@@ -40,10 +41,8 @@ export function LocationSettingsScreen() {
         color: '#10b981',
         bg: '#f0fdf4',
         border: '#bbf7d0',
-        title: isForeign ? 'Background Location Enabled' : '백그라운드 위치 권한 허용됨',
-        description: isForeign
-          ? 'Location sharing works even when the app is in the background.'
-          : '앱을 최소화해도 위치 공유가 정상 작동합니다.',
+        title: L('settings.backgroundLocationEnabled'),
+        description: L('settings.locationSharingWorksEvenWhen'),
       };
     }
 
@@ -53,10 +52,8 @@ export function LocationSettingsScreen() {
         color: '#f59e0b',
         bg: '#fffbeb',
         border: '#fde68a',
-        title: isForeign ? 'Location Allowed (While Using App)' : '앱 사용 중에만 위치 허용됨',
-        description: isForeign
-          ? 'Background location is not allowed. Location sharing will stop when the app is minimized.'
-          : '백그라운드 위치는 허용되지 않았습니다. 앱을 최소화하면 위치 공유가 중단됩니다.',
+        title: L('settings.locationAllowedWhileUsingApp'),
+        description: L('settings.backgroundLocationIsNotAllowed'),
       };
     }
 
@@ -65,10 +62,8 @@ export function LocationSettingsScreen() {
       color: '#ef4444',
       bg: '#fef2f2',
       border: '#fecaca',
-      title: isForeign ? 'Location Access Denied' : '위치 접근이 허용되지 않았습니다',
-      description: isForeign
-        ? 'Location access is required to use the location sharing feature.'
-        : '위치 공유 기능을 사용하려면 위치 접근 권한이 필요합니다.',
+      title: L('settings.locationAccessDenied'),
+      description: L('settings.locationAccessIsRequiredTo2'),
     };
   };
 
@@ -93,10 +88,8 @@ export function LocationSettingsScreen() {
   const handleBackgroundRequest = async () => {
     if (!disclosureRead) {
       Alert.alert(
-        isForeign ? 'Please Read First' : '안내를 먼저 읽어주세요',
-        isForeign
-          ? 'Please read the "Background Location" notice below before enabling.'
-          : '아래 "백그라운드 위치 수집" 안내를 먼저 확인해 주세요.'
+        L('settings.pleaseReadFirst'),
+        L('settings.pleaseReadTheBackgroundLocation')
       );
       return;
     }
@@ -108,12 +101,10 @@ export function LocationSettingsScreen() {
       <View style={styles.centerContainer}>
         <Ionicons name="lock-closed-outline" size={64} color="#cbd5e1" />
         <Text style={styles.emptyTitle}>
-          {isForeign ? 'Login Required' : '로그인 필요'}
+          {L('common.loginRequired')}
         </Text>
         <Text style={styles.emptyText}>
-          {isForeign
-            ? 'Please log in to access this page.'
-            : '로그인 후 이용 가능합니다.'}
+          {L('common.pleaseLogInToAccess')}
         </Text>
       </View>
     );
@@ -151,54 +142,42 @@ export function LocationSettingsScreen() {
         <View style={styles.disclosureHeader}>
           <Ionicons name="information-circle" size={20} color="#d97706" />
           <Text style={styles.disclosureHeaderText}>
-            {isForeign ? 'Background Location Collection' : '백그라운드 위치 수집'}
+            {L('settings.backgroundLocationCollection')}
           </Text>
         </View>
 
         <Text style={styles.disclosureBody}>
-          {isForeign
-            ? 'SMIS Mentor collects location data (GPS coordinates) to enable the location sharing feature in the Camp tab. This data is collected in the background and when the app is closed or not in use. This data is not used for advertising.'
-            : 'SMIS Mentor는 캠프 탭의 위치 공유 기능을 위해 위치 데이터(GPS 좌표)를 수집합니다. 앱이 종료된 경우(when the app is closed) 및 백그라운드(background) 상태에서도 수집됩니다. 이 데이터는 광고 목적으로 사용되지 않습니다.'}
+          {L('common.smisMentorCollectsLocationData')}
         </Text>
 
         <View style={styles.disclosureItem}>
           <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
           <Text style={styles.disclosureItemText}>
-            {isForeign
-              ? 'Collected data: GPS coordinates, device battery level and charging status'
-              : '수집 정보: GPS 좌표, 기기 배터리 잔량 및 충전 상태'}
+            {L('settings.collectedDataGpsCoordinatesDevice')}
           </Text>
         </View>
         <View style={styles.disclosureItem}>
           <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
           <Text style={styles.disclosureItemText}>
-            {isForeign
-              ? 'Purpose: Real-time location sharing among camp staff within the same camp code'
-              : '수집 목적: 같은 캠프 코드의 스태프 간 실시간 위치 공유'}
+            {L('settings.purposeRealTimeLocationSharing')}
           </Text>
         </View>
         <View style={styles.disclosureItem}>
           <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
           <Text style={styles.disclosureItemText}>
-            {isForeign
-              ? 'Sharing: Only shared with staff in the same camp. Not shared with third parties.'
-              : '공유 대상: 같은 캠프 스태프에게만 표시. 외부 제3자와 공유하지 않음.'}
+            {L('settings.sharingOnlySharedWithStaff')}
           </Text>
         </View>
         <View style={styles.disclosureItem}>
           <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
           <Text style={styles.disclosureItemText}>
-            {isForeign
-              ? 'Collection interval: Every 15 seconds or when moved 20m (to save battery)'
-              : '수집 주기: 15초마다 또는 20m 이동 시 (배터리 절약)'}
+            {L('settings.collectionIntervalEvery15Seconds')}
           </Text>
         </View>
         <View style={styles.disclosureItem}>
           <Ionicons name="radio-button-on" size={8} color="#d97706" style={styles.bullet} />
           <Text style={styles.disclosureItemText}>
-            {isForeign
-              ? 'Stop collection: Turn off the location sharing switch in the Camp tab to stop immediately.'
-              : '수집 중단: 캠프 탭의 위치 공유 스위치를 끄면 즉시 수집이 중단됩니다.'}
+            {L('settings.stopCollectionTurnOffThe')}
           </Text>
         </View>
 
@@ -206,9 +185,7 @@ export function LocationSettingsScreen() {
           <View style={styles.androidNotice}>
             <Ionicons name="logo-android" size={14} color="#374151" />
             <Text style={styles.androidNoticeText}>
-              {isForeign
-                ? 'On Android, a foreground service notification is shown in the status bar while location sharing is active.'
-                : 'Android에서는 위치 공유 중 상태 표시줄에 포그라운드 서비스 알림이 표시됩니다.'}
+              {L('settings.onAndroidAForegroundService')}
             </Text>
           </View>
         )}
@@ -220,7 +197,7 @@ export function LocationSettingsScreen() {
             onPress={() => setDisclosureRead((v) => !v)}
             activeOpacity={0.7}
             accessibilityLabel={
-              isForeign ? 'I have read the above notice' : '위 안내를 읽었습니다'
+              L('settings.iHaveReadTheAbove')
             }
             accessibilityRole="checkbox"
             accessibilityState={{ checked: disclosureRead }}
@@ -231,9 +208,7 @@ export function LocationSettingsScreen() {
               )}
             </View>
             <Text style={styles.confirmText}>
-              {isForeign
-                ? 'I have read the above notice and agree to background location collection.'
-                : '위 안내를 읽었으며 백그라운드 위치 수집에 동의합니다.'}
+              {L('settings.iHaveReadTheAbove2')}
             </Text>
           </TouchableOpacity>
         )}
@@ -245,19 +220,17 @@ export function LocationSettingsScreen() {
           <View style={styles.sectionHeader}>
             <Ionicons name="shield-checkmark-outline" size={22} color="#3b82f6" />
             <Text style={styles.sectionTitle}>
-              {isForeign ? 'Grant Location Access' : '위치 접근 허용'}
+              {L('settings.grantLocationAccess')}
             </Text>
           </View>
           <Text style={styles.sectionDescription}>
-            {isForeign
-              ? 'Location access is required to use the location sharing feature in the Camp tab. Without this permission, you cannot share your location with other staff.'
-              : '캠프 탭의 위치 공유 기능을 사용하려면 위치 접근 권한이 필요합니다. 이 권한 없이는 다른 스태프와 위치를 공유할 수 없습니다.'}
+            {L('settings.locationAccessIsRequiredTo')}
           </Text>
           <TouchableOpacity
             style={styles.primaryButton}
             onPress={handleForegroundRequest}
             disabled={requesting}
-            accessibilityLabel={isForeign ? 'Allow location access' : '위치 접근 허용하기'}
+            accessibilityLabel={L('settings.allowLocationAccess2')}
             accessibilityRole="button"
           >
             {requesting ? (
@@ -266,7 +239,7 @@ export function LocationSettingsScreen() {
               <>
                 <Ionicons name="location-outline" size={18} color="#ffffff" />
                 <Text style={styles.primaryButtonText}>
-                  {isForeign ? 'Allow Location Access' : '위치 접근 허용하기'}
+                  {L('settings.allowLocationAccess')}
                 </Text>
               </>
             )}
@@ -280,20 +253,18 @@ export function LocationSettingsScreen() {
           <View style={styles.sectionHeader}>
             <Ionicons name="shield-checkmark-outline" size={22} color="#f59e0b" />
             <Text style={styles.sectionTitle}>
-              {isForeign ? 'Enable Background Location' : '백그라운드 위치 허용'}
+              {L('settings.enableBackgroundLocation')}
             </Text>
           </View>
           <Text style={styles.sectionDescription}>
-            {isForeign
-              ? 'Allow background location access to keep sharing your location even when the app is minimized.'
-              : '앱을 최소화해도 위치 공유가 계속되도록 백그라운드 위치 접근을 허용해 주세요.'}
+            {L('settings.allowBackgroundLocationAccessTo')}
           </Text>
           <TouchableOpacity
             style={[styles.primaryButton, styles.warningButton]}
             onPress={handleBackgroundRequest}
             disabled={requesting}
             accessibilityLabel={
-              isForeign ? 'Allow background location' : '백그라운드 위치 허용하기'
+              L('settings.allowBackgroundLocation2')
             }
             accessibilityRole="button"
           >
@@ -303,7 +274,7 @@ export function LocationSettingsScreen() {
               <>
                 <Ionicons name="navigate-outline" size={18} color="#ffffff" />
                 <Text style={styles.primaryButtonText}>
-                  {isForeign ? 'Allow Background Location' : '백그라운드 위치 허용하기'}
+                  {L('settings.allowBackgroundLocation')}
                 </Text>
               </>
             )}
@@ -315,19 +286,17 @@ export function LocationSettingsScreen() {
       {permissionLevel === 'denied' && (
         <View style={styles.openSettingsSection}>
           <Text style={styles.openSettingsHint}>
-            {isForeign
-              ? 'If the permission request was previously denied, open your device settings to enable it manually.'
-              : '이전에 권한 요청을 거부했다면 기기 설정에서 직접 허용해야 합니다.'}
+            {L('settings.ifThePermissionRequestWas')}
           </Text>
           <TouchableOpacity
             style={styles.secondaryButton}
             onPress={openSettings}
-            accessibilityLabel={isForeign ? 'Open device settings' : '기기 설정 열기'}
+            accessibilityLabel={L('settings.openDeviceSettings2')}
             accessibilityRole="button"
           >
             <Ionicons name="settings-outline" size={16} color="#3b82f6" />
             <Text style={styles.secondaryButtonText}>
-              {isForeign ? 'Open Device Settings' : '기기 설정 열기'}
+              {L('settings.openDeviceSettings')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -337,9 +306,7 @@ export function LocationSettingsScreen() {
       <View style={styles.infoCard}>
         <Ionicons name="information-circle-outline" size={18} color="#6b7280" />
         <Text style={styles.infoText}>
-          {isForeign
-            ? 'Location access is only used for the location sharing feature in the Camp tab and is not used for advertising, analytics, or any other purpose. For more details, see Privacy Policy §9.'
-            : '위치 접근은 캠프 탭의 위치 공유 기능에만 사용되며, 광고·분석 등 다른 목적으로는 사용되지 않습니다. 자세한 내용은 개인정보처리방침 §9를 확인하세요.'}
+          {L('settings.locationAccessIsOnlyUsed')}
         </Text>
       </View>
     </ScrollView>

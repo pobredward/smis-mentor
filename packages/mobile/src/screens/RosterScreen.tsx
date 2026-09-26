@@ -8,6 +8,7 @@ import { ArrivalScreen } from './ArrivalScreen';
 import { useAuth } from '../context/AuthContext';
 import { jobCodesService, stSheetService } from '../services';
 import { CampCode } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 type RosterSubTab = 'class' | 'room' | 'departure' | 'arrival';
 
@@ -34,12 +35,12 @@ export function RosterScreen() {
   }, [activeJobCodeId]);
 
   const subTabs: SubTabDef[] = [
-    { id: 'class', title: isForeign ? 'Class' : '반명단' },
-    { id: 'room', title: isForeign ? 'Room' : '방명단' },
+    { id: 'class', title: L('students.class') },
+    { id: 'room', title: L('students.room') },
     ...(isEJCamp
       ? [
-          { id: 'departure' as const, title: isForeign ? 'Arrival' : '입소' },
-          { id: 'arrival' as const, title: isForeign ? 'Departure' : '퇴소' },
+          { id: 'departure' as const, title: L('students.arrival') },
+          { id: 'arrival' as const, title: L('students.departure') },
         ]
       : []),
   ];

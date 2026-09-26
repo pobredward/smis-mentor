@@ -123,8 +123,7 @@ import {
   INVENTORY_CATEGORIES,
   INVENTORY_SUBCATEGORIES,
   INVENTORY_UNITS,
-  DEFAULT_INVENTORY_ITEMS,
-} from '@smis-mentor/shared';
+  DEFAULT_INVENTORY_ITEMS, dataLabel, L, isEnglishUI } from '@smis-mentor/shared';
 import type {
   InventoryItem,
   InventoryItemView,
@@ -309,7 +308,7 @@ export default function InventoryContent() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] text-center p-4">
         <FiBox className="h-10 w-10 text-gray-300 mb-2" aria-hidden />
-        <p className="text-gray-600 font-medium">{activeJobCodeId ? '캠프 정보를 불러오는 중...' : '활성 캠프를 선택해주세요.'}</p>
+        <p className="text-gray-600 font-medium">{activeJobCodeId ? L('inventory.loadingCampInfo') : L('patient.pleaseSelectAnActiveCamp')}</p>
       </div>
     );
   }
@@ -317,12 +316,12 @@ export default function InventoryContent() {
   // 상단 메뉴 — 재고 현황 · 재고 요청 · 구매 목록 · 입출고 기록 · 분실물 · 관리
   // (구매 목록·입출고 기록은 기존에 관리 정보를 보던 범위 = 부매니저·관리자)
   const tabs: { id: SubTab; title: string; icon: React.ReactNode; badge?: number }[] = [
-    { id: 'stock', title: isForeign ? 'Stock' : '재고 현황', icon: <FiBox className="w-3.5 h-3.5" /> },
-    { id: 'request', title: isForeign ? 'Request' : '재고 요청', icon: <FiClipboard className="w-3.5 h-3.5" />, badge: requestBadge },
-    ...(perm.isStockManager ? [{ id: 'purchase' as SubTab, title: isForeign ? 'To buy' : '구매 목록', icon: <FiShoppingCart className="w-3.5 h-3.5" /> }] : []),
-    ...(perm.isStockManager ? [{ id: 'movement' as SubTab, title: isForeign ? 'History' : '입출고 기록', icon: <FiList className="w-3.5 h-3.5" /> }] : []),
-    { id: 'lost', title: isForeign ? 'Lost & Found' : '분실물', icon: <FiSearch className="w-3.5 h-3.5" />, badge: keptLostCount },
-    ...(isAdmin ? [{ id: 'manage' as SubTab, title: '관리', icon: <FiSettings className="w-3.5 h-3.5" /> }] : []),
+    { id: 'stock', title: L('inventory.stock'), icon: <FiBox className="w-3.5 h-3.5" /> },
+    { id: 'request', title: L('inventory.request'), icon: <FiClipboard className="w-3.5 h-3.5" />, badge: requestBadge },
+    ...(perm.isStockManager ? [{ id: 'purchase' as SubTab, title: L('inventory.toBuy'), icon: <FiShoppingCart className="w-3.5 h-3.5" /> }] : []),
+    ...(perm.isStockManager ? [{ id: 'movement' as SubTab, title: L('inventory.history'), icon: <FiList className="w-3.5 h-3.5" /> }] : []),
+    { id: 'lost', title: L('inventory.lostFound'), icon: <FiSearch className="w-3.5 h-3.5" />, badge: keptLostCount },
+    ...(isAdmin ? [{ id: 'manage' as SubTab, title: L('inventory.manage'), icon: <FiSettings className="w-3.5 h-3.5" /> }] : []),
   ];
 
   return (
@@ -461,15 +460,15 @@ function StockTab({ campCode, views, groups, needs, perm, userName, myGroupId, o
             className={`rounded-xl border px-3 py-2.5 text-left transition-colors ${
               shortOnly ? 'border-red-400 bg-red-50' : shortIds.size > 0 ? 'border-red-200 bg-red-50/60 hover:border-red-300' : 'border-gray-200 bg-white'
             }`}>
-            <p className="text-[11px] text-gray-500">재고 부족{shortOnly ? ' · 보는 중' : ''}</p>
+            <p className="text-[11px] text-gray-500">{L('inventory.lowStock')}{shortOnly ? L('inventory.viewing') : ''}</p>
             <p className={`text-lg font-extrabold leading-tight ${shortIds.size > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-              {shortIds.size}<span className="text-[11px] font-semibold text-gray-400 ml-0.5">개 품목</span>
+              {shortIds.size}<span className="text-[11px] font-semibold text-gray-400 ml-0.5">{L('inventory.items3')}</span>
             </p>
           </button>
           <button onClick={onGoRequests} className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-left hover:border-emerald-300 transition-colors">
-            <p className="text-[11px] text-gray-500">미처리 요청</p>
+            <p className="text-[11px] text-gray-500">{L('inventory.openRequests')}</p>
             <p className={`text-lg font-extrabold leading-tight ${openRequestCount > 0 ? 'text-emerald-700' : 'text-gray-400'}`}>
-              {openRequestCount}<span className="text-[11px] font-semibold text-gray-400 ml-0.5">건</span>
+              {openRequestCount}<span className="text-[11px] font-semibold text-gray-400 ml-0.5">{L('home.text')}</span>
               <FiChevronRight className="inline w-3.5 h-3.5 text-gray-300 ml-0.5" />
             </p>
           </button>
@@ -480,39 +479,39 @@ function StockTab({ campCode, views, groups, needs, perm, userName, myGroupId, o
       <div className="space-y-2">
         <div className="flex gap-2">
           <select value={groupFilter} onChange={e => { setGroupTouched(true); setGroupFilter(e.target.value); }} className={`${selCls} flex-1 min-w-0`}>
-            <option value="전체">교무실 전체 (합계)</option>
+            <option value="전체">{L('inventory.allStaffRoomsTotal')}</option>
             {groups.map(g => <option key={g.id} value={g.id}>{g.id === myGroupId ? '★ ' : ''}{g.name}</option>)}
           </select>
           <select value={category} onChange={e => setCategory(e.target.value as InventoryCategory | '전체')} className={`${selCls} w-28 shrink-0`}>
-            <option value="전체">분류 전체</option>
-            {INVENTORY_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            <option value="전체">{L('inventory.allCategories')}</option>
+            {INVENTORY_CATEGORIES.map(c => <option key={c} value={c}>{dataLabel(c)}</option>)}
           </select>
           {perm.canEditItem && (
             <button onClick={() => setAdding({ category: category === '전체' ? undefined : category })}
               className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold text-white bg-gray-800 hover:bg-gray-900">
-              <FiPlus className="w-3 h-3" />품목 추가
+              <FiPlus className="w-3 h-3" />{L('inventory.addItem')}
             </button>
           )}
         </div>
         <div className="relative">
           <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="물품명 검색"
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={L('inventory.searchItems2')}
             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white outline-none focus:border-emerald-400" />
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           {perm.isStockManager && (
             <label className="flex items-center gap-1 text-[11px] text-gray-500 cursor-pointer">
-              <input type="checkbox" checked={shortOnly} onChange={e => setShortOnly(e.target.checked)} className="w-3.5 h-3.5" />부족한 물품만 보기
+              <input type="checkbox" checked={shortOnly} onChange={e => setShortOnly(e.target.checked)} className="w-3.5 h-3.5" />{L('inventory.showLowStockItemsOnly')}
             </label>
           )}
           {anyPlaced && (
             <label className="flex items-center gap-1 text-[11px] text-gray-400 cursor-pointer">
-              <input type="checkbox" checked={!placedOnly} onChange={e => setPlacedOnly(!e.target.checked)} className="w-3.5 h-3.5" />이 캠프에 없는 품목도 보기
+              <input type="checkbox" checked={!placedOnly} onChange={e => setPlacedOnly(!e.target.checked)} className="w-3.5 h-3.5" />{L('inventory.showItemsNotInThis')}
             </label>
           )}
           {perm.isAdmin && (
             <label className="flex items-center gap-1 text-[11px] text-gray-400 cursor-pointer">
-              <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} className="w-3.5 h-3.5" />사용 안 함 포함
+              <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} className="w-3.5 h-3.5" />{L('inventory.includeInactive')}
             </label>
           )}
         </div>
@@ -520,24 +519,24 @@ function StockTab({ campCode, views, groups, needs, perm, userName, myGroupId, o
 
       {groups.length === 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] text-amber-800">
-          이 캠프에 교무실(재고 그룹)이 아직 없습니다. {perm.isAdmin ? '관리 탭에서 패키지를 적용하거나 그룹을 추가해주세요.' : '관리자가 등록하면 수량이 표시됩니다.'}
+          {L('inventory.thisCampHasNoStaff')} {perm.isAdmin ? L('inventory.applyAPackageOrAdd') : L('inventory.quantitiesAppearOnceAnAdmin')}
         </div>
       )}
 
       {views.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <FiBox className="h-10 w-10 text-gray-300 mb-2" />
-          <p className="text-sm text-gray-500">등록된 품목이 없습니다.</p>
-          {perm.isAdmin && <p className="text-[11px] text-gray-400 mt-1">관리 탭 › 기본 품목 세트 불러오기로 시작할 수 있습니다.</p>}
+          <p className="text-sm text-gray-500">{L('inventory.noItemsRegistered')}</p>
+          {perm.isAdmin && <p className="text-[11px] text-gray-400 mt-1">{L('inventory.youCanStartFromManage')}</p>}
         </div>
       ) : filtered.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-10">{shortOnly ? '부족한 물품이 없습니다.' : '검색 결과가 없습니다.'}</p>
+        <p className="text-sm text-gray-400 text-center py-10">{shortOnly ? L('inventory.noLowStockItems') : L('students.noResults')}</p>
       ) : (
         sections.map(([title, { cat, sub, list }]) => (
           <div key={title}>
             <div className="flex items-center gap-2 mb-1 px-0.5">
-              <p className="flex-1 text-[11px] font-bold text-gray-500">{title} <span className="text-gray-300 font-normal">{list.length}</span></p>
-              {perm.canEditItem && <button onClick={() => setAdding({ category: cat, subCategory: sub })} className="text-[10px] font-semibold text-emerald-700 hover:underline">+ 추가</button>}
+              <p className="flex-1 text-[11px] font-bold text-gray-500">{sub ? `${dataLabel(cat)} · ${sub}` : dataLabel(cat)} <span className="text-gray-300 font-normal">{list.length}</span></p>
+              {perm.canEditItem && <button onClick={() => setAdding({ category: cat, subCategory: sub })} className="text-[10px] font-semibold text-emerald-700 hover:underline">{L('patient.add')}</button>}
             </div>
             <div className="rounded-xl border border-gray-200 bg-white overflow-hidden divide-y divide-gray-100">
               {list.map(v => (
@@ -586,10 +585,10 @@ function ItemRow({ view, groupId, showStatus, isShort, onClick, onQuickUse }: {
         <span className="flex-1 min-w-0">
           <span className="flex items-center gap-1.5">
             <span className={`text-[13px] font-semibold truncate ${view.isActive === false ? 'text-gray-400' : 'text-gray-900'}`}>{view.name}</span>
-            {view.isActive === false && <span className="text-[9px] px-1 rounded bg-gray-100 text-gray-500 shrink-0">사용 안 함</span>}
+            {view.isActive === false && <span className="text-[9px] px-1 rounded bg-gray-100 text-gray-500 shrink-0">{L('inventory.inactive')}</span>}
             {(exSt === 'expired' || exSt === 'soon') && (
               <span className={`text-[9px] px-1 rounded font-bold shrink-0 ${exSt === 'expired' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'}`}>
-                ⏳ {fmtExpiry(ex)} {exSt === 'expired' ? '지남' : '임박'}
+                ⏳ {fmtExpiry(ex)} {exSt === 'expired' ? L('inventory.expired') : L('inventory.expiring')}
               </span>
             )}
           </span>
@@ -598,17 +597,17 @@ function ItemRow({ view, groupId, showStatus, isShort, onClick, onQuickUse }: {
       </button>
       <button onClick={onClick} className="shrink-0 w-[72px] h-full text-right pr-2 flex flex-col justify-center">
         <span className={`text-sm font-extrabold leading-none ${lowShown ? 'text-red-600' : 'text-gray-900'}`}>
-          {qty}<span className="text-[10px] font-semibold text-gray-400 ml-0.5">{view.unit}</span>
+          {qty}<span className="text-[10px] font-semibold text-gray-400 ml-0.5">{dataLabel(view.unit)}</span>
         </span>
       </button>
       {showStatus && (
         <button onClick={onClick} className="shrink-0 w-[46px] h-full flex items-center justify-center">
-          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${low ? 'bg-red-100 text-red-700' : 'text-gray-400'}`}>{low ? '부족' : '정상'}</span>
+          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${low ? 'bg-red-100 text-red-700' : 'text-gray-400'}`}>{low ? L('inventory.low') : L('data.feverNormal')}</span>
         </button>
       )}
       {onQuickUse && (
-        <button onClick={onQuickUse} title="이 교무실에서 사용 기록"
-          className="shrink-0 mr-2 px-2 py-1 text-[10px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md">− 사용</button>
+        <button onClick={onQuickUse} title={L('inventory.usageLogInThisStaff')}
+          className="shrink-0 mr-2 px-2 py-1 text-[10px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md">{L('inventory.use4')}</button>
       )}
     </div>
   );
@@ -640,32 +639,32 @@ function ItemMediaSection({ item, canEdit, userName }: { item: InventoryItem; ca
   const [viewing, setViewing] = useState<ItemMedia | null>(null);
   const add = async (files: File[]) => {
     if (!files.length) return;
-    if (files.some(f => f.size > 50 * 1024 * 1024)) alert('50MB를 넘는 파일은 빼고 올립니다.');
+    if (files.some(f => f.size > 50 * 1024 * 1024)) alert(L('inventory.filesOver50mbAreSkipped'));
     setBusy(true);
     try { await addInventoryItemMedia(db, item.id, await uploadItemMedia(item.id, files, userName)); }
-    catch (e) { console.error('품목 사진 업로드 오류:', e); alert('사진을 올리지 못했습니다.'); }
+    catch (e) { console.error('품목 사진 업로드 오류:', e); alert(L('inventory.couldNotUploadThePhoto')); }
     finally { setBusy(false); }
   };
   const remove = async (m: ItemMedia) => {
     setDeleteBusy(true);
     try { await removeInventoryItemMedia(db, item.id, media, m.path); await deleteObject(storageRef(storage, m.path)).catch(() => {}); setDeleting(null); }
-    catch (e) { console.error(e); alert('삭제하지 못했습니다.'); }
+    catch (e) { console.error(e); alert(L('inventory.couldNotDelete')); }
     finally { setDeleteBusy(false); }
   };
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <p className="text-sm font-bold text-gray-700">사진 · 영상 <span className="font-normal text-gray-400">{media.length || ''}</span></p>
+        <p className="text-sm font-bold text-gray-700">{L('inventory.photosVideos')} <span className="font-normal text-gray-400">{media.length || ''}</span></p>
         {canEdit && (
           <label className={`flex items-center gap-1 text-[13px] font-semibold cursor-pointer ${busy ? 'text-gray-400' : 'text-blue-700 hover:underline'}`}>
-            <FiCamera className="w-3.5 h-3.5" />{busy ? '올리는 중...' : '추가'}
+            <FiCamera className="w-3.5 h-3.5" />{busy ? L('inventory.uploading') : L('task.add')}
             <input type="file" accept="image/*,video/*" multiple disabled={busy} className="hidden" onChange={e => { add(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
           </label>
         )}
       </div>
       {media.length === 0 ? (
         <p className="text-[13px] text-gray-400 bg-gray-50 rounded-xl px-3 py-3 text-center">
-          {canEdit ? '아직 사진이 없어요. 포장·실물 사진을 올려두면 다른 선생님이 찾기 쉬워요.' : '등록된 사진이 없습니다. (사진 등록은 관리자만)'}
+          {canEdit ? L('inventory.noPhotosYetUploadPackage') : L('inventory.noPhotosRegisteredOnlyAdmins')}
         </p>
       ) : (
         <div className="space-y-2">
@@ -676,7 +675,7 @@ function ItemMediaSection({ item, canEdit, userName }: { item: InventoryItem; ca
                 : <img src={m.url} alt="" className="w-full max-h-[420px] object-contain bg-gray-50 cursor-zoom-in" loading="lazy" onClick={() => setViewing(m)} />}
               {m.by && <span className="absolute bottom-1.5 left-1.5 text-[11px] px-1.5 py-0.5 rounded bg-black/50 text-white pointer-events-none">{m.by}</span>}
               {canEdit && (
-                <button onClick={() => setDeleting(m)} title="삭제" className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white text-[13px] flex items-center justify-center hover:bg-red-600">✕</button>
+                <button onClick={() => setDeleting(m)} title={L('common.delete')} className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/60 text-white text-[13px] flex items-center justify-center hover:bg-red-600">✕</button>
               )}
             </div>
           ))}
@@ -691,14 +690,14 @@ function ItemMediaSection({ item, canEdit, userName }: { item: InventoryItem; ca
                 : <img src={deleting.url} alt="" className="w-full max-h-56 object-contain" />}
             </div>
             <div className="px-5 py-4 space-y-2">
-              <h3 className="text-lg font-bold text-gray-900">이 {deleting.type === 'video' ? '영상' : '사진'}을 삭제할까요?</h3>
+              <h3 className="text-lg font-bold text-gray-900">{L('inventory.this')} {deleting.type === 'video' ? L('inventory.video') : L('inventory.photo')}{L('inventory.deleteIt')}</h3>
               <p className="text-[14px] text-gray-600 leading-relaxed">
-                <b>{item.name}</b>의 {deleting.type === 'video' ? '영상' : '사진'}이 <b className="text-red-600">모든 캠프에서 사라지고 되돌릴 수 없어요.</b>
-                {deleting.by ? <> ({deleting.by} 선생님이 올림)</> : null}
+                <b>{item.name}</b>{L('inventory.s')} {deleting.type === 'video' ? L('inventory.video') : L('inventory.photo')}{L('inventory.this')} <b className="text-red-600">{L('inventory.itWillDisappearFromEvery')}</b>
+                {deleting.by ? <> ({deleting.by} {L('inventory.uploaded2')}</> : null}
               </p>
               <div className="flex gap-2 pt-1">
-                <button onClick={() => setDeleting(null)} disabled={deleteBusy} className="flex-1 py-2 text-base text-gray-700 bg-gray-100 rounded-xl">취소</button>
-                <button onClick={() => remove(deleting)} disabled={deleteBusy} className="flex-1 py-2 text-base font-bold text-white bg-red-600 rounded-xl disabled:opacity-50">{deleteBusy ? '삭제 중...' : '삭제'}</button>
+                <button onClick={() => setDeleting(null)} disabled={deleteBusy} className="flex-1 py-2 text-base text-gray-700 bg-gray-100 rounded-xl">{L('common.cancel')}</button>
+                <button onClick={() => remove(deleting)} disabled={deleteBusy} className="flex-1 py-2 text-base font-bold text-white bg-red-600 rounded-xl disabled:opacity-50">{deleteBusy ? L('inventory.deleting') : L('common.delete')}</button>
               </div>
             </div>
           </div>
@@ -710,7 +709,7 @@ function ItemMediaSection({ item, canEdit, userName }: { item: InventoryItem; ca
             ? <video src={viewing.url} className="max-w-full max-h-full" controls autoPlay playsInline onClick={e => e.stopPropagation()} />
             : <img src={viewing.url} alt="" className="max-w-full max-h-full object-contain" />}
           <button onClick={() => setViewing(null)} className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 text-white flex items-center justify-center"><FiX /></button>
-          {viewing.by && <p className="absolute bottom-4 inset-x-0 text-center text-[13px] text-white/70">{viewing.by} 올림</p>}
+          {viewing.by && <p className="absolute bottom-4 inset-x-0 text-center text-[13px] text-white/70">{viewing.by} {L('inventory.uploaded')}</p>}
         </div>
       )}
     </div>
@@ -754,7 +753,7 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
     try {
       await setStockMeta(db, campCode, view.id, meta.groupId, meta.kind === 'expiry' ? { expiry: meta.value || null } : { location: meta.value || null });
       setMeta(null);
-    } catch (e) { console.error(e); alert('저장하지 못했습니다.'); }
+    } catch (e) { console.error(e); alert(L('profile.couldNotSave')); }
     finally { setBusy(false); }
   };
   const [showAllMoves, setShowAllMoves] = useState(false);
@@ -790,7 +789,7 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
         }
         setRestockExpiry('');
       } else if (mode.type === 'adjust') {
-        if (!memo.trim()) { alert('조정 사유를 입력해주세요.'); return; }
+        if (!memo.trim()) { alert(L('inventory.pleaseEnterTheReasonFor')); return; }
         if (perm.canManageStock) {
           await adjustStockTo(db, campCode, { ...base, current, target: n, reason: memo.trim() }, userName);
         } else {
@@ -804,7 +803,7 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
       setMode(null); setQty(''); setMemo('');
     } catch (e) {
       console.error('재고 처리 오류:', e);
-      alert(e instanceof Error && e.message ? e.message : '처리 중 오류가 발생했습니다.');
+      alert(e instanceof Error && e.message ? e.message : L('inventory.anErrorOccurredWhileProcessing'));
     } finally {
       setBusy(false);
     }
@@ -818,16 +817,16 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
         <div className="flex items-start justify-between px-5 py-4 border-b border-gray-100">
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className={`text-[12px] px-1.5 py-0.5 rounded border ${CATEGORY_STYLE[view.category] ?? CATEGORY_STYLE.기타}`}>{view.category}{view.subCategory ? ` · ${view.subCategory}` : ''}</span>
+              <span className={`text-[12px] px-1.5 py-0.5 rounded border ${CATEGORY_STYLE[view.category] ?? CATEGORY_STYLE.기타}`}>{dataLabel(view.category)}{view.subCategory ? ` · ${view.subCategory}` : ''}</span>
               {view.kind && <span className="text-[12px] text-gray-500">{view.kind}</span>}
-              {view.isActive === false && <span className="text-[11px] px-1 rounded bg-gray-100 text-gray-500">사용 안 함</span>}
+              {view.isActive === false && <span className="text-[11px] px-1 rounded bg-gray-100 text-gray-500">{L('inventory.inactive')}</span>}
             </div>
             <h2 className="text-lg font-bold text-gray-900 mt-1">{view.name} {view.spec && <span className="text-sm font-normal text-gray-400">{view.spec}</span>}</h2>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <div className="text-right">
-              <p className="text-3xl font-extrabold text-emerald-700 leading-none">{view.total}<span className="text-sm text-gray-400 ml-0.5">{view.unit}</span></p>
-              <p className="text-[11px] text-gray-400">현재 총재고</p>
+              <p className="text-3xl font-extrabold text-emerald-700 leading-none">{view.total}<span className="text-sm text-gray-400 ml-0.5">{dataLabel(view.unit)}</span></p>
+              <p className="text-[11px] text-gray-400">{L('inventory.currentTotalStock')}</p>
             </div>
             <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
           </div>
@@ -845,20 +844,20 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
           {/* 교무실별 수량 */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <p className="text-sm font-bold text-gray-700">교무실별 수량</p>
-              {perm.canEditItem && <button onClick={() => setEditItem(true)} className="text-[13px] text-emerald-700 hover:underline">품목 수정</button>}
+              <p className="text-sm font-bold text-gray-700">{L('inventory.quantityByStaffRoom')}</p>
+              {perm.canEditItem && <button onClick={() => setEditItem(true)} className="text-[13px] text-emerald-700 hover:underline">{L('inventory.editItem')}</button>}
             </div>
             {groups.length === 0 ? (
-              <p className="text-[13px] text-gray-400">교무실(재고 그룹)이 없습니다.</p>
+              <p className="text-[13px] text-gray-400">{L('inventory.noStaffRoomsInventoryGroups')}</p>
             ) : (
               <div className="rounded-xl border border-gray-200 overflow-hidden">
                 <table className="w-full text-[13px]">
                   <thead className="bg-gray-50 text-gray-500">
                     <tr>
-                      <th className="text-left px-3 py-2 font-semibold">교무실</th>
-                      <th className="text-right px-2 py-2 font-semibold">현재</th>
-                      {perm.isStockManager && <th className="text-right px-2 py-2 font-semibold">최소</th>}
-                      {perm.isStockManager && <th className="text-left px-2 py-2 font-semibold">상태</th>}
+                      <th className="text-left px-3 py-2 font-semibold">{L('inventory.staffRoom2')}</th>
+                      <th className="text-right px-2 py-2 font-semibold">{L('inventory.current')}</th>
+                      {perm.isStockManager && <th className="text-right px-2 py-2 font-semibold">{L('inventory.min2')}</th>}
+                      {perm.isStockManager && <th className="text-left px-2 py-2 font-semibold">{L('inventory.status')}</th>}
                       <th className="px-2 py-2" />
                     </tr>
                   </thead>
@@ -875,12 +874,12 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
                             {g.location && <span className="text-gray-400 ml-1">{g.location}</span>}
                             <div className="flex flex-wrap items-center gap-1 mt-0.5">
                               <button onClick={() => setMeta({ groupId: g.id, kind: 'location', value: view.locations[g.id] ?? '' })}
-                                className={`text-[12px] ${view.locations[g.id] ? 'text-gray-700' : 'text-gray-300 hover:text-gray-500'}`}>📍 {view.locations[g.id] || '위치 적기'}</button>
+                                className={`text-[12px] ${view.locations[g.id] ? 'text-gray-700' : 'text-gray-300 hover:text-gray-500'}`}>📍 {view.locations[g.id] || L('inventory.addLocation')}</button>
                               {(() => {
                                 const ex = view.expiries[g.id]; const st = expiryState(ex);
-                                if (!ex) return perm.canManageStock ? <button onClick={() => setMeta({ groupId: g.id, kind: 'expiry', value: '' })} className="text-[12px] text-gray-300 hover:text-gray-500">⏳ 유효기간</button> : null;
+                                if (!ex) return perm.canManageStock ? <button onClick={() => setMeta({ groupId: g.id, kind: 'expiry', value: '' })} className="text-[12px] text-gray-300 hover:text-gray-500">{L('inventory.expiry2')}</button> : null;
                                 return <button disabled={!perm.canManageStock} onClick={() => setMeta({ groupId: g.id, kind: 'expiry', value: ex })}
-                                  className={`text-[12px] px-1 rounded ${st === 'expired' ? 'bg-red-100 text-red-700 font-bold' : st === 'soon' ? 'bg-amber-100 text-amber-800 font-bold' : 'text-gray-500'}`}>⏳ {fmtExpiry(ex)}{st === 'expired' ? ' 지남' : st === 'soon' ? ' 임박' : ''}</button>;
+                                  className={`text-[12px] px-1 rounded ${st === 'expired' ? 'bg-red-100 text-red-700 font-bold' : st === 'soon' ? 'bg-amber-100 text-amber-800 font-bold' : 'text-gray-500'}`}>⏳ {fmtExpiry(ex)}{st === 'expired' ? L('inventory.past') : st === 'soon' ? L('inventory.soon') : ''}</button>;
                               })()}
                             </div>
                           </td>
@@ -888,21 +887,21 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
                           {perm.isStockManager && <td className="text-right px-2 py-2 text-gray-500">{min}{isOverride && <span className="text-[11px] text-amber-600 ml-0.5">*</span>}</td>}
                           {perm.isStockManager && (
                             <td className="px-2 py-2">
-                              {low ? <span className="text-[12px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">부족 (−{min - n})</span>
-                                : <span className="text-[12px] text-gray-400">정상</span>}
+                              {low ? <span className="text-[12px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">{L('inventory.low2')}{min - n})</span>
+                                : <span className="text-[12px] text-gray-400">{L('data.feverNormal')}</span>}
                             </td>
                           )}
                           <td className="px-2 py-2 text-right whitespace-nowrap">
                             {g.id in view.stocks && (
-                              <button onClick={() => { setMode({ type: 'use', groupId: g.id }); setQty('1'); setMemo(''); }} className="text-[12px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md px-2 py-1 mr-2">− 사용</button>
+                              <button onClick={() => { setMode({ type: 'use', groupId: g.id }); setQty('1'); setMemo(''); }} className="text-[12px] font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-md px-2 py-1 mr-2">{L('inventory.use4')}</button>
                             )}
                             {managedGroupIds.has(g.id) && (
                               <>
-                                <button onClick={() => { setMode({ type: 'restock', groupId: g.id }); setQty(''); setMemo(''); }} className="text-[12px] font-semibold text-emerald-700 hover:underline mr-2">+입고</button>
-                                <button onClick={() => { setMode({ type: 'adjust', groupId: g.id }); setQty(String(n)); setMemo(''); }} className="text-[12px] text-gray-500 hover:underline mr-2">조정</button>
-                                <button onClick={() => { setMode(null); setTransferFrom(g.id); }} title="다른 그룹과 주고받기" className="text-[12px] font-semibold text-indigo-600 hover:underline mr-2">이동</button>
+                                <button onClick={() => { setMode({ type: 'restock', groupId: g.id }); setQty(''); setMemo(''); }} className="text-[12px] font-semibold text-emerald-700 hover:underline mr-2">{L('inventory.restock6')}</button>
+                                <button onClick={() => { setMode({ type: 'adjust', groupId: g.id }); setQty(String(n)); setMemo(''); }} className="text-[12px] text-gray-500 hover:underline mr-2">{L('inventory.adjust')}</button>
+                                <button onClick={() => { setMode(null); setTransferFrom(g.id); }} title={L('inventory.exchangeWithOtherGroups')} className="text-[12px] font-semibold text-indigo-600 hover:underline mr-2">{L('inventory.move2')}</button>
                                 {perm.canManageStock && (
-                                  <button onClick={() => { setMode({ type: 'min', groupId: g.id }); setQty(isOverride ? String(view.minStocks[g.id]) : ''); setMemo(''); }} className="text-[12px] text-gray-500 hover:underline">최소</button>
+                                  <button onClick={() => { setMode({ type: 'min', groupId: g.id }); setQty(isOverride ? String(view.minStocks[g.id]) : ''); setMemo(''); }} className="text-[12px] text-gray-500 hover:underline">{L('inventory.min2')}</button>
                                 )}
                               </>
                             )}
@@ -914,27 +913,27 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
                 </table>
               </div>
             )}
-            {perm.isSubManager && managedGroupIds.size > 0 && <p className="text-[12px] text-gray-400 mt-1">내 그룹 재고는 <b>입고 · 조정 · 이동</b>할 수 있어요. 이동은 다른 그룹에서 가져오는 것도 됩니다 (그 그룹 부매니저에게 알림).</p>}
-            {perm.canManageStock && <p className="text-[12px] text-gray-400 mt-1">최소 수량 기본값 {view.minStockDefault ?? 0}{view.unit} (품목 수정에서 변경) · * 표시는 교무실별 예외 · <b>조정</b>은 이 교무실 수량만 바꾸고, <b>이동</b>은 다른 교무실로 옮깁니다</p>}
+            {perm.isSubManager && managedGroupIds.size > 0 && <p className="text-[12px] text-gray-400 mt-1">{L('inventory.forYourGroupSStock')} <b>{L('inventory.restockAdjustMove')}</b>{L('inventory.moveAlsoWorksForTaking')}</p>}
+            {perm.canManageStock && <p className="text-[12px] text-gray-400 mt-1">{L('inventory.defaultMinimumQuantity')} {view.minStockDefault ?? 0}{dataLabel(view.unit)} {L('inventory.changeInEditItemMeans')} <b>{L('inventory.adjust')}</b>{L('inventory.changesOnlyThisStaffRoom')} <b>{L('inventory.move2')}</b>{L('inventory.movesItToAnotherStaff')}</p>}
           </div>
 
           {/* 세부 위치 · 유효기간 */}
           {meta && (
             <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2">
-              <p className="text-sm font-bold text-gray-800">{meta.kind === 'location' ? '📍 세부 위치' : '⏳ 유효기간'} · {groups.find(g => g.id === meta.groupId)?.name}</p>
+              <p className="text-sm font-bold text-gray-800">{meta.kind === 'location' ? L('inventory.exactLocation') : L('inventory.expiry2')} · {groups.find(g => g.id === meta.groupId)?.name}</p>
               {meta.kind === 'location' ? (
-                <input value={meta.value} onChange={e => setMeta({ ...meta, value: e.target.value })} autoFocus placeholder="예: 약통 2번 칸, 교무실 캐비닛 위"
+                <input value={meta.value} onChange={e => setMeta({ ...meta, value: e.target.value })} autoFocus placeholder={L('inventory.eGMedicineBoxSlot')}
                   className="w-full text-base border border-gray-200 rounded-lg px-2.5 py-2 outline-none bg-white" />
               ) : (
                 <div className="flex items-center gap-2">
                   <input type="date" value={meta.value} onChange={e => setMeta({ ...meta, value: e.target.value })} className="text-base border border-gray-200 rounded-lg px-2.5 py-2 bg-white" />
-                  <span className="text-[12px] text-gray-400">여러 개면 가장 빠른 날짜</span>
+                  <span className="text-[12px] text-gray-400">{L('inventory.ifSeveralTheEarliestDate')}</span>
                 </div>
               )}
               <div className="flex gap-2">
-                {meta.value && <button onClick={() => setMeta({ ...meta, value: '' })} className="px-3 py-2 text-sm text-red-500 bg-white border border-red-200 rounded-lg">지우기</button>}
-                <button onClick={() => setMeta(null)} className="flex-1 py-2 text-sm text-gray-500 bg-white border border-gray-200 rounded-lg">취소</button>
-                <button onClick={saveMeta} disabled={busy} className="flex-1 py-2 text-sm font-bold text-white bg-gray-800 rounded-lg disabled:opacity-50">저장</button>
+                {meta.value && <button onClick={() => setMeta({ ...meta, value: '' })} className="px-3 py-2 text-sm text-red-500 bg-white border border-red-200 rounded-lg">{L('inventory.clear')}</button>}
+                <button onClick={() => setMeta(null)} className="flex-1 py-2 text-sm text-gray-500 bg-white border border-gray-200 rounded-lg">{L('common.cancel')}</button>
+                <button onClick={saveMeta} disabled={busy} className="flex-1 py-2 text-sm font-bold text-white bg-gray-800 rounded-lg disabled:opacity-50">{L('common.save')}</button>
               </div>
             </div>
           )}
@@ -943,33 +942,33 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
           {mode && group && (
             <div className={`rounded-xl border p-3 space-y-2 ${mode.type === 'use' ? 'border-blue-200 bg-blue-50' : mode.type === 'restock' ? 'border-emerald-200 bg-emerald-50' : mode.type === 'adjust' ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'}`}>
               <p className="text-sm font-bold text-gray-800">
-                {mode.type === 'use' ? '📤 사용하기' : mode.type === 'restock' ? '📥 재고 입고' : mode.type === 'adjust' ? '✏️ 이 교무실 수량만 조정' : '📏 최소 보유 수량'} · {group.name}
-                <span className="font-normal text-gray-500 ml-1">현재 {current}{view.unit}</span>
+                {mode.type === 'use' ? L('inventory.use3') : mode.type === 'restock' ? L('inventory.restock5') : mode.type === 'adjust' ? L('inventory.adjustThisStaffRoomOnly') : L('inventory.minimumQuantity')} · {group.name}
+                <span className="font-normal text-gray-500 ml-1">{L('inventory.current')} {current}{dataLabel(view.unit)}</span>
               </p>
               <div className="flex gap-2 items-center">
                 <input type="number" min={0} value={qty} onChange={e => setQty(e.target.value)} autoFocus
-                  placeholder={mode.type === 'restock' ? '입고 수량' : mode.type === 'adjust' ? '조정 후 수량' : `비우면 기본값(${view.minStockDefault ?? 0})`}
+                  placeholder={mode.type === 'restock' ? L('inventory.restockQuantity') : mode.type === 'adjust' ? L('inventory.quantityAfterAdjustment') : L('inventory.leaveBlankForDefault', { v0: view.minStockDefault ?? 0 })}
                   className="w-32 text-base border border-gray-200 rounded-lg px-2.5 py-2 outline-none bg-white" />
-                <span className="text-sm text-gray-500">{view.unit}</span>
-                {mode.type === 'restock' && qty && <span className="text-[13px] text-emerald-700">→ {current + (parseInt(qty, 10) || 0)}{view.unit}</span>}
-                {mode.type === 'use' && qty && <span className="text-[13px] text-blue-700">→ {current - (parseInt(qty, 10) || 0)}{view.unit} 남음</span>}
+                <span className="text-sm text-gray-500">{dataLabel(view.unit)}</span>
+                {mode.type === 'restock' && qty && <span className="text-[13px] text-emerald-700">→ {current + (parseInt(qty, 10) || 0)}{dataLabel(view.unit)}</span>}
+                {mode.type === 'use' && qty && <span className="text-[13px] text-blue-700">→ {current - (parseInt(qty, 10) || 0)}{dataLabel(view.unit)} {L('inventory.left')}</span>}
                 {mode.type === 'restock' && (
-                  <label className="ml-auto flex items-center gap-1 text-[12px] text-gray-500">유효기간
+                  <label className="ml-auto flex items-center gap-1 text-[12px] text-gray-500">{L('inventory.expiry')}
                     <input type="date" value={restockExpiry} onChange={e => setRestockExpiry(e.target.value)} className="text-[13px] border border-gray-200 rounded px-1.5 py-0.5 bg-white" />
                   </label>
                 )}
-                {mode.type === 'adjust' && qty && <span className="text-[13px] text-amber-700">차이 {(parseInt(qty, 10) || 0) - current > 0 ? '+' : ''}{(parseInt(qty, 10) || 0) - current}</span>}
+                {mode.type === 'adjust' && qty && <span className="text-[13px] text-amber-700">{L('inventory.difference')} {(parseInt(qty, 10) || 0) - current > 0 ? '+' : ''}{(parseInt(qty, 10) || 0) - current}</span>}
               </div>
               {mode.type !== 'min' && (
                 <>
                 {mode.type === 'use' && isMedicine && (
-                  <p className="text-[12px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1">💊 학생에게 먹이거나 발라 준 약은 <b>환자 탭</b>에서 복용 기록을 남기면 자동으로 빠져요. 여기서도 빼면 두 번 빠집니다.</p>
+                  <p className="text-[12px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2 py-1">{L('inventory.medicineGivenOrAppliedTo')} <b>{L('inventory.patientTab')}</b>{L('inventory.isDeductedAutomaticallyWhenYou')}</p>
                 )}
                 {mode.type === 'use' && (
                   <div className="flex flex-wrap gap-1">
                     {USE_REASONS.map(r => (
                       <button key={r} type="button" onClick={() => setMemo(memo === r ? '' : r)}
-                        className={`px-2 py-0.5 rounded-full text-[12px] font-semibold border ${memo === r ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>{r}</button>
+                        className={`px-2 py-0.5 rounded-full text-[12px] font-semibold border ${memo === r ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>{dataLabel(r)}</button>
                     ))}
                   </div>
                 )}
@@ -977,28 +976,28 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
                   <div className="flex flex-wrap gap-1">
                     {ADJUST_REASONS.map(r => (
                       <button key={r} type="button" onClick={() => setMemo(memo === r ? '' : r)}
-                        className={`px-2 py-0.5 rounded-full text-[12px] font-semibold border ${memo === r ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'}`}>{r}</button>
+                        className={`px-2 py-0.5 rounded-full text-[12px] font-semibold border ${memo === r ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'}`}>{dataLabel(r)}</button>
                     ))}
                   </div>
                 )}
                 <input value={memo} onChange={e => setMemo(e.target.value)}
-                  placeholder={mode.type === 'use' ? '어디에 썼나요? (선택, 예: 3반 미술 수업)' : mode.type === 'restock' ? '메모 (선택, 예: 이마트 구매)' : '위에서 고르거나 직접 입력 (필수)'}
+                  placeholder={mode.type === 'use' ? L('inventory.whatWasItUsedFor') : mode.type === 'restock' ? L('inventory.noteOptionalEGBought2') : L('inventory.pickAboveOrTypeIt')}
                   className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-2 outline-none bg-white" />
                 </>
               )}
               <div className="flex gap-2">
-                <button onClick={() => setMode(null)} className="flex-1 py-2 text-sm text-gray-500 bg-white border border-gray-200 rounded-lg">취소</button>
+                <button onClick={() => setMode(null)} className="flex-1 py-2 text-sm text-gray-500 bg-white border border-gray-200 rounded-lg">{L('common.cancel')}</button>
                 <button onClick={submit} disabled={busy}
-                  className="flex-1 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50">{busy ? '처리 중...' : '저장'}</button>
+                  className="flex-1 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg disabled:opacity-50">{busy ? L('inventory.processing') : L('common.save')}</button>
               </div>
             </div>
           )}
 
           {/* 변동 내역 */}
           <div>
-            <p className="text-sm font-bold text-gray-700 mb-1.5">변동 내역 <span className="text-gray-400 font-normal">({movements.length}건)</span></p>
+            <p className="text-sm font-bold text-gray-700 mb-1.5">{L('inventory.changeHistory')} <span className="text-gray-400 font-normal">({movements.length}{L('inventory.entries')}</span></p>
             {movements.length === 0 ? (
-              <p className="text-[13px] text-gray-400">이 캠프에서 아직 변동이 없습니다.</p>
+              <p className="text-[13px] text-gray-400">{L('inventory.noChangesInThisCamp')}</p>
             ) : (
               <div className="space-y-1">
                 {(showAllMoves ? movements : movements.slice(0, 4)).map(m => (
@@ -1015,7 +1014,7 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
                 ))}
                 {movements.length > 4 && (
                   <button onClick={() => setShowAllMoves(v => !v)} className="w-full py-1 text-[13px] font-semibold text-gray-500 hover:text-gray-800">
-                    {showAllMoves ? '접기 ▲' : `이전 내역 ${movements.length - 4}건 더 보기 ▼`}
+                    {showAllMoves ? L('inventory.collapse2') : L('inventory.showEarlierEntries', { v0: movements.length - 4 })}
                   </button>
                 )}
               </div>
@@ -1031,11 +1030,11 @@ function ItemDetailModal({ view, groups, campCode, perm, managedGroupIds, userId
             onClick={() => { if (useGroupId) { setMode({ type: 'use', groupId: useGroupId }); setQty('1'); setMemo(''); } }}
             disabled={!useGroupId}
             className="flex-1 py-3 text-base font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl disabled:bg-gray-200 disabled:text-gray-400">
-            사용하기
+            {L('inventory.use2')}
           </button>
           <button onClick={() => onRequest(view, defaultGroupId)}
             className="flex-1 py-3 text-base font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl">
-            필요한 물품 요청
+            {L('inventory.requestNeededItems3')}
           </button>
         </div>
       </div>
@@ -1110,7 +1109,7 @@ function StockTransferModal({ view, groups, campCode, fromGroupId, managedGroupI
       }
     } catch (e) {
       console.error('그룹 간 이동 오류:', e);
-      alert(e instanceof Error ? e.message : '이동하지 못했습니다.');
+      alert(e instanceof Error ? e.message : L('inventory.couldNotMove'));
     } finally { setBusy(false); }
   };
 
@@ -1119,8 +1118,8 @@ function StockTransferModal({ view, groups, campCode, fromGroupId, managedGroupI
       <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div>
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-1.5"><FiRepeat className="w-4 h-4 text-indigo-600" />다른 교무실로 이동</h2>
-            <p className="text-[13px] text-gray-500 mt-0.5">보내는 곳에서 빠지고 받는 곳에 그대로 더해집니다 (전체 재고는 그대로)</p>
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-1.5"><FiRepeat className="w-4 h-4 text-indigo-600" />{L('inventory.moveToAnotherStaffRoom')}</h2>
+            <p className="text-[13px] text-gray-500 mt-0.5">{L('inventory.itSDeductedFromThe')}</p>
           </div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
         </div>
@@ -1133,72 +1132,72 @@ function StockTransferModal({ view, groups, campCode, fromGroupId, managedGroupI
               : <span className="w-11 h-11 rounded-lg bg-gray-100 shrink-0 flex items-center justify-center text-gray-300"><FiBox /></span>}
             <div className="min-w-0">
               <p className="text-base font-bold text-gray-900 truncate">{view.name}</p>
-              <p className="text-[13px] text-gray-400 truncate">{[view.kind, view.spec].filter(Boolean).join(' · ') || `${view.category}`}</p>
+              <p className="text-[13px] text-gray-400 truncate">{[view.kind, view.spec].filter(Boolean).join(' · ') || dataLabel(view.category)}</p>
             </div>
             <span className="ml-auto text-right shrink-0">
-              <span className="block text-lg font-extrabold text-emerald-700 leading-none">{view.total}{view.unit}</span>
-              <span className="block text-[11px] text-gray-400">전체</span>
+              <span className="block text-lg font-extrabold text-emerald-700 leading-none">{view.total}{dataLabel(view.unit)}</span>
+              <span className="block text-[11px] text-gray-400">{L('common.all')}</span>
             </span>
           </div>
 
           {done ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 space-y-1">
-              <p className="text-base font-bold text-emerald-800">이동했습니다.</p>
-              <p className="text-[14px] text-gray-700">{fromGroup?.name} <b>{done.from}{view.unit}</b> · {toGroup?.name} <b>{done.to}{view.unit}</b></p>
-              <p className="text-[13px] text-gray-500">양쪽 입출고 기록에 남았습니다.</p>
+              <p className="text-base font-bold text-emerald-800">{L('inventory.moved')}</p>
+              <p className="text-[14px] text-gray-700">{fromGroup?.name} <b>{done.from}{dataLabel(view.unit)}</b> · {toGroup?.name} <b>{done.to}{dataLabel(view.unit)}</b></p>
+              <p className="text-[13px] text-gray-500">{L('inventory.recordedInBothStockLogs')}</p>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-end">
                 <div>
-                  <p className="text-[13px] font-bold text-gray-600 mb-1">보내는 교무실</p>
+                  <p className="text-[13px] font-bold text-gray-600 mb-1">{L('inventory.fromStaffRoom')}</p>
                   <select value={from} onChange={e => setFrom(e.target.value)} className="w-full text-base border border-gray-200 rounded-lg px-2 py-2 bg-white outline-none">
                     {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                   </select>
-                  <p className="text-[13px] text-gray-500 mt-1">보유 <b className="text-gray-800">{fromCur}{view.unit}</b></p>
+                  <p className="text-[13px] text-gray-500 mt-1">{L('inventory.onHand')} <b className="text-gray-800">{fromCur}{dataLabel(view.unit)}</b></p>
                 </div>
                 <div className="pb-7 text-gray-300 text-xl">→</div>
                 <div>
-                  <p className="text-[13px] font-bold text-gray-600 mb-1">받는 교무실</p>
+                  <p className="text-[13px] font-bold text-gray-600 mb-1">{L('inventory.toStaffRoom')}</p>
                   <select value={to} onChange={e => setTo(e.target.value)} className="w-full text-base border border-gray-200 rounded-lg px-2 py-2 bg-white outline-none">
-                    {others.length === 0 && <option value="">이동할 곳이 없습니다</option>}
+                    {others.length === 0 && <option value="">{L('inventory.nowhereToMoveTo')}</option>}
                     {others.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                   </select>
-                  <p className="text-[13px] text-gray-500 mt-1">보유 <b className="text-gray-800">{toCur}{view.unit}</b>{!(to in view.stocks) && to ? ' (새로 생김)' : ''}</p>
+                  <p className="text-[13px] text-gray-500 mt-1">{L('inventory.onHand')} <b className="text-gray-800">{toCur}{dataLabel(view.unit)}</b>{!(to in view.stocks) && to ? L('inventory.new') : ''}</p>
                 </div>
               </div>
 
               <div>
-                <p className="text-[13px] font-bold text-gray-600 mb-1">이동할 수량</p>
+                <p className="text-[13px] font-bold text-gray-600 mb-1">{L('inventory.quantityToMove')}</p>
                 <div className="flex items-center gap-2">
                   <input type="number" min={1} max={fromCur} value={qty} onChange={e => setQty(e.target.value)} autoFocus
                     className="w-28 text-base border border-gray-200 rounded-lg px-2.5 py-2 outline-none bg-white" />
-                  <span className="text-sm text-gray-500">{view.unit}</span>
+                  <span className="text-sm text-gray-500">{dataLabel(view.unit)}</span>
                   <div className="flex gap-1 ml-auto">
                     {[1, 5, 10].filter(x => x <= fromCur).map(x => (
                       <button key={x} type="button" onClick={() => setQty(String(x))} className="px-2 py-1 text-[13px] border border-gray-200 rounded-md text-gray-600 hover:border-indigo-300">{x}</button>
                     ))}
-                    {fromCur > 0 && <button type="button" onClick={() => setQty(String(fromCur))} className="px-2 py-1 text-[13px] border border-gray-200 rounded-md text-gray-600 hover:border-indigo-300">전부</button>}
+                    {fromCur > 0 && <button type="button" onClick={() => setQty(String(fromCur))} className="px-2 py-1 text-[13px] border border-gray-200 rounded-md text-gray-600 hover:border-indigo-300">{L('inventory.all')}</button>}
                   </div>
                 </div>
-                {n > fromCur && <p className="text-[13px] text-red-600 mt-1">보유 수량({fromCur}{view.unit})보다 많이 보낼 수 없습니다.</p>}
+                {n > fromCur && <p className="text-[13px] text-red-600 mt-1">{L('inventory.youCanTSendMore')}{fromCur}{dataLabel(view.unit)}{L('inventory.text4')}</p>}
                 {!invalid && (
                   <p className="text-[13px] text-gray-600 mt-1.5 bg-gray-50 rounded-lg px-2 py-2">
                     {fromGroup?.name} {fromCur} → <b className="text-red-600">{fromCur - n}</b> · {toGroup?.name} {toCur} → <b className="text-emerald-700">{toCur + n}</b>
-                    <span className="text-gray-400"> · 전체 {view.total} (그대로)</span>
+                    <span className="text-gray-400"> {L('patient.total2')} {view.total} {L('inventory.unchanged')}</span>
                   </p>
                 )}
               </div>
 
               <div>
-                <p className="text-[13px] font-bold text-gray-600 mb-1">이동 사유 <span className="font-normal text-gray-400">(선택)</span></p>
+                <p className="text-[13px] font-bold text-gray-600 mb-1">{L('inventory.reasonForMove')} <span className="font-normal text-gray-400">{L('patient.optional')}</span></p>
                 <div className="flex flex-wrap gap-1 mb-1.5">
                   {TRANSFER_REASONS.map(r => (
                     <button key={r} type="button" onClick={() => setMemo(memo === r ? '' : r)}
-                      className={`px-2 py-0.5 rounded-full text-[12px] font-semibold border ${memo === r ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'}`}>{r}</button>
+                      className={`px-2 py-0.5 rounded-full text-[12px] font-semibold border ${memo === r ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'}`}>{dataLabel(r)}</button>
                   ))}
                 </div>
-                <input value={memo} onChange={e => setMemo(e.target.value)} placeholder="직접 입력해도 됩니다"
+                <input value={memo} onChange={e => setMemo(e.target.value)} placeholder={L('inventory.youCanAlsoTypeIt')}
                   className="w-full text-sm border border-gray-200 rounded-lg px-2.5 py-2 outline-none bg-white" />
               </div>
             </>
@@ -1206,10 +1205,10 @@ function StockTransferModal({ view, groups, campCode, fromGroupId, managedGroupI
         </div>
 
         <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 text-base text-gray-600 bg-gray-100 rounded-xl">{done ? '닫기' : '취소'}</button>
+          <button onClick={onClose} className="flex-1 py-2.5 text-base text-gray-600 bg-gray-100 rounded-xl">{done ? L('common.close') : L('common.cancel')}</button>
           {!done && (
             <button onClick={submit} disabled={invalid || busy}
-              className="flex-1 py-2.5 text-base font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-40">{busy ? '이동 중...' : '이동하기'}</button>
+              className="flex-1 py-2.5 text-base font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl disabled:opacity-40">{busy ? L('inventory.moving') : L('inventory.move')}</button>
           )}
         </div>
       </div>
@@ -1247,7 +1246,7 @@ const settleVerb = (kind: SupplyLineSettleKind) => SUPPLY_SETTLE_LABELS[kind].ve
 /** 관리자 지정 품목(쿠팡·학부모 청구) 표시 */
 function GuideTag({ line }: { line: Pick<SupplyRequestLine, 'channel' | 'parentBill'> }) {
   if (!line.channel && !line.parentBill) return null;
-  return <span className="ml-1 inline-block text-[9px] px-1 py-0.5 rounded bg-orange-100 text-orange-800 font-bold align-middle">{[line.channel, line.parentBill ? '학부모 청구' : ''].filter(Boolean).join(' · ')}</span>;
+  return <span className="ml-1 inline-block text-[9px] px-1 py-0.5 rounded bg-orange-100 text-orange-800 font-bold align-middle">{[line.channel, line.parentBill ? L('data.settleParent') : ''].filter(Boolean).join(' · ')}</span>;
 }
 function SectionHeader({ label, count }: { label: string; count: number }) {
   return <p className="px-1 pt-1 text-[11px] font-bold text-gray-500">{label === '캠프 공용' ? '🏕 ' : '👥 '}{label} <span className="font-normal text-gray-400">{count}</span></p>;
@@ -1326,34 +1325,34 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
     if (posting || shortage.length === 0) return;
     setPosting(true);
     try { await addCampRequestsFromNeeds(db, campCode, shortage, items, { uid: userId, name: userName }); }
-    catch (e) { console.error(e); alert('요청을 만들지 못했습니다.'); }
+    catch (e) { console.error(e); alert(L('inventory.couldNotCreateTheRequest')); }
     finally { setPosting(false); }
   };
   const [copied, setCopied] = useState(false);
   const copyShopping = async () => {
-    const text = `[장보기 목록]\n${shopping.map(l => `• ${l.name} ${l.total}${l.unit}  (${l.who.join(', ')})`).join('\n')}`;
+    const text = L('inventory.shoppingList2', { v0: shopping.map(l => `• ${l.name} ${l.total}${dataLabel(l.unit)}  (${l.who.join(', ')})`).join('\n') });
     try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* noop */ }
   };
-  const run = async (fn: () => Promise<void>) => { try { await fn(); } catch (e) { console.error(e); alert('처리하지 못했습니다. 권한을 확인해주세요.'); } };
+  const run = async (fn: () => Promise<void>) => { try { await fn(); } catch (e) { console.error(e); alert(L('inventory.couldNotProcessPleaseCheck')); } };
   const defaultBuyer = settings?.defaultBuyerId ? settings.defaultBuyerName : '';
 
   return (
     <div className="px-4 py-3 space-y-3">
       <button onClick={() => setEditing({ mode: 'new' })} className="w-full flex items-center justify-center gap-1.5 py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl">
-        <FiPlus className="w-4 h-4" />필요한 물품 요청하기
+        <FiPlus className="w-4 h-4" />{L('inventory.requestNeededItems2')}
       </button>
       {isAdmin && <div className={`flex items-center gap-2 rounded-xl px-3 py-2 ${defaultBuyer ? 'bg-emerald-50' : 'bg-red-50 border border-red-200'}`}>
-        <span className="flex-1 text-[12px] text-gray-700">🛒 기본 구매 담당 <b className="text-gray-900">{defaultBuyer || '미지정'}</b>
-          <span className="text-[10px] text-gray-400 ml-1">{defaultBuyer ? '· 따로 지정하지 않은 요청은 모두 이 사람이 사 와요' : isAdmin ? '· 지정하면 요청마다 담당을 고르지 않아도 돼요' : '· 관리자가 지정해요'}</span></span>
-        <button onClick={() => setAssigning({ mode: 'default' })} className="shrink-0 px-2 py-1 text-[11px] font-bold text-emerald-700 bg-white border border-emerald-200 rounded-lg">{defaultBuyer ? '변경' : '지정하기'}</button>
+        <span className="flex-1 text-[12px] text-gray-700">{L('inventory.defaultBuyer2')} <b className="text-gray-900">{defaultBuyer || L('data.unspecified')}</b>
+          <span className="text-[10px] text-gray-400 ml-1">{defaultBuyer ? L('inventory.buysEveryRequestWithoutA') : isAdmin ? L('inventory.onceSetYouDonT') : L('inventory.setByAnAdmin')}</span></span>
+        <button onClick={() => setAssigning({ mode: 'default' })} className="shrink-0 px-2 py-1 text-[11px] font-bold text-emerald-700 bg-white border border-emerald-200 rounded-lg">{defaultBuyer ? L('patient.change') : L('inventory.assign')}</button>
       </div>}
       <div className="flex items-center gap-1.5 flex-wrap">
         {([
-          ['open', `진행 중 ${open.length}`, true],
-          ['buy', `🛒 내 구매 ${myBuyLineCount}`, myBuys.length > 0],
-          ['settle', `💰 정산 ${settleBadge}`, settleVisible.length > 0],
-          ['mine', `내 요청 ${mine.length}`, true],
-          ['done', '완료·반려', true],
+          ['open', L('inventory.inProgress', { v0: open.length }), true],
+          ['buy', L('inventory.myPurchases', { v0: myBuyLineCount }), myBuys.length > 0],
+          ['settle', L('inventory.settle2', { v0: settleBadge }), settleVisible.length > 0],
+          ['mine', L('inventory.myRequests', { v0: mine.length }), true],
+          ['done', L('inventory.doneRejected'), true],
         ] as const).filter(([, , show]) => show).map(([id, label]) => (
           <button key={id} onClick={() => setFilter(id)} className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold ${filter === id ? 'bg-gray-800 text-white' : id === 'settle' && settleBadge ? 'bg-yellow-100 text-yellow-800' : id === 'buy' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'}`}>{label}</button>
         ))}
@@ -1361,16 +1360,16 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
 
       {filter === 'open' && (myBuys.length > 0 || mySettleTodo.length > 0) && (
         <div className="flex gap-2">
-          {myBuys.length > 0 && <button onClick={() => setFilter('buy')} className="flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-[12px] font-bold text-emerald-800">🛒 제가 사 올 것 {myBuyLineCount}품목 →</button>}
-          {mySettleTodo.length > 0 && <button onClick={() => setFilter('settle')} className="flex-1 rounded-xl border border-yellow-300 bg-yellow-50 px-3 py-2 text-left text-[12px] font-bold text-yellow-900">💰 정산할 것 {mySettleTodo.length}건 →</button>}
+          {myBuys.length > 0 && <button onClick={() => setFilter('buy')} className="flex-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-[12px] font-bold text-emerald-800">{L('inventory.toBuy3')} {myBuyLineCount}{L('inventory.items2')}</button>}
+          {mySettleTodo.length > 0 && <button onClick={() => setFilter('settle')} className="flex-1 rounded-xl border border-yellow-300 bg-yellow-50 px-3 py-2 text-left text-[12px] font-bold text-yellow-900">{L('inventory.toSettle')} {mySettleTodo.length}{L('inventory.items')}</button>}
         </div>
       )}
       {isAdmin && filter === 'open' && intakeWaiting.length > 0 && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 space-y-1">
-          <p className="text-[12px] font-bold text-amber-900">📥 구매했지만 재고 입고 전 {intakeWaiting.length}건</p>
+          <p className="text-[12px] font-bold text-amber-900">{L('inventory.boughtNotYetRestocked')} {intakeWaiting.length}{L('home.text')}</p>
           {intakeWaiting.map(r => (
             <button key={r.id} onClick={() => setOpenId(r.id)} className="w-full text-left text-[11px] text-amber-900 hover:underline truncate">
-              🏕 {r.items.map(l => `${l.name} ${l.quantity}${l.unit}`).join(', ')} <span className="text-amber-700">→ 입고 처리</span>
+              🏕 {r.items.map(l => `${l.name} ${l.quantity}${dataLabel(l.unit)}`).join(', ')} <span className="text-amber-700">{L('inventory.restock4')}</span>
             </button>
           ))}
         </div>
@@ -1378,12 +1377,12 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
       {isAdmin && filter === 'open' && shortage.length > 0 && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 space-y-1.5">
           <div className="flex items-center gap-2">
-            <p className="flex-1 text-[12px] font-bold text-red-800">📉 최소 수량 미만 {shortage.length}건 <span className="font-normal text-red-600">· 아직 요청 안 됨</span></p>
-            <button onClick={() => setShowNeeds(v => !v)} className="px-2 py-1 text-[11px] text-red-700 bg-white border border-red-200 rounded-lg">{showNeeds ? '접기' : '목록 보기'}</button>
-            <button onClick={postNeeds} disabled={posting} className="px-2 py-1 text-[11px] font-bold text-white bg-red-500 rounded-lg disabled:opacity-40">{posting ? '올리는 중...' : '요청으로 올리기'}</button>
+            <p className="flex-1 text-[12px] font-bold text-red-800">{L('inventory.belowMinimum')} {shortage.length}{L('home.text')} <span className="font-normal text-red-600">{L('inventory.notRequestedYet')}</span></p>
+            <button onClick={() => setShowNeeds(v => !v)} className="px-2 py-1 text-[11px] text-red-700 bg-white border border-red-200 rounded-lg">{showNeeds ? L('inventory.collapse') : L('inventory.viewList')}</button>
+            <button onClick={postNeeds} disabled={posting} className="px-2 py-1 text-[11px] font-bold text-white bg-red-500 rounded-lg disabled:opacity-40">{posting ? L('inventory.uploading') : L('inventory.addAsRequest')}</button>
           </div>
           {showNeeds && shortage.map(n => (
-            <p key={`${n.itemId}|${n.groupId}`} className="text-[11px] text-gray-700"><b>{n.itemName}</b> · {n.groupName} 현재 {n.current}/최소 {n.min} → <b className="text-red-600">{n.shortage}{n.unit}</b></p>
+            <p key={`${n.itemId}|${n.groupId}`} className="text-[11px] text-gray-700"><b>{n.itemName}</b> · {n.groupName} {L('inventory.current')} {n.current}{L('inventory.min3')} {n.min} → <b className="text-red-600">{n.shortage}{dataLabel(n.unit)}</b></p>
           ))}
         </div>
       )}
@@ -1392,17 +1391,17 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
         <div className="space-y-2">
           <div className="rounded-xl border border-amber-200 bg-amber-50 overflow-hidden">
             <div className="flex items-center gap-2 px-3 py-2">
-              <p className="flex-1 text-sm font-bold text-gray-900">🧾 장보기 목록 <span className="text-[11px] font-normal text-amber-800">{shopping.length}품목</span></p>
-              <button onClick={copyShopping} className="px-2 py-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg"><FiCopy className="inline w-3 h-3 mr-0.5" />{copied ? '복사됨' : '복사'}</button>
+              <p className="flex-1 text-sm font-bold text-gray-900">{L('inventory.shoppingList')} <span className="text-[11px] font-normal text-amber-800">{shopping.length}{L('push.itemDefault')}</span></p>
+              <button onClick={copyShopping} className="px-2 py-1 text-[11px] font-semibold text-gray-700 bg-white border border-gray-200 rounded-lg"><FiCopy className="inline w-3 h-3 mr-0.5" />{copied ? L('inventory.copied') : L('task.copy2')}</button>
             </div>
             {shopping.map(l => (
               <div key={l.key} className="flex items-center gap-2 px-3 py-1.5 border-t border-amber-100 bg-white text-[12px]">
                 <div className="flex-1 min-w-0"><p className="font-semibold text-gray-900 truncate">{l.name}</p><p className="text-[10px] text-gray-500 truncate">{l.who.join(' · ')}</p></div>
-                <span className="font-extrabold text-amber-700">{l.total}<span className="text-[10px] text-gray-400 ml-0.5">{l.unit}</span></span>
+                <span className="font-extrabold text-amber-700">{l.total}<span className="text-[10px] text-gray-400 ml-0.5">{dataLabel(l.unit)}</span></span>
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-gray-500">사 온 품목마다 <b>완료</b>를 눌러 금액을 적어주세요. 학생 물품은 담임쌤이 용돈봉투에서, 선생님 물품은 본인이 송금해요.</p>
+          <p className="text-[11px] text-gray-500">{L('inventory.forEachItemYouBought')} <b>{L('task.done')}</b>{L('inventory.andEnterTheAmountStudent')}</p>
           {sectionsOf(myBuys, r => r).map(sec => (
             <div key={sec.key} className="space-y-2">
               <SectionHeader label={sec.label} count={sec.items.length} />
@@ -1415,7 +1414,7 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
         </div>
       ) : filter === 'settle' ? (
         <div className="space-y-2">
-          <p className="text-[11px] text-gray-500">학생 물품은 <b>담임쌤이 용돈봉투에서 빼서</b>, 선생님 물품은 <b>본인이 송금</b>해서 구매한 사람에게 주고 완료를 눌러주세요. 학부모 청구 품목은 관리자가 처리해요.</p>
+          <p className="text-[11px] text-gray-500">{L('inventory.studentItems')} <b>{L('inventory.theHomeroomMentorTakesIt')}</b>{L('inventory.teacherItems')} <b>{L('inventory.theTeacherTransfersIt')}</b>{L('inventory.toTheBuyerThenTap')}</p>
           {sectionsOf(settleByReq, g => g[0].req).map(sec => (
           <div key={sec.key} className="space-y-2">
           <SectionHeader label={sec.label} count={sec.items.length} />
@@ -1433,26 +1432,26 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
               <div key={`${r.id}|${kind}`} className={`rounded-xl border px-3 py-2 space-y-1.5 ${pendingIds.length ? (kind === 'parent' ? 'border-orange-300 bg-orange-50' : 'border-yellow-300 bg-yellow-50') : 'border-gray-200 bg-white'}`}>
                 <button onClick={() => setOpenId(r.id)} className="w-full text-left">
                   <p className="text-[13px] font-bold text-gray-900">{FOR_ICON[r.forType]} {supplyForLabel(r)}
-                    <span className="ml-1 text-[11px] font-normal text-gray-500">{kind === 'envelope' ? `담임 ${mentorOf(r) || '미확인'} · 용돈봉투` : kind === 'transfer' ? '본인 송금' : '학부모 청구 (관리자)'}</span></p>
+                    <span className="ml-1 text-[11px] font-normal text-gray-500">{kind === 'envelope' ? L('inventory.homeroomAllowanceEnvelope', { v0: mentorOf(r) || L('common.unconfirmed') }) : kind === 'transfer' ? L('inventory.selfTransfer') : L('inventory.billParentsAdmin')}</span></p>
                 </button>
                 {group.map(s => (
                   <div key={s.line.id} className="flex items-center gap-2 text-[12px]">
-                    <span className={`flex-1 min-w-0 truncate ${s.settled ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{s.line.name} {s.line.quantity}{s.line.unit} · <b>{fmtWon(s.done.amount)}</b> → {s.done.by}</span>
+                    <span className={`flex-1 min-w-0 truncate ${s.settled ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{s.line.name} {s.line.quantity}{dataLabel(s.line.unit)} · <b>{fmtWon(s.done.amount)}</b> → {s.done.by}</span>
                     {s.settled ? (
-                      <span className="text-[10px] text-emerald-700 shrink-0">✓ {s.settled.by}{(isAdmin || s.settled.byId === userId) && <button onClick={() => run(() => settleSupplyLines(db, r.id, [s.line.id], null))} className="ml-1 text-gray-400 hover:underline">취소</button>}</span>
+                      <span className="text-[10px] text-emerald-700 shrink-0">✓ {s.settled.by}{(isAdmin || s.settled.byId === userId) && <button onClick={() => run(() => settleSupplyLines(db, r.id, [s.line.id], null))} className="ml-1 text-gray-400 hover:underline">{L('common.cancel')}</button>}</span>
                     ) : mineToSettle ? (
-                      <button onClick={() => run(async () => { await settleSupplyLines(db, r.id, [s.line.id], { uid: userId, name: userName }); notifySupply({ type: 'settled', requestId: r.id, lineIds: [s.line.id] }); })} className="shrink-0 px-2 py-0.5 text-[10px] font-bold text-yellow-900 bg-white border border-yellow-400 rounded">완료</button>
-                    ) : <span className="text-[10px] text-yellow-800 shrink-0">대기</span>}
+                      <button onClick={() => run(async () => { await settleSupplyLines(db, r.id, [s.line.id], { uid: userId, name: userName }); notifySupply({ type: 'settled', requestId: r.id, lineIds: [s.line.id] }); })} className="shrink-0 px-2 py-0.5 text-[10px] font-bold text-yellow-900 bg-white border border-yellow-400 rounded">{L('task.done')}</button>
+                    ) : <span className="text-[10px] text-yellow-800 shrink-0">{L('inventory.pending2')}</span>}
                   </div>
                 ))}
                 {[...byPayee.entries()].map(([payee, v]) => (
                   <p key={payee} className="text-[11px] text-yellow-900 bg-white/70 rounded-lg px-2 py-1">
-                    {SUPPLY_SETTLE_LABELS[kind].icon} {kind === 'parent' ? <>학부모님께 <b>{fmtWon(v.amount)}</b> 청구 → <b>{payee}</b>쌤께 지급</> : <><b>{payee}</b>쌤께 <b>{fmtWon(v.amount)}</b> {settleVerb(kind)}</>}{kind === 'transfer' && v.payTo ? <> · <span className="select-all font-semibold">{v.payTo}</span></> : null}
+                    {SUPPLY_SETTLE_LABELS[kind].icon} {kind === 'parent' ? <>{L('inventory.billParents4')} <b>{fmtWon(v.amount)}</b> {L('inventory.text3')} <b>{payee}</b>{L('inventory.paidTo')}</> : <><b>{payee}</b>{L('inventory.to')} <b>{fmtWon(v.amount)}</b> {settleVerb(kind)}</>}{kind === 'transfer' && v.payTo ? <> · <span className="select-all font-semibold">{v.payTo}</span></> : null}
                   </p>
                 ))}
                 {mineToSettle && pendingIds.length > 1 && (
-                  <button onClick={() => { if (confirm(`${pendingIds.length}개 품목을 모두 ${settleVerb(kind)} 완료로 할까요?`)) run(async () => { await settleSupplyLines(db, r.id, pendingIds, { uid: userId, name: userName }); notifySupply({ type: 'settled', requestId: r.id, lineIds: pendingIds }); }); }}
-                    className="w-full py-1.5 text-[11px] font-bold text-white bg-yellow-500 rounded-lg">{kind === 'envelope' ? '📒 봉투 기재 · 현금 전달' : kind === 'transfer' ? '💸 송금' : '🧾 학부모 청구'} 모두 완료</button>
+                  <button onClick={() => { if (confirm(L('inventory.markAllItemsAsDone', { v0: pendingIds.length, v1: settleVerb(kind) }))) run(async () => { await settleSupplyLines(db, r.id, pendingIds, { uid: userId, name: userName }); notifySupply({ type: 'settled', requestId: r.id, lineIds: pendingIds }); }); }}
+                    className="w-full py-1.5 text-[11px] font-bold text-white bg-yellow-500 rounded-lg">{kind === 'envelope' ? L('inventory.envelopeRecordCashHandover') : kind === 'transfer' ? L('inventory.transfer') : L('inventory.billParents3')} {L('inventory.markAllDone')}</button>
                 )}
               </div>
             );
@@ -1463,14 +1462,14 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
       ) : list.length === 0 ? (
         <div className="flex flex-col items-center py-14 text-center">
           <FiClipboard className="h-9 w-9 text-gray-300 mb-2" />
-          <p className="text-sm text-gray-500">{filter === 'mine' ? '올린 요청이 없습니다.' : filter === 'open' ? '진행 중인 요청이 없습니다.' : '완료된 요청이 없습니다.'}</p>
+          <p className="text-sm text-gray-500">{filter === 'mine' ? L('inventory.youHavenTMadeAny') : filter === 'open' ? L('inventory.noRequestsInProgress') : L('inventory.noCompletedRequests')}</p>
         </div>
       ) : (
         <>
           {filter === 'open' && duplicated.length > 0 && (
             <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 overflow-hidden">
               <button onClick={() => setShowDup(v => !v)} className="w-full flex items-center gap-2 px-3 py-2 text-left">
-                <span className="flex-1 text-[12px] font-bold text-indigo-900">🧺 여러 선생님이 요청한 물품 <span className="font-normal text-indigo-700/70">{duplicated.length}종</span></span>
+                <span className="flex-1 text-[12px] font-bold text-indigo-900">{L('inventory.itemsRequestedBySeveralTeachers')} <span className="font-normal text-indigo-700/70">{duplicated.length}{L('inventory.kinds')}</span></span>
                 <span className="text-indigo-400 text-[11px]">{showDup ? '▲' : '▼'}</span>
               </button>
               {showDup && (
@@ -1479,8 +1478,8 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
                     <div key={l.key} className="px-3 py-1.5">
                       <p className="text-[12px]">
                         <b className="text-gray-900">{l.name}</b>
-                        <span className="font-extrabold text-indigo-700 ml-1.5">{l.total}{l.unit}</span>
-                        <span className="text-gray-400 ml-1">· {l.who.length}건</span>
+                        <span className="font-extrabold text-indigo-700 ml-1.5">{l.total}{dataLabel(l.unit)}</span>
+                        <span className="text-gray-400 ml-1">· {l.who.length}{L('home.text')}</span>
                       </p>
                       <p className="text-[10px] text-gray-500 truncate">{l.who.join(' · ')}</p>
                     </div>
@@ -1489,7 +1488,7 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
               )}
             </div>
           )}
-          {filter === 'open' && <p className="text-[10px] text-gray-400">다른 선생님 요청도 함께 보입니다. 같은 게 필요하면 요청을 열어 <b>나도 필요해요</b>를 눌러주세요.</p>}
+          {filter === 'open' && <p className="text-[10px] text-gray-400">{L('inventory.otherTeachersRequestsAreShown')} <b>{L('inventory.iNeedThisToo2')}</b>{L('inventory.text2')}</p>}
           {sectionsOf(list, r => r).map(sec => (
           <div key={sec.key} className="space-y-1">
           <SectionHeader label={sec.label} count={sec.items.length} />
@@ -1502,7 +1501,7 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
                   <span className="text-lg leading-none mt-0.5">{FOR_ICON[r.forType]}</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-bold text-gray-900 truncate">{supplyForLabel(r)} <span className="text-[11px] font-normal text-gray-400">{r.requesterName} · {fmtDateTime(r.createdAt)}</span></p>
-                    <p className="text-[12px] text-gray-700 truncate">{r.items.map(l => `${r.done?.[l.id] ? '✓' : ''}${l.name} ${l.quantity}${l.unit}${l.groupName ? ` (${l.groupName})` : ''}`).join(', ')}</p>
+                    <p className="text-[12px] text-gray-700 truncate">{r.items.map(l => `${r.done?.[l.id] ? '✓' : ''}${l.name} ${l.quantity}${dataLabel(l.unit)}${l.groupName ? ` (${l.groupName})` : ''}`).join(', ')}</p>
                     <p className={`text-[10px] truncate ${r.status === 'onhold' ? 'text-amber-700' : r.status === 'requested' ? 'text-emerald-700' : 'text-gray-500'}`}>{status}</p>
                     {last && <p className="text-[10px] text-gray-500 truncate">💬 {r.comments!.length} · <b className={last.admin ? 'text-indigo-700' : ''}>{last.name}</b> {last.text}</p>}
                   </div>
@@ -1529,8 +1528,8 @@ function SupplyRequestTab({ campCode, jobCodeId, requests, settings, guides, cam
           onEdit={() => setEditing({ mode: 'edit', req: opened })} onMetoo={() => { setEditing({ mode: 'new', prefill: opened }); setOpenId(null); }} onClose={() => setOpenId(null)} />
       )}
       {assigning && (
-        <SupplyBuyerPicker candidates={candidates} title={assigning.mode === 'default' ? '기본 구매 담당' : '이 요청의 구매 담당'}
-          hint={assigning.mode === 'default' ? '담당을 따로 지정하지 않은 모든 요청을 이 사람이 사 와서 품목별로 완료합니다.' : '기본 담당 대신 이 요청만 다른 사람이 사 옵니다.'}
+        <SupplyBuyerPicker candidates={candidates} title={assigning.mode === 'default' ? L('inventory.defaultBuyer') : L('inventory.buyerForThisRequest')}
+          hint={assigning.mode === 'default' ? L('inventory.thisPersonBuysEveryRequest') : L('inventory.someoneElseBuysJustThis')}
           clearLabel={assigning.mode === 'default' ? (settings?.defaultBuyerId ? '기본 담당 해제' : '') : (assigning.reqs.some(r => r.buyerId) ? '기본 담당으로 되돌리기' : '')}
           onClose={() => setAssigning(null)}
           onPick={c => {
@@ -1566,18 +1565,18 @@ function SupplyLinesCard({ req: r, canBuy, onOpen, onComplete, onUndo }: {
         return (
           <div key={l.id} className="flex items-center gap-2 px-3 py-1.5 border-t border-gray-100">
             <div className="flex-1 min-w-0">
-              <p className={`text-[12px] truncate ${d ? 'text-gray-400 line-through' : 'font-semibold text-gray-900'}`}>{l.name} {l.quantity}{l.unit}{l.groupName ? ` → ${l.groupName}` : ''}<GuideTag line={l} /></p>
+              <p className={`text-[12px] truncate ${d ? 'text-gray-400 line-through' : 'font-semibold text-gray-900'}`}>{l.name} {l.quantity}{dataLabel(l.unit)}{l.groupName ? ` → ${l.groupName}` : ''}<GuideTag line={l} /></p>
               {l.memo && !d && <p className="text-[10px] text-gray-500 truncate">{l.memo}</p>}
-              {d && <p className="text-[10px] text-emerald-700 truncate">✓ {d.amount ? fmtWon(d.amount) : '금액 없음'} · {d.by}{d.payTo ? ` · ${d.payTo}` : ''}</p>}
+              {d && <p className="text-[10px] text-emerald-700 truncate">✓ {d.amount ? fmtWon(d.amount) : L('inventory.noAmount')} · {d.by}{d.payTo ? ` · ${d.payTo}` : ''}</p>}
             </div>
             {canBuy && (d
-              ? <button onClick={() => onUndo(l.id)} className="text-[10px] text-gray-400 hover:underline shrink-0">취소</button>
-              : <button onClick={() => onComplete([l.id])} className="shrink-0 px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 rounded-lg">완료</button>)}
+              ? <button onClick={() => onUndo(l.id)} className="text-[10px] text-gray-400 hover:underline shrink-0">{L('common.cancel')}</button>
+              : <button onClick={() => onComplete([l.id])} className="shrink-0 px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 rounded-lg">{L('task.done')}</button>)}
           </div>
         );
       })}
       {canBuy && undone.length > 1 && (
-        <button onClick={() => onComplete(undone)} className="w-full py-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border-t border-emerald-100">남은 {undone.length}개 한 번에 완료</button>
+        <button onClick={() => onComplete(undone)} className="w-full py-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-50 border-t border-emerald-100">{L('inventory.remaining')} {undone.length}{L('inventory.itemsCompleteAtOnce')}</button>
       )}
     </div>
   );
@@ -1595,47 +1594,47 @@ function SupplyLineCompleteModal({ req: r, lineIds, classMentor, userId, userNam
   const total = lines.reduce((a, l) => a + num(amounts[l.id]), 0);
   const kind = supplySettleKind(r);
   const submit = async () => {
-    if (kind && lines.some(l => !num(amounts[l.id])) && !confirm('금액이 비어 있는 품목이 있어요. 금액이 없으면 정산 요청이 가지 않습니다. 그대로 완료할까요?')) return;
-    if (kind === 'transfer' && lines.some(l => !l.parentBill) && !payTo.trim() && !confirm('송금받을 계좌가 비어 있어요. 그대로 완료할까요?')) return;
+    if (kind && lines.some(l => !num(amounts[l.id])) && !confirm(L('inventory.someItemsHaveNoAmount'))) return;
+    if (kind === 'transfer' && lines.some(l => !l.parentBill) && !payTo.trim() && !confirm(L('inventory.theAccountToReceiveThe'))) return;
     setBusy(true);
     try {
       if (kind === 'transfer' && payTo.trim()) savePayTo(payTo.trim());
       await completeSupplyLines(db, r.id, lines.map(l => ({ lineId: l.id, amount: num(amounts[l.id]), payTo: kind === 'transfer' && !l.parentBill ? payTo : undefined })), { uid: userId, name: userName });
       notifySupply({ type: 'lines_done', requestId: r.id, lineIds: lines.map(l => l.id) });
       onClose();
-    } catch (e) { console.error(e); alert('완료 처리를 하지 못했습니다. 구매 담당인지 확인해주세요.'); }
+    } catch (e) { console.error(e); alert(L('inventory.couldNotMarkAsDone')); }
     finally { setBusy(false); }
   };
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[70] p-4" onClick={onClose}>
       <div className="bg-white w-full max-w-md rounded-2xl shadow-xl flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
         <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-900">✓ 구매 완료 <span className="text-sm font-normal text-gray-500">{FOR_ICON[r.forType]} {supplyForLabel(r)}</span></h2>
-          <p className="text-[11px] text-gray-500 mt-0.5">{kind === 'envelope' ? `담임 ${classMentor || '(미확인)'}쌤이 용돈봉투에서 빼서 나에게 전달하도록 정산 요청이 가요.` : kind === 'transfer' ? `${r.requesterName}쌤이 아래 계좌로 송금하도록 정산 요청이 가요.` : '캠프 공용 — 관리자가 재고에 입고합니다. 금액은 기록용이에요.'}</p>
+          <h2 className="text-base font-bold text-gray-900">{L('inventory.purchased')} <span className="text-sm font-normal text-gray-500">{FOR_ICON[r.forType]} {supplyForLabel(r)}</span></h2>
+          <p className="text-[11px] text-gray-500 mt-0.5">{kind === 'envelope' ? L('inventory.aSettlementRequestGoesTo2', { v0: classMentor || L('common.unconfirmedParen') }) : kind === 'transfer' ? L('inventory.aSettlementRequestGoesTo', { v0: r.requesterName }) : L('inventory.campSuppliesAnAdminRestocks')}</p>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-3 space-y-2">
           {lines.map(l => (
             <div key={l.id} className="flex items-center gap-2">
-              <span className="flex-1 min-w-0 text-[13px] font-semibold text-gray-900 truncate">{l.name} <span className="font-normal text-gray-500">{l.quantity}{l.unit}</span><GuideTag line={l} /></span>
+              <span className="flex-1 min-w-0 text-[13px] font-semibold text-gray-900 truncate">{l.name} <span className="font-normal text-gray-500">{l.quantity}{dataLabel(l.unit)}</span><GuideTag line={l} /></span>
               <input inputMode="numeric" value={amounts[l.id]} onChange={e => setAmounts(a => ({ ...a, [l.id]: e.target.value.replace(/[^0-9]/g, '') }))} autoFocus={lines[0].id === l.id}
-                placeholder="금액" className={`w-24 text-right text-sm border rounded-lg px-2 py-1 outline-none ${kind && !num(amounts[l.id]) ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200'}`} />
-              <span className="text-[11px] text-gray-400">원</span>
+                placeholder={L('patient.amount')} className={`w-24 text-right text-sm border rounded-lg px-2 py-1 outline-none ${kind && !num(amounts[l.id]) ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200'}`} />
+              <span className="text-[11px] text-gray-400">{L('patient.krw')}</span>
             </div>
           ))}
-          {lines.some(l => l.parentBill) && <p className="text-[10px] text-orange-700 bg-orange-50 rounded-lg px-2 py-1">🧾 '학부모 청구' 품목은 용돈봉투·송금 대신 관리자가 학부모님께 청구해요.</p>}
+          {lines.some(l => l.parentBill) && <p className="text-[10px] text-orange-700 bg-orange-50 rounded-lg px-2 py-1">{L('inventory.billParentsItemsAreBilled')}</p>}
           {kind === 'transfer' && lines.some(l => !l.parentBill) && (
             <div className="pt-1">
-              <p className="text-[11px] font-bold text-gray-700 mb-1">💸 송금받을 곳</p>
-              <input value={payTo} onChange={e => setPayTo(e.target.value)} placeholder="예: 카카오뱅크 3333-01-1234567 홍길동" className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-400" />
-              <p className="text-[10px] text-gray-400 mt-0.5">이 기기에 기억해 두고 다음에 자동으로 채워요.</p>
+              <p className="text-[11px] font-bold text-gray-700 mb-1">{L('inventory.transferTo')}</p>
+              <input value={payTo} onChange={e => setPayTo(e.target.value)} placeholder={L('inventory.eGKakaobank333301')} className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-400" />
+              <p className="text-[10px] text-gray-400 mt-0.5">{L('inventory.savedOnThisDeviceAnd')}</p>
             </div>
           )}
         </div>
         <div className="px-5 py-3 border-t border-gray-100 space-y-2">
-          <p className="text-right text-[12px] text-gray-600">합계 <b className="text-gray-900">{fmtWon(total)}</b></p>
+          <p className="text-right text-[12px] text-gray-600">{L('inventory.total')} <b className="text-gray-900">{fmtWon(total)}</b></p>
           <div className="flex gap-2">
-            <button onClick={onClose} className="flex-1 py-2 text-xs text-gray-600 bg-gray-100 rounded-xl">취소</button>
-            <button onClick={submit} disabled={busy} className="flex-[2] py-2 text-xs font-bold text-white bg-emerald-600 rounded-xl disabled:opacity-40">{busy ? '처리 중...' : `${lines.length}개 품목 구매 완료`}</button>
+            <button onClick={onClose} className="flex-1 py-2 text-xs text-gray-600 bg-gray-100 rounded-xl">{L('common.cancel')}</button>
+            <button onClick={submit} disabled={busy} className="flex-[2] py-2 text-xs font-bold text-white bg-emerald-600 rounded-xl disabled:opacity-40">{busy ? L('inventory.processing') : L('inventory.purchaseItems', { v0: lines.length })}</button>
           </div>
         </div>
       </div>
@@ -1655,10 +1654,10 @@ function SupplyBuyerPicker({ candidates, title, hint, clearLabel, onPick, onClos
         <div className="px-5 py-4 border-b border-gray-100">
           <h2 className="text-base font-bold text-gray-900">🛒 {title}</h2>
           <p className="text-[11px] text-gray-500 mt-0.5">{hint}</p>
-          <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="이름 검색" className="mt-2 w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-400" />
+          <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder={L('patient.searchName')} className="mt-2 w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-400" />
         </div>
         <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
-          {list.length === 0 && <p className="px-5 py-6 text-center text-xs text-gray-400">{candidates.length ? '검색 결과가 없습니다.' : '캠프 인원을 불러오는 중...'}</p>}
+          {list.length === 0 && <p className="px-5 py-6 text-center text-xs text-gray-400">{candidates.length ? L('students.noResults') : L('inventory.loadingCampMembers')}</p>}
           {list.map(c => (
             <button key={c.uid} onClick={() => onPick(c)} className="w-full text-left flex items-center gap-2 px-5 py-2 hover:bg-emerald-50">
               <span className="flex-1 text-sm font-semibold text-gray-900">{c.name}</span>
@@ -1668,7 +1667,7 @@ function SupplyBuyerPicker({ candidates, title, hint, clearLabel, onPick, onClos
         </div>
         <div className="px-5 py-3 border-t border-gray-100 flex gap-2">
           {clearLabel && <button onClick={() => onPick(null)} className="flex-1 py-2 text-xs text-red-500 border border-red-200 rounded-xl">{clearLabel}</button>}
-          <button onClick={onClose} className="flex-1 py-2 text-xs text-gray-600 bg-gray-100 rounded-xl">닫기</button>
+          <button onClick={onClose} className="flex-1 py-2 text-xs text-gray-600 bg-gray-100 rounded-xl">{L('common.close')}</button>
         </div>
       </div>
     </div>
@@ -1711,8 +1710,8 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
   };
   const upd = (id: string, patch: Partial<SupplyRequestLine>) => setLines(ls => ls.map(l => l.id === id ? { ...l, ...patch } : l));
   const submit = async () => {
-    if (forType === 'student' && !student) { alert('어떤 학생을 위한 물품인지 선택해주세요.'); return; }
-    if (lines.length === 0) { alert('필요한 물품을 하나 이상 담아주세요.'); return; }
+    if (forType === 'student' && !student) { alert(L('inventory.pleaseSelectWhichStudentThe')); return; }
+    if (lines.length === 0) { alert(L('inventory.addAtLeastOneItem')); return; }
     setBusy(true);
     try {
       const payload = {
@@ -1734,7 +1733,7 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
         notifySupply({ type: 'request_created', requestId: id });
       }
       onClose();
-    } catch (e) { console.error('구매 요청 저장 오류:', e); alert('요청을 저장하지 못했습니다.'); }
+    } catch (e) { console.error('구매 요청 저장 오류:', e); alert(L('inventory.couldNotSaveTheRequest')); }
     finally { setBusy(false); }
   };
   const seg = (on: boolean) => `flex-1 py-2 rounded-xl text-xs font-bold border ${on ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'}`;
@@ -1744,36 +1743,36 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4" onClick={onClose}>
       <div className="bg-white w-full max-w-md rounded-2xl shadow-xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-900">{existing ? '요청 수정' : prefill ? '🙋 나도 필요해요' : '📝 필요한 물품 요청'}</h2>
+          <h2 className="text-base font-bold text-gray-900">{existing ? L('inventory.editRequest') : prefill ? L('inventory.iNeedThisToo') : L('inventory.requestNeededItems')}</h2>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {prefill && <p className="text-[11px] text-gray-500 bg-amber-50 rounded-xl px-3 py-2">{supplyForLabel(prefill)} 요청과 같은 물품을 담았어요. 누구 것인지와 수량만 바꿔 올리면 장보기 목록에 합쳐집니다.</p>}
+          {prefill && <p className="text-[11px] text-gray-500 bg-amber-50 rounded-xl px-3 py-2">{supplyForLabel(prefill)} {L('inventory.addedTheSameItemsAs')}</p>}
           <div>
-            <p className="text-xs font-bold text-gray-800 mb-1.5">① 누가 필요한가요?</p>
+            <p className="text-xs font-bold text-gray-800 mb-1.5">{L('inventory.whoNeedsIt')}</p>
             <div className="flex gap-1.5">
-              <button type="button" onClick={() => setForType('student')} className={seg(forType === 'student')}>👧 학생</button>
-              <button type="button" onClick={() => setForType('mentor')} className={seg(forType === 'mentor')}>🙋 본인</button>
-              <button type="button" onClick={() => setForType('camp')} className={seg(forType === 'camp')}>🏕 캠프 공용</button>
+              <button type="button" onClick={() => setForType('student')} className={seg(forType === 'student')}>{L('inventory.student')}</button>
+              <button type="button" onClick={() => setForType('mentor')} className={seg(forType === 'mentor')}>{L('inventory.me')}</button>
+              <button type="button" onClick={() => setForType('camp')} className={seg(forType === 'camp')}>{L('inventory.campSupplies')}</button>
             </div>
-            <p className="mt-1.5 text-[10px] text-gray-500">{forType === 'student' ? '학생 용돈봉투에서 담임쌤이 정산해요.' : forType === 'mentor' ? '사 온 사람에게 본인이 송금해요.' : '상비약·소모품처럼 캠프 재고로 쓰는 물건. 구매 후 관리자가 재고에 입고해요.'}</p>
+            <p className="mt-1.5 text-[10px] text-gray-500">{forType === 'student' ? L('inventory.theHomeroomMentorSettlesIt') : forType === 'mentor' ? L('inventory.youTransferTheMoneyTo') : L('inventory.itemsUsedAsCampStock')}</p>
             {forType === 'student' && (student ? (
               <div className="mt-2 flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2">
-                <span className="flex-1 text-sm font-bold text-blue-900">{student.name} <span className="font-normal text-blue-500 text-xs">{student.cls}{student.mentor ? ` · 담임 ${student.mentor}` : ''}</span></span>
-                <button onClick={() => setStudent(null)} className="text-xs text-gray-500">변경</button>
+                <span className="flex-1 text-sm font-bold text-blue-900">{student.name} <span className="font-normal text-blue-500 text-xs">{student.cls}{student.mentor ? L('inventory.homeroom', { v0: student.mentor }) : ''}</span></span>
+                <button onClick={() => setStudent(null)} className="text-xs text-gray-500">{L('patient.change')}</button>
               </div>
             ) : (
               <div className="relative mt-2">
-                <input value={studentQuery} onChange={e => setStudentQuery(e.target.value)} placeholder="학생 이름 검색" className={inputCls} />
+                <input value={studentQuery} onChange={e => setStudentQuery(e.target.value)} placeholder={L('inventory.searchStudentName')} className={inputCls} />
                 {studentQuery.trim() && (
                   <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
                     {studentResults.map(s => (
                       <button key={s.studentId} type="button" onClick={() => { setStudent({ id: s.studentId, name: s.name, cls: s.className, mentor: s.classMentor || undefined, code: studentClassCode(s.classNumber) || undefined }); setStudentQuery(''); }} className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50">
-                        {s.name} <span className="text-[11px] text-gray-400">{s.className}{s.classMentor ? ` · 담임 ${s.classMentor}` : ''}</span>
+                        {s.name} <span className="text-[11px] text-gray-400">{s.className}{s.classMentor ? L('inventory.homeroom', { v0: s.classMentor }) : ''}</span>
                       </button>
                     ))}
                     {studentResults.length === 0 && (
-                      <button type="button" onClick={() => { setStudent({ name: studentQuery.trim() }); setStudentQuery(''); }} className="w-full text-left px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">명단에 없으면 <b>"{studentQuery.trim()}"</b>로 입력</button>
+                      <button type="button" onClick={() => { setStudent({ name: studentQuery.trim() }); setStudentQuery(''); }} className="w-full text-left px-3 py-2 text-sm text-gray-600 hover:bg-gray-50">{L('inventory.ifNotOnTheRoster')} <b>"{studentQuery.trim()}"</b>{L('inventory.toEnter')}</button>
                     )}
                   </div>
                 )}
@@ -1781,22 +1780,22 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
             ))}
           </div>
           <div className="space-y-2">
-            <p className="text-xs font-bold text-gray-800">② 무엇이 필요한가요? <span className="font-normal text-gray-400">{lines.length}개 담음 · 어디서 살지는 구매 담당이 정해요</span></p>
+            <p className="text-xs font-bold text-gray-800">{L('inventory.whatDoYouNeed')} <span className="font-normal text-gray-400">{lines.length}{L('inventory.itemsAddedTheBuyerDecides')}</span></p>
             <div className="relative">
               <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setQ(''); }} placeholder="물품 검색 (예: 밴드, 치약, 보드마카)" className={`${inputCls} pl-9`} />
+              <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') setQ(''); }} placeholder={L('inventory.searchItemsEGBandage')} className={`${inputCls} pl-9`} />
               {q.trim() && (
                 <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white rounded-xl border border-emerald-200 shadow-lg divide-y divide-gray-100 overflow-hidden max-h-80 overflow-y-auto">
                   {guideResults.map(g => (
                     <div key={g.id} className="bg-orange-50">
                       <button type="button" onClick={() => setOpenGuide(v => v === g.id ? null : g.id)} className="w-full text-left flex items-center gap-2 px-3 py-1.5 hover:bg-orange-100">
-                        <span className="flex-1 min-w-0 text-[12px] truncate"><b>{g.name}</b> <span className="text-[10px] px-1 py-0.5 rounded bg-orange-200 text-orange-900 font-bold">{g.channel || '쿠팡'}{g.parentBill ? ' · 학부모 청구' : ''}</span></span>
-                        <span className="text-[11px] font-bold text-orange-700">{openGuide === g.id ? '접기' : '안내 보기'}</span>
+                        <span className="flex-1 min-w-0 text-[12px] truncate"><b>{g.name}</b> <span className="text-[10px] px-1 py-0.5 rounded bg-orange-200 text-orange-900 font-bold">{g.channel || L('data.coupang')}{g.parentBill ? L('inventory.billParents2') : ''}</span></span>
+                        <span className="text-[11px] font-bold text-orange-700">{openGuide === g.id ? L('inventory.collapse') : L('inventory.viewGuide')}</span>
                       </button>
                       {openGuide === g.id && (
                         <div className="px-3 pb-2 space-y-1.5">
-                          <p className="text-[11px] text-orange-900 whitespace-pre-wrap bg-white rounded-lg px-2 py-1.5 border border-orange-200">📌 {g.guide || `${g.channel || '쿠팡'}에서 구매하는 품목이에요.`}</p>
-                          <button type="button" onClick={() => addGuide(g)} className="w-full py-1 text-[11px] font-bold text-white bg-orange-500 rounded-lg">안내 확인 · 요청에 담기</button>
+                          <p className="text-[11px] text-orange-900 whitespace-pre-wrap bg-white rounded-lg px-2 py-1.5 border border-orange-200">📌 {g.guide || L('inventory.thisItemIsBoughtFrom', { v0: dataLabel(g.channel || '쿠팡') })}</p>
+                          <button type="button" onClick={() => addGuide(g)} className="w-full py-1 text-[11px] font-bold text-white bg-orange-500 rounded-lg">{L('inventory.gotItAddToRequest')}</button>
                         </div>
                       )}
                     </div>
@@ -1807,12 +1806,12 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
                     return (
                       <button key={i.id} type="button" onClick={() => addItem(i)} className="w-full text-left flex items-center gap-2 px-3 py-1.5 hover:bg-emerald-50">
                         {itemThumb(i) ? <img src={itemThumb(i)} alt="" className="w-8 h-8 rounded object-cover bg-gray-100 shrink-0" loading="lazy" /> : null}
-                        <span className="flex-1 min-w-0 text-[12px] truncate"><b>{i.name}</b> <span className="text-gray-400">{[i.kind, i.spec].filter(Boolean).join(' · ')}</span>{stock && stock.total > 0 ? <span className="text-emerald-600"> · 캠프 재고 {stock.total}</span> : null}</span>
-                        <span className="text-[11px] font-bold text-emerald-600">{had ? `${had.quantity} +1` : '+ 담기'}</span>
+                        <span className="flex-1 min-w-0 text-[12px] truncate"><b>{i.name}</b> <span className="text-gray-400">{[i.kind, i.spec].filter(Boolean).join(' · ')}</span>{stock && stock.total > 0 ? <span className="text-emerald-600"> {L('inventory.campStock')} {stock.total}</span> : null}</span>
+                        <span className="text-[11px] font-bold text-emerald-600">{had ? `${had.quantity} +1` : L('inventory.add')}</span>
                       </button>
                     );
                   })}
-                  <button type="button" onClick={() => { setLines(ls => [...ls, { id: newId(), name: q.trim(), quantity: 1, unit: '개' }]); setQ(''); }} className="w-full text-left px-3 py-1.5 text-[12px] text-gray-600 bg-gray-50 hover:bg-gray-100"><b>"{q.trim()}"</b> 직접 추가</button>
+                  <button type="button" onClick={() => { setLines(ls => [...ls, { id: newId(), name: q.trim(), quantity: 1, unit: '개' }]); setQ(''); }} className="w-full text-left px-3 py-1.5 text-[12px] text-gray-600 bg-gray-50 hover:bg-gray-100"><b>"{q.trim()}"</b> {L('inventory.addManually')}</button>
                 </div>
               )}
             </div>
@@ -1832,29 +1831,29 @@ function SupplyRequestFormModal({ campCode, existing, prefill, groups, guides, i
                       {[...new Set([l.unit, ...UNITS])].map(u => (
                         <button key={u} type="button" onClick={() => upd(l.id, { unit: u })} className={`px-2 py-0.5 rounded text-[10px] font-semibold ${l.unit === u ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500'}`}>{u}</button>
                       ))}
-                      <input value={l.memo ?? ''} onChange={e => upd(l.id, { memo: e.target.value || undefined })} placeholder="메모 (색상·사이즈 등)" className="flex-1 min-w-[120px] text-[11px] border border-gray-200 rounded px-2 py-0.5 outline-none" />
+                      <input value={l.memo ?? ''} onChange={e => upd(l.id, { memo: e.target.value || undefined })} placeholder={L('inventory.noteColorSizeEtc')} className="flex-1 min-w-[120px] text-[11px] border border-gray-200 rounded px-2 py-0.5 outline-none" />
                     </div>
                     {forType === 'camp' && (l.itemId ? (
                       <div className="flex items-center gap-1 flex-wrap">
-                        <span className="text-[10px] text-gray-500">입고 그룹</span>
+                        <span className="text-[10px] text-gray-500">{L('inventory.restockGroup')}</span>
                         {groups.map(g => {
                           const on = (l.groupId ?? defaultGroup?.id) === g.id;
                           return <button key={g.id} type="button" onClick={() => upd(l.id, { groupId: g.id, groupName: g.name })} className={`px-2 py-0.5 rounded text-[10px] font-semibold ${on ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-500'}`}>{g.name}</button>;
                         })}
                       </div>
-                    ) : <p className="text-[10px] text-gray-400">재고 품목이 아니라 입고되지 않아요</p>)}
+                    ) : <p className="text-[10px] text-gray-400">{L('inventory.notAStockItemSo')}</p>)}
                   </div>
                 ))}
               </div>
             )}
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-800 mb-1">메모 <span className="font-normal text-gray-400">(선택)</span></p>
-            <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="예: 오늘 저녁까지 필요해요, 약국에 있어요" className={`${inputCls} resize-none`} />
+            <p className="text-xs font-bold text-gray-800 mb-1">{L('common.memo')} <span className="font-normal text-gray-400">{L('patient.optional')}</span></p>
+            <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder={L('inventory.eGNeededByTonight')} className={`${inputCls} resize-none`} />
           </div>
         </div>
         <div className="px-5 py-4 border-t border-gray-100">
-          <button onClick={submit} disabled={busy} className="w-full py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl disabled:opacity-40">{busy ? '저장 중...' : existing ? '수정 저장' : '요청 올리기'}</button>
+          <button onClick={submit} disabled={busy} className="w-full py-2.5 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl disabled:opacity-40">{busy ? L('task.saving') : existing ? L('inventory.saveChanges') : L('inventory.submitRequest')}</button>
         </div>
       </div>
     </div>
@@ -1878,7 +1877,7 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
   const run = async (fn: () => Promise<void>) => {
     if (busy) return;
     setBusy(true);
-    try { await fn(); } catch (e) { console.error(e); alert('처리하지 못했습니다. 권한을 확인해주세요.'); } finally { setBusy(false); }
+    try { await fn(); } catch (e) { console.error(e); alert(L('inventory.couldNotProcessPleaseCheck')); } finally { setBusy(false); }
   };
   const act = (status: SupplyRequestStatus, opts?: { note?: string; holdUntil?: string }) =>
     run(async () => { await setSupplyRequestStatus(db, [r.id], status, userName, opts); if (status === 'rejected' || status === 'onhold') notifySupply({ type: 'status', requestId: r.id }); setMode('none'); setReason(''); });
@@ -1894,7 +1893,7 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
       itemId: l.itemId, itemName: l.itemName, groupId: l.groupId,
       groupName: groups.find(g => g.id === l.groupId)?.name ?? '', quantity: Math.max(0, parseInt(l.quantity, 10) || 0),
     }));
-    if (lines.some(l => !l.groupId)) { alert('입고할 그룹을 골라주세요.'); return; }
+    if (lines.some(l => !l.groupId)) { alert(L('inventory.chooseAGroupToRestock')); return; }
     await receiveSupplyRequest(db, campCode, r.id, lines, userName);
     setIntake(false);
   });
@@ -1913,7 +1912,7 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
               ); })()}
               <h2 className="text-base font-bold text-gray-900">{FOR_ICON[r.forType]} {supplyForLabel(r)}</h2>
             </div>
-            <p className="text-[11px] text-gray-400 mt-0.5">{r.requesterName} · {fmtDateTime(r.createdAt)}{r.forType === 'student' && classMentor ? ` · 담임 ${classMentor}` : ''}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">{r.requesterName} · {fmtDateTime(r.createdAt)}{r.forType === 'student' && classMentor ? L('inventory.homeroom', { v0: classMentor }) : ''}</p>
           </div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
         </div>
@@ -1921,8 +1920,8 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
           {/* 구매 담당 */}
           {isOpen && (
             <div className={`flex items-center gap-2 rounded-xl px-3 py-2 ${buyer ? 'bg-emerald-50' : 'bg-red-50'}`}>
-              <span className={`flex-1 text-[12px] font-bold ${buyer ? 'text-emerald-800' : 'text-red-700'}`}>{buyer ? `🛒 구매 담당: ${buyer.uid === userId ? '나' : buyer.name}${buyer.isDefault ? ' (기본 담당)' : ''}` : '🛒 구매 담당 없음 — 관리자가 지정해주세요'}</span>
-              {isAdmin && <button onClick={onAssign} className="text-[11px] font-semibold text-emerald-700 hover:underline">이 요청만 {r.buyerId ? '변경' : '다른 사람'}</button>}
+              <span className={`flex-1 text-[12px] font-bold ${buyer ? 'text-emerald-800' : 'text-red-700'}`}>{buyer ? L('inventory.buyer', { v0: buyer.uid === userId ? L('common.meWord') : buyer.name, v1: buyer.isDefault ? L('inventory.defaultBuyerSuffix') : '' }) : L('inventory.noBuyerAnAdminNeeds')}</span>
+              {isAdmin && <button onClick={onAssign} className="text-[11px] font-semibold text-emerald-700 hover:underline">{L('inventory.thisRequestOnly')} {r.buyerId ? L('patient.change') : L('inventory.someoneElse')}</button>}
             </div>
           )}
           {/* 품목 (품목별 구매 완료 · 정산) */}
@@ -1936,30 +1935,30 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
               return (
                 <div key={l.id} className="flex items-center gap-2 px-3 py-2">
                   <div className="flex-1 min-w-0">
-                    <p className={`text-[13px] font-bold truncate ${d ? 'text-gray-500' : 'text-gray-900'}`}>{d ? '✓ ' : ''}{l.name} <span className="font-extrabold text-amber-700">{l.quantity}{l.unit}</span>{isCamp && l.groupName ? <span className="text-[11px] font-normal text-emerald-700"> → {l.groupName}</span> : null}<GuideTag line={l} /></p>
-                    {(l.memo || (isAdmin && stock)) && <p className="text-[10px] text-gray-500">{[l.memo, isAdmin && stock ? `캠프 재고 ${stock.total}${stock.unit}` : ''].filter(Boolean).join(' · ')}</p>}
-                    {d && <p className="text-[10px] text-emerald-700">{d.amount ? fmtWon(d.amount) : '금액 없음'} · {d.by} · {fmtDateTime(d.at)}{d.payTo ? ` · 💸 ${d.payTo}` : ''}</p>}
-                    {d && lk && d.amount ? <p className={`text-[10px] ${st ? 'text-gray-400' : 'text-yellow-700'}`}>{st ? `✓ 정산 완료 · ${st.by}` : `💰 ${lk === 'envelope' ? '담임 봉투 정산' : lk === 'transfer' ? '송금' : '학부모 청구'} 대기`}</p> : null}
+                    <p className={`text-[13px] font-bold truncate ${d ? 'text-gray-500' : 'text-gray-900'}`}>{d ? '✓ ' : ''}{l.name} <span className="font-extrabold text-amber-700">{l.quantity}{dataLabel(l.unit)}</span>{isCamp && l.groupName ? <span className="text-[11px] font-normal text-emerald-700"> → {l.groupName}</span> : null}<GuideTag line={l} /></p>
+                    {(l.memo || (isAdmin && stock)) && <p className="text-[10px] text-gray-500">{[l.memo, isAdmin && stock ? L('inventory.campStock3', { v0: stock.total, v1: dataLabel(stock.unit) }) : ''].filter(Boolean).join(' · ')}</p>}
+                    {d && <p className="text-[10px] text-emerald-700">{d.amount ? fmtWon(d.amount) : L('inventory.noAmount')} · {d.by} · {fmtDateTime(d.at)}{d.payTo ? ` · 💸 ${d.payTo}` : ''}</p>}
+                    {d && lk && d.amount ? <p className={`text-[10px] ${st ? 'text-gray-400' : 'text-yellow-700'}`}>{st ? L('inventory.settled', { v0: st.by }) : L('inventory.pending', { v0: lk === 'envelope' ? L('inventory.envelopeSettlement') : lk === 'transfer' ? L('inventory.transferWord') : L('inventory.parentBillingWord') })}</p> : null}
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     {canBuy && r.status !== 'rejected' && !r.stockApplied && (d
-                      ? <button onClick={() => run(() => undoSupplyLine(db, r.id, l.id))} className="text-[10px] text-gray-400 hover:underline">구매 취소</button>
-                      : isOpen && <button onClick={() => onComplete([l.id])} className="px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 rounded-lg">완료</button>)}
+                      ? <button onClick={() => run(() => undoSupplyLine(db, r.id, l.id))} className="text-[10px] text-gray-400 hover:underline">{L('inventory.cancelPurchase')}</button>
+                      : isOpen && <button onClick={() => onComplete([l.id])} className="px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 rounded-lg">{L('task.done')}</button>)}
                     {d && lk && d.amount && canSettleLine ? (st
-                      ? (isAdmin || st.byId === userId) && <button onClick={() => run(() => settleSupplyLines(db, r.id, [l.id], null))} className="text-[10px] text-gray-400 hover:underline">정산 취소</button>
-                      : <button onClick={() => run(async () => { await settleSupplyLines(db, r.id, [l.id], { uid: userId, name: userName }); notifySupply({ type: 'settled', requestId: r.id, lineIds: [l.id] }); })} className="px-2 py-0.5 text-[10px] font-bold text-yellow-900 bg-yellow-100 border border-yellow-300 rounded">{SUPPLY_SETTLE_LABELS[lk].icon} {lk === 'envelope' ? '정산' : lk === 'transfer' ? '송금' : '청구'} 완료</button>) : null}
+                      ? (isAdmin || st.byId === userId) && <button onClick={() => run(() => settleSupplyLines(db, r.id, [l.id], null))} className="text-[10px] text-gray-400 hover:underline">{L('inventory.cancelSettlement')}</button>
+                      : <button onClick={() => run(async () => { await settleSupplyLines(db, r.id, [l.id], { uid: userId, name: userName }); notifySupply({ type: 'settled', requestId: r.id, lineIds: [l.id] }); })} className="px-2 py-0.5 text-[10px] font-bold text-yellow-900 bg-yellow-100 border border-yellow-300 rounded">{SUPPLY_SETTLE_LABELS[lk].icon} {lk === 'envelope' ? L('inventory.settle') : lk === 'transfer' ? L('push.howTransfer') : L('inventory.bill')} {L('task.done')}</button>) : null}
                   </div>
                 </div>
               );
             })}
           </div>
           {canBuy && isOpen && r.items.filter(l => !r.done?.[l.id]).length > 1 && (
-            <button onClick={() => onComplete(r.items.filter(l => !r.done?.[l.id]).map(l => l.id))} className="w-full py-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl">남은 품목 한 번에 구매 완료</button>
+            <button onClick={() => onComplete(r.items.filter(l => !r.done?.[l.id]).map(l => l.id))} className="w-full py-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl">{L('inventory.purchaseRemainingItemsAtOnce')}</button>
           )}
           {settleLines.length > 0 && (
             <p className="text-[11px] text-gray-600 bg-yellow-50 rounded-xl px-3 py-2">
-              {kind === 'envelope' ? `📒 담임 ${classMentor || '(미확인)'}쌤이 용돈봉투에서 빼서 구매한 선생님께 전달해요.` : `💸 ${r.requesterName}쌤이 구매한 선생님께 송금해요.`}
-              {' '}정산 {settleLines.filter(s => s.settled).length}/{settleLines.length} · 남은 금액 {fmtWon(settleLines.filter(s => !s.settled).reduce((a, s) => a + (s.done.amount ?? 0), 0))}
+              {kind === 'envelope' ? L('inventory.homeroomMentorTakesItFrom', { v0: classMentor || L('common.unconfirmedParen') }) : L('inventory.transfersToTheTeacherWho', { v0: r.requesterName })}
+              {' '}{L('inventory.settle')} {settleLines.filter(s => s.settled).length}/{settleLines.length} {L('inventory.remainingAmount')} {fmtWon(settleLines.filter(s => !s.settled).reduce((a, s) => a + (s.done.amount ?? 0), 0))}
             </p>
           )}
           {r.note && <p className="text-[12px] text-gray-700 bg-gray-50 rounded-xl px-3 py-2">📝 {r.note}</p>}
@@ -1967,15 +1966,15 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
             <p className={`text-[11px] rounded-xl px-3 py-2 ${r.status === 'onhold' ? 'bg-amber-50 text-amber-800' : 'bg-gray-50 text-gray-600'}`}>{status}{r.handledBy ? ` · ${r.handledBy}` : ''} · {fmtDateTime(r.handledAt)}</p>
           )}
           <div className="flex gap-2">
-            {isOpen && !mine && <button onClick={onMetoo} className="flex-1 py-2 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl">🙋 나도 필요해요</button>}
-            {mine && isOpen && <button onClick={onEdit} className="flex-1 py-2 text-xs font-bold text-gray-700 bg-gray-100 rounded-xl">수정</button>}
-            {mine && isOpen && !supplyDoneCount(r) && <button onClick={() => { if (confirm('이 요청을 취소할까요?')) run(async () => { await deleteSupplyRequest(db, r.id); onClose(); }); }} className="flex-1 py-2 text-xs text-red-500 border border-red-200 rounded-xl">요청 취소</button>}
+            {isOpen && !mine && <button onClick={onMetoo} className="flex-1 py-2 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 rounded-xl">{L('inventory.iNeedThisToo')}</button>}
+            {mine && isOpen && <button onClick={onEdit} className="flex-1 py-2 text-xs font-bold text-gray-700 bg-gray-100 rounded-xl">{L('task.edit')}</button>}
+            {mine && isOpen && !supplyDoneCount(r) && <button onClick={() => { if (confirm(L('inventory.cancelThisRequest'))) run(async () => { await deleteSupplyRequest(db, r.id); onClose(); }); }} className="flex-1 py-2 text-xs text-red-500 border border-red-200 rounded-xl">{L('inventory.cancelRequest')}</button>}
           </div>
 
           {/* 캠프 공용 → 재고 입고 */}
           {canIntake && (intake ? (
             <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-2.5 space-y-1.5">
-              <p className="text-[11px] font-bold text-emerald-800">📥 재고 입고 — 실제로 산 수량(낱개)과 넣을 그룹을 확인하세요</p>
+              <p className="text-[11px] font-bold text-emerald-800">{L('inventory.restockCheckTheQuantityActually')}</p>
               {intakeLines.map((l, idx) => (
                 <div key={l.lineId} className="flex items-center gap-1.5">
                   <span className="flex-1 min-w-0 text-[12px] font-semibold text-gray-800 truncate">{l.itemName}</span>
@@ -1985,49 +1984,49 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
                   <input type="number" min={0} value={l.quantity} onChange={e => setIntakeLines(ls => ls.map((x, i) => i === idx ? { ...x, quantity: e.target.value } : x))} className="w-16 text-[12px] border border-emerald-200 rounded-lg px-1.5 py-1 bg-white text-right" />
                 </div>
               ))}
-              {r.items.some(l => !l.itemId) && <p className="text-[10px] text-gray-500">재고 품목이 아닌 {r.items.filter(l => !l.itemId).map(l => l.name).join(', ')}은(는) 입고하지 않아요.</p>}
+              {r.items.some(l => !l.itemId) && <p className="text-[10px] text-gray-500">{L('inventory.notStockItems')} {r.items.filter(l => !l.itemId).map(l => l.name).join(', ')}{L('inventory.wonTBeRestocked')}</p>}
               <div className="flex gap-1.5">
-                <button onClick={() => setIntake(false)} className="flex-1 py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">취소</button>
-                <button onClick={doIntake} disabled={busy} className="flex-[2] py-1.5 text-[11px] font-bold text-white bg-emerald-600 rounded-lg disabled:opacity-40">{r.status === 'purchased' ? '재고에 입고' : '구매 완료 + 재고 입고'}</button>
+                <button onClick={() => setIntake(false)} className="flex-1 py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">{L('common.cancel')}</button>
+                <button onClick={doIntake} disabled={busy} className="flex-[2] py-1.5 text-[11px] font-bold text-white bg-emerald-600 rounded-lg disabled:opacity-40">{r.status === 'purchased' ? L('inventory.restock3') : L('inventory.purchasedRestocked')}</button>
               </div>
             </div>
           ) : (
-            <button onClick={() => setIntake(true)} className={`w-full py-2 text-xs font-bold rounded-xl ${r.status === 'purchased' ? 'text-white bg-amber-500' : 'text-emerald-700 bg-white border border-emerald-200'}`}>📥 {r.status === 'purchased' ? '재고에 입고하기' : '구매 완료 + 재고 입고'}</button>
+            <button onClick={() => setIntake(true)} className={`w-full py-2 text-xs font-bold rounded-xl ${r.status === 'purchased' ? 'text-white bg-amber-500' : 'text-emerald-700 bg-white border border-emerald-200'}`}>📥 {r.status === 'purchased' ? L('inventory.restock2') : L('inventory.purchasedRestocked')}</button>
           ))}
 
           {/* 관리자 처리 */}
           {isAdmin && (
             <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-2.5 space-y-2">
-              <p className="text-[10px] font-bold text-indigo-700">관리자 처리</p>
+              <p className="text-[10px] font-bold text-indigo-700">{L('inventory.adminActions')}</p>
               {mode === 'none' ? (
                 isOpen ? (
                   <div className="flex gap-1.5">
-                    <button onClick={() => setMode('reject')} className="flex-1 py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">반려</button>
+                    <button onClick={() => setMode('reject')} className="flex-1 py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">{L('inventory.reject')}</button>
                     {r.status === 'onhold'
-                      ? <button onClick={() => act('requested')} disabled={busy} className="flex-1 py-1.5 text-[11px] text-amber-800 bg-white border border-amber-200 rounded-lg">보류 해제</button>
-                      : <button onClick={() => setMode('hold')} className="flex-1 py-1.5 text-[11px] text-amber-800 bg-white border border-amber-200 rounded-lg">⏸ 보류</button>}
+                      ? <button onClick={() => act('requested')} disabled={busy} className="flex-1 py-1.5 text-[11px] text-amber-800 bg-white border border-amber-200 rounded-lg">{L('inventory.releaseHold')}</button>
+                      : <button onClick={() => setMode('hold')} className="flex-1 py-1.5 text-[11px] text-amber-800 bg-white border border-amber-200 rounded-lg">{L('inventory.hold')}</button>}
                   </div>
                 ) : !r.stockApplied ? (
-                  <button onClick={() => act('requested')} disabled={busy} className="w-full py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">다시 진행 중으로</button>
-                ) : <p className="text-[10px] text-gray-400">재고에 입고된 요청이라 되돌릴 수 없어요.</p>
+                  <button onClick={() => act('requested')} disabled={busy} className="w-full py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">{L('inventory.backToInProgress')}</button>
+                ) : <p className="text-[10px] text-gray-400">{L('inventory.thisRequestWasAlreadyRestocked')}</p>
               ) : (
                 <div className="space-y-1.5">
                   <input value={reason} onChange={e => setReason(e.target.value)} autoFocus
-                    placeholder={mode === 'reject' ? '반려 사유 (예: 캠프 재고로 대체, 살 필요 없음)' : '보류 사유 (예: 이번 장보기엔 못 사요)'} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none bg-white" />
+                    placeholder={mode === 'reject' ? L('inventory.reasonForRejectionEG') : L('inventory.reasonForHoldEG')} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-1.5 outline-none bg-white" />
                   {mode === 'hold' && (
                     <div className="flex items-center gap-1 flex-wrap">
-                      <span className="text-[10px] text-gray-500 mr-0.5">구매 예정</span>
-                      {([['내일', 1], ['3일 뒤', 3], ['1주 뒤', 7]] as const).map(([label, n]) => (
+                      <span className="text-[10px] text-gray-500 mr-0.5">{L('inventory.toBuy2')}</span>
+                      {([[L('inventory.tomorrow'), 1], [L('inventory.in3Days'), 3], [L('inventory.in1Week'), 7]] as const).map(([label, n]) => (
                         <button key={label} type="button" onClick={() => setHoldUntil(addDaysStr(n))} className={`px-2 py-0.5 rounded text-[10px] font-semibold ${holdUntil === addDaysStr(n) ? 'bg-amber-200 text-amber-900' : 'bg-white border border-gray-200 text-gray-600'}`}>{label}</button>
                       ))}
                       <input type="date" value={holdUntil} onChange={e => setHoldUntil(e.target.value)} className="text-[11px] border border-gray-200 rounded px-1.5 py-0.5 bg-white" />
-                      <button type="button" onClick={() => setHoldUntil('')} className={`px-2 py-0.5 rounded text-[10px] ${!holdUntil ? 'bg-amber-200 text-amber-900' : 'text-gray-400'}`}>미정</button>
+                      <button type="button" onClick={() => setHoldUntil('')} className={`px-2 py-0.5 rounded text-[10px] ${!holdUntil ? 'bg-amber-200 text-amber-900' : 'text-gray-400'}`}>{L('data.tbd')}</button>
                     </div>
                   )}
                   <div className="flex gap-1.5">
-                    <button onClick={() => setMode('none')} className="flex-1 py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">취소</button>
+                    <button onClick={() => setMode('none')} className="flex-1 py-1.5 text-[11px] text-gray-600 bg-white border border-gray-200 rounded-lg">{L('common.cancel')}</button>
                     <button onClick={() => act(mode === 'reject' ? 'rejected' : 'onhold', { note: reason, holdUntil })} disabled={busy}
-                      className={`flex-1 py-1.5 text-[11px] font-bold text-white rounded-lg ${mode === 'reject' ? 'bg-gray-500' : 'bg-amber-500'}`}>{mode === 'reject' ? '반려' : '보류'}</button>
+                      className={`flex-1 py-1.5 text-[11px] font-bold text-white rounded-lg ${mode === 'reject' ? 'bg-gray-500' : 'bg-amber-500'}`}>{mode === 'reject' ? L('inventory.reject') : L('inventory.onHold')}</button>
                   </div>
                 </div>
               )}
@@ -2036,22 +2035,22 @@ function SupplyRequestDetailModal({ req: r, buyer, canBuy, settlerIsMe, campCode
 
           {/* 메모·댓글 */}
           <div className="space-y-1.5">
-            <p className="text-[11px] font-bold text-gray-700">💬 메모·댓글 {r.comments?.length ? r.comments.length : ''}</p>
+            <p className="text-[11px] font-bold text-gray-700">{L('inventory.notesComments')} {r.comments?.length ? r.comments.length : ''}</p>
             {(r.comments ?? []).map(c => (
               <div key={c.id} className={`rounded-xl px-3 py-1.5 ${c.admin ? 'bg-indigo-50' : 'bg-gray-50'}`}>
                 <div className="flex items-center gap-1.5">
                   <b className={`text-[11px] ${c.admin ? 'text-indigo-700' : 'text-gray-800'}`}>{c.name}</b>
-                  {c.admin && <span className="text-[9px] px-1 rounded bg-indigo-100 text-indigo-700 font-bold">관리자</span>}
+                  {c.admin && <span className="text-[9px] px-1 rounded bg-indigo-100 text-indigo-700 font-bold">{L('common.roleAdmin')}</span>}
                   <span className="text-[10px] text-gray-400">{fmtDateTime(c.at)}</span>
-                  {isAdmin && <button onClick={() => run(() => deleteSupplyComment(db, r.id, c))} className="ml-auto text-[10px] text-gray-300 hover:text-red-500">삭제</button>}
+                  {isAdmin && <button onClick={() => run(() => deleteSupplyComment(db, r.id, c))} className="ml-auto text-[10px] text-gray-300 hover:text-red-500">{L('common.delete')}</button>}
                 </div>
                 <p className="text-[12px] text-gray-700 whitespace-pre-wrap">{c.text}</p>
               </div>
             ))}
             <div className="flex gap-1.5">
               <input value={comment} onChange={e => setComment(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && comment.trim()) send(); }}
-                placeholder={isAdmin ? '예: 이번엔 못 사고 다음 주에 살게요' : '예: 저희 반도 2개 필요해요'} className="flex-1 text-[12px] border border-gray-200 rounded-xl px-3 py-1.5 outline-none focus:border-emerald-400" />
-              <button onClick={send} disabled={busy || !comment.trim()} className="px-3 text-[12px] font-bold text-white bg-gray-800 rounded-xl disabled:opacity-30">등록</button>
+                placeholder={isAdmin ? L('inventory.eGCanTBuy') : L('inventory.eGOurClassNeeds')} className="flex-1 text-[12px] border border-gray-200 rounded-xl px-3 py-1.5 outline-none focus:border-emerald-400" />
+              <button onClick={send} disabled={busy || !comment.trim()} className="px-3 text-[12px] font-bold text-white bg-gray-800 rounded-xl disabled:opacity-30">{L('inventory.post')}</button>
             </div>
           </div>
         </div>
@@ -2109,34 +2108,34 @@ function PurchaseListTab({ views, groups, needs, requests, settings, onSelect, o
     <div className="px-4 py-3 space-y-3">
       <div className="flex gap-2">
         <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)} className={`${selCls} flex-1 min-w-0`}>
-          <option value="전체">교무실 전체</option>
+          <option value="전체">{L('inventory.allStaffRooms')}</option>
           {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
         </select>
         <div className="relative flex-1">
           <FiSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="물품명" className="w-full pl-8 pr-2 py-1.5 text-[12px] border border-gray-200 rounded-lg bg-white outline-none" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={L('inventory.item2')} className="w-full pl-8 pr-2 py-1.5 text-[12px] border border-gray-200 rounded-lg bg-white outline-none" />
         </div>
       </div>
 
       <p className="text-[10px] text-gray-400">
-        실제 구매 수량은 구매 담당자가 정합니다. 구매를 눌러도 재고는 늘지 않고, 물건이 도착해 <b>입고</b>까지 해야 재고에 반영됩니다.
+        {L('inventory.theBuyerDecidesTheActual')} <b>{L('inventory.restock')}</b>{L('inventory.themToUpdateStock')}
       </p>
 
       {/* ① 자동 부족 */}
       <div>
-        <p className="text-[11px] font-bold text-gray-500 mb-1 px-0.5">재고 부족 (최소 재고 미달) <span className="text-gray-300 font-normal">{auto.length}</span></p>
+        <p className="text-[11px] font-bold text-gray-500 mb-1 px-0.5">{L('inventory.lowStockBelowMinimum')} <span className="text-gray-300 font-normal">{auto.length}</span></p>
         {auto.length === 0 ? (
-          <p className="text-[11px] text-gray-400 bg-gray-50 rounded-xl px-3 py-3 text-center">부족한 물품이 없습니다.</p>
+          <p className="text-[11px] text-gray-400 bg-gray-50 rounded-xl px-3 py-3 text-center">{L('inventory.noLowStockItems')}</p>
         ) : (
           <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
             <table className="w-full text-[11px]">
               <thead className="bg-gray-50 text-gray-500">
                 <tr>
-                  <th className="text-left px-3 py-1.5 font-semibold">물품명 · 규격</th>
-                  <th className="text-left px-2 py-1.5 font-semibold">교무실</th>
-                  <th className="text-right px-2 py-1.5 font-semibold">현재</th>
-                  <th className="text-right px-2 py-1.5 font-semibold">최소</th>
-                  <th className="text-right px-2 py-1.5 font-semibold">부족</th>
+                  <th className="text-left px-3 py-1.5 font-semibold">{L('inventory.itemSpec')}</th>
+                  <th className="text-left px-2 py-1.5 font-semibold">{L('inventory.staffRoom2')}</th>
+                  <th className="text-right px-2 py-1.5 font-semibold">{L('inventory.current')}</th>
+                  <th className="text-right px-2 py-1.5 font-semibold">{L('inventory.min2')}</th>
+                  <th className="text-right px-2 py-1.5 font-semibold">{L('inventory.low')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -2151,7 +2150,7 @@ function PurchaseListTab({ views, groups, needs, requests, settings, onSelect, o
                       <td className="px-2 py-1.5 text-gray-600">{n.groupName}</td>
                       <td className="px-2 py-1.5 text-right font-bold text-red-600">{n.current}</td>
                       <td className="px-2 py-1.5 text-right text-gray-500">{n.min}</td>
-                      <td className="px-2 py-1.5 text-right font-bold text-gray-800">{n.shortage}{n.unit}</td>
+                      <td className="px-2 py-1.5 text-right font-bold text-gray-800">{n.shortage}{dataLabel(n.unit)}</td>
                     </tr>
                   );
                 })}
@@ -2164,11 +2163,11 @@ function PurchaseListTab({ views, groups, needs, requests, settings, onSelect, o
       {/* ② 요청에서 올라온 것 */}
       <div>
         <div className="flex items-center gap-2 mb-1 px-0.5">
-          <p className="flex-1 text-[11px] font-bold text-gray-500">요청 물품 (아직 구매 전) <span className="text-gray-300 font-normal">{fromRequests.length}</span></p>
-          <button onClick={onGoRequests} className="text-[10px] font-semibold text-emerald-700 hover:underline">재고 요청 탭 →</button>
+          <p className="flex-1 text-[11px] font-bold text-gray-500">{L('inventory.requestedItemsNotBoughtYet')} <span className="text-gray-300 font-normal">{fromRequests.length}</span></p>
+          <button onClick={onGoRequests} className="text-[10px] font-semibold text-emerald-700 hover:underline">{L('inventory.stockRequestsTab')}</button>
         </div>
         {fromRequests.length === 0 ? (
-          <p className="text-[11px] text-gray-400 bg-gray-50 rounded-xl px-3 py-3 text-center">진행 중인 요청 물품이 없습니다.</p>
+          <p className="text-[11px] text-gray-400 bg-gray-50 rounded-xl px-3 py-3 text-center">{L('inventory.noRequestedItemsInProgress')}</p>
         ) : (
           <div className="rounded-xl border border-gray-200 bg-white overflow-hidden divide-y divide-gray-100">
             {fromRequests.map(({ req, line }) => {
@@ -2182,9 +2181,9 @@ function PurchaseListTab({ views, groups, needs, requests, settings, onSelect, o
                     {v?.spec && <span className="text-gray-400 ml-1">{v.spec}</span>}
                     <span className="text-gray-400 ml-1">· {supplyForLabel(req)}{line.groupName ? ` · ${line.groupName}` : ''}</span>
                     {line.channel && <span className="ml-1 text-[9px] px-1 rounded bg-sky-50 text-sky-700 border border-sky-100">{line.channel}</span>}
-                    {line.parentBill && <span className="ml-1 text-[9px] px-1 rounded bg-violet-50 text-violet-700 border border-violet-100">학부모 청구</span>}
+                    {line.parentBill && <span className="ml-1 text-[9px] px-1 rounded bg-violet-50 text-violet-700 border border-violet-100">{L('inventory.parentBillingWord')}</span>}
                   </span>
-                  <span className="shrink-0 font-bold text-gray-800">{line.quantity}{line.unit}</span>
+                  <span className="shrink-0 font-bold text-gray-800">{line.quantity}{dataLabel(line.unit)}</span>
                   <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded ${
                     pg.key === 'buying' ? 'bg-emerald-50 text-emerald-700' : pg.key === 'approved' ? 'bg-blue-50 text-blue-700' : pg.key === 'onhold' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500'
                   }`}>{pg.label}</span>
@@ -2232,18 +2231,18 @@ function MovementTab({ campCode, groups, views }: {
     <div className="px-4 py-3 space-y-3">
       <div className="flex gap-2">
         <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)} className={`${selCls} flex-1 min-w-0`}>
-          <option value="전체">교무실 전체</option>
+          <option value="전체">{L('inventory.allStaffRooms')}</option>
           {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
         </select>
         <select value={days} onChange={e => setDays(Number(e.target.value))} className={`${selCls} w-24 shrink-0`}>
-          <option value={7}>최근 7일</option>
-          <option value={30}>최근 30일</option>
-          <option value={0}>전체 기간</option>
+          <option value={7}>{L('inventory.last7Days')}</option>
+          <option value={30}>{L('inventory.last30Days')}</option>
+          <option value={0}>{L('inventory.allTime')}</option>
         </select>
       </div>
       <div className="relative">
         <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="물품명 검색"
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder={L('inventory.searchItems2')}
           className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white outline-none focus:border-emerald-400" />
       </div>
       <div className="flex gap-1.5 overflow-x-auto pb-0.5">
@@ -2255,10 +2254,10 @@ function MovementTab({ campCode, groups, views }: {
         ))}
       </div>
 
-      <p className="text-[10px] text-gray-400">최신 400건까지 보여줍니다. 그룹 간 이동은 보낸 기록·받은 기록이 각각 남습니다.</p>
+      <p className="text-[10px] text-gray-400">{L('inventory.showsUpToTheLatest')}</p>
 
       {filtered.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-10">기록이 없습니다.</p>
+        <p className="text-sm text-gray-400 text-center py-10">{L('inventory.noRecords')}</p>
       ) : (
         <div className="rounded-xl border border-gray-200 bg-white overflow-hidden divide-y divide-gray-100">
           {filtered.map(m => {
@@ -2338,7 +2337,7 @@ function LostTab({ campCode, jobCodeId, students, campGroups, lostItems, isAdmin
     found: lostItems.filter(l => lostItemKind(l) === 'found' && isLostOpen(l)).length,
     lost: lostItems.filter(l => lostItemKind(l) === 'lost' && isLostOpen(l)).length,
   }), [lostItems]);
-  const L = LOST_STATUS_LABELS_BY_KIND[kind];
+  const SL = LOST_STATUS_LABELS_BY_KIND[kind];
 
   return (
     <div className="px-4 py-3 space-y-3">
@@ -2355,8 +2354,8 @@ function LostTab({ campCode, jobCodeId, students, campGroups, lostItems, isAdmin
       <div className="flex items-center justify-between gap-2">
         <p className="text-[10px] text-gray-400 flex-1">
           {kind === 'found'
-            ? '주운 물건을 등록해 주인을 찾습니다. 주인을 찾으면 "주인 찾음"으로 바꿔주세요.'
-            : '잃어버린 물건을 등록하면 캠프 선생님 전체에게 알림이 갑니다. 주운 물건과 짝이 맞으면 연결해주세요.'}
+            ? L('inventory.registerFoundItemsToFind')
+            : L('inventory.registeringALostItemNotifies')}
         </p>
         <button onClick={() => setShowForm(true)} className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shrink-0">
           <FiPlus className="w-3 h-3" />{LOST_KIND_LABELS[kind].action}
@@ -2364,11 +2363,11 @@ function LostTab({ campCode, jobCodeId, students, campGroups, lostItems, isAdmin
       </div>
       <div className="relative">
         <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="물품명 · 장소 · 학생 이름 검색"
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder={L('inventory.searchItemPlaceStudentName')}
           className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white outline-none focus:border-blue-400" />
       </div>
       <div className="flex gap-1.5 overflow-x-auto">
-        {([['found', `${L.found} ${counts.found}`], ['claimed', `${L.claimed} ${counts.claimed}`], ['discarded', `${L.discarded} ${counts.discarded}`], ['전체', '전체']] as const).map(([id, label]) => (
+        {([['found', `${SL.found} ${counts.found}`], ['claimed', `${SL.claimed} ${counts.claimed}`], ['discarded', `${SL.discarded} ${counts.discarded}`], ['전체', L('common.all')]] as const).map(([id, label]) => (
           <button key={id} onClick={() => setFilter(id)}
             className={`px-2.5 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap border ${filter === id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200'}`}>{label}</button>
         ))}
@@ -2377,7 +2376,7 @@ function LostTab({ campCode, jobCodeId, students, campGroups, lostItems, isAdmin
       {list.length === 0 ? (
         <div className="flex flex-col items-center py-14 text-center">
           <FiSearch className="h-9 w-9 text-gray-300 mb-2" />
-          <p className="text-sm text-gray-500">{ofKind.length === 0 ? (kind === 'found' ? '등록된 주운 물건이 없습니다.' : '찾는 물건 신고가 없습니다.') : '해당하는 건이 없습니다.'}</p>
+          <p className="text-sm text-gray-500">{ofKind.length === 0 ? (kind === 'found' ? L('inventory.noFoundItemsRegistered') : L('inventory.noLostItemReports')) : L('inventory.nothingMatches')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -2398,8 +2397,8 @@ function LostTab({ campCode, jobCodeId, students, campGroups, lostItems, isAdmin
                     {l.ownerName && <span className="text-[10px] text-rose-600 shrink-0">🏷️ {l.ownerName}</span>}
                     {l.media.length > 1 && <span className="text-[9px] text-gray-400 shrink-0">+{l.media.length - 1}</span>}
                   </div>
-                  <p className="text-[11px] text-gray-600 mt-0.5 truncate">📍 {l.foundPlace || '장소 미상'} · {l.foundDate}{l.matchedId ? ' · 🔗 연결됨' : ''}</p>
-                  <p className="text-[10px] text-gray-400 truncate">{l.keptAt ? `보관: ${l.keptAt} · ` : ''}등록 {l.reportedBy}{l.status === 'claimed' && l.claimedBy ? ` · → ${l.claimedBy}` : ''}</p>
+                  <p className="text-[11px] text-gray-600 mt-0.5 truncate">📍 {l.foundPlace || L('inventory.unknownPlace')} · {l.foundDate}{l.matchedId ? L('inventory.linked2') : ''}</p>
+                  <p className="text-[10px] text-gray-400 truncate">{l.keptAt ? L('inventory.keptAt3', { v0: l.keptAt }) : ''}{L('inventory.post')} {l.reportedBy}{l.status === 'claimed' && l.claimedBy ? ` · → ${l.claimedBy}` : ''}</p>
                 </div>
               </button>
             );
@@ -2421,7 +2420,7 @@ function MediaPicker({ files, onChange, disabled }: { files: File[]; onChange: (
     <div className="space-y-2">
       <div className="flex gap-2">
         <label className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border border-dashed text-xs font-semibold cursor-pointer ${disabled ? 'opacity-50 cursor-not-allowed' : 'border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100'}`}>
-          <FiCamera className="w-4 h-4" />사진 · 영상 추가
+          <FiCamera className="w-4 h-4" />{L('inventory.addPhotosVideos')}
           <input type="file" accept="image/*,video/*" multiple disabled={disabled} className="hidden"
             onChange={e => { const picked = Array.from(e.target.files ?? []); if (picked.length) onChange([...files, ...picked]); e.target.value = ''; }} />
         </label>
@@ -2431,14 +2430,14 @@ function MediaPicker({ files, onChange, disabled }: { files: File[]; onChange: (
           {previews.map(({ f, url }, i) => (
             <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
               {f.type.startsWith('video/') ? <video src={url} className="w-full h-full object-cover" muted playsInline /> : <img src={url} alt="" className="w-full h-full object-cover" />}
-              {f.type.startsWith('video/') && <span className="absolute bottom-1 left-1 text-[9px] px-1 rounded bg-black/60 text-white flex items-center gap-0.5"><FiVideo className="w-2.5 h-2.5" />영상</span>}
+              {f.type.startsWith('video/') && <span className="absolute bottom-1 left-1 text-[9px] px-1 rounded bg-black/60 text-white flex items-center gap-0.5"><FiVideo className="w-2.5 h-2.5" />{L('inventory.video')}</span>}
               {!disabled && <button type="button" onClick={() => onChange(files.filter((_, j) => j !== i))} className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center">✕</button>}
-              {f.size > 50 * 1024 * 1024 && <span className="absolute inset-x-0 bottom-0 text-[9px] text-center bg-red-600 text-white">50MB 초과</span>}
+              {f.size > 50 * 1024 * 1024 && <span className="absolute inset-x-0 bottom-0 text-[9px] text-center bg-red-600 text-white">{L('inventory.over50mb')}</span>}
             </div>
           ))}
         </div>
       )}
-      <p className="text-[10px] text-gray-400">사진·영상 각 50MB 이하. 여러 개 첨부 가능합니다.</p>
+      <p className="text-[10px] text-gray-400">{L('inventory.photosVideosUpTo50mb')}</p>
     </div>
   );
 }
@@ -2522,7 +2521,7 @@ function LostItemFormModal({ kind, allItems, campCode, jobCodeId, students, camp
     if (!name.trim() || busy || tooBig) return;
     setBusy(true);
     try {
-      setProgress('등록 중...');
+      setProgress(L('inventory.registering'));
       const ownerGroup = ownerGroupLabel?.toLowerCase();
       const id = await addLostItem(db, {
         campCode, name: name.trim(), description: description.trim() || undefined, foundPlace: foundPlace.trim() || undefined,
@@ -2534,7 +2533,7 @@ function LostItemFormModal({ kind, allItems, campCode, jobCodeId, students, camp
         notifyTargets: owner && !toAll ? targets : undefined,
       });
       if (files.length) {
-        setProgress(`사진·영상 ${files.length}개 업로드 중...`);
+        setProgress(L('inventory.uploadingPhotosVideos', { v0: files.length }));
         const media = await uploadLostMedia(campCode, id, files);
         await addLostItemMedia(db, id, media);
       }
@@ -2543,14 +2542,14 @@ function LostItemFormModal({ kind, allItems, campCode, jobCodeId, students, camp
           .then(data => {
             const msg = missedSummary(data?.missed);
             if (msg) toast(`🔕 ${msg}`, { duration: 8000 });
-            else if (data?.sent) toast.success(`${data.sent}명에게 알림을 보냈어요`);
+            else if (data?.sent) toast.success(L('inventory.notifiedPeople', { v0: data.sent }));
           })
           .catch(e => console.warn('분실물 알림 요청 실패:', e));
       }
       onCreated(id);
     } catch (e) {
       console.error('분실물 등록 오류:', e);
-      alert('등록 중 오류가 발생했습니다.');
+      alert(L('inventory.anErrorOccurredWhileRegistering'));
     } finally { setBusy(false); setProgress(''); }
   };
 
@@ -2559,72 +2558,72 @@ function LostItemFormModal({ kind, allItems, campCode, jobCodeId, students, camp
     <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-[60]" onClick={busy ? undefined : onClose}>
       <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-900">{isLost ? '🙋 잃어버렸어요' : '🔍 주운 물건 등록'}</h2>
+          <h2 className="text-base font-bold text-gray-900">{isLost ? L('inventory.iLostSomething') : L('inventory.registerAFoundItem')}</h2>
           <button onClick={onClose} disabled={busy} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
           <MediaPicker files={files} onChange={setFiles} disabled={busy} />
           <div>
-            <p className="text-xs font-bold text-gray-700 mb-1">물품명 *</p>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="예: 파란색 물통, 안경, 후드집업" className={inputCls} autoFocus />
+            <p className="text-xs font-bold text-gray-700 mb-1">{L('inventory.item')}</p>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder={L('inventory.eGBlueWaterBottle')} className={inputCls} autoFocus />
           </div>
 
           {/* 반대쪽에서 짝이 될 만한 건 제안 */}
           {matches.length > 0 && (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 space-y-1.5">
               <p className="text-[12px] font-bold text-amber-900">
-                💡 {isLost ? '혹시 이 물건인가요? (누군가 주워서 등록했어요)' : '이 물건을 찾는 사람이 있어요'}
+                💡 {isLost ? L('inventory.couldThisBeItSomeone') : L('inventory.someoneIsLookingForThis2')}
               </p>
               {matches.map(({ item: m }) => (
                 <button type="button" key={m.id} onClick={() => onCreated(m.id)} className="w-full text-left text-[11px] text-gray-700 bg-white rounded-lg border border-amber-100 px-2.5 py-1.5 hover:border-amber-300">
                   <b className="text-gray-900">{m.name}</b>
                   {m.ownerName && <span className="text-rose-600 ml-1">🏷️ {m.ownerName}</span>}
-                  <span className="text-gray-400 ml-1">· {m.foundPlace || '장소 미상'} · {m.foundDate} · {m.reportedBy}</span>
+                  <span className="text-gray-400 ml-1">· {m.foundPlace || L('inventory.unknownPlace')} · {m.foundDate} · {m.reportedBy}</span>
                   {m.description && <span className="block text-gray-500 truncate">{m.description}</span>}
                 </button>
               ))}
               <p className="text-[10px] text-amber-700">
-                눌러서 열어 보고, 같은 물건이면 거기서 <b>연결</b>하세요. 아니면 그대로 등록해도 됩니다.
+                {L('inventory.tapToOpenItAnd')} <b>{L('inventory.link3')}</b>{L('inventory.itThereOtherwiseYouCan')}
               </p>
             </div>
           )}
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <p className="text-xs font-bold text-gray-700 mb-1">{isLost ? '마지막으로 본 곳' : '발견 장소'}</p>
-              <input value={foundPlace} onChange={e => setFoundPlace(e.target.value)} placeholder="예: 강당, 3층 복도" className={inputCls} />
+              <p className="text-xs font-bold text-gray-700 mb-1">{isLost ? L('inventory.lastSeenAt') : L('inventory.foundAt')}</p>
+              <input value={foundPlace} onChange={e => setFoundPlace(e.target.value)} placeholder={L('inventory.eGAuditorium3rdFloor')} className={inputCls} />
             </div>
             <div>
-              <p className="text-xs font-bold text-gray-700 mb-1">{isLost ? '잃어버린 날' : '발견일'}</p>
+              <p className="text-xs font-bold text-gray-700 mb-1">{isLost ? L('inventory.dateLost') : L('inventory.dateFound')}</p>
               <input type="date" value={foundDate} max={todayStr()} onChange={e => setFoundDate(e.target.value)} className={inputCls} />
             </div>
           </div>
           {!isLost && (
             <div>
-              <p className="text-xs font-bold text-gray-700 mb-1">보관 장소</p>
-              <input value={keptAt} onChange={e => setKeptAt(e.target.value)} placeholder="예: 2층 교무실 분실물 박스" className={inputCls} />
+              <p className="text-xs font-bold text-gray-700 mb-1">{L('inventory.keptAt2')}</p>
+              <input value={keptAt} onChange={e => setKeptAt(e.target.value)} placeholder={L('inventory.eGLostFoundBox')} className={inputCls} />
             </div>
           )}
           <div>
-            <p className="text-xs font-bold text-gray-700 mb-1">설명 <span className="font-normal text-gray-400">(특징, 이름표 여부 등)</span></p>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="예: 뚜껑에 스티커 붙어 있음, 이름 없음" className={`${inputCls} resize-none`} />
+            <p className="text-xs font-bold text-gray-700 mb-1">{L('inventory.description')} <span className="font-normal text-gray-400">{L('inventory.featuresNameTagEtc')}</span></p>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder={L('inventory.eGStickerOnThe')} className={`${inputCls} resize-none`} />
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-700 mb-1">{isLost ? '🙋 잃어버린 학생 ' : '🏷️ 이름표 (주인을 아는 경우)'}<span className="font-normal text-gray-400">{isLost ? '(선택 — 선생님 물건이면 비워두세요)' : ''}</span></p>
+            <p className="text-xs font-bold text-gray-700 mb-1">{isLost ? L('inventory.studentWhoLostIt2') : L('inventory.nameTagIfTheOwner')}<span className="font-normal text-gray-400">{isLost ? L('inventory.optionalLeaveBlankIfIt') : ''}</span></p>
             {owner ? (
               <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2">
                 <span className="text-sm font-semibold text-rose-800">{owner.name}</span>
-                <span className="text-[11px] text-rose-700/80">{[owner.className, owner.classMentor && `담임 ${owner.classMentor}`, owner.unitMentor && `방 ${owner.unitMentor}`].filter(Boolean).join(' · ')}</span>
+                <span className="text-[11px] text-rose-700/80">{[owner.className, owner.classMentor && L('inventory.homeroom2', { v0: owner.classMentor }), owner.unitMentor && L('inventory.room', { v0: owner.unitMentor })].filter(Boolean).join(' · ')}</span>
                 <button type="button" onClick={() => setOwner(null)} className="ml-auto text-rose-400 hover:text-rose-600 text-xs">✕</button>
               </div>
             ) : (
               <div className="relative">
-                <input value={ownerQuery} onChange={e => setOwnerQuery(e.target.value)} placeholder="학생 이름 검색 (모르면 비워두세요)" className={inputCls} />
+                <input value={ownerQuery} onChange={e => setOwnerQuery(e.target.value)} placeholder={L('inventory.searchStudentNameLeaveBlank')} className={inputCls} />
                 {ownerResults.length > 0 && (
                   <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
                     {ownerResults.map(s => (
                       <button key={s.studentId} type="button" onClick={() => { setOwner(s); setOwnerQuery(''); }}
                         className="w-full text-left px-3 py-2 text-sm hover:bg-rose-50">
-                        {s.name} <span className="text-[11px] text-gray-400">{s.className}{s.classMentor ? ` · 담임 ${s.classMentor}` : ''}</span>
+                        {s.name} <span className="text-[11px] text-gray-400">{s.className}{s.classMentor ? L('inventory.homeroom', { v0: s.classMentor }) : ''}</span>
                       </button>
                     ))}
                   </div>
@@ -2636,21 +2635,21 @@ function LostItemFormModal({ kind, allItems, campCode, jobCodeId, students, camp
             <label className="flex items-start gap-2 px-3 py-2 cursor-pointer">
               <input type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} className="w-4 h-4 mt-0.5" />
               <span className="text-[12px] text-gray-700">
-                푸시 알림 보내기
+                {L('inventory.sendPushNotification')}
                 <span className="block text-[10px] text-gray-400">
-                  {!notify ? '아무에게도 보내지 않습니다'
+                  {!notify ? L('inventory.notSentToAnyone')
                     : owner && !toAll
                       ? (targets.length
-                          ? `${owner.name} 학생 ${targets.map(t => LOST_NOTIFY_TARGET_LABELS[t].ko).join(' · ')}에게만 보냅니다`
-                          : '받는 사람을 골라주세요')
-                      : '캠프 선생님 전체에게 보냅니다 — 중요하지 않은 물품이면 끄세요'}
+                          ? L('inventory.sentOnlyToS', { v0: owner.name, v1: targets.map(t => LOST_NOTIFY_TARGET_LABELS[t].ko).join(' · ') })
+                          : L('inventory.chooseRecipients'))
+                      : L('inventory.sentToAllCampTeachers')}
                 </span>
               </span>
             </label>
             {notify && owner && (
               <div className="px-3 py-2 bg-gray-50/60 space-y-1.5">
                 <p className="text-[11px] font-bold text-gray-600">
-                  받는 사람 <span className="font-normal text-gray-400">이름표가 있어 주인을 아는 물품이에요</span>
+                  {L('inventory.recipients')} <span className="font-normal text-gray-400">{L('inventory.thisItemHasAName')}</span>
                 </p>
                 <div className={`space-y-1 ${toAll ? 'opacity-40' : ''}`}>
                   {LOST_NOTIFY_TARGETS.map(t => {
@@ -2666,7 +2665,7 @@ function LostItemFormModal({ kind, allItems, campCode, jobCodeId, students, camp
                         <span className="text-[12px] text-gray-700 flex-1 min-w-0">
                           {LOST_NOTIFY_TARGET_LABELS[t].ko}
                           <span className="text-[11px] text-gray-400 ml-1">
-                            {loading ? '확인 중...' : who || (t === 'groupManager' ? `${ownerGroupLabel ?? ''} 부매니저 없음`.trim() : '지정된 사람 없음')}
+                            {loading ? L('inventory.checking') : who || (t === 'groupManager' ? `${ownerGroupLabel ?? ''} 부매니저 없음`.trim() : L('inventory.noOneAssigned'))}
                           </span>
                         </span>
                         {(() => {
@@ -2674,8 +2673,8 @@ function LostItemFormModal({ kind, allItems, campCode, jobCodeId, students, camp
                           // 부매니저가 여러 명이면 한 명이라도 못 받으면 알려 준다
                           const names = t === 'groupManager' ? groupManagerNames : [who];
                           const bad = names.map(n => reachOfName(n)).find(st => st && st !== 'ok');
-                          if (bad) return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 shrink-0 font-bold">🔕 {MISSED_STATE_LABELS[bad]?.ko ?? '못 받음'}</span>;
-                          if (names.every(n => reachOfName(n) === 'ok')) return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">받을 수 있음</span>;
+                          if (bad) return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-200 shrink-0 font-bold">🔕 {MISSED_STATE_LABELS[bad]?.ko ?? L('inventory.canTReceive2')}</span>;
+                          if (names.every(n => reachOfName(n) === 'ok')) return <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">{L('inventory.canReceive2')}</span>;
                           return null;
                         })()}
                       </label>
@@ -2684,11 +2683,11 @@ function LostItemFormModal({ kind, allItems, campCode, jobCodeId, students, camp
                 </div>
                 <label className="flex items-center gap-2 pt-1 border-t border-gray-200 cursor-pointer">
                   <input type="checkbox" checked={toAll} onChange={e => setToAll(e.target.checked)} className="w-4 h-4" />
-                  <span className="text-[12px] text-gray-700 flex-1">캠프 선생님 전체</span>
+                  <span className="text-[12px] text-gray-700 flex-1">{L('inventory.allCampTeachers')}</span>
                   {toAll && (
                     <button type="button" onClick={e => { e.preventDefault(); setShowCheck(v => !v); loadCampUsers(); }}
                       className="text-[11px] font-semibold text-blue-700 hover:underline shrink-0">
-                      {checking ? '확인 중...' : showCheck ? '접기' : '받을 수 있는지 확인'}
+                      {checking ? L('inventory.checking') : showCheck ? L('inventory.collapse') : L('inventory.checkWhoCanReceive')}
                     </button>
                   )}
                 </label>
@@ -2696,12 +2695,12 @@ function LostItemFormModal({ kind, allItems, campCode, jobCodeId, students, camp
                 {toAll && showCheck && preview && (
                   <div className="rounded-lg border border-gray-200 bg-white px-2.5 py-2 space-y-1">
                     <p className="text-[11px] text-gray-700">
-                      <b>{preview.total}명</b> 중 <b className="text-emerald-700">{preview.ok.length}명</b>이 받을 수 있어요
-                      {preview.missed.length > 0 && <> · <b className="text-red-600">{preview.missed.length}명</b>은 못 받아요</>}
+                      <b>{preview.total}{L('common.people2')}</b> {L('inventory.of')} <b className="text-emerald-700">{preview.ok.length}{L('common.people2')}</b>{L('inventory.canReceive')}
+                      {preview.missed.length > 0 && <> · <b className="text-red-600">{preview.missed.length}{L('common.people2')}</b>{L('inventory.canTReceive')}</>}
                     </p>
                     {preview.missed.length > 0 && (
                       <p className="text-[11px] text-gray-500 leading-relaxed">
-                        {preview.missed.map(m => `${m.name}(${MISSED_STATE_LABELS[m.state]?.ko ?? '못 받음'})`).join(', ')}
+                        {preview.missed.map(m => `${m.name}(${(isEnglishUI() ? MISSED_STATE_LABELS[m.state]?.en : MISSED_STATE_LABELS[m.state]?.ko) ?? L('inventory.cannotReceive')})`).join(', ')}
                       </p>
                     )}
                   </div>
@@ -2709,14 +2708,14 @@ function LostItemFormModal({ kind, allItems, campCode, jobCodeId, students, camp
                 {/* 담당 선생님 — 고른 사람 중 못 받는 사람 요약 */}
                 {!toAll && preview && preview.missed.length > 0 && (
                   <p className="text-[11px] text-red-600">
-                    🔕 {preview.missed.map(m => `${m.name}(${MISSED_STATE_LABELS[m.state]?.ko ?? '못 받음'})`).join(', ')} — 알림을 켜 달라고 알려주세요
+                    🔕 {preview.missed.map(m => `${m.name}(${(isEnglishUI() ? MISSED_STATE_LABELS[m.state]?.en : MISSED_STATE_LABELS[m.state]?.ko) ?? L('inventory.cannotReceive')})`).join(', ')} {L('inventory.askThemToTurnOn')}
                   </p>
                 )}
                 {!toAll && preview && preview.total === 0 && targets.length > 0 && (
-                  <p className="text-[11px] text-amber-700">고른 담당 선생님이 이 캠프 명단에 없어요. 캠프 전체로 보내는 게 좋겠습니다.</p>
+                  <p className="text-[11px] text-amber-700">{L('inventory.theChosenTeacherIsnT')}</p>
                 )}
                 {!toAll && targets.length === 0 && (
-                  <p className="text-[11px] text-amber-700">한 명 이상 고르거나, 캠프 전체를 선택하거나, 푸시 알림을 꺼주세요.</p>
+                  <p className="text-[11px] text-amber-700">{L('inventory.chooseAtLeastOnePerson')}</p>
                 )}
               </div>
             )}
@@ -2725,8 +2724,8 @@ function LostItemFormModal({ kind, allItems, campCode, jobCodeId, students, camp
         <div className="px-5 py-4 border-t border-gray-100 space-y-1.5">
           {progress && <p className="text-[11px] text-blue-600 text-center">{progress}</p>}
           <div className="flex gap-2">
-            <button onClick={onClose} disabled={busy} className="flex-1 py-2.5 text-sm text-gray-600 bg-gray-100 rounded-xl disabled:opacity-40">취소</button>
-            <button onClick={submit} disabled={!name.trim() || busy || tooBig} className="flex-1 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl disabled:opacity-40">{busy ? '등록 중...' : '등록'}</button>
+            <button onClick={onClose} disabled={busy} className="flex-1 py-2.5 text-sm text-gray-600 bg-gray-100 rounded-xl disabled:opacity-40">{L('common.cancel')}</button>
+            <button onClick={submit} disabled={!name.trim() || busy || tooBig} className="flex-1 py-2.5 text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl disabled:opacity-40">{busy ? L('inventory.registering') : L('inventory.post')}</button>
           </div>
         </div>
       </div>
@@ -2740,7 +2739,7 @@ function LostItemDetailModal({ item, allItems, isAdmin, userId, userName, onClos
   const canDelete = isAdmin || item.reportedById === userId;
   const kind = lostItemKind(item);
   const isLost = kind === 'lost';
-  const L = LOST_STATUS_LABELS_BY_KIND[kind];
+  const SL = LOST_STATUS_LABELS_BY_KIND[kind];
   const [claimName, setClaimName] = useState(item.claimedBy ?? item.ownerName ?? '');
   const [claiming, setClaiming] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -2760,7 +2759,7 @@ function LostItemDetailModal({ item, allItems, isAdmin, userId, userName, onClos
   );
   const link = async (otherId: string, otherName: string) => {
     if (busy) return;
-    if (!confirm(`\u300c${item.name}\u300d\uc640 \u300c${otherName}\u300d\uc744 \uac19\uc740 \ubb3c\uac74\uc73c\ub85c \uc5f0\uacb0\ud569\ub2c8\ub2e4.\n\uc5f0\uacb0\ud558\uba74 \uc591\ucabd \ubaa8\ub450 \ucc3e\uc740 \uac83\uc73c\ub85c \uc815\ub9ac\ub429\ub2c8\ub2e4. \uc9c4\ud589\ud560\uae4c\uc694?`)) return;
+    if (!confirm(L('inventory.linkAndAsTheSame', { v0: item.name, v1: otherName }))) return;
     setBusy(true);
     try {
       await linkLostItems(db, item.id, otherId, { name: userName, claimedName: claimName.trim() || undefined });
@@ -2769,12 +2768,12 @@ function LostItemDetailModal({ item, allItems, isAdmin, userId, userName, onClos
         .then(data => {
           const msg = missedSummary(data?.missed);
           if (msg) toast(`🔕 ${msg}`, { duration: 8000 });
-          else if (data?.sent) toast.success(`${data.sent}명에게 찾았다고 알렸어요`);
+          else if (data?.sent) toast.success(L('inventory.notifiedPeopleThatItWas', { v0: data.sent }));
         })
         .catch(e => console.warn('분실물 연결 알림 요청 실패:', e));
     } catch (e) {
       console.error('분실물 연결 오류:', e);
-      alert('연결 중 오류가 발생했습니다.');
+      alert(L('inventory.anErrorOccurredWhileLinking'));
     } finally { setBusy(false); }
   };
 
@@ -2793,11 +2792,11 @@ function LostItemDetailModal({ item, allItems, isAdmin, userId, userName, onClos
       const media = await uploadLostMedia(item.campCode, item.id, newFiles);
       await addLostItemMedia(db, item.id, media);
       setNewFiles([]);
-    } catch (e) { console.error('첨부 추가 오류:', e); alert('업로드 중 오류가 발생했습니다.'); }
+    } catch (e) { console.error('첨부 추가 오류:', e); alert(L('inventory.anErrorOccurredWhileUploading')); }
     finally { setBusy(false); }
   };
   const removeMedia = async (m: LostItemMedia) => {
-    if (!confirm('이 첨부를 삭제할까요?')) return;
+    if (!confirm(L('inventory.deleteThisAttachment'))) return;
     try { await deleteObject(storageRef(storage, m.path)); } catch { /* 이미 없으면 무시 */ }
     await removeLostItemMedia(db, item.id, item.media, m.path);
   };
@@ -2809,7 +2808,7 @@ function LostItemDetailModal({ item, allItems, isAdmin, userId, userName, onClos
     finally { setBusy(false); }
   };
   const remove = async () => {
-    if (!confirm('이 분실물 기록과 첨부를 삭제할까요?')) return;
+    if (!confirm(L('inventory.deleteThisLostFoundRecord'))) return;
     setBusy(true);
     try {
       await Promise.all(item.media.map(m => deleteObject(storageRef(storage, m.path)).catch(() => undefined)));
@@ -2829,7 +2828,7 @@ function LostItemDetailModal({ item, allItems, isAdmin, userId, userName, onClos
               <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${LOST_STATUS_STYLE[item.status]}`}>{lostStatusLabel(item)}</span>
             </div>
             <h2 className="text-base font-bold text-gray-900 mt-1">{item.name}</h2>
-            <p className="text-[10px] text-gray-400">등록 {item.reportedBy} · {fmtDateTime(item.createdAt)}{item.status !== 'found' && item.claimedHandler ? ` · ${lostStatusLabel(item)} 처리 ${item.claimedHandler} ${fmtDateTime(item.claimedAt)}` : ''}</p>
+            <p className="text-[10px] text-gray-400">{L('inventory.post')} {item.reportedBy} · {fmtDateTime(item.createdAt)}{item.status !== 'found' && item.claimedHandler ? L('inventory.marked', { v0: lostStatusLabel(item), v1: item.claimedHandler, v2: fmtDateTime(item.claimedAt) }) : ''}</p>
           </div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
         </div>
@@ -2843,7 +2842,7 @@ function LostItemDetailModal({ item, allItems, isAdmin, userId, userName, onClos
                   <button type="button" onClick={() => setViewer(m)} className="w-full h-full">
                     {m.type === 'video' ? <video src={m.url} className="w-full h-full object-cover" muted playsInline preload="metadata" /> : <img src={m.url} alt="" className="w-full h-full object-cover" />}
                   </button>
-                  {m.type === 'video' && <span className="absolute bottom-1 left-1 text-[9px] px-1 rounded bg-black/60 text-white flex items-center gap-0.5 pointer-events-none"><FiVideo className="w-2.5 h-2.5" />영상</span>}
+                  {m.type === 'video' && <span className="absolute bottom-1 left-1 text-[9px] px-1 rounded bg-black/60 text-white flex items-center gap-0.5 pointer-events-none"><FiVideo className="w-2.5 h-2.5" />{L('inventory.video')}</span>}
                   {canDelete && <button type="button" onClick={() => removeMedia(m)} className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white text-[10px] flex items-center justify-center">✕</button>}
                 </div>
               ))}
@@ -2852,86 +2851,86 @@ function LostItemDetailModal({ item, allItems, isAdmin, userId, userName, onClos
           <div>
             <MediaPicker files={newFiles} onChange={setNewFiles} disabled={busy} />
             {newFiles.length > 0 && (
-              <button onClick={uploadMore} disabled={busy} className="mt-1.5 w-full py-2 text-xs font-bold text-white bg-blue-600 rounded-xl disabled:opacity-40">{busy ? '업로드 중...' : `${newFiles.length}개 첨부 업로드`}</button>
+              <button onClick={uploadMore} disabled={busy} className="mt-1.5 w-full py-2 text-xs font-bold text-white bg-blue-600 rounded-xl disabled:opacity-40">{busy ? L('task.uploading') : L('inventory.uploadAttachments', { v0: newFiles.length })}</button>
             )}
           </div>
 
           {/* 정보 */}
           {editing ? (
             <div className="space-y-2">
-              <input value={name} onChange={e => setName(e.target.value)} className={inputCls} placeholder="물품명" />
+              <input value={name} onChange={e => setName(e.target.value)} className={inputCls} placeholder={L('inventory.item2')} />
               <div className="grid grid-cols-2 gap-2">
-                <input value={foundPlace} onChange={e => setFoundPlace(e.target.value)} className={inputCls} placeholder="발견 장소" />
+                <input value={foundPlace} onChange={e => setFoundPlace(e.target.value)} className={inputCls} placeholder={L('inventory.foundAt')} />
                 <input type="date" value={foundDate} onChange={e => setFoundDate(e.target.value)} className={inputCls} />
               </div>
-              <input value={keptAt} onChange={e => setKeptAt(e.target.value)} className={inputCls} placeholder="보관 장소" />
-              <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} className={`${inputCls} resize-none`} placeholder="설명" />
+              <input value={keptAt} onChange={e => setKeptAt(e.target.value)} className={inputCls} placeholder={L('inventory.keptAt2')} />
+              <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} className={`${inputCls} resize-none`} placeholder={L('inventory.description')} />
               <div className="flex gap-2">
-                <button onClick={() => setEditing(false)} className="flex-1 py-1.5 text-xs text-gray-500 bg-gray-100 rounded-lg">취소</button>
-                <button onClick={saveEdit} disabled={busy} className="flex-1 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg disabled:opacity-40">저장</button>
+                <button onClick={() => setEditing(false)} className="flex-1 py-1.5 text-xs text-gray-500 bg-gray-100 rounded-lg">{L('common.cancel')}</button>
+                <button onClick={saveEdit} disabled={busy} className="flex-1 py-1.5 text-xs font-bold text-white bg-blue-600 rounded-lg disabled:opacity-40">{L('common.save')}</button>
               </div>
             </div>
           ) : (
             <div className="rounded-xl border border-gray-100 bg-gray-50 p-3 text-[12px] text-gray-700 space-y-1">
-              <p>📍 {isLost ? '마지막으로 본 곳' : '발견 장소'}: <b>{item.foundPlace || '—'}</b> · {isLost ? '잃어버린 날' : '발견일'} <b>{item.foundDate}</b></p>
-              {!isLost && <p>📦 보관 장소: <b>{item.keptAt || '—'}</b></p>}
+              <p>📍 {isLost ? L('inventory.lastSeenAt') : L('inventory.foundAt')}: <b>{item.foundPlace || '—'}</b> · {isLost ? L('inventory.dateLost') : L('inventory.dateFound')} <b>{item.foundDate}</b></p>
+              {!isLost && <p>{L('inventory.keptAt')} <b>{item.keptAt || '—'}</b></p>}
               {item.description && <p className="text-gray-600">📝 {item.description}</p>}
-              {item.ownerName && <p className="text-rose-700">{isLost ? '🙋 잃어버린 학생' : '🏷️ 이름표'}: <b>{item.ownerName}</b>{item.ownerClassCode ? ` (${item.ownerClassCode})` : ''}</p>}
-              {item.status === 'claimed' && <p className="text-emerald-700">✅ {isLost ? `${item.claimedBy || '주인'} 학생이 찾았어요` : `${item.claimedBy || '주인'}에게 돌려줌`}</p>}
-              <button onClick={() => setEditing(true)} className="text-[11px] text-blue-600 hover:underline">정보 수정</button>
+              {item.ownerName && <p className="text-rose-700">{isLost ? L('inventory.studentWhoLostIt') : L('inventory.nameTag')}: <b>{item.ownerName}</b>{item.ownerClassCode ? ` (${item.ownerClassCode})` : ''}</p>}
+              {item.status === 'claimed' && <p className="text-emerald-700">✅ {isLost ? L('inventory.foundBy', { v0: item.claimedBy || L('inventory.ownerWord') }) : L('inventory.returnedTo', { v0: item.claimedBy || L('inventory.ownerWord') })}</p>}
+              <button onClick={() => setEditing(true)} className="text-[11px] text-blue-600 hover:underline">{L('inventory.editInfo')}</button>
             </div>
           )}
 
           {/* 짝 연결 */}
           {matched ? (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-              <p className="text-[11px] font-bold text-emerald-800">🔗 연결된 {LOST_KIND_LABELS[lostItemKind(matched)].tab}</p>
+              <p className="text-[11px] font-bold text-emerald-800">{L('inventory.linked')} {LOST_KIND_LABELS[lostItemKind(matched)].tab}</p>
               <button type="button" onClick={() => onOpen(matched.id)} className="mt-1 w-full text-left">
                 <p className="text-[12px] font-bold text-gray-900 hover:underline">{matched.name}</p>
-                <p className="text-[10px] text-gray-500">등록 {matched.reportedBy} · {matched.foundPlace || '장소 미기재'}</p>
+                <p className="text-[10px] text-gray-500">{L('inventory.post')} {matched.reportedBy} · {matched.foundPlace || L('inventory.noPlaceGiven')}</p>
               </button>
-              {item.matchedBy && <p className="text-[10px] text-emerald-700 mt-1">{item.matchedBy} 연결 · {fmtDateTime(item.matchedAt)}</p>}
+              {item.matchedBy && <p className="text-[10px] text-emerald-700 mt-1">{item.matchedBy} {L('inventory.link2')} {fmtDateTime(item.matchedAt)}</p>}
             </div>
           ) : matches.length > 0 ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 space-y-2">
               <p className="text-[11px] font-bold text-amber-800">
-                💡 {isLost ? '이 물건일 수도 있어요 (주운 물건)' : '이 물건을 찾는 사람이 있어요 (찾는 물건)'}
+                💡 {isLost ? L('inventory.thisMightBeItFound') : L('inventory.someoneIsLookingForThis')}
               </p>
               {matches.map(m => (
                 <div key={m.item.id} className="flex items-center gap-2 bg-white rounded-lg border border-amber-100 px-2.5 py-2">
                   <button type="button" onClick={() => onOpen(m.item.id)} className="flex-1 min-w-0 text-left">
                     <p className="text-[12px] font-bold text-gray-900 truncate hover:underline">{m.item.name}</p>
-                    <p className="text-[10px] text-gray-500 truncate">{m.item.reportedBy} · {m.item.foundPlace || '장소 미기재'}{m.item.ownerName ? ` · ${m.item.ownerName}` : ''}</p>
+                    <p className="text-[10px] text-gray-500 truncate">{m.item.reportedBy} · {m.item.foundPlace || L('inventory.noPlaceGiven')}{m.item.ownerName ? ` · ${m.item.ownerName}` : ''}</p>
                   </button>
                   <button type="button" onClick={() => link(m.item.id, m.item.name)} disabled={busy}
-                    className="shrink-0 px-2.5 py-1.5 text-[11px] font-bold text-white bg-amber-600 rounded-lg disabled:opacity-40">연결하기</button>
+                    className="shrink-0 px-2.5 py-1.5 text-[11px] font-bold text-white bg-amber-600 rounded-lg disabled:opacity-40">{L('inventory.link')}</button>
                 </div>
               ))}
-              <p className="text-[10px] text-amber-700">연결하면 양쪽 모두 “{L.claimed}”으로 정리됩니다.</p>
+              <p className="text-[10px] text-amber-700">{L('inventory.onceLinkedBothWillBe')}{SL.claimed}{L('inventory.text')}</p>
             </div>
           ) : null}
 
           {/* 상태 */}
           <div className="space-y-2">
-            <p className="text-xs font-bold text-gray-700">상태 변경</p>
+            <p className="text-xs font-bold text-gray-700">{L('inventory.changeStatus')}</p>
             <div className="flex gap-1.5">
               {LOST_ITEM_STATUSES.map(s => (
                 <button key={s} onClick={() => setStatus(s)} disabled={busy}
                   className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-colors ${item.status === s ? `${LOST_STATUS_STYLE[s]} border-transparent` : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
-                  {L[s]}
+                  {SL[s]}
                 </button>
               ))}
             </div>
             {(claiming || item.status === 'claimed') && (
               <div className="flex gap-2 items-center">
-                <input value={claimName} onChange={e => setClaimName(e.target.value)} placeholder={isLost ? '찾은 학생(사람) 이름' : '돌려준 학생(사람) 이름'} className={`${inputCls} flex-1`} autoFocus={claiming} />
-                <button onClick={() => setStatus('claimed')} disabled={busy || !claimName.trim()} className="px-3 py-2 text-xs font-bold text-white bg-emerald-600 rounded-xl disabled:opacity-40">{item.status === 'claimed' ? '이름 저장' : `${L.claimed} 처리`}</button>
+                <input value={claimName} onChange={e => setClaimName(e.target.value)} placeholder={isLost ? L('inventory.nameOfTheStudentPerson2') : L('inventory.nameOfTheStudentPerson')} className={`${inputCls} flex-1`} autoFocus={claiming} />
+                <button onClick={() => setStatus('claimed')} disabled={busy || !claimName.trim()} className="px-3 py-2 text-xs font-bold text-white bg-emerald-600 rounded-xl disabled:opacity-40">{item.status === 'claimed' ? L('inventory.saveName') : L('inventory.mark', { v0: SL.claimed })}</button>
               </div>
             )}
           </div>
 
           {canDelete && (
-            <button onClick={remove} disabled={busy} className="w-full py-2 text-[11px] text-red-500 hover:bg-red-50 rounded-lg">기록 삭제</button>
+            <button onClick={remove} disabled={busy} className="w-full py-2 text-[11px] text-red-500 hover:bg-red-50 rounded-lg">{L('patient.deleteRecord')}</button>
           )}
         </div>
       </div>
@@ -2987,46 +2986,46 @@ function BulkStockEditor({ campCode, views, groups, userName }: {
 
   const save = async () => {
     if (changed.length === 0 || busy) return;
-    if (mode === 'adjust' && !memo.trim()) { alert('실사 조정 사유를 입력해주세요. (예: 29기 종료 실사)'); return; }
-    if (!confirm(`${changed.length}칸을 ${mode === 'restock' ? '입고(기수 시작·보충)' : '실사 조정'}으로 저장할까요?`)) return;
+    if (mode === 'adjust' && !memo.trim()) { alert(L('inventory.enterTheReasonForThe')); return; }
+    if (!confirm(L('inventory.saveCellsAs', { v0: changed.length, v1: mode === 'restock' ? L('inventory.restockModeLabel') : L('inventory.countModeLabel') }))) return;
     setBusy(true);
     try {
       const n = await setStockLevels(db, campCode, changed, {
         reason: mode, refLabel: mode === 'restock' ? '일괄 입고' : '실사', memo: memo.trim() || undefined,
       }, userName);
-      alert(`${n}칸을 저장했습니다.`);
+      alert(L('inventory.savedCells', { v0: n }));
       setEdits({});
     } catch (e) {
       console.error('일괄 저장 오류:', e);
-      alert('저장 중 오류가 발생했습니다.');
+      alert(L('task.failedToSaveTask2'));
     } finally { setBusy(false); }
   };
 
-  if (groups.length === 0) return <p className="text-[11px] text-gray-400">먼저 그룹 · 패키지에서 재고 그룹을 만들어주세요.</p>;
+  if (groups.length === 0) return <p className="text-[11px] text-gray-400">{L('inventory.createInventoryGroupsInGroups')}</p>;
 
   return (
     <div className="space-y-2">
       <div className="rounded-xl border border-gray-200 bg-white p-3 space-y-2">
-        <p className="text-xs font-bold text-gray-800">📋 일괄 입력 · 실사</p>
-        <p className="text-[10px] text-gray-400">칸에 <b>지금 실제 수량(낱개)</b>을 적고 저장하세요. 바뀐 칸만 기록되고, 차이는 변동 내역에 남습니다.</p>
+        <p className="text-xs font-bold text-gray-800">{L('inventory.bulkEntryStockCount')}</p>
+        <p className="text-[10px] text-gray-400">{L('inventory.inEachCellEnter')} <b>{L('inventory.theActualQuantityNowUnits')}</b>{L('inventory.andSaveOnlyChangedCells')}</p>
         <div className="flex flex-wrap gap-1.5 items-center">
-          {([['restock', '입고 (기수 시작·보충)'], ['adjust', '실사 조정']] as const).map(([id, label]) => (
+          {([['restock', L('inventory.restockTermStartRefill')], ['adjust', L('inventory.stockCountAdjustment')]] as const).map(([id, label]) => (
             <button key={id} onClick={() => setMode(id)}
               className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border ${mode === id ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-200'}`}>{label}</button>
           ))}
           {mode === 'adjust' && STOCKTAKE_REASONS.map(r => (
             <button key={r} type="button" onClick={() => setMemo(memo === r ? '' : r)}
-              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${memo === r ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'}`}>{r}</button>
+              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${memo === r ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300'}`}>{dataLabel(r)}</button>
           ))}
-          <input value={memo} onChange={e => setMemo(e.target.value)} placeholder={mode === 'adjust' ? '사유 (필수 · 버튼 또는 직접 입력)' : '메모 (선택, 예: 이마트 구매분)'}
+          <input value={memo} onChange={e => setMemo(e.target.value)} placeholder={mode === 'adjust' ? L('inventory.reasonRequiredButtonOrType') : L('inventory.noteOptionalEGBought')}
             className="flex-1 min-w-[160px] text-[11px] border border-gray-200 rounded-lg px-2 py-1 outline-none" />
         </div>
         <div className="flex gap-1.5 overflow-x-auto items-center">
           {(['전체', ...INVENTORY_CATEGORIES] as const).map(c => (
             <button key={c} onClick={() => setCategory(c)}
-              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap border ${category === c ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{c}</button>
+              className={`px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap border ${category === c ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{dataLabel(c)}</button>
           ))}
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="품목 검색" className="ml-auto w-32 text-[11px] border border-gray-200 rounded-lg px-2 py-1 outline-none" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={L('inventory.searchItems')} className="ml-auto w-32 text-[11px] border border-gray-200 rounded-lg px-2 py-1 outline-none" />
         </div>
       </div>
 
@@ -3034,7 +3033,7 @@ function BulkStockEditor({ campCode, views, groups, userName }: {
         <table className="text-[11px] min-w-full">
           <thead className="bg-gray-50 text-gray-500 sticky top-0 z-10">
             <tr>
-              <th className="text-left px-2 py-1.5 font-semibold sticky left-0 bg-gray-50 min-w-[150px]">품목</th>
+              <th className="text-left px-2 py-1.5 font-semibold sticky left-0 bg-gray-50 min-w-[150px]">{L('push.itemDefault')}</th>
               {groups.map(g => <th key={g.id} className="px-1.5 py-1.5 font-semibold whitespace-nowrap">{g.name}</th>)}
             </tr>
           </thead>
@@ -3044,7 +3043,7 @@ function BulkStockEditor({ campCode, views, groups, userName }: {
                 <td className="px-2 py-1 sticky left-0 bg-white">
                   <span className="font-semibold text-gray-800">{v.name}</span>
                   {(v.kind || v.spec) && <span className="text-gray-400 ml-1 text-[10px]">{[v.kind, v.spec].filter(Boolean).join(' · ')}</span>}
-                  <span className="text-gray-300 ml-1 text-[10px]">{v.unit}</span>
+                  <span className="text-gray-300 ml-1 text-[10px]">{dataLabel(v.unit)}</span>
                 </td>
                 {groups.map(g => {
                   const k = key(v.id, g.id);
@@ -3067,10 +3066,10 @@ function BulkStockEditor({ campCode, views, groups, userName }: {
       </div>
 
       <div className="flex items-center justify-between gap-2 sticky bottom-0 bg-gray-50 py-2">
-        <span className="text-[11px] text-gray-500">바뀐 칸 <b className="text-emerald-700">{changed.length}</b></span>
+        <span className="text-[11px] text-gray-500">{L('inventory.changedCells')} <b className="text-emerald-700">{changed.length}</b></span>
         <div className="flex gap-1.5">
-          <button onClick={() => setEdits({})} disabled={busy || Object.keys(edits).length === 0} className="px-3 py-1.5 text-xs text-gray-600 bg-white border border-gray-200 rounded-lg disabled:opacity-40">되돌리기</button>
-          <button onClick={save} disabled={busy || changed.length === 0} className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg disabled:opacity-40">{busy ? '저장 중...' : '저장'}</button>
+          <button onClick={() => setEdits({})} disabled={busy || Object.keys(edits).length === 0} className="px-3 py-1.5 text-xs text-gray-600 bg-white border border-gray-200 rounded-lg disabled:opacity-40">{L('inventory.undo')}</button>
+          <button onClick={save} disabled={busy || changed.length === 0} className="px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg disabled:opacity-40">{busy ? L('task.saving') : L('common.save')}</button>
         </div>
       </div>
     </div>
@@ -3094,7 +3093,7 @@ function ManageTab({ campCode, items, views, groups, packages, campGroups, perm,
   return (
     <div className="px-4 py-3 space-y-3">
       <div className="flex gap-1.5">
-        {([['groups', '그룹 · 패키지'], ['bulk', '일괄 입력 · 실사'], ['items', '품목 관리'], ['guides', '지정 품목 (쿠팡)']] as const).map(([id, label]) => (
+        {([['groups', L('inventory.groupsPackages')], ['bulk', L('inventory.bulkEntryStockCount2')], ['items', L('inventory.items4')], ['guides', L('inventory.designatedItemsCoupang')]] as const).map(([id, label]) => (
           <button key={id} onClick={() => setSection(id)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border ${section === id ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-600 border-gray-200'}`}>{label}</button>
         ))}
@@ -3129,10 +3128,10 @@ function GroupManager({ campCode, groups, packages, campGroups, views, userName 
   const remove = async (g: InventoryGroup) => {
     const left = views.filter(v => getGroupStock(v, g.id) !== 0);
     if (left.length > 0) {
-      alert(`"${g.name}" 그룹에 재고가 남아 있습니다 (${left.length}개 품목: ${left.slice(0, 3).map(v => v.name).join(', ')}${left.length > 3 ? ' …' : ''}).\n일괄 입력·실사에서 다른 그룹으로 옮기거나 0으로 맞춘 뒤 삭제해주세요.`);
+      alert(L('inventory.groupStillHasStockItems', { v0: g.name, v1: left.length, v2: left.slice(0, 3).map(v => v.name).join(', '), v3: left.length > 3 ? ' …' : '' }));
       return;
     }
-    if (!confirm(`"${g.name}" 그룹을 삭제할까요?`)) return;
+    if (!confirm(L('inventory.deleteGroup', { v0: g.name }))) return;
     await deleteInventoryGroup(db, g.id);
   };
   const savePkg = async () => {
@@ -3142,42 +3141,42 @@ function GroupManager({ campCode, groups, packages, campGroups, views, userName 
     finally { setBusy(false); }
   };
   const apply = async (pkg: InventoryPackage) => {
-    if (!confirm(`패키지 "${pkg.name}"의 그룹 ${pkg.slots.length}개를 이 캠프(${campCode})에 추가할까요?\n추가 후 그룹명·호실만 수정하면 됩니다.`)) return;
+    if (!confirm(L('inventory.addGroupsFromPackageTo', { v0: pkg.name, v1: pkg.slots.length, v2: campCode }))) return;
     const n = await applyPackageToCamp(db, campCode, pkg, groups);
-    if (n === 0) alert('이미 같은 슬롯의 그룹이 있어 추가된 그룹이 없습니다.');
+    if (n === 0) alert(L('inventory.noGroupsAddedBecauseGroups'));
   };
 
   return (
     <div className="space-y-4">
       {/* 현재 캠프 그룹 */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-2">
-        <p className="text-xs font-bold text-gray-800">{campCode} 재고 그룹 <span className="text-gray-400 font-normal">({groups.length})</span></p>
-        <p className="text-[10px] text-gray-400">보관 장소/키트 단위. 그룹명과 호실(보관 장소)은 기수마다 바꿔 쓰면 됩니다.</p>
+        <p className="text-xs font-bold text-gray-800">{campCode} {L('inventory.inventoryGroups')} <span className="text-gray-400 font-normal">({groups.length})</span></p>
+        <p className="text-[10px] text-gray-400">{L('inventory.aStoragePlaceKitUnit')}</p>
         {groups.map(g => <GroupRow key={g.id} group={g} campGroups={campGroups} onDelete={() => remove(g)} />)}
-        {campGroups.length > 0 && <p className="text-[10px] text-gray-400">"캠프 그룹"을 연결하면 환자 탭에서 학생 반에 맞는 그룹이 자동 선택됩니다.</p>}
+        {campGroups.length > 0 && <p className="text-[10px] text-gray-400">{L('inventory.linkingACampGroupAuto')}</p>}
         <div className="flex gap-1.5 items-center pt-1">
-          <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="그룹명 (예: Spring)" className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none" />
-          <input value={newLoc} onChange={e => setNewLoc(e.target.value)} placeholder="보관 장소 (예: 2층 교무실)" className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none" />
-          <button onClick={add} disabled={!newName.trim() || busy} className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg disabled:opacity-40"><FiPlus className="w-3 h-3" />그룹</button>
+          <input value={newName} onChange={e => setNewName(e.target.value)} placeholder={L('inventory.groupNameEGSpring')} className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none" />
+          <input value={newLoc} onChange={e => setNewLoc(e.target.value)} placeholder={L('inventory.storagePlaceEG2nd')} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none" />
+          <button onClick={add} disabled={!newName.trim() || busy} className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg disabled:opacity-40"><FiPlus className="w-3 h-3" />{L('schedule.group')}</button>
         </div>
       </div>
 
       {/* 패키지 */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 space-y-2">
-        <p className="text-xs font-bold text-gray-800 flex items-center gap-1"><FiPackage className="w-3.5 h-3.5" />그룹 패키지 <span className="text-gray-400 font-normal">(회사 공통)</span></p>
-        <p className="text-[10px] text-gray-400">그룹 구성을 저장해 두고 다음 기수에 적용한 뒤 그룹명·호실만 부여하세요.</p>
-        {packages.length === 0 && <p className="text-[11px] text-gray-400">저장된 패키지가 없습니다.</p>}
+        <p className="text-xs font-bold text-gray-800 flex items-center gap-1"><FiPackage className="w-3.5 h-3.5" />{L('inventory.groupPackages')} <span className="text-gray-400 font-normal">{L('inventory.companyWide')}</span></p>
+        <p className="text-[10px] text-gray-400">{L('inventory.saveAGroupSetupAnd')}</p>
+        {packages.length === 0 && <p className="text-[11px] text-gray-400">{L('inventory.noSavedPackages')}</p>}
         {packages.map(p => (
           <div key={p.id} className="flex items-center gap-2 text-[11px] bg-gray-50 rounded-lg px-2.5 py-1.5">
             <span className="font-semibold text-gray-800">{p.name}</span>
             <span className="text-gray-400 flex-1 truncate">{p.slots.map(s => s.label).join(' · ')}</span>
-            <button onClick={() => apply(p)} className="text-emerald-700 font-semibold hover:underline">이 캠프에 적용</button>
-            <button onClick={() => { if (confirm(`패키지 "${p.name}"을 삭제할까요?`)) deleteInventoryPackage(db, p.id); }} className="text-gray-300 hover:text-red-500">🗑️</button>
+            <button onClick={() => apply(p)} className="text-emerald-700 font-semibold hover:underline">{L('inventory.applyToThisCamp')}</button>
+            <button onClick={() => { if (confirm(L('inventory.deletePackage', { v0: p.name }))) deleteInventoryPackage(db, p.id); }} className="text-gray-300 hover:text-red-500">🗑️</button>
           </div>
         ))}
         <div className="flex gap-1.5 items-center pt-1">
-          <input value={pkgName} onChange={e => setPkgName(e.target.value)} placeholder="현재 구성을 패키지로 저장 — 이름 (예: 제주 기본 세트)" className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none" />
-          <button onClick={savePkg} disabled={!pkgName.trim() || groups.length === 0 || busy} className="px-2.5 py-1.5 text-xs font-bold text-gray-700 bg-gray-100 rounded-lg disabled:opacity-40">저장</button>
+          <input value={pkgName} onChange={e => setPkgName(e.target.value)} placeholder={L('inventory.saveCurrentSetupAsA')} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none" />
+          <button onClick={savePkg} disabled={!pkgName.trim() || groups.length === 0 || busy} className="px-2.5 py-1.5 text-xs font-bold text-gray-700 bg-gray-100 rounded-lg disabled:opacity-40">{L('common.save')}</button>
         </div>
       </div>
     </div>
@@ -3197,15 +3196,15 @@ function GroupRow({ group, campGroups, onDelete }: { group: InventoryGroup; camp
     <div className="flex gap-1.5 items-center">
       <span className="text-[10px] text-gray-300 w-4 text-right">{group.order + 1}</span>
       <input value={name} onChange={e => setName(e.target.value)} onBlur={save} className="w-32 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none font-semibold" />
-      <input value={loc} onChange={e => setLoc(e.target.value)} onBlur={save} placeholder="보관 장소 / 호실" className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none" />
+      <input value={loc} onChange={e => setLoc(e.target.value)} onBlur={save} placeholder={L('inventory.storagePlaceRoom')} className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 outline-none" />
       {campGroups.length > 0 && (
         <select value={group.campGroupName ?? ''} onChange={e => updateInventoryGroup(db, group.id, { campGroupName: e.target.value })}
-          className="w-24 text-[11px] border border-gray-200 rounded-lg px-1.5 py-1.5 bg-white" title="연결할 캠프 그룹">
-          <option value="">캠프 그룹 —</option>
+          className="w-24 text-[11px] border border-gray-200 rounded-lg px-1.5 py-1.5 bg-white" title={L('inventory.campGroupToLink')}>
+          <option value="">{L('inventory.campGroup')}</option>
           {campGroups.map(cg => <option key={cg.name} value={cg.name}>{cg.name}</option>)}
         </select>
       )}
-      {dirty && <button onClick={save} className="text-[10px] font-semibold text-emerald-700">저장</button>}
+      {dirty && <button onClick={save} className="text-[10px] font-semibold text-emerald-700">{L('common.save')}</button>}
       <button onClick={onDelete} className="text-gray-300 hover:text-red-500 text-xs px-1">🗑️</button>
     </div>
   );
@@ -3220,11 +3219,11 @@ function ItemManager({ items, views, groups, perm, userName, onSelect }: {
   const [busy, setBusy] = useState(false);
 
   const importDefaults = async () => {
-    if (!confirm(`기본 품목 세트 ${DEFAULT_INVENTORY_ITEMS.length}개를 등록할까요? (이미 있는 품목은 건너뜁니다)`)) return;
+    if (!confirm(L('inventory.registerDefaultItemsExistingItems', { v0: DEFAULT_INVENTORY_ITEMS.length }))) return;
     setBusy(true);
     try {
       const n = await importInventoryItems(db, DEFAULT_INVENTORY_ITEMS, items, userName);
-      alert(`${n}개 품목을 추가했습니다.`);
+      alert(L('inventory.addedItems', { v0: n }));
     } finally { setBusy(false); }
   };
 
@@ -3238,26 +3237,26 @@ function ItemManager({ items, views, groups, perm, userName, onSelect }: {
       <div className="flex gap-1.5 items-center">
         <div className="relative flex-1">
           <FiSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="품목 검색" className="w-full pl-8 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white outline-none" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder={L('inventory.searchItems')} className="w-full pl-8 pr-2 py-1.5 text-xs border border-gray-200 rounded-lg bg-white outline-none" />
         </div>
-        <button onClick={() => setShowForm(true)} className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg"><FiPlus className="w-3 h-3" />품목 추가</button>
-        <button onClick={importDefaults} disabled={busy} className="px-2.5 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 rounded-lg disabled:opacity-40" title="시트 품목 + 상비약 대표 브랜드">기본 세트 불러오기</button>
+        <button onClick={() => setShowForm(true)} className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-bold text-white bg-emerald-600 rounded-lg"><FiPlus className="w-3 h-3" />{L('inventory.addItem')}</button>
+        <button onClick={importDefaults} disabled={busy} className="px-2.5 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 rounded-lg disabled:opacity-40" title={L('inventory.sheetItemsCommonMedicineBrands')}>{L('inventory.loadDefaultSet')}</button>
       </div>
-      <p className="text-[10px] text-gray-400">품목은 회사 공통입니다 — 여기서 바꾸면 모든 캠프에 반영됩니다. 수량은 캠프별로 품목 상세에서 입고합니다.</p>
+      <p className="text-[10px] text-gray-400">{L('inventory.itemsAreCompanyWideChanges')}</p>
       <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-        {list.length === 0 && <p className="text-[11px] text-gray-400 px-3 py-3">품목이 없습니다.</p>}
+        {list.length === 0 && <p className="text-[11px] text-gray-400 px-3 py-3">{L('inventory.noItems')}</p>}
         {list.map(v => (
           <div key={v.id} className={`flex items-center gap-2 px-3 py-2 text-[11px] ${v.isActive === false ? 'opacity-50' : ''}`}>
-            <span className={`text-[9px] px-1 py-0.5 rounded border shrink-0 ${CATEGORY_STYLE[v.category] ?? CATEGORY_STYLE.기타}`}>{v.category}{v.subCategory ? `·${v.subCategory}` : ''}</span>
+            <span className={`text-[9px] px-1 py-0.5 rounded border shrink-0 ${CATEGORY_STYLE[v.category] ?? CATEGORY_STYLE.기타}`}>{dataLabel(v.category)}{v.subCategory ? `·${v.subCategory}` : ''}</span>
             <button onClick={() => onSelect(v.id)} className="flex-1 min-w-0 text-left truncate">
               <b className="text-gray-900">{v.name}</b>
               {v.kind && <span className="text-gray-500 ml-1">{v.kind}</span>}
               {v.spec && <span className="text-gray-400 ml-1">{v.spec}</span>}
-              <span className="text-gray-400 ml-1">· {INVENTORY_USAGE_LABELS[getItemUsage(v)]} · {v.unit} · 최소 {v.minStockDefault ?? 0}{v.ingredient ? ` · ${v.ingredient}` : ''}</span>
+              <span className="text-gray-400 ml-1">· {INVENTORY_USAGE_LABELS[getItemUsage(v)]} · {dataLabel(v.unit)} {L('inventory.min')} {v.minStockDefault ?? 0}{v.ingredient ? ` · ${v.ingredient}` : ''}</span>
             </button>
-            {v.isActive === false && <span className="text-[9px] px-1 rounded bg-gray-100 text-gray-500 shrink-0">사용 안 함</span>}
+            {v.isActive === false && <span className="text-[9px] px-1 rounded bg-gray-100 text-gray-500 shrink-0">{L('inventory.inactive')}</span>}
             <button onClick={() => setEditing(v)} className="text-gray-400 hover:text-emerald-700 shrink-0">✏️</button>
-            <button onClick={() => updateInventoryItem(db, v.id, { isActive: v.isActive === false })} className="text-[10px] text-gray-400 hover:text-gray-700 shrink-0">{v.isActive === false ? '사용' : '사용 안 함'}</button>
+            <button onClick={() => updateInventoryItem(db, v.id, { isActive: v.isActive === false })} className="text-[10px] text-gray-400 hover:text-gray-700 shrink-0">{v.isActive === false ? L('inventory.use') : L('inventory.inactive')}</button>
           </div>
         ))}
       </div>
@@ -3312,8 +3311,8 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
   const pickPhoto = (f?: File | null) => {
     setPhotoError('');
     if (!f) { setPhoto(null); if (photoUrl) URL.revokeObjectURL(photoUrl); setPhotoUrl(null); return; }
-    if (!f.type.startsWith('image/')) { setPhotoError('이미지 파일만 올릴 수 있습니다.'); return; }
-    if (f.size > 10 * 1024 * 1024) { setPhotoError('10MB 이하 이미지만 올릴 수 있습니다.'); return; }
+    if (!f.type.startsWith('image/')) { setPhotoError(L('inventory.onlyImageFilesCanBe2')); return; }
+    if (f.size > 10 * 1024 * 1024) { setPhotoError(L('inventory.onlyImagesUpTo10mb')); return; }
     if (photoUrl) URL.revokeObjectURL(photoUrl);
     setPhoto(f);
     setPhotoUrl(URL.createObjectURL(f));
@@ -3351,7 +3350,7 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
             if (uploaded.length) await addInventoryItemMedia(db, id, uploaded);
           } catch (e) {
             console.error('품목 이미지 업로드 오류:', e);
-            alert('품목은 등록했지만 이미지를 올리지 못했습니다. 품목 상세에서 다시 시도해주세요.');
+            alert(L('inventory.theItemWasRegisteredBut'));
           }
         }
         // 최초 재고
@@ -3368,7 +3367,7 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
       onClose();
     } catch (e) {
       console.error('품목 저장 오류:', e);
-      alert('저장 중 오류가 발생했습니다.');
+      alert(L('task.failedToSaveTask2'));
     } finally { setBusy(false); }
   };
 
@@ -3382,7 +3381,7 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
     <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-[60]" onClick={onClose}>
       <div className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-bold text-gray-900">{item ? '품목 수정' : '품목 추가'}</h2>
+          <h2 className="text-lg font-bold text-gray-900">{item ? L('inventory.editItem') : L('inventory.addItem')}</h2>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
@@ -3395,11 +3394,11 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
                 <label className="block w-[72px] h-[72px] rounded-xl border border-dashed border-gray-300 bg-gray-50 overflow-hidden cursor-pointer relative hover:border-emerald-400">
                   {photoUrl
                     ? <img src={photoUrl} alt="" className="w-full h-full object-cover" />
-                    : <span className="w-full h-full flex flex-col items-center justify-center text-gray-400"><FiCamera className="w-4 h-4" /><span className="text-[11px] mt-0.5">이미지</span></span>}
+                    : <span className="w-full h-full flex flex-col items-center justify-center text-gray-400"><FiCamera className="w-4 h-4" /><span className="text-[11px] mt-0.5">{L('common.images')}</span></span>}
                   <input type="file" accept="image/*" className="hidden" onChange={e => { pickPhoto(e.target.files?.[0]); e.target.value = ''; }} />
                 </label>
                 {photo && (
-                  <button type="button" onClick={() => pickPhoto(null)} className="w-full mt-1 text-[12px] text-gray-400 hover:text-red-500">제거</button>
+                  <button type="button" onClick={() => pickPhoto(null)} className="w-full mt-1 text-[12px] text-gray-400 hover:text-red-500">{L('inventory.remove')}</button>
                 )}
               </div>
             )}
@@ -3408,18 +3407,18 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
                 <div className="w-[72px] h-[72px] rounded-xl border border-gray-200 bg-gray-50 overflow-hidden flex items-center justify-center">
                   {itemThumb(item) ? <img src={itemThumb(item)} alt="" className="w-full h-full object-cover" /> : <FiBox className="w-5 h-5 text-gray-300" />}
                 </div>
-                <p className="w-full mt-1 text-[11px] text-gray-400 text-center leading-tight">상세에서<br />사진 관리</p>
+                <p className="w-full mt-1 text-[11px] text-gray-400 text-center leading-tight">{L('inventory.inDetails')}<br />{L('inventory.managePhotos')}</p>
               </div>
             )}
             <div className="flex-1 min-w-0 space-y-3">
               <div>
-                <p className="text-sm font-bold text-gray-700 mb-1">물품명 *</p>
-                <input value={name} onChange={e => setName(e.target.value)} placeholder="예: 타이레놀" className={inputCls} autoFocus={!item} />
+                <p className="text-sm font-bold text-gray-700 mb-1">{L('inventory.item')}</p>
+                <input value={name} onChange={e => setName(e.target.value)} placeholder={L('inventory.eGTylenol')} className={inputCls} autoFocus={!item} />
               </div>
               <div>
-                <p className="text-sm font-bold text-gray-700 mb-1">분류 *</p>
+                <p className="text-sm font-bold text-gray-700 mb-1">{L('inventory.category')}</p>
                 <select value={category} onChange={e => { const c = e.target.value as InventoryCategory; setCategory(c); setSubCategory(''); if (!item) setUsage(suggestedUsages(c)[0]); }} className={inputCls}>
-                  {INVENTORY_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {INVENTORY_CATEGORIES.map(c => <option key={c} value={c}>{dataLabel(c)}</option>)}
                 </select>
               </div>
             </div>
@@ -3429,17 +3428,17 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
           {canSetStock && (
             <div className="grid grid-cols-3 gap-2">
               <div className="col-span-1">
-                <p className="text-sm font-bold text-gray-700 mb-1">보관 교무실</p>
+                <p className="text-sm font-bold text-gray-700 mb-1">{L('inventory.staffRoom')}</p>
                 <select value={stockGroupId} onChange={e => setStockGroupId(e.target.value)} className={inputCls}>
                   {groups!.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
               </div>
               <div>
-                <p className="text-sm font-bold text-gray-700 mb-1">최초 재고</p>
+                <p className="text-sm font-bold text-gray-700 mb-1">{L('inventory.initialStock')}</p>
                 <input type="number" min={0} value={initialQty} onChange={e => setInitialQty(e.target.value)} placeholder="0" className={inputCls} />
               </div>
               <div>
-                <p className="text-sm font-bold text-gray-700 mb-1">단위 (낱개)</p>
+                <p className="text-sm font-bold text-gray-700 mb-1">{L('inventory.unitSingle')}</p>
                 <input list="inv-units" value={unit} onChange={e => setUnit(e.target.value)} className={inputCls} />
                 <datalist id="inv-units">{INVENTORY_UNITS.map(u => <option key={u} value={u} />)}</datalist>
               </div>
@@ -3447,7 +3446,7 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
           )}
           {!canSetStock && (
             <div>
-              <p className="text-sm font-bold text-gray-700 mb-1">단위 (낱개)</p>
+              <p className="text-sm font-bold text-gray-700 mb-1">{L('inventory.unitSingle')}</p>
               <input list="inv-units2" value={unit} onChange={e => setUnit(e.target.value)} className={inputCls} />
               <datalist id="inv-units2">{INVENTORY_UNITS.map(u => <option key={u} value={u} />)}</datalist>
             </div>
@@ -3456,7 +3455,7 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
           {/* ── 상세 설정 (접힘) ── */}
           <button type="button" onClick={() => setShowDetail(v => !v)}
             className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-sm font-bold text-gray-600 hover:border-gray-300">
-            <span>상세 설정 <span className="font-normal text-gray-400">세부 분류 · 물품 유형 · 규격 · 최소 재고{isMed ? ' · 의약품 정보' : ''}</span></span>
+            <span>{L('inventory.advanced')} <span className="font-normal text-gray-400">{L('inventory.subcategoryItemTypeSpecMin')}{isMed ? L('inventory.medicineInfo') : ''}</span></span>
             <span className="text-gray-400">{showDetail ? '▲' : '▼'}</span>
           </button>
 
@@ -3464,18 +3463,18 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
             <div className="space-y-3 rounded-xl border border-gray-100 p-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <p className="text-sm font-bold text-gray-700 mb-1">세부 분류</p>
-                  <input list="inv-subcats" value={subCategory} onChange={e => setSubCategory(e.target.value)} placeholder={subs.length ? subs.join(' / ') : '(선택)'} className={inputCls} />
+                  <p className="text-sm font-bold text-gray-700 mb-1">{L('inventory.subcategory')}</p>
+                  <input list="inv-subcats" value={subCategory} onChange={e => setSubCategory(e.target.value)} placeholder={subs.length ? subs.join(' / ') : L('patient.optional')} className={inputCls} />
                   <datalist id="inv-subcats">{subs.map(s => <option key={s} value={s} />)}</datalist>
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-gray-700 mb-1">종류</p>
-                  <input value={kind} onChange={e => setKind(e.target.value)} placeholder="예: 소화제, 진통제(아세트)" className={inputCls} />
+                  <p className="text-sm font-bold text-gray-700 mb-1">{L('patient.type')}</p>
+                  <input value={kind} onChange={e => setKind(e.target.value)} placeholder={L('inventory.eGDigestivePainReliever')} className={inputCls} />
                 </div>
               </div>
 
               <div>
-                <p className="text-sm font-bold text-gray-700 mb-1">물품 유형 *</p>
+                <p className="text-sm font-bold text-gray-700 mb-1">{L('inventory.itemType')}</p>
                 <div className="flex gap-1.5 flex-wrap">
                   {primaryUsages.map(u => (
                     <button key={u} type="button" onClick={() => setUsage(u)}
@@ -3486,66 +3485,66 @@ function ItemFormModal({ item, preset, groups, campCode, defaultGroupId, perm, u
                       className={`px-2.5 py-1 rounded-full text-[13px] border ${usage === u ? 'bg-gray-800 text-white border-gray-800 font-semibold' : 'bg-white text-gray-400 border-gray-200'}`}>{INVENTORY_USAGE_LABELS[u]}</button>
                   ))}
                 </div>
-                <p className="text-[12px] text-gray-400 mt-1">먹는 약·바르는 약·처치 소모품은 환자 보고에서 사용 기록할 수 있고, 비품은 위치·수량만 관리합니다.</p>
+                <p className="text-[12px] text-gray-400 mt-1">{L('inventory.oralMedicineTopicalMedicineAnd')}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <p className="text-sm font-bold text-gray-700 mb-1">규격 · 비고</p>
-                  <input value={spec} onChange={e => setSpec(e.target.value)} placeholder="알약 500mg" className={inputCls} />
+                  <p className="text-sm font-bold text-gray-700 mb-1">{L('inventory.specNotes')}</p>
+                  <input value={spec} onChange={e => setSpec(e.target.value)} placeholder={L('inventory.tablet500mg')} className={inputCls} />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-gray-700 mb-1">포장당 낱개 수량</p>
-                  <input type="number" min={1} value={packSize} onChange={e => setPackSize(e.target.value)} placeholder="예: 4" className={inputCls} />
+                  <p className="text-sm font-bold text-gray-700 mb-1">{L('inventory.unitsPerPackage')}</p>
+                  <input type="number" min={1} value={packSize} onChange={e => setPackSize(e.target.value)} placeholder={L('inventory.eG4')} className={inputCls} />
                 </div>
               </div>
 
               {isMed && (
                 <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 p-3 space-y-2">
-                  <p className="text-sm font-bold text-emerald-800">의약품 상세 정보 <span className="font-normal text-emerald-700/70">(포장 설명서 기준으로 관리자가 입력)</span></p>
+                  <p className="text-sm font-bold text-emerald-800">{L('inventory.medicineDetails')} <span className="font-normal text-emerald-700/70">{L('inventory.enteredByAnAdminFrom')}</span></p>
                   <div className="grid grid-cols-3 gap-2">
                     <div className="col-span-3 sm:col-span-1">
-                      <p className="text-[13px] text-gray-600 mb-0.5">주성분</p>
-                      <input value={ingredient} onChange={e => setIngredient(e.target.value)} placeholder="아세트아미노펜" className={inputCls} />
+                      <p className="text-[13px] text-gray-600 mb-0.5">{L('inventory.activeIngredient')}</p>
+                      <input value={ingredient} onChange={e => setIngredient(e.target.value)} placeholder={L('inventory.acetaminophen')} className={inputCls} />
                     </div>
                     <div>
-                      <p className="text-[13px] text-gray-600 mb-0.5">최소 간격(시간)</p>
-                      <input type="number" min={0} step={0.5} value={intervalHours} onChange={e => setIntervalHours(e.target.value)} placeholder="예: 4" className={inputCls} />
+                      <p className="text-[13px] text-gray-600 mb-0.5">{L('inventory.minimumIntervalHours')}</p>
+                      <input type="number" min={0} step={0.5} value={intervalHours} onChange={e => setIntervalHours(e.target.value)} placeholder={L('inventory.eG4')} className={inputCls} />
                     </div>
                     <div>
-                      <p className="text-[13px] text-gray-600 mb-0.5">1일 최대(회)</p>
-                      <input type="number" min={0} value={maxPerDay} onChange={e => setMaxPerDay(e.target.value)} placeholder="예: 4" className={inputCls} />
+                      <p className="text-[13px] text-gray-600 mb-0.5">{L('inventory.maxPerDayTimes')}</p>
+                      <input type="number" min={0} value={maxPerDay} onChange={e => setMaxPerDay(e.target.value)} placeholder={L('inventory.eG4')} className={inputCls} />
                     </div>
                   </div>
                   <div>
-                    <p className="text-[13px] text-gray-600 mb-0.5">복용 · 사용 안내</p>
-                    <textarea value={dosageNote} onChange={e => setDosageNote(e.target.value)} rows={2} placeholder="예: 만 7~12세 1정, 만 12세 이상 1~2정 (포장 설명서 확인)" className={`${inputCls} resize-none`} />
+                    <p className="text-[13px] text-gray-600 mb-0.5">{L('inventory.dosageUsage')}</p>
+                    <textarea value={dosageNote} onChange={e => setDosageNote(e.target.value)} rows={2} placeholder={L('inventory.eGAges712')} className={`${inputCls} resize-none`} />
                   </div>
-                  <p className="text-[12px] text-gray-500">같은 주성분끼리 간격·횟수를 계산합니다 (예: 타이레놀과 판콜에이는 둘 다 아세트아미노펜).</p>
+                  <p className="text-[12px] text-gray-500">{L('inventory.intervalsAndCountsAreCalculated')}</p>
                 </div>
               )}
 
               <div>
-                <p className="text-sm font-bold text-gray-700 mb-1">{isMed ? '주의사항 · 기타 안내' : '설명 · 안내'} <span className="font-normal text-gray-400">(선택 시 그대로 표시)</span></p>
-                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="예: 해열·진통제로 사용하는 약품. 식후 복용" className={`${inputCls} resize-none`} />
+                <p className="text-sm font-bold text-gray-700 mb-1">{isMed ? L('inventory.cautionsOtherNotes') : L('inventory.descriptionGuide')} <span className="font-normal text-gray-400">{L('inventory.shownAsIsWhenSelected')}</span></p>
+                <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder={L('inventory.eGFeverReducerPain')} className={`${inputCls} resize-none`} />
               </div>
 
               <div className="grid grid-cols-2 gap-2 items-end">
                 <div>
-                  <p className="text-sm font-bold text-gray-700 mb-1">최소 재고 (교무실당 기본값)</p>
-                  <input type="number" min={0} value={minStockDefault} onChange={e => setMinStockDefault(e.target.value)} placeholder="0 = 부족 판단 안 함" className={inputCls} />
+                  <p className="text-sm font-bold text-gray-700 mb-1">{L('inventory.minimumStockDefaultPerStaff')}</p>
+                  <input type="number" min={0} value={minStockDefault} onChange={e => setMinStockDefault(e.target.value)} placeholder={L('inventory.n0NeverFlagAsLow')} className={inputCls} />
                 </div>
                 <label className="flex items-center gap-2 text-sm text-gray-700 pb-2 cursor-pointer">
                   <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="w-4 h-4" />
-                  사용 중 <span className="text-[12px] text-gray-400">(해제 시 새 보고에서 숨김, 기록은 유지)</span>
+                  {L('inventory.active')} <span className="text-[12px] text-gray-400">{L('inventory.whenOffHiddenFromNew')}</span>
                 </label>
               </div>
             </div>
           )}
         </div>
         <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2.5 text-base text-gray-600 bg-gray-100 rounded-xl">취소</button>
-          <button onClick={save} disabled={!name.trim() || busy} className="flex-1 py-2.5 text-base font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl disabled:opacity-40">{busy ? '저장 중...' : '저장'}</button>
+          <button onClick={onClose} className="flex-1 py-2.5 text-base text-gray-600 bg-gray-100 rounded-xl">{L('common.cancel')}</button>
+          <button onClick={save} disabled={!name.trim() || busy} className="flex-1 py-2.5 text-base font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl disabled:opacity-40">{busy ? L('task.saving') : L('common.save')}</button>
         </div>
       </div>
     </div>
@@ -3562,17 +3561,17 @@ function SupplyGuideManager() {
     <div className="space-y-2">
       <div className="flex items-center gap-2">
         <div className="flex-1">
-          <p className="text-sm font-bold text-gray-800">관리자 지정 품목 <span className="text-gray-400 font-normal">{guides.length}</span></p>
-          <p className="text-[10px] text-gray-400">책가방·슬리퍼·손목시계처럼 쿠팡 등에서 사서 학부모님께 따로 청구하는 품목. 멘토가 요청할 때 검색하면 안내와 함께 맨 위에 떠요. (전 캠프 공통)</p>
+          <p className="text-sm font-bold text-gray-800">{L('inventory.adminDesignatedItems')} <span className="text-gray-400 font-normal">{guides.length}</span></p>
+          <p className="text-[10px] text-gray-400">{L('inventory.itemsLikeSchoolBagsSlippers')}</p>
         </div>
-        <button onClick={() => setEditing('new')} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold text-white bg-emerald-600 rounded-lg"><FiPlus className="w-3 h-3" />추가</button>
+        <button onClick={() => setEditing('new')} className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-bold text-white bg-emerald-600 rounded-lg"><FiPlus className="w-3 h-3" />{L('task.add')}</button>
       </div>
       <div className="bg-white rounded-xl border border-gray-200 divide-y divide-gray-100">
-        {guides.length === 0 && <p className="px-3 py-6 text-center text-xs text-gray-400">지정된 품목이 없습니다.</p>}
+        {guides.length === 0 && <p className="px-3 py-6 text-center text-xs text-gray-400">{L('inventory.noDesignatedItems')}</p>}
         {guides.map(g => (
           <button key={g.id} onClick={() => setEditing(g)} className={`w-full text-left px-3 py-2 hover:bg-gray-50 ${g.isActive === false ? 'opacity-50' : ''}`}>
-            <p className="text-[13px] font-bold text-gray-900">{g.name} <GuideTag line={{ channel: g.channel, parentBill: g.parentBill }} />{g.isActive === false && <span className="ml-1 text-[10px] text-gray-400">사용 안 함</span>}</p>
-            {g.keywords?.length ? <p className="text-[10px] text-gray-400">검색어: {g.keywords.join(', ')}</p> : null}
+            <p className="text-[13px] font-bold text-gray-900">{g.name} <GuideTag line={{ channel: g.channel, parentBill: g.parentBill }} />{g.isActive === false && <span className="ml-1 text-[10px] text-gray-400">{L('inventory.inactive')}</span>}</p>
+            {g.keywords?.length ? <p className="text-[10px] text-gray-400">{L('inventory.keywords2')} {g.keywords.join(', ')}</p> : null}
             <p className="text-[11px] text-gray-600 line-clamp-2 whitespace-pre-wrap">{g.guide}</p>
           </button>
         ))}
@@ -3592,36 +3591,36 @@ function SupplyGuideFormModal({ guide, onClose }: { guide?: SupplyGuide; onClose
   const [busy, setBusy] = useState(false);
   const inputCls = 'w-full text-sm border border-gray-200 rounded-xl px-3 py-2 outline-none focus:border-emerald-400';
   const save = async () => {
-    if (!name.trim()) { alert('품목 이름을 입력해주세요.'); return; }
+    if (!name.trim()) { alert(L('inventory.pleaseEnterTheItemName')); return; }
     setBusy(true);
     try {
       await saveSupplyGuide(db, { name, keywords: keywords.split(',').map(s => s.trim()).filter(Boolean), channel, parentBill, guide: text, isActive: active }, guide?.id);
       onClose();
-    } catch (e) { console.error(e); alert('저장하지 못했습니다.'); }
+    } catch (e) { console.error(e); alert(L('profile.couldNotSave')); }
     finally { setBusy(false); }
   };
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4" onClick={onClose}>
       <div className="bg-white w-full max-w-md rounded-2xl shadow-xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-900">{guide ? '지정 품목 수정' : '지정 품목 추가'}</h2>
+          <h2 className="text-base font-bold text-gray-900">{guide ? L('inventory.editDesignatedItem') : L('inventory.addDesignatedItem')}</h2>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600"><FiX /></button>
         </div>
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-          <div><p className="text-xs font-bold text-gray-700 mb-1">품목 이름</p><input value={name} onChange={e => setName(e.target.value)} placeholder="예: 책가방" className={inputCls} /></div>
-          <div><p className="text-xs font-bold text-gray-700 mb-1">검색어 <span className="font-normal text-gray-400">(쉼표로 구분)</span></p><input value={keywords} onChange={e => setKeywords(e.target.value)} placeholder="예: 가방, 백팩" className={inputCls} /></div>
+          <div><p className="text-xs font-bold text-gray-700 mb-1">{L('inventory.itemName')}</p><input value={name} onChange={e => setName(e.target.value)} placeholder={L('inventory.eGSchoolBag')} className={inputCls} /></div>
+          <div><p className="text-xs font-bold text-gray-700 mb-1">{L('inventory.keywords')} <span className="font-normal text-gray-400">{L('inventory.commaSeparated')}</span></p><input value={keywords} onChange={e => setKeywords(e.target.value)} placeholder={L('inventory.eGBagBackpack')} className={inputCls} /></div>
           <div className="flex gap-2">
-            <div className="flex-1"><p className="text-xs font-bold text-gray-700 mb-1">구매 경로</p><input value={channel} onChange={e => setChannel(e.target.value)} placeholder="쿠팡" className={inputCls} /></div>
-            <label className="flex items-end gap-1.5 pb-2 text-xs font-semibold text-gray-700"><input type="checkbox" checked={parentBill} onChange={e => setParentBill(e.target.checked)} />학부모님께 청구</label>
+            <div className="flex-1"><p className="text-xs font-bold text-gray-700 mb-1">{L('inventory.whereToBuy')}</p><input value={channel} onChange={e => setChannel(e.target.value)} placeholder={L('data.coupang')} className={inputCls} /></div>
+            <label className="flex items-end gap-1.5 pb-2 text-xs font-semibold text-gray-700"><input type="checkbox" checked={parentBill} onChange={e => setParentBill(e.target.checked)} />{L('inventory.billParents')}</label>
           </div>
-          <div><p className="text-xs font-bold text-gray-700 mb-1">멘토에게 보여줄 안내</p>
+          <div><p className="text-xs font-bold text-gray-700 mb-1">{L('inventory.guideShownToMentors')}</p>
             <textarea value={text} onChange={e => setText(e.target.value)} rows={5} className={`${inputCls} resize-none`}
-              placeholder={'예: 쿠팡에서 주문하는 품목이에요.\n학생 사이즈·색상을 메모에 적어주세요.\n금액은 학부모님께 따로 청구합니다 (용돈봉투에서 빼지 마세요).'} /></div>
-          <label className="flex items-center gap-1.5 text-xs text-gray-600"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />검색에 보이기</label>
+              placeholder={L('inventory.eGThisItemIs')} /></div>
+          <label className="flex items-center gap-1.5 text-xs text-gray-600"><input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />{L('inventory.showInSearch')}</label>
         </div>
         <div className="px-5 py-4 border-t border-gray-100 flex gap-2">
-          {guide && <button onClick={() => { if (confirm(`${guide.name}을(를) 삭제할까요?`)) deleteSupplyGuide(db, guide.id).then(onClose); }} className="px-3 py-2 text-xs text-red-500 border border-red-200 rounded-xl">삭제</button>}
-          <button onClick={save} disabled={busy} className="flex-1 py-2.5 text-sm font-bold text-white bg-emerald-600 rounded-xl disabled:opacity-40">{busy ? '저장 중...' : '저장'}</button>
+          {guide && <button onClick={() => { if (confirm(L('inventory.delete', { v0: guide.name }))) deleteSupplyGuide(db, guide.id).then(onClose); }} className="px-3 py-2 text-xs text-red-500 border border-red-200 rounded-xl">{L('common.delete')}</button>}
+          <button onClick={save} disabled={busy} className="flex-1 py-2.5 text-sm font-bold text-white bg-emerald-600 rounded-xl disabled:opacity-40">{busy ? L('task.saving') : L('common.save')}</button>
         </div>
       </div>
     </div>

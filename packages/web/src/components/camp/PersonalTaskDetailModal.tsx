@@ -4,6 +4,8 @@ import { useEffect } from 'react';
 import type { PersonalTask, TaskCategory } from '@smis-mentor/shared';
 import { formatTime, formatDuration } from '@/lib/taskService';
 import { useAuth } from '@/contexts/AuthContext';
+import { L, isEnglishUI } from '@smis-mentor/shared';
+import { currentIntlLocale } from '@smis-mentor/shared';
 
 interface PersonalTaskDetailModalProps {
   task: PersonalTask;
@@ -33,7 +35,9 @@ export default function PersonalTaskDetailModal({
   }, [onClose]);
 
   const taskDate = task.date.toDate();
-  const dateStr = taskDate.toLocaleDateString(isForeign ? 'en-US' : 'ko-KR', {
+  // 날짜 형식은 사전이 아니라 Intl 로케일로
+  // eslint-disable-next-line no-restricted-syntax
+  const dateStr = taskDate.toLocaleDateString(currentIntlLocale(), {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -56,16 +60,16 @@ export default function PersonalTaskDetailModal({
         {/* 헤더 */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-2">
-            <span className="text-base font-bold text-gray-900">{isForeign ? 'Personal Task Detail' : '개인 업무 상세'}</span>
+            <span className="text-base font-bold text-gray-900">{L('task.personalTaskDetail')}</span>
             <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full font-medium">
-              {isForeign ? 'Only you' : '나만 보임'}
+              {L('task.onlyYou')}
             </span>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label={isForeign ? 'Close' : '닫기'}
+            aria-label={L('common.close')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -79,7 +83,7 @@ export default function PersonalTaskDetailModal({
           <div className="flex items-start gap-3">
             <div
               className="mt-0.5 flex-shrink-0 w-5 h-5"
-              aria-label={isForeign ? (task.isCompleted ? 'Completed' : 'Not completed') : (task.isCompleted ? '완료됨' : '미완료')}
+              aria-label={isEnglishUI() ? (task.isCompleted ? 'Completed' : 'Not completed') : (task.isCompleted ? L('task.completed') : L('task.notCompleted'))}
             >
               {task.isCompleted ? (
                 <svg className="w-5 h-5" style={{ color: accentColor }} fill="currentColor" viewBox="0 0 24 24">
@@ -134,7 +138,7 @@ export default function PersonalTaskDetailModal({
                 <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <span>{isForeign ? `Est. duration: ${durationStr}` : `예상 소요시간: ${durationStr}`}</span>
+                <span>{L('task.estDurationV0', { v0: durationStr })}</span>
               </div>
             )}
           </div>
@@ -142,7 +146,7 @@ export default function PersonalTaskDetailModal({
           {/* 메모 */}
           {task.description && (
             <div>
-              <h5 className="text-xs font-semibold text-gray-500 mb-1.5">{isForeign ? 'Note' : '메모'}</h5>
+              <h5 className="text-xs font-semibold text-gray-500 mb-1.5">{L('task.note')}</h5>
               <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed bg-gray-50 rounded-lg p-3">
                 {task.description}
               </p>
@@ -162,14 +166,14 @@ export default function PersonalTaskDetailModal({
                 <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
-                {isForeign ? 'Completed' : '완료됨'}
+                {L('task.completed')}
               </>
             ) : (
               <>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <circle cx="12" cy="12" r="10" strokeWidth="2" />
                 </svg>
-                {isForeign ? 'Not completed' : '미완료'}
+                {L('task.notCompleted')}
               </>
             )}
           </div>
@@ -182,14 +186,14 @@ export default function PersonalTaskDetailModal({
             onClick={onEdit}
             className="flex-1 py-2.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-xl hover:bg-blue-100 transition-colors"
           >
-            {isForeign ? 'Edit' : '수정'}
+            {L('task.edit')}
           </button>
           <button
             type="button"
             onClick={onDelete}
             className="flex-1 py-2.5 text-sm font-medium text-red-600 bg-red-50 rounded-xl hover:bg-red-100 transition-colors"
           >
-            {isForeign ? 'Delete' : '삭제'}
+            {L('common.delete')}
           </button>
         </div>
       </div>

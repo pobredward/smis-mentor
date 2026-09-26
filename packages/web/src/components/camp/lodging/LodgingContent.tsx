@@ -29,8 +29,7 @@ import {
   type LodgingPlaceSetting,
   type LodgingRoomSetting,
   type LodgingRoomView,
-  type STSheetStudent,
-} from '@smis-mentor/shared';
+  type STSheetStudent, L } from '@smis-mentor/shared';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { getJobCodeById, getUsersByJobCodeId } from '@/lib/firebaseService';
@@ -199,7 +198,7 @@ export default function LodgingContent() {
       queryClient.setQueryData(['campLodging', campCode], saved);
     } catch (e) {
       console.error('숙소 설정 저장 실패', e);
-      alert('저장에 실패했습니다. 다시 시도해주세요.');
+      alert(L('common.failedToSavePleaseTry'));
       throw e;
     } finally {
       setSaving(false);
@@ -243,7 +242,7 @@ export default function LodgingContent() {
   }, [q, rooms]);
 
   if (!activeJobCodeId) {
-    return <Empty title={isForeign ? 'No active camp' : '활성화된 캠프가 없습니다'} body={isForeign ? 'Activate a camp on My Page.' : '마이페이지에서 참여 중인 캠프를 활성화하면 숙소를 볼 수 있습니다.'} />;
+    return <Empty title={L('lodging.noActiveCamp')} body={L('lodging.activateACampOnMy')} />;
   }
   if (!jobCode) {
     return (
@@ -256,16 +255,16 @@ export default function LodgingContent() {
   if (!building) {
     return (
       <Empty
-        title={isForeign ? 'No building map for this camp yet' : '이 캠프의 건물 정보가 아직 없습니다'}
-        body={isForeign ? 'Only E/J camps (Ilsung Condo) have a floor plan so far.' : '지금은 E/J 캠프(일성콘도)만 도면이 있습니다. 다른 캠프는 배치도가 준비되면 붙입니다.'}
+        title={L('lodging.noBuildingMapForThis')}
+        body={L('lodging.onlyEJCampsIlsung2')}
       />
     );
   }
 
   const tabs: { key: ViewKey; label: string }[] = [
-    { key: 'all', label: isForeign ? 'All' : '전체' },
+    { key: 'all', label: L('lodging.all') },
     { key: 'b1', label: 'B1' },
-    ...building.floors.map((f) => ({ key: `f${f}` as ViewKey, label: isForeign ? `${f}F` : `${f}층` })),
+    ...building.floors.map((f) => ({ key: `f${f}` as ViewKey, label: L('lodging.v0F', { v0: f }) })),
     { key: '3d', label: '3D' },
   ];
   const floorOf = (v: ViewKey) => (v.startsWith('f') ? Number(v.slice(1)) : null);
@@ -279,7 +278,7 @@ export default function LodgingContent() {
   return (
     <div className="pt-2 pb-16">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <div role="tablist" aria-label="숙소 보기" className="flex min-w-0 flex-1 flex-wrap gap-1">
+        <div role="tablist" aria-label={L('lodging.viewLodging')} className="flex min-w-0 flex-1 flex-wrap gap-1">
           {tabs.map((t) => {
             const on = t.key === view;
             return (
@@ -304,12 +303,12 @@ export default function LodgingContent() {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={isForeign ? 'Search name / room' : '이름·호수·선생님 검색'}
+            placeholder={L('lodging.searchNameRoom')}
             className="w-44 rounded-md border border-gray-300 px-2.5 py-1.5 text-xs"
           />
           {q && (
             <span className="text-xs text-gray-500">
-              {hits.size ? `${hits.size}개 방` : '없음'}
+              {hits.size ? L('lodging.rooms', { v0: hits.size }) : L('task.none')}
               {hits.size > 0 && hits.size <= 6 && (
                 <>
                   {' · '}
@@ -333,16 +332,16 @@ export default function LodgingContent() {
                   type="button"
                   onClick={() => toggleRow(k)}
                   aria-pressed={open}
-                  title={open ? `${LODGING_FILTER_LABEL[k]}별 줄 숨기기` : `${LODGING_FILTER_LABEL[k]}별 줄 보이기`}
+                  title={open ? L('lodging.hideRowsBy', { v0: LODGING_FILTER_LABEL[k] }) : L('lodging.showRowsBy', { v0: LODGING_FILTER_LABEL[k] })}
                   className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold ring-1 ring-inset transition-colors ${
                     open ? 'bg-gray-900 text-white ring-gray-900' : 'bg-white text-gray-500 ring-gray-300 hover:bg-gray-50'
                   }`}
                 >
                   {open ? <FiEye size={12} /> : <FiEyeOff size={12} />}
-                  {LODGING_FILTER_LABEL[k]}별
+                  {LODGING_FILTER_LABEL[k]}{L('lodging.by')}
                   {off > 0 && (
                     <span className={`rounded-full px-1 text-[10px] font-medium ${open ? 'bg-amber-400 text-gray-900' : 'bg-amber-100 text-amber-700'}`}>
-                      {off}개 꺼짐
+                      {off}{L('lodging.off')}
                     </span>
                   )}
                 </button>
@@ -362,24 +361,24 @@ export default function LodgingContent() {
                 <button
                   type="button"
                   onClick={() => toggleRow(k)}
-                  aria-label={`${LODGING_FILTER_LABEL[k]}별 줄 숨기기`}
-                  title="이 줄 숨기기"
+                  aria-label={L('lodging.hideRowsBy', { v0: LODGING_FILTER_LABEL[k] })}
+                  title={L('lodging.hideThisRow')}
                   className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-gray-600 hover:bg-gray-100"
                 >
                   <FiEye size={13} />
                 </button>
-                <span className="w-9 shrink-0 text-[11px] font-semibold leading-5 text-gray-700">{LODGING_FILTER_LABEL[k]}별</span>
+                <span className="w-9 shrink-0 text-[11px] font-semibold leading-5 text-gray-700">{LODGING_FILTER_LABEL[k]}{L('lodging.by')}</span>
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
                   <button
                     type="button"
                     onClick={() => setHidden((h) => setAllLodgingHidden(h, k, filterOptions[k], allOn))}
                     aria-pressed={allOn}
-                    title={allOn ? '모두 숨기기' : '모두 보이기'}
+                    title={allOn ? L('lodging.hideAll') : L('lodging.showAll')}
                     className={`rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 transition-colors ${
                       allOn ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 ring-1 ring-inset ring-gray-400 hover:bg-gray-50'
                     }`}
                   >
-                    전체
+                    {L('lodging.all')}
                   </button>
                   {filterOptions[k].map((o) => {
                     const off = hidden[k].includes(o.value);
@@ -390,7 +389,7 @@ export default function LodgingContent() {
                         onClick={() => setHidden((h) => toggleLodgingHidden(h, k, o.value))}
                         onDoubleClick={() => setHidden((h) => onlyLodgingValue(h, k, o.value, filterOptions[k]))}
                         aria-pressed={!off}
-                        title="누르면 보이기/숨기기 · 두 번 누르면 이것만"
+                        title={L('lodging.tapToShowHideDouble')}
                         className={`rounded-full px-2 py-0.5 text-[11px] leading-4 transition-colors ${
                           off
                             ? 'bg-white text-gray-400 line-through ring-1 ring-inset ring-gray-200'
@@ -410,9 +409,9 @@ export default function LodgingContent() {
 
       {unknown.size > 0 && (
         <p className="mb-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          시트 방호수가 도면에 없는 학생:{' '}
+          {L('lodging.studentsWhoseSheetRoomNumber')}{' '}
           {Array.from(unknown.entries())
-            .map(([num, list]) => `${num || '(빈칸)'} — ${list.map((s) => s.name).join(', ')}`)
+            .map(([num, list]) => `${num || L('common.blankParen')} — ${list.map((s) => s.name).join(', ')}`)
             .join(' / ')}
         </p>
       )}
@@ -428,7 +427,7 @@ export default function LodgingContent() {
                   className="pt-3 pl-3 text-left font-mono text-base font-bold text-gray-600 hover:text-blue-600"
                 >
                   {f}F
-                  <span className="block font-sans text-[10px] font-normal text-gray-400">{cnt}명</span>
+                  <span className="block font-sans text-[10px] font-normal text-gray-400">{cnt}{L('common.people2')}</span>
                 </button>
                 <div className="p-2">
                   <LodgingFloorGrid
@@ -448,7 +447,7 @@ export default function LodgingContent() {
           <div className="grid grid-cols-[48px_1fr] items-start rounded-xl border border-gray-200 bg-white">
             <button onClick={() => setView('b1')} className="pt-3 pl-3 text-left font-mono text-base font-bold text-gray-600 hover:text-blue-600">
               B1
-              <span className="block font-sans text-[10px] font-normal text-gray-400">시설</span>
+              <span className="block font-sans text-[10px] font-normal text-gray-400">{L('lodging.facilities')}</span>
             </button>
             <div className="flex flex-wrap gap-1 p-2">
               {places
@@ -463,7 +462,7 @@ export default function LodgingContent() {
                       style={{ background: c.bg, color: c.ink }}
                     >
                       {p.name}
-                      {p.cap ? ` ${p.cap}명` : ''}
+                      {p.cap ? L('lodging.students', { v0: p.cap }) : ''}
                       {p.purpose ? ` · ${p.purpose}` : ''}
                     </button>
                   );
@@ -476,7 +475,7 @@ export default function LodgingContent() {
       {floorOf(view) !== null && (
         <div className="rounded-xl border border-gray-200 bg-white p-3">
           <p className="mb-2 text-xs text-gray-500">
-            <b className="text-gray-800">{floorOf(view)}층</b> · 왼쪽 별관(세로 복도) 가운데 통로에서 본관(가로 복도)이 동쪽으로 뻗습니다
+            <b className="text-gray-800">{floorOf(view)}{L('lodging.f')}</b> {L('lodging.fromTheMiddlePassageOf')}
           </p>
           <LodgingFloorGrid
             building={building}
@@ -519,18 +518,18 @@ export default function LodgingContent() {
           })}
           <span className="inline-flex items-center gap-1">
             <i className="inline-block h-3 w-3 rounded-sm bg-blue-100" />
-            본관↔별관 통로
+            {L('lodging.mainAnnexPassage')}
           </span>
           {mine.size > 0 && (
             <span className="inline-flex items-center gap-1">
               <i className="inline-block h-3 w-3 rounded-sm border-2 border-emerald-500 bg-white" />
-              {isForeign ? 'My room' : '내 방·담당'}
+              {L('lodging.myRoom')}
             </span>
           )}
         </div>
       )}
 
-      {loadingStudents && <p className="mt-2 text-xs text-gray-400">명단 불러오는 중…</p>}
+      {loadingStudents && <p className="mt-2 text-xs text-gray-400">{L('lodging.loadingRoster')}</p>}
 
       {target && (
         <LodgingDetail

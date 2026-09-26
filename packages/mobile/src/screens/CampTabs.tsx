@@ -29,6 +29,7 @@ import {
   updateLessonMaterial,
 } from '../services/lessonMaterialService';
 import { getUserJobCodesInfo } from '../services/authService';
+import { L } from '@smis-mentor/shared';
 
 interface JobCodeWithGroup {
   generation: string;
@@ -238,7 +239,7 @@ export function LessonScreen() {
       setSections(allSections);
     } catch (error) {
       logger.error('데이터 로드 오류:', error);
-      Alert.alert('오류', '데이터를 불러오는 중 오류가 발생했습니다.');
+      Alert.alert(L('common.error'), L('content.anErrorOccurredWhileLoading'));
     } finally {
       setLoading(false);
     }
@@ -302,7 +303,7 @@ export function LessonScreen() {
   // 소제목 추가
   const handleAddSection = async (materialId: string) => {
     if (!sectionTitle.trim()) {
-      Alert.alert('오류', '소제목 이름을 입력해주세요.');
+      Alert.alert(L('common.error'), L('content.pleaseEnterASubsectionName'));
       return;
     }
 
@@ -339,17 +340,17 @@ export function LessonScreen() {
       setSectionTitle('');
       setSectionViewUrl('');
       setSectionOriginalUrl('');
-      Alert.alert('성공', '소제목이 추가되었습니다.');
+      Alert.alert(L('common.success'), L('content.subsectionAdded'));
     } catch (error) {
       logger.error('소제목 추가 오류:', error);
-      Alert.alert('오류', '소제목 추가 중 오류가 발생했습니다.');
+      Alert.alert(L('common.error'), L('content.anErrorOccurredWhileAdding'));
     }
   };
 
   // 소제목 수정
   const handleEditSection = async (materialId: string, sectionId: string) => {
     if (!sectionTitle.trim()) {
-      Alert.alert('오류', '소제목 이름을 입력해주세요.');
+      Alert.alert(L('common.error'), L('content.pleaseEnterASubsectionName'));
       return;
     }
 
@@ -437,10 +438,10 @@ export function LessonScreen() {
       setSectionTitle('');
       setSectionViewUrl('');
       setSectionOriginalUrl('');
-      Alert.alert('성공', '소제목이 수정되었습니다.');
+      Alert.alert(L('common.success'), L('content.subsectionUpdated'));
     } catch (error) {
       logger.error('소제목 수정 오류:', error);
-      Alert.alert('오류', '소제목 수정 중 오류가 발생했습니다.');
+      Alert.alert(L('common.error'), L('content.anErrorOccurredWhileUpdating'));
     }
   };
 
@@ -448,14 +449,14 @@ export function LessonScreen() {
   const handleDeleteSection = async (materialId: string, sectionId: string) => {
     const section = sections[materialId]?.find((s) => s.id === sectionId);
     if (section?.isFromTemplate) {
-      Alert.alert('오류', '관리자가 설정한 소제목은 삭제할 수 없습니다.');
+      Alert.alert(L('common.error'), L('content.subsectionsSetByAnAdministrator'));
       return;
     }
 
-    Alert.alert('삭제 확인', '정말 삭제하시겠습니까?', [
-      { text: '취소', style: 'cancel' },
+    Alert.alert(L('common.confirmDelete'), L('content.areYouSureYouWant3'), [
+      { text: L('common.cancel'), style: 'cancel' },
       {
-        text: '삭제',
+        text: L('common.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -464,10 +465,10 @@ export function LessonScreen() {
               ...prev,
               [materialId]: prev[materialId]?.filter((s) => s.id !== sectionId) || [],
             }));
-            Alert.alert('성공', '소제목이 삭제되었습니다.');
+            Alert.alert(L('common.success'), L('content.subsectionDeleted'));
           } catch (error) {
             logger.error('소제목 삭제 오류:', error);
-            Alert.alert('오류', '소제목 삭제 중 오류가 발생했습니다.');
+            Alert.alert(L('common.error'), L('content.anErrorOccurredWhileDeleting'));
           }
         },
       },
@@ -477,12 +478,12 @@ export function LessonScreen() {
   // 유저 대주제 추가
   const handleAddUserMaterial = async () => {
     if (!newMaterialTitle.trim()) {
-      Alert.alert('오류', '대주제 이름을 입력해주세요.');
+      Alert.alert(L('common.error'), L('content.pleaseEnterATopicName'));
       return;
     }
 
     if (!selectedMaterialCode) {
-      Alert.alert('오류', '코드를 선택한 후 대주제를 추가해주세요.');
+      Alert.alert(L('common.error'), L('content.selectACodeBeforeAdding'));
       return;
     }
 
@@ -512,10 +513,10 @@ export function LessonScreen() {
 
       setNewMaterialTitle('');
       setShowAddMaterialForm(false);
-      Alert.alert('성공', `${selectedMaterialCode}에 대주제가 추가되었습니다.`);
+      Alert.alert(L('common.success'), L('content.topicAddedTo', { v0: selectedMaterialCode }));
     } catch (error) {
       logger.error('대주제 추가 오류:', error);
-      Alert.alert('오류', '대주제 추가 중 오류가 발생했습니다.');
+      Alert.alert(L('common.error'), L('content.anErrorOccurredWhileAdding2'));
     }
   };
 
@@ -525,14 +526,14 @@ export function LessonScreen() {
     if (!material) return;
 
     if (material.templateId) {
-      Alert.alert('오류', '템플릿 기반 대주제는 삭제할 수 없습니다.');
+      Alert.alert(L('common.error'), L('content.templateBasedTopicsCannotBe'));
       return;
     }
 
-    Alert.alert('삭제 확인', '정말 삭제하시겠습니까? 모든 소제목도 함께 삭제됩니다.', [
-      { text: '취소', style: 'cancel' },
+    Alert.alert(L('common.confirmDelete'), L('content.deleteThisAllSubsectionsWill'), [
+      { text: L('common.cancel'), style: 'cancel' },
       {
-        text: '삭제',
+        text: L('common.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -543,10 +544,10 @@ export function LessonScreen() {
               delete newSections[materialId];
               return newSections;
             });
-            Alert.alert('성공', '대주제가 삭제되었습니다.');
+            Alert.alert(L('common.success'), L('content.topicDeleted'));
           } catch (error) {
             logger.error('대주제 삭제 오류:', error);
-            Alert.alert('오류', '대주제 삭제 중 오류가 발생했습니다.');
+            Alert.alert(L('common.error'), L('content.anErrorOccurredWhileDeleting2'));
           }
         },
       },
@@ -558,8 +559,8 @@ export function LessonScreen() {
       <View style={styles.container}>
         <View style={styles.placeholderContainer}>
           <Ionicons name="lock-closed-outline" size={64} color="#cbd5e1" />
-          <Text style={styles.placeholderTitle}>로그인 필요</Text>
-          <Text style={styles.placeholderText}>로그인 후 이용 가능합니다.</Text>
+          <Text style={styles.placeholderTitle}>{L('common.loginRequired')}</Text>
+          <Text style={styles.placeholderText}>{L('common.pleaseLogInToUse')}</Text>
         </View>
       </View>
     );
@@ -570,12 +571,12 @@ export function LessonScreen() {
       <View style={styles.container}>
         <View style={styles.placeholderContainer}>
           <Ionicons name="warning-outline" size={64} color="#f59e0b" />
-          <Text style={styles.placeholderTitle}>직무 경험 필요</Text>
+          <Text style={styles.placeholderTitle}>{L('content.jobExperienceRequired')}</Text>
           <Text style={styles.placeholderText}>
-            수업 자료를 이용하려면 직무 경험이 등록되어야 합니다.
+            {L('content.aJobExperienceMustBe')}
           </Text>
           <Text style={[styles.placeholderText, { marginTop: 4 }]}>
-            관리자에게 문의해주세요.
+            {L('content.pleaseContactAnAdministrator')}
           </Text>
         </View>
       </View>
@@ -587,12 +588,12 @@ export function LessonScreen() {
       <View style={styles.container}>
         <View style={styles.placeholderContainer}>
           <Ionicons name="settings-outline" size={64} color="#3b82f6" />
-          <Text style={styles.placeholderTitle}>캠프를 선택해주세요</Text>
+          <Text style={styles.placeholderTitle}>{L('common.pleaseSelectACamp')}</Text>
           <Text style={styles.placeholderText}>
-            마이페이지에서 활성화할 캠프를 선택하면
+            {L('common.selectACampToActivate')}
           </Text>
           <Text style={styles.placeholderText}>
-            해당 캠프의 수업 자료를 확인할 수 있습니다.
+            {L('content.toViewThatCampS')}
           </Text>
         </View>
       </View>
@@ -605,7 +606,7 @@ export function LessonScreen() {
         <View style={styles.placeholderContainer}>
           <ActivityIndicator size="large" color="#3b82f6" />
           <Text style={[styles.placeholderText, { marginTop: 16 }]}>
-            수업 자료를 불러오는 중...
+            {L('content.loadingLessonMaterials')}
           </Text>
         </View>
       </View>
@@ -648,14 +649,14 @@ export function LessonScreen() {
             {showAddMaterialForm ? (
               <View style={styles.addMaterialForm}>
                 <Text style={styles.addMaterialFormTitle}>
-                  {selectedMaterialCode}에 새 대주제 추가
+                  {selectedMaterialCode}{L('content.addANewTopic2')}
                 </Text>
                 <Text style={styles.addMaterialFormSubtitle}>
-                  {selectedMaterialCode} 카테고리에 새로운 대주제를 추가합니다.
+                  {selectedMaterialCode} {L('content.addANewTopicTo')}
                 </Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="대주제 이름 (예: 개인 프로젝트)"
+                  placeholder={L('content.topicNameEGPersonal')}
                   value={newMaterialTitle}
                   onChangeText={setNewMaterialTitle}
                 />
@@ -667,13 +668,13 @@ export function LessonScreen() {
                       setNewMaterialTitle('');
                     }}
                   >
-                    <Text style={styles.cancelButtonText}>취소</Text>
+                    <Text style={styles.cancelButtonText}>{L('common.cancel')}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={styles.saveButton}
                     onPress={handleAddUserMaterial}
                   >
-                    <Text style={styles.saveButtonText}>추가하기</Text>
+                    <Text style={styles.saveButtonText}>{L('task.add2')}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -684,7 +685,7 @@ export function LessonScreen() {
               >
                 <Ionicons name="add-circle-outline" size={20} color="#3b82f6" />
                 <Text style={styles.addMaterialButtonText}>
-                  {selectedMaterialCode}에 새 대주제 추가하기
+                  {selectedMaterialCode}{L('content.addANewTopic')}
                 </Text>
               </TouchableOpacity>
             )}
@@ -695,9 +696,9 @@ export function LessonScreen() {
         {sortedFilteredMaterials.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="document-outline" size={64} color="#cbd5e1" />
-            <Text style={styles.emptyTitle}>등록된 수업 자료가 없습니다</Text>
+            <Text style={styles.emptyTitle}>{L('content.noLessonMaterialsYet')}</Text>
             <Text style={styles.emptyText}>
-              관리자가 템플릿을 추가하면 자동으로 표시됩니다
+              {L('content.theyAppearAutomaticallyWhenAn')}
             </Text>
           </View>
         ) : (
@@ -718,7 +719,7 @@ export function LessonScreen() {
                       </View>
                       <View style={styles.materialInfo}>
                         <Text style={styles.materialTitle}>{material.title}</Text>
-                        <Text style={styles.materialSubtitle}>{sectionCount}개 소제목</Text>
+                        <Text style={styles.materialSubtitle}>{sectionCount}{L('content.subsections')}</Text>
                       </View>
                     </View>
                     <View style={styles.materialHeaderRight}>
@@ -753,9 +754,9 @@ export function LessonScreen() {
                       {sections[material.id]?.length === 0 ? (
                         <View style={styles.emptySections}>
                           <Ionicons name="albums-outline" size={32} color="#cbd5e1" />
-                          <Text style={styles.emptySectionsText}>소제목이 없습니다</Text>
+                          <Text style={styles.emptySectionsText}>{L('content.noSubsections')}</Text>
                           <Text style={[styles.emptySectionsText, { fontSize: 12 }]}>
-                            아래 버튼을 클릭하여 소제목을 추가해보세요
+                            {L('content.tapTheButtonBelowTo')}
                           </Text>
                         </View>
                       ) : (
@@ -775,35 +776,35 @@ export function LessonScreen() {
                                     styles.input,
                                     section.isFromTemplate && styles.inputDisabled,
                                   ]}
-                                  placeholder="소제목 이름"
+                                  placeholder={L('content.subsectionName')}
                                   value={sectionTitle}
                                   onChangeText={setSectionTitle}
                                   editable={!section.isFromTemplate}
                                 />
                                 {section.isFromTemplate && (
                                   <Text style={styles.helperText}>
-                                    관리자가 설정한 제목은 수정할 수 없습니다.
+                                    {L('content.titlesSetByAnAdministrator')}
                                   </Text>
                                 )}
                                 <TextInput
                                   style={styles.input}
-                                  placeholder="공개보기 링크"
+                                  placeholder={L('content.publicViewLink')}
                                   value={sectionViewUrl}
                                   onChangeText={setSectionViewUrl}
                                   autoCapitalize="none"
                                 />
                                 <Text style={[styles.helperText, { color: '#dc2626', fontWeight: '600', marginBottom: 8 }]}>
-                                  ⚠️ 필수: Canva에서 '공유' → '공개 보기 링크' → '공개 보기 링크 만들기' → '복사' 클릭
+                                  {L('content.requiredInCanvaClickShare')}
                                 </Text>
                                 <TextInput
                                   style={styles.input}
-                                  placeholder="원본 링크"
+                                  placeholder={L('content.originalLink')}
                                   value={sectionOriginalUrl}
                                   onChangeText={setSectionOriginalUrl}
                                   autoCapitalize="none"
                                 />
                                 <Text style={[styles.helperText, { color: '#dc2626', fontWeight: '600', marginBottom: 8 }]}>
-                                  ⚠️ 필수: Canva에서 '액세스 수준'을 '링크가 있는 모든 사용자'로 변경 → '링크 복사' 클릭
+                                  {L('content.requiredInCanvaSetAccess')}
                                 </Text>
                                 <View style={styles.formActions}>
                                   <TouchableOpacity
@@ -815,13 +816,13 @@ export function LessonScreen() {
                                       setSectionOriginalUrl('');
                                     }}
                                   >
-                                    <Text style={styles.cancelButtonText}>취소</Text>
+                                    <Text style={styles.cancelButtonText}>{L('common.cancel')}</Text>
                                   </TouchableOpacity>
                                   <TouchableOpacity
                                     style={styles.saveButton}
                                     onPress={() => handleEditSection(material.id, section.id)}
                                   >
-                                    <Text style={styles.saveButtonText}>수정 완료</Text>
+                                    <Text style={styles.saveButtonText}>{L('content.done')}</Text>
                                   </TouchableOpacity>
                                 </View>
                               </View>
@@ -879,7 +880,7 @@ export function LessonScreen() {
                                           !section.viewUrl && styles.actionLinkButtonTextDisabled,
                                         ]}
                                       >
-                                        공개
+                                        {L('content.public')}
                                       </Text>
                                     </TouchableOpacity>
                                     <TouchableOpacity
@@ -899,7 +900,7 @@ export function LessonScreen() {
                                           !section.originalUrl && styles.actionLinkButtonTextDisabled,
                                         ]}
                                       >
-                                        원본
+                                        {L('content.original')}
                                       </Text>
                                     </TouchableOpacity>
                                     {/* 수정/삭제 버튼 */}
@@ -940,29 +941,29 @@ export function LessonScreen() {
                         <View style={styles.addSectionForm}>
                           <TextInput
                             style={styles.input}
-                            placeholder="소제목 이름"
+                            placeholder={L('content.subsectionName')}
                             value={sectionTitle}
                             onChangeText={setSectionTitle}
                           />
                           <TextInput
                             style={styles.input}
-                            placeholder="공개보기 링크"
+                            placeholder={L('content.publicViewLink')}
                             value={sectionViewUrl}
                             onChangeText={setSectionViewUrl}
                             autoCapitalize="none"
                           />
                           <Text style={[styles.helperText, { color: '#dc2626', fontWeight: '600', marginBottom: 8 }]}>
-                            ⚠️ 필수: Canva에서 '공유' → '공개 보기 링크' → '공개 보기 링크 만들기' → '복사' 클릭
+                            {L('content.requiredInCanvaClickShare')}
                           </Text>
                           <TextInput
                             style={styles.input}
-                            placeholder="원본 링크"
+                            placeholder={L('content.originalLink')}
                             value={sectionOriginalUrl}
                             onChangeText={setSectionOriginalUrl}
                             autoCapitalize="none"
                           />
                           <Text style={[styles.helperText, { color: '#dc2626', fontWeight: '600', marginBottom: 8 }]}>
-                            ⚠️ 필수: Canva에서 '액세스 수준'을 '링크가 있는 모든 사용자'로 변경 → '링크 복사' 클릭
+                            {L('content.requiredInCanvaSetAccess')}
                           </Text>
                           <View style={styles.formActions}>
                             <TouchableOpacity
@@ -974,13 +975,13 @@ export function LessonScreen() {
                                 setSectionOriginalUrl('');
                               }}
                             >
-                              <Text style={styles.cancelButtonText}>취소</Text>
+                              <Text style={styles.cancelButtonText}>{L('common.cancel')}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                               style={styles.saveButton}
                               onPress={() => handleAddSection(material.id)}
                             >
-                              <Text style={styles.saveButtonText}>추가하기</Text>
+                              <Text style={styles.saveButtonText}>{L('task.add2')}</Text>
                             </TouchableOpacity>
                           </View>
                         </View>
@@ -990,7 +991,7 @@ export function LessonScreen() {
                           onPress={() => setAddingSectionFor(material.id)}
                         >
                           <Ionicons name="add-circle-outline" size={16} color="#9ca3af" />
-                          <Text style={styles.addSectionButtonText}>소제목 추가</Text>
+                          <Text style={styles.addSectionButtonText}>{L('content.addSubsection')}</Text>
                         </TouchableOpacity>
                       )}
                     </View>

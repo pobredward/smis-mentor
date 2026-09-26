@@ -48,6 +48,7 @@ import { LodgingViewer } from '../components/lodging/LodgingViewer';
 import { LodgingRoomSheet, type LodgingTarget } from '../components/lodging/LodgingRoomSheet';
 import { PanZoomCanvas, type PanZoomHandle } from '../components/lodging/PanZoomCanvas';
 import { StudentDetailModal } from '../components/StudentDetailModal';
+import { L } from '@smis-mentor/shared';
 
 type ViewKey = 'all' | 'b1' | 'f1' | 'f2' | 'f3' | 'f4' | '3d';
 const VIEW_KEYS: readonly string[] = ['all', 'b1', 'f1', 'f2', 'f3', 'f4', '3d'];
@@ -171,7 +172,7 @@ export function LodgingScreen() {
       const saved = await updateCampLodging(db, data.campCode, next, userData?.userId);
       queryClient.setQueryData(lodgingQueryKey(activeJobCodeId ?? ''), { ...data, lodging: saved });
     } catch (e) {
-      Alert.alert('저장 실패', '숙소 설정을 저장하지 못했습니다. 다시 시도해주세요.');
+      Alert.alert(L('common.saveFailed'), L('lodging.couldNotSaveLodgingSettings'));
       throw e;
     } finally {
       setSaving(false);
@@ -269,7 +270,7 @@ export function LodgingScreen() {
   }, [q, hitKey]);
 
   if (!activeJobCodeId) {
-    return <Empty title={isForeign ? 'No active camp' : '활성화된 캠프가 없습니다'} body={isForeign ? 'Activate a camp on My Page.' : '마이페이지에서 참여 중인 캠프를 활성화하면 숙소를 볼 수 있습니다.'} />;
+    return <Empty title={L('lodging.noActiveCamp')} body={L('lodging.activateACampOnMy')} />;
   }
   if (isLoading || !data) {
     return (
@@ -281,16 +282,16 @@ export function LodgingScreen() {
   if (!building) {
     return (
       <Empty
-        title={isForeign ? 'No building map for this camp yet' : '이 캠프의 건물 정보가 아직 없습니다'}
-        body={isForeign ? 'Only E/J camps (Ilsung Condo) have a floor plan so far.' : '지금은 E/J 캠프(일성콘도)만 도면이 있습니다.'}
+        title={L('lodging.noBuildingMapForThis')}
+        body={L('lodging.onlyEJCampsIlsung')}
       />
     );
   }
 
   const tabs: { key: ViewKey; label: string }[] = [
-    { key: 'all', label: isForeign ? 'All' : '전체' },
+    { key: 'all', label: L('lodging.all') },
     { key: 'b1', label: 'B1' },
-    ...building.floors.map((f) => ({ key: `f${f}` as ViewKey, label: isForeign ? `${f}F` : `${f}층` })),
+    ...building.floors.map((f) => ({ key: `f${f}` as ViewKey, label: L('lodging.v0F', { v0: f }) })),
     { key: '3d', label: '3D' },
   ];
   const floorOf = floorOfView;
@@ -325,7 +326,7 @@ export function LodgingScreen() {
             >
               <TouchableOpacity onPress={() => setView(`f${f}` as ViewKey)} style={styles.floorHead}>
                 <Text style={styles.floorTitle}>{f}F</Text>
-                <Text style={styles.floorCount}>{cnt}명</Text>
+                <Text style={styles.floorCount}>{cnt}{L('common.people2')}</Text>
               </TouchableOpacity>
               <LodgingFloorGrid
                 building={building}
@@ -347,7 +348,7 @@ export function LodgingScreen() {
         <View style={styles.floorCard}>
           <TouchableOpacity onPress={() => setView('b1')} style={styles.floorHead}>
             <Text style={styles.floorTitle}>B1</Text>
-            <Text style={styles.floorCount}>시설</Text>
+            <Text style={styles.floorCount}>{L('lodging.facilities')}</Text>
           </TouchableOpacity>
           <View style={styles.b1Chips}>
             {places
@@ -358,7 +359,7 @@ export function LodgingScreen() {
                   <TouchableOpacity key={p.id} onPress={() => openPlace(p.id)} style={[styles.b1Chip, { backgroundColor: c.bg }]}>
                     <Text style={[styles.b1ChipText, { color: c.ink }]}>
                       {p.name}
-                      {p.cap ? ` ${p.cap}명` : ''}
+                      {p.cap ? L('lodging.students', { v0: p.cap }) : ''}
                       {p.purpose ? ` · ${p.purpose}` : ''}
                     </Text>
                   </TouchableOpacity>
@@ -376,7 +377,7 @@ export function LodgingScreen() {
         }}
       >
         <Text style={styles.floorNote}>
-          <Text style={{ fontWeight: '700', color: '#111827' }}>{floor}층</Text> · 왼쪽 별관 가운데 통로에서 본관이 동쪽으로 뻗습니다
+          <Text style={{ fontWeight: '700', color: '#111827' }}>{floor}{L('lodging.f')}</Text> {L('lodging.fromTheMiddlePassageOf2')}
         </Text>
         <LodgingFloorGrid
           building={building}
@@ -427,7 +428,7 @@ export function LodgingScreen() {
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder={isForeign ? 'Search name / room' : '이름·호수·선생님 검색'}
+            placeholder={L('lodging.searchNameRoom')}
             placeholderTextColor="#9ca3af"
             style={styles.search}
             clearButtonMode="while-editing"
@@ -451,7 +452,7 @@ export function LodgingScreen() {
                 </TouchableOpacity>
               </View>
             ) : (
-              <Text style={styles.hitText}>{hitList.length ? hitList[0] : '없음'}</Text>
+              <Text style={styles.hitText}>{hitList.length ? hitList[0] : L('task.none')}</Text>
             ))}
           {/* 그룹별·공항별 줄 보이기 — 꺼 두면 줄이 통째로 빠져 배치도가 넓어진다 */}
           {FILTER_KEYS.filter((k) => filterOptions[k].length > 0).map((k) => {
@@ -463,7 +464,7 @@ export function LodgingScreen() {
                 onPress={() => toggleRow(k)}
                 hitSlop={4}
                 style={[styles.rowPill, open && styles.rowPillOn]}
-                accessibilityLabel={`${LODGING_FILTER_LABEL[k]}별 줄 ${open ? '숨기기' : '보이기'}`}
+                accessibilityLabel={L('lodging.rowBy', { v0: LODGING_FILTER_LABEL[k], v1: open ? L('common.hide') : L('common.show') })}
               >
                 <Ionicons name={open ? 'eye-outline' : 'eye-off-outline'} size={12} color={open ? '#fff' : '#6b7280'} />
                 <Text style={[styles.rowPillText, open && styles.rowPillTextOn]}>{LODGING_FILTER_LABEL[k]}</Text>
@@ -484,18 +485,18 @@ export function LodgingScreen() {
                 onPress={() => toggleRow(k)}
                 hitSlop={{ top: 6, bottom: 6, left: 8, right: 4 }}
                 style={styles.eyeBtn}
-                accessibilityLabel={`${LODGING_FILTER_LABEL[k]}별 줄 숨기기`}
+                accessibilityLabel={L('lodging.hideRowsBy', { v0: LODGING_FILTER_LABEL[k] })}
               >
                 <Ionicons name="eye-outline" size={15} color="#4b5563" />
               </TouchableOpacity>
-              <Text style={styles.rowLabel}>{LODGING_FILTER_LABEL[k]}별</Text>
+              <Text style={styles.rowLabel}>{LODGING_FILTER_LABEL[k]}{L('lodging.by')}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipStrip} contentContainerStyle={styles.chipRow}>
                 {/* 전체 — 다 켜져 있으면 다 끄고, 하나라도 꺼져 있으면 다 켠다 */}
                 <TouchableOpacity
                   onPress={() => setHidden((h) => setAllLodgingHidden(h, k, filterOptions[k], allOn))}
                   style={[styles.allChip, allOn && styles.allChipOn]}
                 >
-                  <Text style={[styles.allChipText, allOn && styles.allChipTextOn]}>전체</Text>
+                  <Text style={[styles.allChipText, allOn && styles.allChipTextOn]}>{L('lodging.all')}</Text>
                 </TouchableOpacity>
                 {filterOptions[k].map((o) => {
                   const off = hidden[k].includes(o.value);
@@ -520,9 +521,9 @@ export function LodgingScreen() {
 
       {!isViewer && unknown.size > 0 && (
         <Text style={styles.warn} numberOfLines={2}>
-          시트 방호수가 도면에 없는 학생:{' '}
+          {L('lodging.studentsWhoseSheetRoomNumber')}{' '}
           {Array.from(unknown.entries())
-            .map(([num, list]) => `${num || '(빈칸)'} — ${list.map((s) => s.name).join(', ')}`)
+            .map(([num, list]) => `${num || L('common.blankParen')} — ${list.map((s) => s.name).join(', ')}`)
             .join(' / ')}
         </Text>
       )}
@@ -549,12 +550,12 @@ export function LodgingScreen() {
               })}
               <View style={styles.legendItem}>
                 <View style={[styles.legendSwatch, { backgroundColor: '#dbeafe' }]} />
-                <Text style={styles.legendText}>본관↔별관 통로</Text>
+                <Text style={styles.legendText}>{L('lodging.mainAnnexPassage')}</Text>
               </View>
               {mine.size > 0 && (
                 <View style={styles.legendItem}>
                   <View style={[styles.legendSwatch, styles.legendMine]} />
-                  <Text style={styles.legendText}>{isForeign ? 'My room' : '내 방·담당'}</Text>
+                  <Text style={styles.legendText}>{L('lodging.myRoom')}</Text>
                 </View>
               )}
             </ScrollView>

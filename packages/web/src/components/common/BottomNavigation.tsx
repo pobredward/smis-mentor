@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { memo, useState, useEffect } from 'react';
 import { getCampTabUrl } from '@/lib/campUtils';
+import { L } from '@smis-mentor/shared';
 
 const BottomNavigation = () => {
   const pathname = usePathname();
@@ -49,7 +50,7 @@ const BottomNavigation = () => {
       )
     }] : []),
     {
-      name: isForeign ? 'Camp' : '캠프',
+      name: L('nav.camp'),
       path: campUrl,
       icon: (active: boolean) => (
         <svg className={`w-6 h-6 ${active ? 'text-blue-600' : 'text-gray-600'}`} fill={active ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
@@ -58,7 +59,7 @@ const BottomNavigation = () => {
       )
     },
     {
-      name: isForeign ? 'My Page' : '마이페이지',
+      name: L('common.myPage'),
       path: '/profile',
       icon: (active: boolean) => (
         <svg className={`w-6 h-6 ${active ? 'text-blue-600' : 'text-gray-600'}`} fill={active ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">

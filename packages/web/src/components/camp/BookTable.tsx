@@ -10,6 +10,7 @@ import {
   type TimetableClassColumn,
   type TimetableSubject,
 } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 interface BookTableProps {
   /** 이 표의 반 목록 (순서 그대로) */
@@ -61,9 +62,9 @@ export default function BookTable({
   return (
     <section className="mt-6">
       <div className="mb-2 flex flex-wrap items-baseline gap-x-2">
-        <h3 className="text-sm font-semibold text-gray-900">{isForeign ? 'Books' : '교재'}</h3>
+        <h3 className="text-sm font-semibold text-gray-900">{L('schedule.books')}</h3>
         <span className="text-[11px] text-gray-400">
-          {isForeign ? 'Set by level code' : '반마다 레벨 코드 하나로 정해집니다'}
+          {L('schedule.setByLevelCode')}
         </span>
       </div>
 
@@ -78,7 +79,7 @@ export default function BookTable({
           <thead>
             <tr>
               <th className="border-b border-r border-gray-200 bg-gray-50 px-1 py-1 text-[10px] font-medium text-gray-500">
-                {isForeign ? 'Code' : '코드'}
+                {L('schedule.code')}
               </th>
               {classes.map((c) => {
                 const info = classInfo[c.classCode];

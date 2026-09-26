@@ -24,12 +24,13 @@ import { type FirebaseStorage, ref, deleteObject } from 'firebase/storage';
 import type { Task, TaskAttachment, JobExperienceGroupRole, TaskCompletion } from '../types/camp';
 import { isTaskVisibleTo, type TaskViewer } from './taskService';
 import { logger } from '../utils/logger';
+import { currentIntlLocale } from '../i18n/format';
 
 export const CAMP_TASKS_COLLECTION = 'campTasks';
 
 // 유틸리티: 날짜 포맷팅
 export const formatTaskDate = (date: Timestamp): string => {
-  return date.toDate().toLocaleDateString('ko-KR', {
+  return date.toDate().toLocaleDateString(currentIntlLocale(), {
     year: 'numeric',
     month: 'long',
     day: 'numeric',

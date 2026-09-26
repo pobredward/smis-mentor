@@ -36,6 +36,7 @@ import { DaumPostcode } from '../components/DaumPostcode';
 import { getPhonePlaceholder } from '../utils/phoneUtils';
 import Constants from 'expo-constants';
 import { PHONE_COUNTRY_CODES as countryCodes } from '@smis-mentor/shared';
+import { L, isEnglishUI } from '@smis-mentor/shared';
 
 type ProfileEditNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ProfileEdit'>;
 
@@ -48,7 +49,7 @@ const profileSchemaMentor = z.object({
   address: z.string().min(1, '주소를 입력해주세요.'),
   addressDetail: z.string().min(1, '상세 주소를 입력해주세요.'),
   gender: z.enum(['M', 'F'], {
-    errorMap: () => ({ message: '성별을 선택해주세요.' }),
+    errorMap: () => ({ message: L('profile.pleaseSelectYourGender') }),
   }),
   selfIntroduction: z.string().max(500, '자기소개는 500자 이내로 작성해주세요.').optional(),
   jobMotivation: z.string().max(500, '지원 동기는 500자 이내로 작성해주세요.').optional(),
@@ -243,7 +244,7 @@ export function ProfileEditScreen() {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (!permissionResult.granted) {
-        Alert.alert(isForeign ? 'Permission Required' : '권한 필요', isForeign ? 'Photo library access permission is required.' : '사진 라이브러리 접근 권한이 필요합니다.');
+        Alert.alert(L('common.permissionRequired'), L('common.photoLibraryAccessPermissionIs'));
         return;
       }
 
@@ -260,7 +261,7 @@ export function ProfileEditScreen() {
       }
     } catch (error) {
       logger.error('이미지 선택 오류:', error);
-      Alert.alert('오류', '이미지 선택 중 오류가 발생했습니다.');
+      Alert.alert(L('common.error'), L('profile.anErrorOccurredWhileSelecting'));
     }
   };
 
@@ -292,10 +293,10 @@ export function ProfileEditScreen() {
 
       setProfileImageUrl(downloadURL);
       await refreshUserData();
-      Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Profile image has been updated.' : '프로필 이미지가 변경되었습니다.');
+      Alert.alert(L('common.success'), L('profile.profileImageHasBeenUpdated'));
     } catch (error) {
       logger.error('이미지 업로드 오류:', error);
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'An error occurred while uploading the image.' : '이미지 업로드 중 오류가 발생했습니다.');
+      Alert.alert(L('common.error'), L('profile.anErrorOccurredWhileUploading'));
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
@@ -391,7 +392,7 @@ export function ProfileEditScreen() {
         }
         if (emailError) {
           setEmailExists(true);
-          Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'This email is already in use or could not be changed.' : (/이미 사용/.test(emailError) ? '이미 사용 중인 이메일입니다.' : '이메일을 변경할 수 없습니다. 잠시 후 다시 시도해주세요.'));
+          Alert.alert(L('common.error'), isEnglishUI() ? 'This email is already in use or could not be changed.' : (/이미 사용/.test(emailError) ? L('profile.thisEmailIsAlreadyIn') : L('profile.cannotChangeTheEmailPlease')));
           setIsLoading(false);
           return;
         }
@@ -402,7 +403,7 @@ export function ProfileEditScreen() {
         const existsPhone = await checkPhoneExists(finalPhoneNumber, userData.userId);
         if (existsPhone) {
           setPhoneExists(true);
-          Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'This phone number is already in use.' : '이미 사용 중인 전화번호입니다.');
+          Alert.alert(L('common.error'), L('profile.thisPhoneNumberIsAlready'));
           setIsLoading(false);
           return;
         }
@@ -481,7 +482,7 @@ export function ProfileEditScreen() {
             await saveSensitiveInfo({ userId: userData.userId, rrnFront, rrnLast });
           } catch (rrnErr) {
             logger.error('주민번호 저장 실패:', rrnErr);
-            Alert.alert('오류', '주민번호 저장에 실패했습니다. 다시 시도해주세요.');
+            Alert.alert(L('common.error'), L('profile.failedToSaveTheId'));
             setIsLoading(false);
             return;
           }
@@ -491,13 +492,13 @@ export function ProfileEditScreen() {
       await refreshUserData();
 
       Alert.alert(
-        isForeign ? 'Success' : '성공',
-        isForeign ? 'Profile has been updated successfully.' : '프로필이 성공적으로 업데이트되었습니다.',
-        [{ text: isForeign ? 'OK' : '확인', onPress: () => navigation.goBack() }]
+        L('common.success'),
+        L('profile.profileHasBeenUpdatedSuccessfully'),
+        [{ text: L('common.ok'), onPress: () => navigation.goBack() }]
       );
     } catch (error) {
       logger.error('프로필 업데이트 오류:', error);
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'An error occurred while updating profile.' : '프로필 업데이트 중 오류가 발생했습니다.');
+      Alert.alert(L('common.error'), L('profile.anErrorOccurredWhileUpdating'));
     } finally {
       setIsLoading(false);
     }
@@ -512,9 +513,9 @@ export function ProfileEditScreen() {
     // 주소 선택 완료 알림
     setTimeout(() => {
       Alert.alert(
-        isForeign ? 'Address Selected' : '주소 선택 완료', 
-        isForeign ? 'Address has been selected. Please enter detailed address.' : '주소가 선택되었습니다. 상세 주소를 입력해주세요.',
-        [{ text: isForeign ? 'OK' : '확인' }]
+        L('profile.addressSelected'), 
+        L('profile.addressHasBeenSelectedPlease'),
+        [{ text: L('common.ok') }]
       );
     }, 300);
   };
@@ -527,7 +528,7 @@ export function ProfileEditScreen() {
   if (!userData) {
     return (
       <View style={styles.container}>
-        <Text style={styles.errorText}>{isForeign ? 'Unable to load user information.' : '사용자 정보를 불러올 수 없습니다.'}</Text>
+        <Text style={styles.errorText}>{L('common.unableToLoadUserInformation')}</Text>
       </View>
     );
   }
@@ -549,7 +550,7 @@ export function ProfileEditScreen() {
           <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
             <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>{isForeign ? 'Edit Profile' : '프로필 수정'}</Text>
+          <Text style={styles.title}>{L('profile.editProfile')}</Text>
           <TouchableOpacity
             style={[styles.saveButton, (isLoading || emailExists || phoneExists) && styles.saveButtonDisabled]}
             onPress={handleSubmit(onSubmit)}
@@ -558,7 +559,7 @@ export function ProfileEditScreen() {
             {isLoading ? (
               <ActivityIndicator size="small" color="#ffffff" />
             ) : (
-              <Text style={styles.saveButtonText}>{isForeign ? 'Save' : '저장'}</Text>
+              <Text style={styles.saveButtonText}>{L('common.save')}</Text>
             )}
           </TouchableOpacity>
         </View>
@@ -568,7 +569,7 @@ export function ProfileEditScreen() {
           {/* ━━━ 1. 개인 정보 ━━━ */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{isForeign ? 'Personal Information' : '개인 정보'}</Text>
+              <Text style={styles.sectionTitle}>{L('profile.personalInformation')}</Text>
             </View>
 
             {/* 프로필 이미지 (인라인) */}
@@ -589,7 +590,7 @@ export function ProfileEditScreen() {
                 )}
               </TouchableOpacity>
               <TouchableOpacity onPress={handleImagePick} disabled={isUploading} style={styles.changeImageBtn}>
-                <Text style={styles.changeImageBtnText}>{isForeign ? 'Change Image' : '이미지 변경'}</Text>
+                <Text style={styles.changeImageBtnText}>{L('profile.changeImage')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -627,16 +628,16 @@ export function ProfileEditScreen() {
             ) : (
               <View style={styles.row2}>
                 <View style={styles.col}>
-                  <Text style={styles.label}>이름 *</Text>
+                  <Text style={styles.label}>{L('profile.name')}</Text>
                   <Controller control={control} name="name"
                     render={({ field: { onChange, onBlur, value } }) => (
                       <TextInput style={[styles.input, errors.name && styles.inputError]}
-                        onBlur={onBlur} onChangeText={onChange} value={value ?? ''} placeholder="이름" />
+                        onBlur={onBlur} onChangeText={onChange} value={value ?? ''} placeholder={L('profile.name2')} />
                     )} />
                   {errors.name && <Text style={styles.errorMsg}>{errors.name.message}</Text>}
                 </View>
                 <View style={styles.col}>
-                  <Text style={styles.label}>성별</Text>
+                  <Text style={styles.label}>{L('profile.gender')}</Text>
                   <Controller control={control} name="gender"
                     render={({ field: { onChange, value } }) => (
                       <View style={styles.genderRow}>
@@ -644,7 +645,7 @@ export function ProfileEditScreen() {
                           <TouchableOpacity key={g} onPress={() => onChange(g)}
                             style={[styles.genderBtn, value === g && styles.genderBtnActive]}>
                             <Text style={[styles.genderBtnText, value === g && styles.genderBtnTextActive]}>
-                              {g === 'M' ? '남성' : '여성'}
+                              {g === 'M' ? L('profile.male') : L('profile.female')}
                             </Text>
                           </TouchableOpacity>
                         ))}
@@ -657,7 +658,7 @@ export function ProfileEditScreen() {
 
             {/* 이메일 (1열) */}
             <View style={styles.formGroup}>
-              <Text style={styles.label}>{isForeign ? 'Email *' : '이메일 *'}</Text>
+              <Text style={styles.label}>{L('profile.email')}</Text>
               <Controller control={control} name="email"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <TextInput
@@ -666,13 +667,13 @@ export function ProfileEditScreen() {
                     onChangeText={onChange} value={value}
                     placeholder="email@example.com" keyboardType="email-address" autoCapitalize="none" />
                 )} />
-              {emailExists && <Text style={styles.errorMsg}>이미 사용 중</Text>}
+              {emailExists && <Text style={styles.errorMsg}>{L('profile.alreadyInUse')}</Text>}
               {errors.email && <Text style={styles.errorMsg}>{errors.email.message}</Text>}
             </View>
 
             {/* 전화번호 (1열) */}
             <View style={styles.formGroup}>
-              <Text style={styles.label}>{isForeign ? 'Phone *' : '전화번호 *'}</Text>
+              <Text style={styles.label}>{L('profile.phone')}</Text>
               {isForeign ? (
                 <View style={styles.phoneRow}>
                   <TouchableOpacity style={styles.countryCodeBtn} onPress={() => setShowCountryPicker(true)}>
@@ -693,7 +694,7 @@ export function ProfileEditScreen() {
                       onChangeText={onChange} value={value} placeholder="01012345678" keyboardType="phone-pad" />
                   )} />
               )}
-              {phoneExists && <Text style={styles.errorMsg}>이미 사용 중</Text>}
+              {phoneExists && <Text style={styles.errorMsg}>{L('profile.alreadyInUse')}</Text>}
               {errors.phoneNumber && <Text style={styles.errorMsg}>{errors.phoneNumber.message}</Text>}
             </View>
 
@@ -751,13 +752,13 @@ export function ProfileEditScreen() {
             {!isForeign && (
               <View style={[styles.formGroup, styles.dividerTop]}>
                 <View style={styles.rrnHeader}>
-                  <Text style={styles.subSectionTitle}>주민등록번호</Text>
+                  <Text style={styles.subSectionTitle}>{L('profile.residentRegistrationNumber')}</Text>
                   <View style={styles.rrnBadge}>
-                    <Text style={styles.rrnBadgeText}>🔒 암호화 저장{hasExistingRRN ? ' · 변경 시에만 입력' : ''}</Text>
+                    <Text style={styles.rrnBadgeText}>{L('profile.encrypted')}{hasExistingRRN ? L('profile.enterOnlyToChange') : ''}</Text>
                   </View>
                 </View>
                 {/* 앞자리 */}
-                <Text style={styles.label}>앞자리 (6자리)</Text>
+                <Text style={styles.label}>{L('profile.firstDigits6')}</Text>
                 <Controller control={control} name={'rrnFront' as any}
                   render={({ field: { onChange, onBlur, value } }) => (
                     <TextInput
@@ -770,9 +771,9 @@ export function ProfileEditScreen() {
                 {(errors as any).rrnFront && <Text style={styles.errorMsg}>{(errors as any).rrnFront.message}</Text>}
                 {/* 뒷자리 */}
                 <View style={[styles.rrnLastHeader, { marginTop: 10 }]}>
-                  <Text style={styles.label}>뒷자리 (7자리)</Text>
+                  <Text style={styles.label}>{L('profile.lastDigits7')}</Text>
                   <TouchableOpacity onPress={() => setShowRrnLast(!showRrnLast)}>
-                    <Text style={styles.rrnToggle}>{showRrnLast ? '숨기기' : '보기'}</Text>
+                    <Text style={styles.rrnToggle}>{showRrnLast ? L('profile.hide') : L('profile.show')}</Text>
                   </TouchableOpacity>
                 </View>
                 <Controller control={control} name={'rrnLast' as any}
@@ -787,7 +788,7 @@ export function ProfileEditScreen() {
                   )} />
                 {(errors as any).rrnLast && <Text style={styles.errorMsg}>{(errors as any).rrnLast.message}</Text>}
                 {hasExistingRRN && !watch('rrnFront' as any) && (
-                  <Text style={[styles.hint, { paddingHorizontal: 0, paddingBottom: 0, marginTop: 6 }]}>비워두면 기존 저장 정보가 유지됩니다.</Text>
+                  <Text style={[styles.hint, { paddingHorizontal: 0, paddingBottom: 0, marginTop: 6 }]}>{L('profile.leaveBlankToKeepThe')}</Text>
                 )}
               </View>
             )}
@@ -795,7 +796,7 @@ export function ProfileEditScreen() {
             {/* 가입 경로 (멘토 전용) */}
             {!isForeign && (
               <View style={[styles.formGroup, styles.dividerTop, styles.formGroupLast]}>
-                <Text style={styles.subSectionTitle}>가입 경로</Text>
+                <Text style={styles.subSectionTitle}>{L('profile.howDidYouHearAbout')}</Text>
                 <View style={styles.referralGrid}>
                   {['에브리타임','학교 커뮤니티','링커리어','캠퍼스픽','인스타그램','페이스북','구글/네이버 등 검색','지인 소개','기타'].map(option => (
                     <Controller key={option} control={control} name={'referralPath' as any}
@@ -810,19 +811,19 @@ export function ProfileEditScreen() {
                 </View>
                 {watch('referralPath' as any) === '지인 소개' && (
                   <View style={styles.formGroup}>
-                    <Text style={styles.label}>소개인 이름</Text>
+                    <Text style={styles.label}>{L('profile.referrerName')}</Text>
                     <Controller control={control} name={'referrerName' as any}
                       render={({ field: { onChange, onBlur, value } }) => (
-                        <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value ?? ''} placeholder="지인의 이름" />
+                        <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value ?? ''} placeholder={L('profile.referrerSName')} />
                       )} />
                   </View>
                 )}
                 {watch('referralPath' as any) === '기타' && (
                   <View style={styles.formGroup}>
-                    <Text style={styles.label}>기타 상세</Text>
+                    <Text style={styles.label}>{L('profile.otherDetails')}</Text>
                     <Controller control={control} name={'otherReferralDetail' as any}
                       render={({ field: { onChange, onBlur, value } }) => (
-                        <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value ?? ''} placeholder="어떤 경로인지 입력해주세요" />
+                        <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value ?? ''} placeholder={L('profile.pleaseDescribeTheChannel')} />
                       )} />
                   </View>
                 )}
@@ -834,22 +835,22 @@ export function ProfileEditScreen() {
           {!isForeign && (
             <View style={styles.section}>
               <View style={[styles.sectionHeader, { borderLeftColor: '#a855f7' }]}>
-                <Text style={styles.sectionTitle}>학교 정보</Text>
+                <Text style={styles.sectionTitle}>{L('profile.schoolInfo')}</Text>
               </View>
 
               {/* 학교 + 학년 (2열) */}
               <View style={styles.row2}>
                 <View style={styles.col}>
-                  <Text style={styles.label}>학교 *</Text>
+                  <Text style={styles.label}>{L('profile.school2')}</Text>
                   <Controller control={control} name="university"
                     render={({ field: { onChange, onBlur, value } }) => (
                       <TextInput style={[styles.input, errors.university && styles.inputError]}
-                        onBlur={onBlur} onChangeText={onChange} value={value} placeholder="학교명" />
+                        onBlur={onBlur} onChangeText={onChange} value={value} placeholder={L('profile.schoolName')} />
                     )} />
                   {errors.university && <Text style={styles.errorMsg}>{errors.university.message}</Text>}
                 </View>
                 <View style={styles.col}>
-                  <Text style={styles.label}>학년 *</Text>
+                  <Text style={styles.label}>{L('profile.year2')}</Text>
                   <Controller control={control} name="grade"
                     render={({ field: { onChange, value } }) => (
                       <View style={styles.gradeGrid}>
@@ -857,7 +858,7 @@ export function ProfileEditScreen() {
                           <TouchableOpacity key={g} onPress={() => onChange(g)}
                             style={[styles.gradeBtn, value === g && styles.gradeBtnActive]}>
                             <Text style={[styles.gradeBtnText, value === g && styles.gradeBtnTextActive]}>
-                              {g === 6 ? '졸업' : `${g}학년`}
+                              {g === 6 ? L('profile.graduated') : L('profile.year3', { v0: g })}
                             </Text>
                           </TouchableOpacity>
                         ))}
@@ -870,19 +871,19 @@ export function ProfileEditScreen() {
               {/* 전공 (2열) */}
               <View style={styles.row2Last}>
                 <View style={styles.col}>
-                  <Text style={styles.label}>1전공 *</Text>
+                  <Text style={styles.label}>{L('profile.major2')}</Text>
                   <Controller control={control} name="major1"
                     render={({ field: { onChange, onBlur, value } }) => (
                       <TextInput style={[styles.input, errors.major1 && styles.inputError]}
-                        onBlur={onBlur} onChangeText={onChange} value={value} placeholder="1전공" />
+                        onBlur={onBlur} onChangeText={onChange} value={value} placeholder={L('profile.major3')} />
                     )} />
                   {errors.major1 && <Text style={styles.errorMsg}>{errors.major1.message}</Text>}
                 </View>
                 <View style={styles.col}>
-                  <Text style={styles.label}>2전공/부전공</Text>
+                  <Text style={styles.label}>{L('profile.secondMajorMinor')}</Text>
                   <Controller control={control} name="major2"
                     render={({ field: { onChange, onBlur, value } }) => (
-                      <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value} placeholder="2전공 (선택)" />
+                      <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value} placeholder={L('profile.secondMajorOptional')} />
                     )} />
                 </View>
               </View>
@@ -894,7 +895,7 @@ export function ProfileEditScreen() {
                     <View style={[styles.checkbox, value && styles.checkboxChecked]}>
                       {value && <Text style={styles.checkmark}>✓</Text>}
                     </View>
-                    <Text style={styles.checkLabel}>현재 휴학 중</Text>
+                    <Text style={styles.checkLabel}>{L('profile.currentlyOnLeave')}</Text>
                   </TouchableOpacity>
                 )} />
             </View>
@@ -903,31 +904,31 @@ export function ProfileEditScreen() {
           {/* ━━━ 3. 주소 ━━━ */}
           <View style={styles.section}>
             <View style={[styles.sectionHeader, { borderLeftColor: '#22c55e' }]}>
-              <Text style={styles.sectionTitle}>{isForeign ? 'Address' : '주소'}</Text>
+              <Text style={styles.sectionTitle}>{L('profile.address')}</Text>
             </View>
             <View style={styles.formGroup}>
               <Text style={styles.label}>
-                {isForeign ? 'Address (optional)' : '주소 *'}
+                {L('profile.addressOptional')}
               </Text>
               <View style={styles.addressRow}>
                 <Controller control={control} name="address"
                   render={({ field: { value } }) => (
                     <TextInput style={styles.addressInput} value={value}
-                      placeholder={isForeign ? 'Tap search button' : '주소 검색 버튼을 누르세요'} editable={false} />
+                      placeholder={L('profile.tapSearchButton')} editable={false} />
                   )} />
                 <TouchableOpacity style={styles.searchBtn} onPress={() => setIsAddressModalVisible(true)}>
-                  <Text style={styles.searchBtnText}>{isForeign ? 'Search' : '검색'}</Text>
+                  <Text style={styles.searchBtnText}>{L('profile.search')}</Text>
                 </TouchableOpacity>
               </View>
               {errors.address && <Text style={styles.errorMsg}>{errors.address.message}</Text>}
             </View>
             <View style={[styles.formGroup, styles.formGroupLast]}>
-              <Text style={styles.label}>{isForeign ? 'Detailed Address (optional)' : '상세 주소 *'}</Text>
+              <Text style={styles.label}>{L('profile.detailedAddressOptional')}</Text>
               <Controller control={control} name="addressDetail"
                 render={({ field: { onChange, onBlur, value } }) => (
                   <TextInput style={[styles.input, errors.addressDetail && styles.inputError]}
                     onBlur={onBlur} onChangeText={onChange} value={value}
-                    placeholder={isForeign ? 'Detailed address' : '상세 주소'} />
+                    placeholder={L('profile.detailedAddress')} />
                 )} />
               {errors.addressDetail && <Text style={styles.errorMsg}>{errors.addressDetail.message}</Text>}
             </View>
@@ -937,28 +938,28 @@ export function ProfileEditScreen() {
           {!isForeign && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>자기소개 & 지원 동기</Text>
+                <Text style={styles.sectionTitle}>{L('profile.selfIntroductionMotivation2')}</Text>
               </View>
               <View style={styles.formGroup}>
                 <View style={styles.textareaHeader}>
-                  <Text style={styles.label}>자기소개</Text>
+                  <Text style={styles.label}>{L('admin.selfIntroduction')}</Text>
                   <Text style={styles.charCount}>{currentSelfIntro.length}/500</Text>
                 </View>
                 <Controller control={control} name="selfIntroduction"
                   render={({ field: { onChange, onBlur, value } }) => (
                     <TextInput style={styles.textarea} onBlur={onBlur} onChangeText={onChange} value={value}
-                      placeholder="간단한 자기소개를 입력해주세요." multiline scrollEnabled={false} maxLength={500} textAlignVertical="top" />
+                      placeholder={L('profile.pleaseWriteAShortSelf')} multiline scrollEnabled={false} maxLength={500} textAlignVertical="top" />
                   )} />
               </View>
               <View style={[styles.formGroup, styles.formGroupLast]}>
                 <View style={styles.textareaHeader}>
-                  <Text style={styles.label}>지원 동기</Text>
+                  <Text style={styles.label}>{L('profile.motivation2')}</Text>
                   <Text style={styles.charCount}>{currentJobMotivation.length}/500</Text>
                 </View>
                 <Controller control={control} name="jobMotivation"
                   render={({ field: { onChange, onBlur, value } }) => (
                     <TextInput style={styles.textarea} onBlur={onBlur} onChangeText={onChange} value={value}
-                      placeholder="지원 동기를 입력해주세요." multiline scrollEnabled={false} maxLength={500} textAlignVertical="top" />
+                      placeholder={L('profile.pleaseEnterYourMotivation')} multiline scrollEnabled={false} maxLength={500} textAlignVertical="top" />
                   )} />
               </View>
             </View>
@@ -968,14 +969,14 @@ export function ProfileEditScreen() {
           {!isForeign && (
             <View style={styles.section}>
               <View style={[styles.sectionHeader, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderLeftColor: '#f97316' }]}>
-                <Text style={styles.sectionTitle}>알바 & 멘토링 경력</Text>
+                <Text style={styles.sectionTitle}>{L('profile.partTimeMentoringExperience')}</Text>
                 <TouchableOpacity onPress={addPartTimeJob} style={styles.addBtn}>
-                  <Text style={styles.addBtnText}>+ 경력 추가</Text>
+                  <Text style={styles.addBtnText}>{L('profile.addExperience')}</Text>
                 </TouchableOpacity>
               </View>
               {partTimeJobs.length === 0 ? (
                 <View style={styles.emptyBox}>
-                  <Text style={styles.emptyText}>경력을 추가해보세요</Text>
+                  <Text style={styles.emptyText}>{L('profile.addYourExperience')}</Text>
                 </View>
               ) : (
                 partTimeJobs.map((job, index) => (
@@ -985,25 +986,25 @@ export function ProfileEditScreen() {
                     </TouchableOpacity>
                     <View style={styles.jobRow}>
                       <View style={styles.col}>
-                        <Text style={styles.labelSm}>기간 *</Text>
+                        <Text style={styles.labelSm}>{L('profile.period')}</Text>
                         <TextInput style={styles.inputSm} placeholder="2022.03~09"
                           value={job.period} onChangeText={t => updatePartTimeJob(index, 'period', t)} />
                       </View>
                       <View style={styles.col}>
-                        <Text style={styles.labelSm}>회사명 *</Text>
-                        <TextInput style={styles.inputSm} placeholder="회사명"
+                        <Text style={styles.labelSm}>{L('profile.company')}</Text>
+                        <TextInput style={styles.inputSm} placeholder={L('profile.company2')}
                           value={job.companyName} onChangeText={t => updatePartTimeJob(index, 'companyName', t)} />
                       </View>
                     </View>
                     <View style={[styles.jobRow, { marginTop: 8 }]}>
                       <View style={styles.col}>
-                        <Text style={styles.labelSm}>담당 *</Text>
-                        <TextInput style={styles.inputSm} placeholder="담당"
+                        <Text style={styles.labelSm}>{L('profile.role')}</Text>
+                        <TextInput style={styles.inputSm} placeholder={L('profile.role2')}
                           value={job.position} onChangeText={t => updatePartTimeJob(index, 'position', t)} />
                       </View>
                       <View style={styles.col}>
-                        <Text style={styles.labelSm}>업무내용</Text>
-                        <TextInput style={styles.inputSm} placeholder="내용(선택)"
+                        <Text style={styles.labelSm}>{L('profile.details')}</Text>
+                        <TextInput style={styles.inputSm} placeholder={L('profile.detailsOptional2')}
                           value={job.description} onChangeText={t => updatePartTimeJob(index, 'description', t)} />
                       </View>
                     </View>
@@ -1024,7 +1025,7 @@ export function ProfileEditScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>{isForeign ? 'Select Country Code' : '국가 코드 선택'}</Text>
+              <Text style={styles.modalTitle}>{L('profile.selectCountryCode')}</Text>
               <TouchableOpacity onPress={() => setShowCountryPicker(false)}>
                 <Text style={styles.modalClose}>✕</Text>
               </TouchableOpacity>

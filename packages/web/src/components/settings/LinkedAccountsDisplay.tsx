@@ -3,6 +3,7 @@ import { logger } from '@smis-mentor/shared';
 
 import { AuthProvider, SocialProvider } from '@smis-mentor/shared';
 import { getSocialProviderName, getSocialProviderIcon } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 interface LinkedAccount {
   providerId: SocialProvider | 'password';
@@ -35,9 +36,7 @@ export default function LinkedAccountsDisplay({
     return (
       <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
         <p className="text-sm text-amber-800">
-          {isForeign
-            ? 'Unable to load account information. Please refresh the page.'
-            : '계정 정보를 불러올 수 없습니다. 페이지를 새로고침해주세요.'}
+          {L('settings.unableToLoadAccountInformation')}
         </p>
       </div>
     );
@@ -85,7 +84,7 @@ export default function LinkedAccountsDisplay({
       {/* 연동된 계정 목록 */}
       <div>
         <h3 className="text-sm font-semibold text-gray-700 mb-3">
-          {isForeign ? 'Linked Accounts' : '현재 연동된 계정'}
+          {L('common.linkedAccounts')}
         </h3>
         <div className="space-y-2">
           {accounts.map((account) => {
@@ -106,7 +105,7 @@ export default function LinkedAccountsDisplay({
                       </p>
                       {!canUnlinkThis && (
                         <span className="px-2 py-0.5 text-xs font-medium text-blue-700 bg-blue-50 rounded-full">
-                          {isForeign ? 'Primary' : '기본'}
+                          {L('common.primary')}
                         </span>
                       )}
                     </div>
@@ -114,7 +113,7 @@ export default function LinkedAccountsDisplay({
                       <p className="text-sm text-gray-600 truncate">{account.email}</p>
                     )}
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {isForeign ? 'Linked: ' : '연결됨: '}{formatDate(account.linkedAt)}
+                      {L('settings.linked')}{formatDate(account.linkedAt)}
                     </p>
                   </div>
                 </div>
@@ -126,14 +125,14 @@ export default function LinkedAccountsDisplay({
                     className="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                   >
                     {isUnlinking
-                      ? (isForeign ? 'Unlinking...' : '해제 중...')
-                      : (isForeign ? 'Unlink' : '연동 해제')}
+                      ? (L('settings.unlinking'))
+                      : (L('settings.unlink'))}
                   </button>
                 ) : (
                   <span className="px-3 py-1.5 text-xs text-gray-400 whitespace-nowrap">
                     {isPassword
-                      ? (isForeign ? 'Required' : '필수')
-                      : (isForeign ? 'Cannot unlink' : '해제 불가')}
+                      ? (L('settings.required'))
+                      : (L('settings.cannotUnlink'))}
                   </span>
                 )}
               </div>
@@ -146,7 +145,7 @@ export default function LinkedAccountsDisplay({
       {allProviders.some((p) => !linkedProviderIds.includes(p.id)) && (
         <div>
           <h3 className="text-sm font-semibold text-gray-700 mb-3">
-            {isForeign ? 'Available to Link' : '추가 연동 가능'}
+            {L('settings.availableToLink')}
           </h3>
           <div className="space-y-2">
             {allProviders
@@ -167,8 +166,8 @@ export default function LinkedAccountsDisplay({
                     className="px-3 py-1.5 text-xs font-medium text-blue-600 bg-white border border-blue-600 hover:bg-blue-50 rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                   >
                     {isLinking
-                      ? (isForeign ? 'Linking...' : '연동 중...')
-                      : (isForeign ? 'Link' : '연동하기')}
+                      ? (L('settings.linking'))
+                      : (L('settings.link'))}
                   </button>
                 </div>
               ))}
@@ -182,9 +181,7 @@ export default function LinkedAccountsDisplay({
           <div className="flex gap-2">
             <span className="text-amber-600 text-sm flex-shrink-0">⚠️</span>
             <p className="text-sm text-amber-800">
-              {isForeign
-                ? 'At least one login method must be maintained. The last method cannot be unlinked.'
-                : '최소 1개의 로그인 방법을 유지해야 합니다. 마지막 방법은 해제할 수 없습니다.'}
+              {L('settings.atLeastOneLoginMethod')}
             </p>
           </div>
         </div>

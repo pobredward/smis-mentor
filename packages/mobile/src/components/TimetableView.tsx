@@ -19,6 +19,7 @@ import {
   type CampTimetable,
   type RenderedLine,
 } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 interface Props {
   timetable: CampTimetable;
@@ -240,7 +241,7 @@ export function TimetableView({
             {!!resolveTeacher(myClassCode) && <Text style={s.mineSub}>  {resolveTeacher(myClassCode)!.name}</Text>}
           </Text>
           <TouchableOpacity style={s.smallBtn} onPress={() => setOnlyMine(false)}>
-            <Text style={s.smallBtnText}>{isForeign ? 'Show all' : '전체 보기'}</Text>
+            <Text style={s.smallBtnText}>{L('schedule.showAll')}</Text>
           </TouchableOpacity>
         </View>
         <View style={s.card}>
@@ -288,7 +289,7 @@ export function TimetableView({
       {/* 헤더 */}
       <View style={s.headRow}>
         <View style={[s.headCell, { width: headW }]}>
-          <Text style={s.headTime}>{layout === 'date' ? '날짜' : isForeign ? 'Time' : '시간'}</Text>
+          <Text style={s.headTime}>{layout === 'date' ? L('schedule.date') : L('schedule.time')}</Text>
         </View>
         {columns.map((col) => (
           <View key={col.key} style={[s.headCell, { width: widthOf(col.isDuty) }, col.isMine && s.mineHead]}>
@@ -313,7 +314,7 @@ export function TimetableView({
       {rows.length === 0 && (
         <View style={s.emptyRow}>
           <Text style={s.emptyRowText}>
-            {isForeign ? 'No periods yet.' : '아직 교시가 없습니다.'}
+            {L('schedule.noPeriodsYet')}
           </Text>
         </View>
       )}
@@ -348,7 +349,7 @@ export function TimetableView({
                 <Text style={[s.sharedText, { fontSize: fontOf }]} numberOfLines={2}>
                   {row.label}
                   {linkedLabels?.some((k) => row.label.includes(k)) && (
-                    <Text style={[s.linkedHint, { fontSize: fontOf - 2 }]}>  아래 표 ↓</Text>
+                    <Text style={[s.linkedHint, { fontSize: fontOf - 2 }]}>  {L('schedule.tableBelow')}</Text>
                   )}
                   {!!row.subLabel && (
                     <Text style={[s.subLabel, { fontSize: fontOf - 2 }]}>  {row.subLabel}</Text>
@@ -471,7 +472,7 @@ export function TimetableView({
       {hasMyClass && (
         <View style={s.toolbar}>
           <TouchableOpacity style={s.smallBtn} onPress={() => setOnlyMine(true)}>
-            <Text style={s.smallBtnText}>{isForeign ? 'My class only' : '내 반만 보기'}</Text>
+            <Text style={s.smallBtnText}>{L('schedule.myClassOnly')}</Text>
           </TouchableOpacity>
         </View>
       )}

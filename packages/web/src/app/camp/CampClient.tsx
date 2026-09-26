@@ -15,6 +15,7 @@ import PatientContent from '@/components/camp/PatientContent';
 import InventoryContent from '@/components/camp/InventoryContent';
 import { jobCodesService, stSheetService, CampCode } from '@/lib/stSheetService';
 import { hasCampAccess, isCampStaffRole, resolveActiveJobCodeId } from '@smis-mentor/shared';
+import { L, isEnglishUI } from '@smis-mentor/shared';
 
 type TabName = 'education' | 'lesson' | 'tasks' | 'schedule' | 'guide' | 'roster' | 'patient' | 'inventory';
 
@@ -65,14 +66,14 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
   
   // 원어민 유저는 '수업' 탭 제외
   const allTabs: { id: TabName; title: string; path: string }[] = [
-    { id: 'education', title: isForeign ? 'Education' : '교육', path: '/camp/education' },
-    { id: 'lesson', title: '수업', path: '/camp/lesson' },
-    { id: 'tasks', title: isForeign ? 'Tasks' : '업무', path: '/camp/tasks' },
-    { id: 'schedule', title: isForeign ? 'Schedule' : '시간표', path: '/camp/schedule' },
-    { id: 'guide', title: isForeign ? 'Lodging' : '숙소', path: '/camp/guide' },
-    { id: 'roster', title: isForeign ? 'Roster' : '명단', path: '/camp/roster' },
-    { id: 'patient', title: isForeign ? 'Patient' : '환자', path: '/camp/patient' },
-    { id: 'inventory', title: isForeign ? 'Inventory' : '재고', path: '/camp/inventory' },
+    { id: 'education', title: L('nav.education'), path: '/camp/education' },
+    { id: 'lesson', title: L('nav.lessons'), path: '/camp/lesson' },
+    { id: 'tasks', title: L('nav.tasks'), path: '/camp/tasks' },
+    { id: 'schedule', title: L('nav.schedule'), path: '/camp/schedule' },
+    { id: 'guide', title: L('nav.lodging'), path: '/camp/guide' },
+    { id: 'roster', title: L('nav.roster'), path: '/camp/roster' },
+    { id: 'patient', title: L('nav.patient'), path: '/camp/patient' },
+    { id: 'inventory', title: L('nav.inventory'), path: '/camp/inventory' },
   ];
   
   const tabs = isForeign 
@@ -133,16 +134,16 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4 text-center px-6">
           <div className="text-5xl">⏳</div>
           <h2 className="text-xl font-semibold text-gray-800">
-            {isForeign ? 'Waiting for camp access' : isPendingAccount ? '가입 승인 대기 중' : '배정된 캠프가 없어요'}
+            {isEnglishUI() ? 'Waiting for camp access' : isPendingAccount ? L('nav.awaitingApproval') : L('nav.noCampAssigned')}
           </h2>
           <p className="text-gray-500 text-sm max-w-xs leading-relaxed">
-            {isForeign
+            {isEnglishUI()
               ? 'You have not been assigned to a camp yet. Please wait until an administrator grants you access.'
               : isPendingAccount
-                ? '가입이 승인되면 캠프 탭을 사용할 수 있어요.'
+                ? L('nav.youCanUseTheCamp')
                 : isAdmin
-                  ? '마이페이지에서 캠프를 활성화하면 캠프 탭을 볼 수 있어요.'
-                  : '관리자가 캠프에 배정하면 바로 열립니다.'}
+                  ? L('nav.activateACampOnMy')
+                  : L('nav.itOpensAsSoonAs')}
           </p>
         </div>
       </Layout>

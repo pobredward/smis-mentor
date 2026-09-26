@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { logger } from '@smis-mentor/shared';
+import { logger, L, fmtDate } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -196,69 +196,69 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
     type: 'application' | 'interview' | 'final'
   ): { label: string; color: string } => {
     let color = '#94a3b8'; // 기본 회색
-    let label = '미정';
+    let label = L('lodging.tbd');
 
     if (type === 'application') {
       switch (status) {
         case 'pending':
           color = '#f59e0b';
-          label = '검토중';
+          label = L('home.underReview');
           break;
         case 'accepted':
           color = '#10b981';
-          label = '서류합격';
+          label = L('home.documentsPassed2');
           break;
         case 'rejected':
           color = '#ef4444';
-          label = '서류불합격';
+          label = L('home.documentsFailed2');
           break;
         default:
           color = '#94a3b8';
-          label = '미정';
+          label = L('lodging.tbd');
       }
     } else if (type === 'interview') {
       switch (status) {
         case 'pending':
           color = '#f59e0b';
-          label = '면접예정';
+          label = L('home.interviewScheduled2');
           break;
         case 'complete':
           color = '#8b5cf6';
-          label = '면접완료';
+          label = L('home.interviewDone2');
           break;
         case 'passed':
           color = '#10b981';
-          label = '면접합격';
+          label = L('home.interviewPassed2');
           break;
         case 'failed':
           color = '#ef4444';
-          label = '면접불합격';
+          label = L('home.interviewFailed2');
           break;
         case 'absent':
           color = '#ef4444';
-          label = '불참';
+          label = L('home.absent');
           break;
         default:
           color = '#94a3b8';
-          label = '미정';
+          label = L('lodging.tbd');
       }
     } else if (type === 'final') {
       switch (status) {
         case 'finalAccepted':
           color = '#10b981';
-          label = '최종합격';
+          label = L('home.finalPass2');
           break;
         case 'finalRejected':
           color = '#ef4444';
-          label = '최종불합격';
+          label = L('home.finalFail2');
           break;
         case 'finalAbsent':
           color = '#ef4444';
-          label = '불참';
+          label = L('home.absent');
           break;
         default:
           color = '#94a3b8';
-          label = '미정';
+          label = L('lodging.tbd');
       }
     }
 
@@ -268,59 +268,59 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
   const getDetailedApplicationStatus = (application: ApplicationWithJobBoard): { label: string; color: string } => {
     // 1단계: 서류 전형
     if (application.applicationStatus === 'pending') {
-      return { label: '서류 대기', color: '#f59e0b' };
+      return { label: L('home.documentsPending'), color: '#f59e0b' };
     }
     
     if (application.applicationStatus === 'rejected') {
-      return { label: '서류 불합격', color: '#ef4444' };
+      return { label: L('home.documentsFailed'), color: '#ef4444' };
     }
 
     // 2단계: 면접 전형 (서류 합격 후)
     if (application.applicationStatus === 'accepted') {
       // 최종 합격/불합격이 있으면 우선 표시
       if (application.finalStatus === 'finalAccepted') {
-        return { label: '최종 합격', color: '#10b981' };
+        return { label: L('home.finalPass'), color: '#10b981' };
       }
       if (application.finalStatus === 'finalRejected') {
-        return { label: '최종 불합격', color: '#ef4444' };
+        return { label: L('home.finalFail'), color: '#ef4444' };
       }
       if (application.finalStatus === 'finalAbsent') {
-        return { label: '최종 불참', color: '#64748b' };
+        return { label: L('home.finalAbsent'), color: '#64748b' };
       }
 
       // 면접 상태 확인
       if (!application.interviewStatus || application.interviewStatus === 'pending') {
-        return { label: '면접 예정', color: '#3b82f6' };
+        return { label: L('home.interviewScheduled'), color: '#3b82f6' };
       }
       if (application.interviewStatus === 'complete') {
-        return { label: '면접 완료', color: '#8b5cf6' };
+        return { label: L('home.interviewDone'), color: '#8b5cf6' };
       }
       if (application.interviewStatus === 'passed') {
-        return { label: '면접 합격', color: '#10b981' };
+        return { label: L('home.interviewPassed'), color: '#10b981' };
       }
       if (application.interviewStatus === 'failed') {
-        return { label: '면접 불합격', color: '#ef4444' };
+        return { label: L('home.interviewFailed'), color: '#ef4444' };
       }
       if (application.interviewStatus === 'absent') {
-        return { label: '면접 불참', color: '#64748b' };
+        return { label: L('home.interviewAbsent'), color: '#64748b' };
       }
 
       // 면접 상태가 없으면 서류 합격
-      return { label: '서류 합격', color: '#10b981' };
+      return { label: L('home.documentsPassed'), color: '#10b981' };
     }
 
     // 기본값
-    return { label: '알 수 없음', color: '#64748b' };
+    return { label: L('home.unknown'), color: '#64748b' };
   };
 
   const getApplicationStatus = (status: string): { label: string; color: string } => {
     switch (status) {
       case 'pending':
-        return { label: '대기중', color: '#f59e0b' };
+        return { label: L('home.pending'), color: '#f59e0b' };
       case 'accepted':
-        return { label: '합격', color: '#10b981' };
+        return { label: L('home.passed'), color: '#10b981' };
       case 'rejected':
-        return { label: '불합격', color: '#ef4444' };
+        return { label: L('home.failed'), color: '#ef4444' };
       default:
         return { label: status, color: '#64748b' };
     }
@@ -328,24 +328,20 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
 
   const getCurrentTimeGreeting = (): string => {
     const hour = new Date().getHours();
-    if (hour < 6) return '늦은 밤이에요';
-    if (hour < 12) return '좋은 아침이에요';
-    if (hour < 18) return '좋은 오후에요';
-    if (hour < 22) return '좋은 저녁이에요';
-    return '늦은 밤이에요';
+    if (hour < 6) return L('home.greetLateNight');
+    if (hour < 12) return L('home.greetMorning');
+    if (hour < 18) return L('home.greetAfternoon');
+    if (hour < 22) return L('home.greetEvening');
+    return L('home.greetLateNight');
   };
 
   const formatTaskDateTime = (task: Pick<Task, 'date' | 'time'>): string => {
-    const date = task.date.toDate();
-    const month = date.getMonth() + 1;
-    const day = date.getDate();
-    const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-    const weekday = weekdays[date.getDay()];
+    const md = fmtDate(task.date, 'mdw');
     
     if (task.time) {
-      return `${month}/${day}(${weekday}) ${task.time}`;
+      return `${md} ${task.time}`;
     }
-    return `${month}/${day}(${weekday})`;
+    return md;
   };
 
   const handleEditMessage = () => {
@@ -360,12 +356,12 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
 
   const handleSaveMessage = async () => {
     if (!userData?.userId) {
-      Alert.alert('오류', '사용자 정보를 찾을 수 없습니다.');
+      Alert.alert(L('common.error'), L('home.userInformationNotFound'));
       return;
     }
 
     if (!activeJobCode?.code) {
-      Alert.alert('오류', '활성 캠프가 없습니다. 마이페이지에서 캠프를 선택해주세요.');
+      Alert.alert(L('common.error'), L('home.noActiveCampPleaseSelect'));
       return;
     }
 
@@ -379,10 +375,10 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
       
       setMentorHomeMessage(editedMessage.trim());
       setIsEditingMessage(false);
-      Alert.alert('성공', `[${activeJobCode.code}] 멘토 홈 메시지가 저장되었습니다.`);
+      Alert.alert(L('common.success'), L('home.mentorHomeMessageSaved', { v0: activeJobCode.code }));
     } catch (error) {
       logger.error('메시지 저장 오류:', error);
-      Alert.alert('오류', '메시지 저장에 실패했습니다.');
+      Alert.alert(L('common.error'), L('home.failedToSaveTheMessage'));
     }
   };
 
@@ -398,12 +394,12 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
 
   const handleSaveForeignMessage = async () => {
     if (!userData?.userId) {
-      Alert.alert('오류', '사용자 정보를 찾을 수 없습니다.');
+      Alert.alert(L('common.error'), L('home.userInformationNotFound'));
       return;
     }
 
     if (!activeJobCode?.code) {
-      Alert.alert('오류', '활성 캠프가 없습니다. 마이페이지에서 캠프를 선택해주세요.');
+      Alert.alert(L('common.error'), L('home.noActiveCampPleaseSelect'));
       return;
     }
 
@@ -417,10 +413,10 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
       
       setForeignHomeMessage(editedForeignMessage.trim());
       setIsEditingForeignMessage(false);
-      Alert.alert('성공', `[${activeJobCode.code}] 외국인 홈 메시지가 저장되었습니다.`);
+      Alert.alert(L('common.success'), L('home.foreignTeacherHomeMessageSaved', { v0: activeJobCode.code }));
     } catch (error) {
       logger.error('메시지 저장 오류:', error);
-      Alert.alert('오류', '메시지 저장에 실패했습니다.');
+      Alert.alert(L('common.error'), L('home.failedToSaveTheMessage'));
     }
   };
 
@@ -432,7 +428,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>로딩 중...</Text>
+        <Text style={styles.loadingText}>{L('task.loading')}</Text>
       </View>
     );
   }
@@ -442,9 +438,9 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
       <View style={styles.container}>
         <View style={styles.emptyState}>
           <Ionicons name="log-in-outline" size={64} color="#94a3b8" />
-          <Text style={styles.emptyTitle}>로그인이 필요합니다</Text>
+          <Text style={styles.emptyTitle}>{L('common.loginRequired2')}</Text>
           <Text style={styles.emptySubtitle}>
-            마이페이지에서 로그인해주세요
+            {L('home.pleaseLogInOnMy')}
           </Text>
         </View>
       </View>
@@ -529,7 +525,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
             accessibilityLabel={
               isHomeForeign
                 ? permissionStatus === 'denied' ? 'Enable notifications in settings' : 'Allow notifications'
-                : permissionStatus === 'denied' ? '설정에서 알림 허용하기' : '알림 허용하기'
+                : permissionStatus === 'denied' ? L('home.allowNotificationsInSettings') : L('settings.enableNotifications')
             }
           >
             <View style={styles.notificationBannerLeft}>
@@ -547,7 +543,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                 ]}>
                   {isHomeForeign
                     ? permissionStatus === 'denied' ? 'Notifications Blocked' : 'Allow Notifications'
-                    : permissionStatus === 'denied' ? '알림이 차단되어 있습니다' : '알림을 허용해 주세요'}
+                    : permissionStatus === 'denied' ? L('common.notificationsAreBlocked') : L('home.pleaseAllowNotifications')}
                 </Text>
                 <Text style={styles.notificationBannerDesc}>
                   {isHomeForeign
@@ -555,8 +551,8 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                       ? 'Tap to open settings and enable notifications.'
                       : 'Tap to allow notifications for important updates.'
                     : permissionStatus === 'denied'
-                      ? '탭하여 설정에서 알림을 허용하세요.'
-                      : '업무 알림 등 중요한 알림을 받으려면 허용해 주세요.'}
+                      ? L('home.tapToAllowNotificationsIn')
+                      : L('home.allowNotificationsToReceiveImportant')}
                 </Text>
               </View>
             </View>
@@ -591,7 +587,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
           <View style={styles.welcomeContent}>
             <View style={styles.welcomeTextContainer}>
               <Text style={styles.welcomeGreeting}>{getCurrentTimeGreeting()},</Text>
-              <Text style={styles.welcomeName}>{userData.name}님!</Text>
+              <Text style={styles.welcomeName}>{userData.name}{L('home.text2')}</Text>
             </View>
             {userData.profileImage ? (
               <Image
@@ -620,7 +616,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                 <View style={styles.todayProgressBadge}>
                   <Ionicons name="checkmark-circle" size={14} color="#10b981" />
                   <Text style={styles.todayProgressText}>
-                    {completedTodayCount}/{mergedTodayItems.length} 완료
+                    {completedTodayCount}/{mergedTodayItems.length} {L('task.done')}
                   </Text>
                 </View>
               )}
@@ -628,7 +624,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                 <View style={styles.overdueProgressBadge}>
                   <Ionicons name="alert-circle" size={14} color="#ef4444" />
                   <Text style={styles.overdueProgressText}>
-                    {mergedOverdueItems.length}건
+                    {mergedOverdueItems.length}{L('home.text')}
                   </Text>
                 </View>
               )}
@@ -645,7 +641,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                 <View style={styles.adminMessageTitleRow}>
                   <Ionicons name="megaphone-outline" size={20} color="#3b82f6" />
                   <Text style={styles.adminMessageTitle}>
-                    {activeJobCode?.code ? `[${activeJobCode.code}] ` : ''}멘토 홈 메시지 관리
+                    {activeJobCode?.code ? `[${activeJobCode.code}] ` : ''}{L('home.manageMentorHomeMessage')}
                   </Text>
                 </View>
                 {!isEditingMessage && (
@@ -654,7 +650,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                     onPress={handleEditMessage}
                   >
                     <Ionicons name="create-outline" size={18} color="#ffffff" />
-                    <Text style={styles.editButtonText}>편집</Text>
+                    <Text style={styles.editButtonText}>{L('common.edit')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -665,7 +661,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                     style={styles.messageInput}
                     value={editedMessage}
                     onChangeText={setEditedMessage}
-                    placeholder="멘토들에게 전달할 메시지를 입력하세요"
+                    placeholder={L('home.enterAMessageForMentors')}
                     multiline
                     numberOfLines={4}
                     textAlignVertical="top"
@@ -675,14 +671,14 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                       style={styles.cancelButton}
                       onPress={handleCancelEdit}
                     >
-                      <Text style={styles.cancelButtonText}>취소</Text>
+                      <Text style={styles.cancelButtonText}>{L('common.cancel')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={styles.saveButton}
                       onPress={handleSaveMessage}
                     >
                       <Ionicons name="checkmark" size={18} color="#ffffff" />
-                      <Text style={styles.saveButtonText}>저장</Text>
+                      <Text style={styles.saveButtonText}>{L('common.save')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -692,8 +688,8 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                     <Text style={styles.messagePreviewText}>{mentorHomeMessage}</Text>
                   ) : (
                     <Text style={styles.emptyMessageText}>
-                      멘토 홈 화면에 표시할 메시지가 없습니다.{'\n'}
-                      편집 버튼을 눌러 메시지를 작성하세요.
+                      {L('home.noMessageToShowOn2')}{'\n'}
+                      {L('home.tapEditToWriteA')}
                     </Text>
                   )}
                 </View>
@@ -706,7 +702,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                 <View style={styles.adminMessageTitleRow}>
                   <Ionicons name="megaphone-outline" size={20} color="#8b5cf6" />
                   <Text style={styles.adminMessageTitle}>
-                    {activeJobCode?.code ? `[${activeJobCode.code}] ` : ''}외국인 홈 메시지 관리
+                    {activeJobCode?.code ? `[${activeJobCode.code}] ` : ''}{L('home.manageForeignTeacherHomeMessage')}
                   </Text>
                 </View>
                 {!isEditingForeignMessage && (
@@ -715,7 +711,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                     onPress={handleEditForeignMessage}
                   >
                     <Ionicons name="create-outline" size={18} color="#ffffff" />
-                    <Text style={styles.editButtonText}>편집</Text>
+                    <Text style={styles.editButtonText}>{L('common.edit')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -726,7 +722,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                     style={styles.messageInput}
                     value={editedForeignMessage}
                     onChangeText={setEditedForeignMessage}
-                    placeholder="외국인들에게 전달할 메시지를 입력하세요"
+                    placeholder={L('home.enterAMessageForForeign')}
                     multiline
                     numberOfLines={4}
                     textAlignVertical="top"
@@ -736,14 +732,14 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                       style={styles.cancelButton}
                       onPress={handleCancelForeignEdit}
                     >
-                      <Text style={styles.cancelButtonText}>취소</Text>
+                      <Text style={styles.cancelButtonText}>{L('common.cancel')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.saveButton, { backgroundColor: '#8b5cf6' }]}
                       onPress={handleSaveForeignMessage}
                     >
                       <Ionicons name="checkmark" size={18} color="#ffffff" />
-                      <Text style={styles.saveButtonText}>저장</Text>
+                      <Text style={styles.saveButtonText}>{L('common.save')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -753,8 +749,8 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                     <Text style={styles.messagePreviewText}>{foreignHomeMessage}</Text>
                   ) : (
                     <Text style={styles.emptyMessageText}>
-                      외국인 홈 화면에 표시할 메시지가 없습니다.{'\n'}
-                      편집 버튼을 눌러 메시지를 작성하세요.
+                      {L('home.noMessageToShowOn')}{'\n'}
+                      {L('home.tapEditToWriteA')}
                     </Text>
                   )}
                 </View>
@@ -769,13 +765,13 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleRow}>
                 <Ionicons name="today" size={20} color="#3b82f6" />
-                <Text style={styles.sectionTitle}>오늘의 업무</Text>
+                <Text style={styles.sectionTitle}>{L('home.todaySTasks')}</Text>
               </View>
               <TouchableOpacity onPress={() => {
                 setActiveTab('tasks');
                 navigation.navigate('Camp');
               }}>
-                <Text style={styles.sectionLink}>더보기 →</Text>
+                <Text style={styles.sectionLink}>{L('home.more')}</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.tasksList}>
@@ -822,7 +818,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleRow}>
                 <Ionicons name="alert-circle" size={20} color="#ef4444" />
-                <Text style={styles.overdueTitle}>미완료 업무</Text>
+                <Text style={styles.overdueTitle}>{L('home.incompleteTasks')}</Text>
                 {mergedOverdueItems.length > 0 && (
                   <View style={styles.overdueBadge}>
                     <Text style={styles.overdueBadgeText}>{mergedOverdueItems.length}</Text>
@@ -833,21 +829,15 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                 setActiveTab('tasks');
                 navigation.navigate('Camp');
               }}>
-                <Text style={styles.overdueSectionLink}>확인하기 →</Text>
+                <Text style={styles.overdueSectionLink}>{L('home.check')}</Text>
               </TouchableOpacity>
             </View>
 
             {mergedOverdueItems.length > 0 ? (
               <View style={styles.tasksList}>
                 {mergedOverdueItems.map((item) => {
-                  const taskDate = item.task.date.toDate();
-                  const month = taskDate.getMonth() + 1;
-                  const day = taskDate.getDate();
-                  const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-                  const weekday = weekdays[taskDate.getDay()];
-                  const dateLabel = item.task.time
-                    ? `${month}/${day}(${weekday}) ${item.task.time}`
-                    : `${month}/${day}(${weekday})`;
+                  const md = fmtDate(item.task.date, 'mdw');
+                  const dateLabel = item.task.time ? `${md} ${item.task.time}` : md;
                   const isPersonal = item.kind === 'personal';
                   return (
                     <View key={item.task.id} style={styles.overdueTaskItem}>
@@ -865,7 +855,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                         <TouchableOpacity
                           onPress={() => handleHideOverdueTask(item.task.id)}
                           style={styles.hideButton}
-                          accessibilityLabel="이 업무 숨기기"
+                          accessibilityLabel={L('home.hideThisTask')}
                           accessibilityRole="button"
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >
@@ -878,7 +868,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
               </View>
             ) : (
               <Text style={styles.overdueAllHiddenText}>
-                모든 미완료 업무를 숨겼습니다.
+                {L('home.allIncompleteTasksAreHidden')}
               </Text>
             )}
 
@@ -897,8 +887,8 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                   />
                   <Text style={styles.hiddenToggleText}>
                     {showHiddenOverdue
-                      ? `숨긴 업무 접기`
-                      : `숨긴 업무 ${hiddenOverdueItems.length}건`}
+                      ? L('home.collapseHiddenTasks')
+                      : L('home.hiddenTasks', { v0: hiddenOverdueItems.length })}
                   </Text>
                 </TouchableOpacity>
 
@@ -906,14 +896,8 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                   <>
                     <View style={styles.hiddenTasksList}>
                       {hiddenOverdueItems.map((item) => {
-                        const taskDate = item.task.date.toDate();
-                        const month = taskDate.getMonth() + 1;
-                        const day = taskDate.getDate();
-                        const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-                        const weekday = weekdays[taskDate.getDay()];
-                        const dateLabel = item.task.time
-                          ? `${month}/${day}(${weekday}) ${item.task.time}`
-                          : `${month}/${day}(${weekday})`;
+                        const md = fmtDate(item.task.date, 'mdw');
+                        const dateLabel = item.task.time ? `${md} ${item.task.time}` : md;
                         return (
                           <View key={item.task.id} style={styles.hiddenTaskItem}>
                             <Text style={styles.hiddenTaskTitle} numberOfLines={1}>
@@ -930,7 +914,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                       accessibilityRole="button"
                     >
                       <Ionicons name="refresh-outline" size={14} color="#94a3b8" />
-                      <Text style={styles.clearHiddenText}>숨김 전체 해제</Text>
+                      <Text style={styles.clearHiddenText}>{L('home.unhideAll')}</Text>
                     </TouchableOpacity>
                   </>
                 )}
@@ -945,7 +929,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleRow}>
                 <Ionicons name="document-text" size={20} color="#f59e0b" />
-                <Text style={styles.sectionTitle}>지원 현황</Text>
+                <Text style={styles.sectionTitle}>{L('home.applicationStatus')}</Text>
               </View>
               <TouchableOpacity onPress={() => {
                 navigation.navigate('Recruitment', {
@@ -953,7 +937,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                   params: { openApplicationTab: true },
                 } as any);
               }}>
-                <Text style={styles.sectionLink}>더보기 →</Text>
+                <Text style={styles.sectionLink}>{L('home.more')}</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.applicationsList}>
@@ -966,33 +950,29 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
                   <View key={application.applicationHistoryId} style={styles.applicationItem}>
                     <View style={styles.applicationHeader}>
                       <Text style={styles.applicationTitle} numberOfLines={1}>
-                        {application.jobBoardTitle || '알 수 없음'}
+                        {application.jobBoardTitle || L('home.unknown')}
                       </Text>
                       {application.applicationDate && (
                         <Text style={styles.applicationDate}>
-                          지원일: {new Date(application.applicationDate.seconds * 1000).toLocaleDateString('ko-KR', {
-                            year: 'numeric',
-                            month: 'long',
-                            day: 'numeric'
-                          })}
+                          {L('home.applied')} {fmtDate(new Date(application.applicationDate.seconds * 1000), 'date')}
                         </Text>
                       )}
                     </View>
                     <View style={styles.statusRow}>
                       <View style={styles.statusColumn}>
-                        <Text style={styles.statusLabel}>서류</Text>
+                        <Text style={styles.statusLabel}>{L('home.documents')}</Text>
                         <View style={[styles.statusBadge, { backgroundColor: applicationStatusBadge.color }]}>
                           <Text style={styles.statusText}>{applicationStatusBadge.label}</Text>
                         </View>
                       </View>
                       <View style={styles.statusColumn}>
-                        <Text style={styles.statusLabel}>면접</Text>
+                        <Text style={styles.statusLabel}>{L('home.interview')}</Text>
                         <View style={[styles.statusBadge, { backgroundColor: interviewStatusBadge.color }]}>
                           <Text style={styles.statusText}>{interviewStatusBadge.label}</Text>
                         </View>
                       </View>
                       <View style={styles.statusColumn}>
-                        <Text style={styles.statusLabel}>최종</Text>
+                        <Text style={styles.statusLabel}>{L('home.final')}</Text>
                         <View style={[styles.statusBadge, { backgroundColor: finalStatusBadge.color }]}>
                           <Text style={styles.statusText}>{finalStatusBadge.label}</Text>
                         </View>
@@ -1009,16 +989,16 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
         {!activeJobCode && todayTasks.length === 0 && recentApplications.length === 0 && (
           <View style={styles.emptyDataCard}>
             <Ionicons name="rocket-outline" size={48} color="#94a3b8" />
-            <Text style={styles.emptyDataTitle}>시작하기</Text>
+            <Text style={styles.emptyDataTitle}>{L('home.getStarted')}</Text>
             <Text style={styles.emptyDataText}>
-              마이페이지에서 캠프를 선택하고{'\n'}
-              업무와 일정을 확인해보세요!
+              {L('home.selectACampOnMy')}{'\n'}
+              {L('home.checkYourTasksAndSchedule')}
             </Text>
             <TouchableOpacity 
               style={styles.emptyDataButton}
               onPress={() => navigation.navigate('Profile')}
             >
-              <Text style={styles.emptyDataButtonText}>캠프 선택하기</Text>
+              <Text style={styles.emptyDataButtonText}>{L('home.selectCamp')}</Text>
             </TouchableOpacity>
           </View>
         )}

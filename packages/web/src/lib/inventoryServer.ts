@@ -17,7 +17,7 @@
  *    - 양쪽 등록자 + 학생을 지정한 신고면 그 학생의 담임·방 담당·부매니저 (연결한 사람 제외)
  */
 import { getAdminFirestore, adminFieldValue } from './firebase-admin';
-import { notificationAllowed, pushReachOf, lostNotifyRecipients, isCampStaffRole, isStockGroupOf, STOCK_MANAGER_GROUP_ROLES, type NotifyUserLike } from '@smis-mentor/shared';
+import { notificationAllowed, pushReachOf, lostNotifyRecipients, isCampStaffRole, isStockGroupOf, STOCK_MANAGER_GROUP_ROLES, type NotifyUserLike, localeOfUser, t, type Locale } from '@smis-mentor/shared';
 import { notifySupply } from './supplyNotify';
 import * as admin from 'firebase-admin';
 
@@ -170,7 +170,7 @@ export async function notifyLostItem(lostItemId: string): Promise<{ sent: number
 
   const usersSnap = await db.collection('users').where('jobCodeIds', 'array-contains', item.jobCodeId).get();
   // 대상 계산은 shared 의 lostNotifyRecipients 한 곳에서 — 등록 화면 미리보기와 같은 기준
-  type CampUser = NotifyUserLike & { id: string; pushTokens?: Record<string, { platform?: string }> };
+  type CampUser = NotifyUserLike & { id: string; locale?: string; pushTokens?: Record<string, { platform?: string }> };
   const all = usersSnap.docs.map(d => ({ ...(d.data() as object), id: d.id })) as CampUser[];
   let targets = lostNotifyRecipients(all, {
     jobCodeId: item.jobCodeId,
@@ -197,19 +197,19 @@ export async function notifyLostItem(lostItemId: string): Promise<{ sent: number
 
   const place = item.foundPlace ? ` · ${item.foundPlace}` : '';
   const isLost = item.kind === 'lost';
-  const title = isLost
-    ? (item.ownerName ? `🙋 ${item.ownerName} 학생이 물건을 찾아요` : '🙋 물건을 찾고 있어요')
-    : (item.ownerName ? `🔍 ${item.ownerName} 학생 분실물` : '🔍 분실물 등록');
-  const body = isLost
-    ? `${item.name}${place} — 보신 분은 알려주세요`
-    : (item.ownerName ? `${item.name}${place} — 학생에게 전달해주세요` : `${item.name}${place} — 주인을 찾고 있어요`);
+  const vars = { owner: item.ownerName ?? '', item: item.name, place };
+  // 받는 사람 언어로 (원어민·영어 선택자는 영어)
+  const title = (lang: Locale) => t(lang, isLost
+    ? (item.ownerName ? 'push.lostTitleOwner' : 'push.lostTitle')
+    : (item.ownerName ? 'push.foundTitleOwner' : 'push.foundTitle'), vars);
+  const body = (lang: Locale) => t(lang, isLost ? 'push.lostBody' : (item.ownerName ? 'push.foundBodyOwner' : 'push.foundBody'), vars);
 
   const messages: Record<string, unknown>[] = [];
   targets.forEach(u => {
     Object.keys(u.pushTokens ?? {})
       .filter(t => /^(Exponent|Expo)PushToken\[.+\]$/.test(t))
       .forEach(to => messages.push({
-        to, sound: 'default', title, body, priority: 'high', channelId: 'default',
+        to, sound: 'default', title: title(localeOfUser(u)), body: body(localeOfUser(u)), priority: 'high', channelId: 'default',
         data: { type: 'lost-item', lostItemId, screen: 'Camp', tab: 'inventory' },
       }));
   });
@@ -260,7 +260,7 @@ export async function notifyLostMatched(lostItemId: string, actorUid: string): P
   const lost = pair.a.kind === 'lost' ? pair.a : pair.b.kind === 'lost' ? pair.b : null;
   const found = lost === pair.a ? pair.b : pair.a;
   const usersSnap = await db.collection('users').where('jobCodeIds', 'array-contains', pair.a.jobCodeId).get();
-  type CampUser = NotifyUserLike & { id: string; pushTokens?: Record<string, { platform?: string }> };
+  type CampUser = NotifyUserLike & { id: string; locale?: string; pushTokens?: Record<string, { platform?: string }> };
   const all = usersSnap.docs.map(d => ({ ...(d.data() as object), id: d.id })) as CampUser[];
 
   // 받는 사람: 양쪽 등록자 + (학생을 지정한 신고면) 그 학생 담당 셋 — 연결한 사람은 제외
@@ -290,18 +290,20 @@ export async function notifyLostMatched(lostItemId: string, actorUid: string): P
     return true;
   });
 
-  const who = owner?.ownerName ? `${owner.ownerName} 학생 ` : '';
-  const title = `🔗 ${who}물건을 찾았어요`;
-  const kept = found.keptAt ? ` · 보관: ${found.keptAt}` : '';
-  const by = pair.a.matchedBy ? ` — ${pair.a.matchedBy} 연결` : '';
-  const body = `${lost?.name ?? pair.a.name} ↔ ${found.name}${kept}${by}`;
+  // 받는 사람 언어로 (원어민·영어 선택자는 영어)
+  const title = (lang: Locale) => (owner?.ownerName ? t(lang, 'push.matchedTitleOwner', { owner: owner.ownerName }) : t(lang, 'push.matchedTitle'));
+  const body = (lang: Locale) => {
+    const kept = found.keptAt ? t(lang, 'push.matchedKept', { place: found.keptAt }) : '';
+    const by = pair.a.matchedBy ? t(lang, 'push.matchedBy', { name: pair.a.matchedBy }) : '';
+    return `${lost?.name ?? pair.a.name} ↔ ${found.name}${kept}${by}`;
+  };
 
   const messages: Record<string, unknown>[] = [];
   targets.forEach(u => {
     Object.keys(u.pushTokens ?? {})
       .filter(t => /^(Exponent|Expo)PushToken\[.+\]$/.test(t))
       .forEach(to => messages.push({
-        to, sound: 'default', title, body, priority: 'high', channelId: 'default',
+        to, sound: 'default', title: title(localeOfUser(u)), body: body(localeOfUser(u)), priority: 'high', channelId: 'default',
         data: { type: 'lost-item', lostItemId: lost?.id ?? pair.a.id, screen: 'Camp', tab: 'inventory' },
       }));
   });

@@ -30,6 +30,8 @@ export interface User {
     updatedAt: Timestamp;
   };
   role: UserRole;
+  /** 화면 언어 (설정에서 고름). 없으면 역할로 — 원어민 영어, 나머지 한국어 */
+  locale?: 'ko' | 'en';
   jobExperiences?: Array<{
     id: string,
     group: JobGroup,

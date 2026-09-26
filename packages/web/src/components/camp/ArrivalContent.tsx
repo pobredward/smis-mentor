@@ -1,5 +1,5 @@
 'use client';
-import { resolveActiveJobCodeId } from '@smis-mentor/shared';
+import { resolveActiveJobCodeId, L, dataLabel } from '@smis-mentor/shared';
 import { logger, toDriveImageUrl, getFieldValue, getFixedFieldValue, getDefaultFieldConfig, type STSheetFieldConfig } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -90,7 +90,7 @@ export default function ArrivalContent() {
       setHasRealData(hasReal);
     } catch (error) {
       logger.error('❌ [ArrivalContent] 학생 목록 로드 실패:', error);
-      alert('학생 목록을 불러오는데 실패했습니다.');
+      alert(L('common.failedToLoadTheStudent'));
     } finally {
       setLoading(false);
     }
@@ -186,7 +186,7 @@ export default function ArrivalContent() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-sm text-gray-600">퇴소명단 로딩 중...</p>
+          <p className="text-sm text-gray-600">{L('students.loadingDepartureList')}</p>
         </div>
       </div>
     );
@@ -200,7 +200,7 @@ export default function ArrivalContent() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
         </div>
-        <p className="text-center">로그인 후 이용 가능합니다.</p>
+        <p className="text-center">{L('common.pleaseLogInToUse')}</p>
       </div>
     );
   }
@@ -211,9 +211,9 @@ export default function ArrivalContent() {
         <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">활성 캠프를 선택해주세요</h3>
-        <p className="text-sm text-gray-600">마이페이지에서 참여 중인 캠프를 활성화하면</p>
-        <p className="text-sm text-gray-600">해당 캠프의 퇴소명단을 확인할 수 있습니다.</p>
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">{L('students.pleaseSelectAnActiveCamp')}</h3>
+        <p className="text-sm text-gray-600">{L('common.activateYourCampOnMy')}</p>
+        <p className="text-sm text-gray-600">{L('students.toViewThatCampS')}</p>
       </div>
     );
   }
@@ -225,7 +225,7 @@ export default function ArrivalContent() {
         <svg className="w-12 h-12 text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
         </svg>
-        <p className="text-sm font-medium text-gray-600">퇴소명단은 E/J 캠프에서만 사용 가능합니다.</p>
+        <p className="text-sm font-medium text-gray-600">{L('students.theDepartureListIsOnly')}</p>
       </div>
     );
   }
@@ -238,8 +238,8 @@ export default function ArrivalContent() {
         <svg className="w-12 h-12 text-gray-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
-        <p className="text-sm font-medium text-gray-600">ST시트에 퇴소공항조 데이터가 없습니다.</p>
-        <p className="text-xs text-gray-400 mt-1">ST시트에 "퇴소공항조", "퇴소공항인솔" 컬럼을 추가한 후 동기화해주세요.</p>
+        <p className="text-sm font-medium text-gray-600">{L('students.noDepartureAirportGroupData')}</p>
+        <p className="text-xs text-gray-400 mt-1">{L('students.addTheAndColumnsTo')}</p>
       </div>
     );
   }
@@ -248,7 +248,7 @@ export default function ArrivalContent() {
     <div className="flex flex-col h-full bg-gray-50">
       {/* 헤더 */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-gray-900">퇴소명단</h1>
+        <h1 className="text-lg font-semibold text-gray-900">{L('students.departureList')}</h1>
         <div className="flex items-center gap-2">
           {isSearchExpanded ? (
             <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2">
@@ -256,7 +256,7 @@ export default function ArrivalContent() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="이름 검색 (한글/영문)..."
+                placeholder={L('students.searchByNameKoreanEnglish')}
                 className="bg-transparent border-none outline-none text-sm w-40"
                 autoFocus
               />
@@ -286,9 +286,9 @@ export default function ArrivalContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <p className="text-xs text-amber-800">
-              <span className="font-semibold">임시 데이터입니다.</span>
+              <span className="font-semibold">{L('students.thisIsSampleData')}</span>
               <span className="ml-1">
-                {hasRealData ? '관리자가 임시 데이터 표시를 활성화했습니다.' : '공항 조 배정이 완료되면 실제 명단으로 표기됩니다.'}
+                {hasRealData ? L('common.temporaryDataDisplayHasBeen') : L('students.theRealListAppearsOnce')}
               </span>
             </p>
           </div>
@@ -313,14 +313,14 @@ export default function ArrivalContent() {
                       : isUnclassified ? 'bg-gray-200 text-gray-500 hover:bg-gray-300' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
                   }`}
                 >
-                  <span>{group}</span>
+                  <span>{dataLabel(group)}</span>
                   {instructor ? (
                     <span className={`text-[10px] font-normal mt-0.5 ${isSelected ? 'text-orange-100' : 'text-orange-600'}`}>
                       {instructor}
                     </span>
                   ) : isUnclassified ? (
                     <span className={`text-[10px] font-normal mt-0.5 ${isSelected ? 'text-gray-200' : 'text-gray-400'}`}>
-                      {groupedByArrivalGroup[group].length}명
+                      {groupedByArrivalGroup[group].length}{L('common.people2')}
                     </span>
                   ) : null}
                 </button>
@@ -333,7 +333,7 @@ export default function ArrivalContent() {
       {/* 검색 결과 안내 */}
       {searchQuery.trim() && (
         <div className="bg-white border-b border-gray-200 px-4 py-2">
-          <p className="text-sm text-gray-600">"{searchQuery}" 검색 결과: {displayStudents.length}명</p>
+          <p className="text-sm text-gray-600">"{searchQuery}{L('students.results')} {displayStudents.length}{L('common.people2')}</p>
         </div>
       )}
 
@@ -344,12 +344,12 @@ export default function ArrivalContent() {
             <svg className="w-12 h-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <p className="text-sm font-medium text-gray-600">실제 데이터가 없습니다.</p>
-            <p className="text-xs text-gray-400">ST 시트를 동기화하거나 임시 데이터를 켜서 미리 확인하세요.</p>
+            <p className="text-sm font-medium text-gray-600">{L('students.noRealDataYet')}</p>
+            <p className="text-xs text-gray-400">{L('students.syncTheStSheetOr2')}</p>
           </div>
         ) : displayStudents.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500">조를 선택해주세요.</p>
+            <p className="text-gray-500">{L('students.pleaseSelectAGroup')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-4 gap-1">
@@ -407,10 +407,10 @@ export default function ArrivalContent() {
                   <div className="space-y-0.5 text-[10px] text-gray-600">
                     <p className="truncate">{student.englishName || '-'}</p>
                     <p className="truncate text-[8px]">
-                      반:{student.classMentor || '-'}{student.className ? `(${student.className}반)` : ''}
+                      {L('students.class3')}{student.classMentor || '-'}{student.className ? L('common.class2', { v0: student.className }) : ''}
                     </p>
                     <p className="truncate text-[8px]">
-                      방:{student.unitMentor || '-'}{student.roomNumber ? `(${student.roomNumber}호)` : ''}
+                      {L('students.room3')}{student.unitMentor || '-'}{student.roomNumber ? L('common.room2', { v0: student.roomNumber }) : ''}
                     </p>
                     <p className="truncate text-[8px] text-green-600 font-medium">
                       {student.arrivalGroup || '-'}{student.arrivalInstructor ? ` (${student.arrivalInstructor})` : ''}
@@ -438,7 +438,7 @@ export default function ArrivalContent() {
                     {profilePhotoUrl ? (
                       <img
                         src={profilePhotoUrl}
-                        alt={`${selectedStudent.name} 프로필`}
+                        alt={L('common.sProfile', { v0: selectedStudent.name })}
                         className="w-full aspect-square rounded-2xl object-cover border border-gray-200 mb-4"
                         onError={(e) => {
                           e.currentTarget.style.display = 'none';
@@ -463,10 +463,10 @@ export default function ArrivalContent() {
                     {(selectedStudent.arrivalGroup || selectedStudent.arrivalInstructor) && (
                       <div className="mt-3 w-full bg-orange-50 rounded-xl p-3 border border-orange-100">
                         {selectedStudent.arrivalGroup && (
-                          <p className="text-xs text-orange-700 font-semibold text-center">✈ 퇴소 {selectedStudent.arrivalGroup}</p>
+                          <p className="text-xs text-orange-700 font-semibold text-center">{L('students.departure2')} {selectedStudent.arrivalGroup}</p>
                         )}
                         {selectedStudent.arrivalInstructor && (
-                          <p className="text-xs text-orange-600 text-center mt-0.5">인솔: {selectedStudent.arrivalInstructor}</p>
+                          <p className="text-xs text-orange-600 text-center mt-0.5">{L('students.escort')} {selectedStudent.arrivalInstructor}</p>
                         )}
                       </div>
                     )}
@@ -499,7 +499,7 @@ export default function ArrivalContent() {
                         {profilePhotoUrl ? (
                           <img
                             src={profilePhotoUrl}
-                            alt={`${selectedStudent.name} 프로필`}
+                            alt={L('common.sProfile', { v0: selectedStudent.name })}
                             className="w-80 h-80 rounded-2xl object-cover border border-gray-200"
                             onError={(e) => {
                               e.currentTarget.style.display = 'none';
@@ -522,10 +522,10 @@ export default function ArrivalContent() {
                         {(selectedStudent.arrivalGroup || selectedStudent.arrivalInstructor) && (
                           <div className="mt-3 w-full max-w-xs bg-orange-50 rounded-xl p-3 border border-orange-100">
                             {selectedStudent.arrivalGroup && (
-                              <p className="text-xs text-orange-700 font-semibold text-center">✈ 퇴소 {selectedStudent.arrivalGroup}</p>
+                              <p className="text-xs text-orange-700 font-semibold text-center">{L('students.departure2')} {selectedStudent.arrivalGroup}</p>
                             )}
                             {selectedStudent.arrivalInstructor && (
-                              <p className="text-xs text-orange-600 text-center mt-0.5">인솔: {selectedStudent.arrivalInstructor}</p>
+                              <p className="text-xs text-orange-600 text-center mt-0.5">{L('students.escort')} {selectedStudent.arrivalInstructor}</p>
                             )}
                           </div>
                         )}
@@ -616,7 +616,7 @@ export default function ArrivalContent() {
                   onClick={() => setSelectedStudent(null)}
                   className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
                 >
-                  닫기
+                  {L('common.close')}
                 </button>
               </div>
             </div>

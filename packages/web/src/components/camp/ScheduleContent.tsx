@@ -33,6 +33,7 @@ import { getJobCodeById, getUsersByJobCodeId } from '@/lib/firebaseService';
 import TimetableView from './TimetableView';
 import TimetableEditor from './TimetableEditor';
 import BookTable from './BookTable';
+import { L } from '@smis-mentor/shared';
 
 /** 고른 그룹은 캠프별로 기억한다 — 다른 탭 다녀와도 그대로 */
 const GROUP_KEY = (jobCodeId: string) => `SMIS_TIMETABLE_GROUP_${jobCodeId}`;
@@ -243,11 +244,9 @@ export default function ScheduleContent() {
   if (!activeJobCodeId) {
     return (
       <EmptyState
-        title={isForeign ? 'No camp selected' : '활성 캠프가 없습니다'}
+        title={L('schedule.noCampSelected')}
         body={
-          isForeign
-            ? 'Activate a camp on My Page to see its timetable.'
-            : '마이페이지에서 참여 중인 캠프를 활성화하면 시간표가 보입니다.'
+          L('schedule.activateACampOnMy')
         }
       />
     );
@@ -280,7 +279,7 @@ export default function ScheduleContent() {
       <div className="mb-2 flex items-start justify-between gap-2">
         <div
           role="tablist"
-          aria-label="시간표 종류"
+          aria-label={L('schedule.timetableType')}
           className="flex min-w-0 flex-1 flex-wrap gap-1 overflow-x-auto"
         >
           {categories.map((c) => {
@@ -310,7 +309,7 @@ export default function ScheduleContent() {
             onClick={() => setEditing(true)}
             className="shrink-0 rounded-md border border-gray-300 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
           >
-            편집
+            {L('common.edit')}
           </button>
         )}
       </div>
@@ -319,7 +318,7 @@ export default function ScheduleContent() {
       {groups.length > 0 && (
         <div
           role="tablist"
-          aria-label="그룹"
+          aria-label={L('schedule.group')}
           className="mb-3 grid gap-0.5 rounded-lg border border-gray-200 bg-gray-50 p-0.5"
           style={{ gridTemplateColumns: `repeat(${groups.length}, minmax(0, 1fr))` }}
         >
@@ -399,7 +398,7 @@ export default function ScheduleContent() {
         </>
       ) : (
         <EmptyState
-          title={`${activeGroup ?? ''} 그룹에 배정된 반이 없습니다`}
+          title={L('schedule.noClassesAssignedTo', { v0: activeGroup ?? '' })}
           body="관리자 > 지원 유저 관리에서 이 캠프에 멘토를 배정하면서 그룹과 반번호를 넣으면 표가 만들어집니다."
         />
       )}

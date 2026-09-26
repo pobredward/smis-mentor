@@ -20,6 +20,7 @@ import {
   type CampTimetable,
   type RenderedLine,
 } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 interface TimetableViewProps {
   timetable: CampTimetable;
@@ -68,7 +69,7 @@ function CellLines({ line }: { line?: RenderedLine }) {
       {/* 강의실 호수가 맨 위 — 이동 수업에서 제일 먼저 봐야 하는 값 */}
       {line.room && <span className="block text-[10px] leading-none text-gray-400">{line.room}</span>}
       <span
-        title={line.manual ? '직접 입력한 이름 (앱 배정과 연동되지 않음)' : undefined}
+        title={line.manual ? L('schedule.nameTypedManuallyNotLinked') : undefined}
         className={`${line.isName ? nameClass : line.muted ? 'text-gray-400' : 'text-gray-900'} ${
           line.manual ? MANUAL : ''
         }`}
@@ -78,7 +79,7 @@ function CellLines({ line }: { line?: RenderedLine }) {
         {line.sub && (
           <span
             className={`ml-0.5 text-[10px] text-slate-500 ${line.subManual ? MANUAL : ''}`}
-            title={line.subManual ? '직접 입력한 이름 (앱 배정과 연동되지 않음)' : undefined}
+            title={line.subManual ? L('schedule.nameTypedManuallyNotLinked') : undefined}
           >
             ({line.sub})
           </span>
@@ -204,7 +205,7 @@ export default function TimetableView({
             onClick={() => setOnlyMine(false)}
             className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
           >
-            {isForeign ? 'Show all' : '전체 보기'}
+            {L('schedule.showAll')}
           </button>
         </div>
         <ul className="divide-y divide-gray-100 overflow-hidden rounded-lg border border-gray-200 bg-white">
@@ -269,7 +270,7 @@ export default function TimetableView({
             onClick={() => setOnlyMine(true)}
             className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
           >
-            {isForeign ? 'My class only' : '내 반만 보기'}
+            {L('schedule.myClassOnly')}
           </button>
         </div>
       )}
@@ -296,7 +297,7 @@ export default function TimetableView({
                 colSpan={layout === 'date' ? 1 : 2}
                 className="sticky left-0 z-10 border-b border-r border-gray-200 bg-gray-50 px-1 py-1 text-[10px] font-medium text-gray-500"
               >
-                {layout === 'date' ? '날짜' : isForeign ? 'Time' : '시간'}
+                {layout === 'date' ? L('schedule.date') : L('schedule.time')}
               </th>
               {columns.map((col) => (
                 <th
@@ -316,7 +317,7 @@ export default function TimetableView({
                   {col.sub && (
                     <div
                       className={`mt-0.5 truncate text-[11px] text-gray-600 ${col.subManual ? MANUAL : ''}`}
-                      title={col.subManual ? '직접 입력한 이름 (앱 배정과 연동되지 않음)' : undefined}
+                      title={col.subManual ? L('schedule.nameTypedManuallyNotLinked') : undefined}
                     >
                       {col.sub}
                     </div>
@@ -333,7 +334,7 @@ export default function TimetableView({
                   colSpan={(layout === 'date' ? 1 : 2) + columns.length}
                   className="border-t border-gray-200 px-2 py-10 text-center text-xs text-gray-400"
                 >
-                  {isForeign ? 'No periods yet.' : '아직 교시가 없습니다. 편집에서 추가하세요.'}
+                  {L('schedule.noPeriodsYet2')}
                 </td>
               </tr>
             )}
@@ -359,7 +360,7 @@ export default function TimetableView({
                           {isNow && (
                             <span
                               className="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-blue-500 align-middle"
-                              title="지금 진행 중"
+                              title={L('schedule.inProgressNow')}
                             />
                           )}
                         </td>
@@ -380,7 +381,7 @@ export default function TimetableView({
                       colSpan={timetable.classes.length}
                       onClick={openable ? () => onOpenGuide!(row.label) : undefined}
                       role={openable ? 'button' : undefined}
-                      title={openable ? '눌러서 설명 보기' : undefined}
+                      title={openable ? L('schedule.tapToSeeTheDescription') : undefined}
                       onMouseEnter={openable ? () => setHoverUnit(`shared:${first.id}`) : undefined}
                       onMouseLeave={openable ? () => setHoverUnit(null) : undefined}
                       className={`border-x border-b border-gray-200 border-b-gray-300 px-1 py-0.5 text-center text-[11px] font-medium text-gray-700 ${
@@ -395,7 +396,7 @@ export default function TimetableView({
                     >
                       {row.label}
                       {linkedLabels?.some((k) => row.label.includes(k)) && (
-                        <span className="ml-1 text-[10px] font-normal text-blue-600">아래 표 ↓</span>
+                        <span className="ml-1 text-[10px] font-normal text-blue-600">{L('schedule.tableBelow')}</span>
                       )}
                       {row.subLabel && (
                         <span className="ml-1 text-[10px] font-normal text-gray-500">{row.subLabel}</span>
@@ -442,7 +443,7 @@ export default function TimetableView({
                         {nowBlockId === b.id && i === 0 && (
                           <span
                             className="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-blue-500 align-middle"
-                            title="지금 진행 중"
+                            title={L('schedule.inProgressNow')}
                           />
                         )}
                       </td>
@@ -470,7 +471,7 @@ export default function TimetableView({
                         >
                           <span
                             className={`${merged.muted ? 'text-gray-400' : ''} ${merged.manual ? MANUAL : ''}`}
-                            title={merged.manual ? '직접 입력한 이름 (앱 배정과 연동되지 않음)' : undefined}
+                            title={merged.manual ? L('schedule.nameTypedManuallyNotLinked') : undefined}
                           >
                             {merged.text}
                           </span>
@@ -502,7 +503,7 @@ export default function TimetableView({
                         onMouseEnter={openable ? () => setHoverUnit(unitId) : undefined}
                         onMouseLeave={openable ? () => setHoverUnit(null) : undefined}
                         role={openable ? 'button' : undefined}
-                        title={openable ? '눌러서 설명 보기' : undefined}
+                        title={openable ? L('schedule.tapToSeeTheDescription') : undefined}
                         className={`border-x border-gray-200 px-1 text-center align-middle ${
                           layout === 'date' ? 'py-0' : ''
                         } ${

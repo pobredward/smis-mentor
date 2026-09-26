@@ -21,8 +21,7 @@ import {
   canRemindTask,
   notificationAllowed,
   pushReachOf,
-  type TaskViewer,
-} from '@smis-mentor/shared';
+  type TaskViewer, localeOfUser, t } from '@smis-mentor/shared';
 
 const TASKS = 'campTasks';
 const KST_MS = 9 * 3600 * 1000;
@@ -427,8 +426,9 @@ export async function remindTask(uid: string, taskId: string): Promise<{
       .filter(t => /^(Exponent|Expo)PushToken\[.+\]$/.test(t))
       .forEach(to => messages.push({
         to, sound: 'default', priority: 'high', channelId: 'task-reminders',
-        title: '🔔 업무 알림',
-        body: `"${task.title}" 업무를 확인해주세요.`,
+        // 받는 사람 언어로 (원어민·영어 선택자는 영어)
+        title: t(localeOfUser(u as never), 'push.taskReminderTitle'),
+        body: t(localeOfUser(u as never), 'push.taskReminderBody', { title: task.title }),
         data: { type: 'task-reminder', taskId, taskDate, screen: 'Camp', tab: 'tasks' },
       }));
   });

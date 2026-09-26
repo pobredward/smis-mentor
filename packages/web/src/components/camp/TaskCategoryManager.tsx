@@ -11,6 +11,7 @@ import {
 } from '@/lib/taskCategoryService';
 import type { TaskCategory } from '@smis-mentor/shared';
 import { useAuth } from '@/contexts/AuthContext';
+import { L } from '@smis-mentor/shared';
 
 // 관리자가 선택할 수 있는 프리셋 색상
 // 각 계열 5단계 (연→진): 300 / 400 / 500 / 600 / 700
@@ -66,7 +67,7 @@ export default function TaskCategoryManager({
         setCategories(list);
       } catch (error) {
         logger.error('카테고리 로드 오류:', error);
-        toast.error(isForeign ? 'Failed to load categories.' : '카테고리를 불러오는 중 오류가 발생했습니다.');
+        toast.error(L('task.failedToLoadCategories'));
       } finally {
         setLoadingCategories(false);
       }
@@ -92,19 +93,19 @@ export default function TaskCategoryManager({
 
   const handleAdd = async () => {
     if (!newName.trim()) {
-      toast.error(isForeign ? 'Please enter a category name.' : '카테고리 이름을 입력해주세요.');
+      toast.error(L('task.pleaseEnterACategoryName'));
       return;
     }
     setIsAdding(true);
     try {
       await createTaskCategory(campCode, { name: newName, color: newColor, createdBy: adminUserId });
-      toast.success(isForeign ? `Category "${newName}" has been added.` : `"${newName}" 카테고리가 추가되었습니다.`);
+      toast.success(L('task.categoryV0HasBeenAdded', { v0: newName }));
       setNewName('');
       setNewColor(PRESET_COLORS[27]);
       await refreshCategories();
     } catch (error) {
       logger.error('카테고리 추가 오류:', error);
-      toast.error(isForeign ? 'Failed to add category.' : '카테고리 추가 중 오류가 발생했습니다.');
+      toast.error(L('task.failedToAddCategory'));
     } finally {
       setIsAdding(false);
     }
@@ -118,35 +119,33 @@ export default function TaskCategoryManager({
 
   const handleSaveEdit = async () => {
     if (!editingId || !editName.trim()) {
-      toast.error(isForeign ? 'Please enter a category name.' : '카테고리 이름을 입력해주세요.');
+      toast.error(L('task.pleaseEnterACategoryName'));
       return;
     }
     setIsSaving(true);
     try {
       await updateTaskCategory(editingId, { name: editName, color: editColor });
-      toast.success(isForeign ? 'Category has been updated.' : '카테고리가 수정되었습니다.');
+      toast.success(L('task.categoryHasBeenUpdated'));
       setEditingId(null);
       await refreshCategories();
     } catch (error) {
       logger.error('카테고리 수정 오류:', error);
-      toast.error(isForeign ? 'Failed to update category.' : '카테고리 수정 중 오류가 발생했습니다.');
+      toast.error(L('task.failedToUpdateCategory'));
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleDelete = async (cat: TaskCategory) => {
-    const confirmMsg = isForeign
-      ? `Delete "${cat.name}"?\nExisting tasks using this category will be shown without a category.`
-      : `"${cat.name}" 카테고리를 삭제할까요?\n해당 카테고리가 지정된 기존 업무는 카테고리 없음으로 표시됩니다.`;
+    const confirmMsg = L('task.deleteV0NexistingTasksUsing', { v0: cat.name });
     if (!confirm(confirmMsg)) return;
     try {
       await deleteTaskCategory(cat.id);
-      toast.success(isForeign ? `Category "${cat.name}" has been deleted.` : `"${cat.name}" 카테고리가 삭제되었습니다.`);
+      toast.success(L('task.categoryV0HasBeenDeleted', { v0: cat.name }));
       await refreshCategories();
     } catch (error) {
       logger.error('카테고리 삭제 오류:', error);
-      toast.error(isForeign ? 'Failed to delete category.' : '카테고리 삭제 중 오류가 발생했습니다.');
+      toast.error(L('task.failedToDeleteCategory'));
     }
   };
 
@@ -163,14 +162,14 @@ export default function TaskCategoryManager({
         {/* 헤더 */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
-            <h2 className="text-base font-bold text-gray-900">{isForeign ? 'Manage Categories' : '카테고리 관리'}</h2>
-            <p className="text-xs text-gray-400 mt-0.5">{isForeign ? 'Applies to both shared and personal tasks' : '공통/개인 업무 모두 적용됩니다'}</p>
+            <h2 className="text-base font-bold text-gray-900">{L('task.manageCategories')}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{L('task.appliesToBothSharedAnd')}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-            aria-label={isForeign ? 'Close' : '닫기'}
+            aria-label={L('common.close')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -181,9 +180,9 @@ export default function TaskCategoryManager({
         {/* 카테고리 목록 */}
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-2">
           {loadingCategories ? (
-            <p className="text-center text-sm text-gray-400 py-6">{isForeign ? 'Loading...' : '불러오는 중...'}</p>
+            <p className="text-center text-sm text-gray-400 py-6">{L('task.loading2')}</p>
           ) : categories.length === 0 ? (
-            <p className="text-center text-sm text-gray-400 py-6">{isForeign ? 'No categories registered.' : '등록된 카테고리가 없습니다.'}</p>
+            <p className="text-center text-sm text-gray-400 py-6">{L('task.noCategoriesRegistered')}</p>
           ) : null}
 
           {categories.map(cat => (
@@ -218,7 +217,7 @@ export default function TaskCategoryManager({
                       onClick={() => setEditingId(null)}
                       className="flex-1 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                     >
-                      {isForeign ? 'Cancel' : '취소'}
+                      {L('common.cancel')}
                     </button>
                     <button
                       type="button"
@@ -226,7 +225,7 @@ export default function TaskCategoryManager({
                       disabled={isSaving}
                       className="flex-1 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                     >
-                      {isSaving ? (isForeign ? 'Saving...' : '저장 중...') : (isForeign ? 'Save' : '저장')}
+                      {isSaving ? (L('task.saving')) : (L('common.save'))}
                     </button>
                   </div>
                 </div>
@@ -243,7 +242,7 @@ export default function TaskCategoryManager({
                       type="button"
                       onClick={() => startEdit(cat)}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                      aria-label={isForeign ? 'Edit' : '수정'}
+                      aria-label={L('task.edit')}
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -253,7 +252,7 @@ export default function TaskCategoryManager({
                       type="button"
                       onClick={() => handleDelete(cat)}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
-                      aria-label={isForeign ? 'Delete' : '삭제'}
+                      aria-label={L('common.delete')}
                     >
                       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -268,13 +267,13 @@ export default function TaskCategoryManager({
 
         {/* 신규 카테고리 추가 */}
         <div className="px-5 py-4 border-t border-gray-100 space-y-3 flex-shrink-0">
-          <p className="text-xs font-semibold text-gray-500">{isForeign ? 'Add New Category' : '새 카테고리 추가'}</p>
+          <p className="text-xs font-semibold text-gray-500">{L('task.addNewCategory')}</p>
           <input
             type="text"
             value={newName}
             onChange={e => setNewName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
-            placeholder={isForeign ? 'Category name (e.g. Class Prep)' : '카테고리 이름 (예: 수업 준비)'}
+            placeholder={L('task.categoryNameEGClass')}
             className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
           />
           {/* 색상 선택 */}
@@ -305,7 +304,7 @@ export default function TaskCategoryManager({
             disabled={isAdding || !newName.trim()}
             className="w-full py-2.5 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50"
           >
-            {isAdding ? (isForeign ? 'Adding...' : '추가 중...') : (isForeign ? 'Add Category' : '카테고리 추가')}
+            {isAdding ? (L('task.adding')) : (L('task.addCategory'))}
           </button>
         </div>
       </div>

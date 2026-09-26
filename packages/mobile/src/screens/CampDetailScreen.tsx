@@ -25,6 +25,7 @@ import { useAuth } from '../context/AuthContext';
 import { getDisplayItems } from '../services';
 import type { DisplayItem, CampPageCategory } from '@smis-mentor/shared';
 import { RootStackParamList } from '../navigation/types';
+import { L } from '@smis-mentor/shared';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CampDetail'>;
 
@@ -54,7 +55,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
               onPress={handleSharePress}
               style={styles.headerButton}
             >
-              <Text style={styles.headerButtonText}>공유</Text>
+              <Text style={styles.headerButtonText}>{L('common.share')}</Text>
             </TouchableOpacity>
           )}
           
@@ -64,7 +65,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
               onPress={handleEditPress}
               style={styles.headerButton}
             >
-              <Text style={styles.headerButtonText}>편집</Text>
+              <Text style={styles.headerButtonText}>{L('common.edit')}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -86,7 +87,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
       const foundItem = displayItems.find(i => i.id === itemId);
       
       if (!foundItem) {
-        Alert.alert('오류', '항목을 찾을 수 없습니다.');
+        Alert.alert(L('common.error'), L('content.itemNotFound'));
         navigation.goBack();
         return;
       }
@@ -100,7 +101,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
         (userData?.role === 'foreign' && foundItem.targetRole === 'foreign');
 
       if (!hasAccess) {
-        Alert.alert('오류', '접근 권한이 없습니다.');
+        Alert.alert(L('common.error'), L('content.youDonTHaveAccess'));
         navigation.goBack();
         return;
       }
@@ -114,7 +115,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
       }
     } catch (error) {
       logger.error('항목 로드 실패:', error);
-      Alert.alert('오류', '항목을 불러오는데 실패했습니다.');
+      Alert.alert(L('common.error'), L('content.failedToLoadTheItem'));
       navigation.goBack();
     } finally {
       setLoading(false);
@@ -190,7 +191,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
       } else {
         // 웹 또는 기타 플랫폼: 클립보드에 복사
         await Clipboard.setStringAsync(shareUrl);
-        Alert.alert('성공', '공유 링크가 클립보드에 복사되었습니다!');
+        Alert.alert(L('common.success'), L('content.shareLinkCopiedToClipboard'));
       }
     } catch (error) {
       logger.error('공유 실패:', error);
@@ -200,9 +201,9 @@ export function CampDetailScreen({ route, navigation }: Props) {
         const websiteUrl = process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smis-mentor.com';
         const shareUrl = `${websiteUrl}/share/${category}/${itemId}`;
         await Clipboard.setStringAsync(shareUrl);
-        Alert.alert('성공', '공유 링크가 클립보드에 복사되었습니다!');
+        Alert.alert(L('common.success'), L('content.shareLinkCopiedToClipboard'));
       } catch (clipboardError) {
-        Alert.alert('오류', '링크 복사에 실패했습니다.');
+        Alert.alert(L('common.error'), L('common.failedToCopyTheLink'));
       }
     }
   };
@@ -405,7 +406,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>로딩 중...</Text>
+        <Text style={styles.loadingText}>{L('task.loading')}</Text>
       </View>
     );
   }
@@ -413,7 +414,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
   if (!item) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.emptyText}>항목을 찾을 수 없습니다.</Text>
+        <Text style={styles.emptyText}>{L('content.itemNotFound')}</Text>
       </View>
     );
   }
@@ -426,7 +427,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
         hasTable ? (
           <WebView
             source={{
-              html: buildWebViewHtml(preprocessImageStyles(removeTableControls(item.content || '') || '<p style="color: #9ca3af; text-align: center;">내용이 없습니다.</p>')),
+              html: buildWebViewHtml(preprocessImageStyles(removeTableControls(item.content || '') || '<p style="color: #9ca3af; text-align: center;">' + L('content.noContent') + '</p>')),
             }}
             style={styles.webview}
             scalesPageToFit={false}
@@ -452,7 +453,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
         >
           <RenderHTML
             contentWidth={width - 32}
-            source={{ html: preprocessImageStyles(removeTableControls(item.content || '')) || '<p style="color: #9ca3af; text-align: center;">내용이 없습니다.</p>' }}
+            source={{ html: preprocessImageStyles(removeTableControls(item.content || '')) || '<p style="color: #9ca3af; text-align: center;">' + L('content.noContent') + '</p>' }}
             enableExperimentalMarginCollapsing={false}
             renderersProps={{
               img: {
@@ -587,7 +588,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
         <>
           {canGoBack && (
             <TouchableOpacity style={styles.webViewBackButton} onPress={handleGoBack}>
-              <Text style={styles.webViewBackButtonText}>← 뒤로</Text>
+              <Text style={styles.webViewBackButtonText}>{L('content.back')}</Text>
             </TouchableOpacity>
           )}
           <WebView
@@ -598,7 +599,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
             renderLoading={() => (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#3b82f6" />
-                <Text style={styles.loadingText}>로딩 중...</Text>
+                <Text style={styles.loadingText}>{L('task.loading')}</Text>
               </View>
             )}
             onNavigationStateChange={handleNavigationStateChange}

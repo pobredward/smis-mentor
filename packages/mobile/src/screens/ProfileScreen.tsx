@@ -45,6 +45,7 @@ import { uploadCV, uploadPassportPhoto, uploadForeignIdCard, uploadBankBook, upl
 import { updateUserProfile } from '../services/profileService';
 import { ref as storageRef, deleteObject } from 'firebase/storage';
 import { storage } from '../config/firebase';
+import { L } from '@smis-mentor/shared';
 
 type Screen = 
   | 'profile' 
@@ -186,9 +187,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     // 위치 공유 중이면 캠프 전환 차단
     if (isSharingLocation) {
       Alert.alert(
-        '위치 공유 중',
-        '위치 공유를 먼저 꺼주세요.\n위치 공유를 끈 후 활성 캠프를 변경할 수 있습니다.',
-        [{ text: '확인', style: 'default' }]
+        L('common.sharingLocation'),
+        L('profile.pleaseTurnOffLocationSharing'),
+        [{ text: L('common.ok'), style: 'default' }]
       );
       return;
     }
@@ -317,8 +318,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       setTimeout(() => {
         setPrefetchingCamp(false);
         Alert.alert(
-          '완료', 
-          '캠프가 변경되었습니다.\n\n✅ 모든 데이터 로딩 완료\n✅ 채용 데이터 프리로드 완료\n✅ 구글시트 페이지 프리로드 완료\n\n모든 페이지가 즉시 표시됩니다!'
+          L('task.done'), 
+          L('profile.campChangedAllDataLoaded')
         );
       }, 500);
       
@@ -327,7 +328,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       console.error('❌ ProfileScreen: 캠프 변경 실패');
       console.error('💥 에러:', error);
       console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      Alert.alert('오류', '기수 변경에 실패했습니다.');
+      Alert.alert(L('common.error'), L('profile.failedToChangeTheCamp'));
       setPrefetchingCamp(false);
     } finally {
       setChangingJobCode(false);
@@ -339,12 +340,12 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
    */
   const handleCancelPrefetch = () => {
     Alert.alert(
-      '프리로딩 중단',
-      '캠프 데이터 프리로딩을 중단하시겠습니까?\n\n기본 데이터는 로드되지만 일부 페이지는 처음 접속 시 로딩이 필요할 수 있습니다.',
+      L('profile.stopPreloading'),
+      L('profile.stopPreloadingCampDataBasic'),
       [
-        { text: '계속하기', style: 'cancel' },
+        { text: L('profile.continue'), style: 'cancel' },
         {
-          text: '중단',
+          text: L('profile.stop'),
           style: 'destructive',
           onPress: () => {
             console.log('🛑 프리로딩 중단됨');
@@ -521,11 +522,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       setIsLoading(false);
       
       Alert.alert(
-        '회원가입 완료!',
-        '회원가입이 완료되었습니다.\n이메일 인증을 완료한 후 관리자 승인을 기다려주세요.\n\n인증 메일을 확인해주세요.',
+        L('profile.signUpComplete'),
+        L('profile.signUpCompletePleaseVerify'),
         [
           {
-            text: '확인',
+            text: L('common.ok'),
             onPress: () => {
               setCurrentScreen('signin');
               setSignUpData({});
@@ -538,9 +539,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       logger.error('멘토 회원가입 실패:', error);
       const msg = String((error as Error)?.message || '');
       Alert.alert(
-        '회원가입 실패',
-        (/[가-힣]/.test(msg) ? `${msg}\n\n` : '회원가입 중 오류가 발생했습니다.\n다시 시도해주세요.\n\n') +
-        '지속적인 문제 시 관리자에게 문의하세요.\n관리자: 010-7656-7933 (신선웅)'
+        L('profile.signUpFailed'),
+        (/[가-힣]/.test(msg) ? `${msg}\n\n` : L('profile.anErrorOccurredDuringSign')) +
+        L('profile.ifTheProblemPersistsContact')
       );
     }
   };
@@ -591,7 +592,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     setSignUpData({ ...signUpData, ...data });
 
     if (!signUpData.firstName || !signUpData.lastName || !signUpData.phone || !data.email || !data.password) {
-      Alert.alert('오류', '필수 정보가 누락되었습니다.');
+      Alert.alert(L('common.error'), L('profile.requiredInformationIsMissing'));
       return;
     }
 
@@ -705,21 +706,21 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   };
 
   const handleLogout = async () => {
-    Alert.alert('로그아웃', '로그아웃 하시겠습니까?', [
+    Alert.alert(L('profile.logOut'), L('profile.doYouWantToLog'), [
       {
-        text: '취소',
+        text: L('common.cancel'),
         style: 'cancel',
       },
       {
-        text: '로그아웃',
+        text: L('profile.logOut'),
         style: 'destructive',
         onPress: async () => {
           try {
             await signOut();
-            Alert.alert('로그아웃', '로그아웃되었습니다.');
+            Alert.alert(L('profile.logOut'), L('profile.youHaveBeenLoggedOut'));
           } catch (error) {
             console.error('로그아웃 오류:', error);
-            Alert.alert('오류', '로그아웃 중 오류가 발생했습니다.');
+            Alert.alert(L('common.error'), L('profile.anErrorOccurredWhileLogging'));
           }
         },
       },
@@ -733,7 +734,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const reauthenticateUser = async (password: string): Promise<boolean> => {
     try {
       if (!auth.currentUser || !userData?.email) {
-        throw new Error('사용자 정보를 찾을 수 없습니다.');
+        throw new Error(L('home.userInformationNotFound'));
       }
       
       const credential = EmailAuthProvider.credential(userData.email, password);
@@ -743,14 +744,14 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     } catch (error: any) {
       logger.error('❌ 재인증 실패:', error);
       
-      let errorMessage = '재인증에 실패했습니다.';
+      let errorMessage = L('profile.reAuthenticationFailed2');
       if (error.code === 'auth/wrong-password') {
-        errorMessage = '비밀번호가 올바르지 않습니다.';
+        errorMessage = L('profile.incorrectPassword');
       } else if (error.code === 'auth/invalid-credential') {
-        errorMessage = '인증 정보가 올바르지 않습니다.';
+        errorMessage = L('profile.invalidCredentials');
       }
       
-      Alert.alert('재인증 실패', errorMessage);
+      Alert.alert(L('profile.reAuthenticationFailed'), errorMessage);
       return false;
     }
   };
@@ -772,7 +773,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     const password = reauthPassword;
     setReauthPassword('');
     if (!password) {
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter your password.' : '비밀번호를 입력해주세요.');
+      Alert.alert(L('common.error'), L('profile.pleaseEnterYourPassword'));
       resolve?.(false);
       return;
     }
@@ -798,11 +799,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       
       setShowDeactivateModal(false);
       Alert.alert(
-        '회원 탈퇴 완료', 
-        '회원 탈퇴가 완료되었습니다. 이용해 주셔서 감사합니다.',
+        L('profile.accountDeleted'), 
+        L('profile.yourAccountHasBeenDeleted'),
         [
           {
-            text: '확인',
+            text: L('common.ok'),
             onPress: () => {
               // 앱을 종료하거나 로그인 화면으로 이동
               setCurrentScreen('signin');
@@ -820,12 +821,12 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         setIsDeactivating(false); // 로딩 상태 해제
         
         Alert.alert(
-          '재인증 필요',
-          '보안을 위해 재인증이 필요합니다. 계속하시겠습니까?',
+          L('profile.reAuthenticationRequired'),
+          L('profile.forSecurityYouNeedTo'),
           [
-            { text: '취소', style: 'cancel' },
+            { text: L('common.cancel'), style: 'cancel' },
             {
-              text: '재인증',
+              text: L('profile.reAuthenticate'),
               onPress: async () => {
                 const reauthSuccess = await showReauthPrompt();
                 if (reauthSuccess) {
@@ -841,9 +842,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       
       // 다른 에러의 경우
       Alert.alert(
-        '회원 탈퇴 실패',
-        error.message || '회원 탈퇴 중 오류가 발생했습니다. 다시 시도해주세요.',
-        [{ text: '확인' }]
+        L('profile.accountDeletionFailed'),
+        error.message || L('profile.anErrorOccurredWhileDeleting'),
+        [{ text: L('common.ok') }]
       );
     } finally {
       setIsDeactivating(false);
@@ -868,7 +869,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       // 팝업/네이티브 로그인으로 세션이 바뀐 뒤 원래 계정으로 복원할 때 서버에 제출할 증명 (원래 세션의 ID token)
       const originalIdToken = auth.currentUser ? await auth.currentUser.getIdToken(true) : null;
       const restoreOriginalSession = async () => {
-        if (!originalIdToken) throw new Error('원래 세션 정보가 없습니다. 다시 로그인해주세요.');
+        if (!originalIdToken) throw new Error(L('profile.theOriginalSessionIsMissing'));
         const tempUid = auth.currentUser?.uid;
         const tempIdToken = tempUid && tempUid !== userData.userId ? await auth.currentUser!.getIdToken().catch(() => null) : null;
         const { signInWithCustomToken } = await import('../services/authService');
@@ -962,7 +963,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           }
         }
       } else {
-        Alert.alert('알림', '해당 소셜 로그인은 준비 중입니다.');
+        Alert.alert(L('task.notice'), L('profile.thisSocialLoginIsComing'));
         return;
       }
 
@@ -979,7 +980,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         arrayUnion
       );
 
-      Alert.alert('성공', '소셜 계정이 성공적으로 연동되었습니다.');
+      Alert.alert(L('common.success'), L('profile.socialAccountLinkedSuccessfully'));
 
       // 사용자 데이터 새로고침 (UI 즉시 반영)
       console.log('🔄 사용자 데이터 새로고침 시작');
@@ -988,14 +989,14 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     } catch (error: any) {
       console.error('소셜 계정 연동 오류:', error);
       
-      let errorMessage = '소셜 계정 연동 중 오류가 발생했습니다.';
+      let errorMessage = L('profile.anErrorOccurredWhileLinking');
       if (error.message === 'POPUP_CLOSED') {
-        errorMessage = '로그인 창이 닫혔습니다.';
+        errorMessage = L('profile.theLoginWindowWasClosed');
       } else if (error.message?.includes('취소')) {
-        errorMessage = '로그인이 취소되었습니다.';
+        errorMessage = L('profile.loginWasCancelled');
       }
       
-      Alert.alert('오류', errorMessage);
+      Alert.alert(L('common.error'), errorMessage);
     }
   };
 
@@ -1206,19 +1207,17 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
 
     const providerName = 
       providerId === 'google.com' ? 'Google' :
-      providerId === 'naver' || providerId === 'naver.com' ? (isForeign ? 'Naver' : '네이버') :
-      providerId === 'kakao' ? (isForeign ? 'Kakao' : '카카오') :
-      providerId === 'apple.com' ? 'Apple' : (isForeign ? 'Social' : '소셜');
+      providerId === 'naver' || providerId === 'naver.com' ? (L('profile.naver')) :
+      providerId === 'kakao' ? (L('profile.kakao')) :
+      providerId === 'apple.com' ? 'Apple' : (L('profile.social'));
 
     Alert.alert(
-      isForeign ? 'Unlink Account' : '연동 해제',
-      isForeign
-        ? `Are you sure you want to unlink your ${providerName} account?`
-        : `${providerName} 계정 연동을 해제하시겠습니까?`,
+      L('profile.unlinkAccount'),
+      L('profile.areYouSureYouWant', { v0: providerName }),
       [
-        { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
+        { text: L('common.cancel'), style: 'cancel' },
         {
-          text: isForeign ? 'Unlink' : '해제',
+          text: L('profile.unlink'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -1237,7 +1236,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                   const userDoc = await transaction.get(userRef);
                   
                   if (!userDoc.exists()) {
-                    throw new Error('사용자 문서를 찾을 수 없습니다.');
+                    throw new Error(L('profile.userDocumentNotFound'));
                   }
                   
                   const latestUserData = userDoc.data();
@@ -1257,10 +1256,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               );
 
               Alert.alert(
-                isForeign ? 'Success' : '성공',
-                isForeign
-                  ? `${providerName} account has been unlinked.`
-                  : `${providerName} 계정 연동이 해제되었습니다.`
+                L('common.success'),
+                L('profile.v0AccountHasBeenUnlinked', { v0: providerName })
               );
 
               console.log('🔄 사용자 데이터 새로고침 시작');
@@ -1269,8 +1266,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             } catch (error: any) {
               console.error('연동 해제 오류:', error);
               Alert.alert(
-                isForeign ? 'Error' : '오류',
-                error.message || (isForeign ? 'Failed to unlink account.' : '연동 해제 중 오류가 발생했습니다.')
+                L('common.error'),
+                error.message || (L('profile.failedToUnlinkAccount'))
               );
             }
           },
@@ -1283,7 +1280,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>로딩 중...</Text>
+        <Text style={styles.loadingText}>{L('task.loading')}</Text>
       </View>
     );
   }
@@ -1307,20 +1304,13 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     };
 
     const getRoleLabel = (role: string) => {
-      if (isForeign) {
-        switch (role) {
-          case 'foreign': return 'Foreign Teacher';
-          case 'foreign_temp': return 'Foreign Teacher (Temp)';
-          default: return 'User';
-        }
-      }
       switch (role) {
-        case 'admin': return '관리자';
-        case 'mentor': return '멘토';
-        case 'mentor_temp': return '멘토';
-        case 'foreign': return '원어민';
-        case 'foreign_temp': return '원어민';
-        default: return '사용자';
+        case 'admin': return L('common.roleAdmin');
+        case 'mentor':
+        case 'mentor_temp': return L('common.roleMentor');
+        case 'foreign':
+        case 'foreign_temp': return L('common.roleForeign');
+        default: return L('common.roleUser');
       }
     };
 
@@ -1343,21 +1333,12 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     };
 
     const getStatusLabel = (status: string, role: string) => {
-      if (isForeign) {
-        if (role === 'foreign_temp') return 'Active';
-        switch (status) {
-          case 'active': return 'Active';
-          case 'inactive': return 'Inactive';
-          case 'deleted': return 'Deleted';
-          default: return 'Temporary';
-        }
-      }
-      if (role === 'mentor_temp' || role === 'foreign_temp') return '활성';
+      if (role === 'mentor_temp' || role === 'foreign_temp') return L('common.statusActive');
       switch (status) {
-        case 'active': return '활성';
-        case 'inactive': return '비활성';
-        case 'deleted': return '삭제됨';
-        default: return '임시';
+        case 'active': return L('common.statusActive');
+        case 'inactive': return L('common.statusInactive');
+        case 'deleted': return L('common.statusDeleted');
+        default: return L('common.statusTemp');
       }
     };
 
@@ -1395,9 +1376,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                     <Ionicons name="close" size={24} color="#64748b" />
                   </TouchableOpacity>
                 </View>
-                <Text style={styles.modalTitle}>캠프 데이터 로딩 중</Text>
+                <Text style={styles.modalTitle}>{L('profile.loadingCampData')}</Text>
                 <Text style={styles.modalSubtitle}>
-                  빠른 탐색을 위해 데이터를 미리 불러오는 중입니다
+                  {L('profile.preloadingDataForFasterBrowsing')}
                 </Text>
               </View>
               
@@ -1425,7 +1406,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                     prefetchStage === 'cache' && styles.loadingStepTextActive,
                     prefetchStage !== 'cache' && styles.loadingStepTextDone
                   ]}>
-                    기존 캐시 정리
+                    {L('profile.clearingOldCache')}
                   </Text>
                 </View>
                 <View style={styles.loadingStep}>
@@ -1439,7 +1420,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                     prefetchStage === 'update' && styles.loadingStepTextActive,
                     !['cache', 'update'].includes(prefetchStage) && styles.loadingStepTextDone
                   ]}>
-                    캠프 변경
+                    {L('profile.changingCamp')}
                   </Text>
                 </View>
                 <View style={styles.loadingStep}>
@@ -1453,7 +1434,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                     prefetchStage === 'data' && styles.loadingStepTextActive,
                     ['recruitment', 'webview', 'complete'].includes(prefetchStage) && styles.loadingStepTextDone
                   ]}>
-                    캠프 데이터 로딩
+                    {L('profile.loadingCampData2')}
                   </Text>
                 </View>
                 <View style={styles.loadingStep}>
@@ -1467,7 +1448,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                     prefetchStage === 'recruitment' && styles.loadingStepTextActive,
                     ['webview', 'complete'].includes(prefetchStage) && styles.loadingStepTextDone
                   ]}>
-                    채용 데이터 로딩
+                    {L('profile.loadingRecruitmentData')}
                   </Text>
                 </View>
                 <View style={styles.loadingStep}>
@@ -1482,7 +1463,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                       prefetchStage === 'webview' && styles.loadingStepTextActive,
                       prefetchStage === 'complete' && styles.loadingStepTextDone
                     ]}>
-                      구글시트 프리로딩
+                      {L('profile.preloadingGoogleSheets')}
                     </Text>
                     {prefetchStage === 'webview' && webViewLoadProgress.total > 0 && (
                       <Text style={styles.loadingStepSubtext}>
@@ -1508,9 +1489,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.deactivateModalContent}>
-              <Text style={styles.reauthTitle}>{isForeign ? 'Re-authentication Required' : '재인증 필요'}</Text>
+              <Text style={styles.reauthTitle}>{L('profile.reAuthenticationRequired')}</Text>
               <Text style={styles.reauthBody}>
-                {isForeign ? 'For security, please enter your current password.' : '보안을 위해 현재 비밀번호를 입력해주세요.'}
+                {L('profile.forSecurityPleaseEnterYour')}
               </Text>
               <TextInput
                 style={styles.reauthInput}
@@ -1519,17 +1500,17 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                 secureTextEntry
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholder={isForeign ? 'Password' : '비밀번호'}
+                placeholder={L('profile.password')}
                 placeholderTextColor="#9ca3af"
                 returnKeyType="done"
                 onSubmitEditing={() => finishReauth(true)}
               />
               <View style={styles.deactivateModalButtons}>
                 <TouchableOpacity style={styles.deactivateModalCancelButton} onPress={() => finishReauth(false)} accessibilityRole="button">
-                  <Text style={styles.deactivateModalCancelText}>{isForeign ? 'Cancel' : '취소'}</Text>
+                  <Text style={styles.deactivateModalCancelText}>{L('common.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={styles.deactivateModalConfirmButton} onPress={() => finishReauth(true)} accessibilityRole="button">
-                  <Text style={styles.deactivateModalConfirmText}>{isForeign ? 'Confirm' : '확인'}</Text>
+                  <Text style={styles.deactivateModalConfirmText}>{L('profile.confirm')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1553,12 +1534,10 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                 <View style={styles.deactivateModalHeader}>
                   <Ionicons name="warning" size={48} color="#ef4444" />
                   <Text style={styles.deactivateModalTitle}>
-                    {isForeign ? 'Confirm Account Deletion' : '회원 탈퇴 확인'}
+                    {L('common.confirmAccountDeletion')}
                   </Text>
                   <Text style={styles.deactivateModalMessage}>
-                    {isForeign
-                      ? 'All account data (including location data) will be deactivated and you will not be able to log in with the same email.'
-                      : '모든 계정 정보(위치 데이터 포함)가 비활성화되며, 동일한 이메일로 다시 로그인할 수 없습니다.'}
+                    {L('profile.allAccountDataIncludingLocation')}
                   </Text>
                 </View>
 
@@ -1567,13 +1546,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                   <View style={styles.deactivatePermissionHeader}>
                     <Ionicons name="shield-outline" size={16} color="#b45309" />
                     <Text style={styles.deactivatePermissionTitle}>
-                      {isForeign ? 'App Permissions Remain on Device' : '앱 권한은 기기에 남습니다'}
+                      {L('profile.appPermissionsRemainOnDevice')}
                     </Text>
                   </View>
                   <Text style={styles.deactivatePermissionBody}>
-                    {isForeign
-                      ? 'Deleting your account does NOT automatically revoke app permissions (background location, contacts, notifications). Please revoke them manually:\n\nDevice Settings → Apps → SMIS Mentor → Permissions\n\nOr simply uninstall the app.'
-                      : '회원 탈퇴 시 앱에 부여된 권한(백그라운드 위치, 연락처, 알림)이 자동으로 철회되지 않습니다. 아래 방법으로 직접 철회해 주세요.\n\n기기 설정 → 앱 → SMIS Mentor → 권한\n\n또는 앱을 삭제하면 모든 권한이 함께 제거됩니다.'}
+                    {L('profile.deletingYourAccountDoesNot')}
                   </Text>
                 </View>
               </ScrollView>
@@ -1584,11 +1561,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                   onPress={() => setShowDeactivateModal(false)}
                   disabled={isDeactivating}
                   accessible
-                  accessibilityLabel={isForeign ? 'Cancel' : '취소'}
+                  accessibilityLabel={L('common.cancel')}
                   accessibilityRole="button"
                 >
                   <Text style={styles.deactivateModalCancelText}>
-                    {isForeign ? 'Cancel' : '취소'}
+                    {L('common.cancel')}
                   </Text>
                 </TouchableOpacity>
 
@@ -1600,14 +1577,14 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                   onPress={handleDeactivateAccount}
                   disabled={isDeactivating}
                   accessible
-                  accessibilityLabel={isForeign ? 'Delete Account' : '탈퇴하기'}
+                  accessibilityLabel={L('profile.deleteAccount')}
                   accessibilityRole="button"
                 >
                   {isDeactivating ? (
                     <ActivityIndicator size="small" color="#ffffff" />
                   ) : (
                     <Text style={styles.deactivateModalConfirmText}>
-                      {isForeign ? 'Delete' : '탈퇴하기'}
+                      {L('common.delete2')}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -1619,7 +1596,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
         <View style={styles.content}>
           {/* 헤더 */}
           <View style={styles.header}>
-            <Text style={styles.title}>{isForeign ? 'My Page' : '마이페이지'}</Text>
+            <Text style={styles.title}>{L('common.myPage')}</Text>
           </View>
 
           {/* 기본 정보 (사진·이름·연락처) — 제자리 수정 */}
@@ -1641,10 +1618,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>
                 {userData.role === 'admin'
-                  ? '전체 캠프 코드'
-                  : isForeign
-                    ? 'SMIS Camp History'
-                    : 'SMIS 캠프 참여 이력'}
+                  ? L('profile.allCampCodes')
+                  : L('common.smisCampHistory')}
               </Text>
             </View>
             
@@ -1654,9 +1629,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               </View>
             ) : jobCodes.length === 0 ? (
               <Text style={styles.emptyText}>
-                {isForeign
-                  ? 'No camp history registered. Camp codes will appear here once assigned by an administrator.'
-                  : '등록된 참여 이력이 없습니다.'}
+                {L('common.noCampHistoryRegisteredCamp')}
               </Text>
             ) : userData.role === 'admin' ? (
               // Admin: generation별 뱃지 형태 (27기 이상만 표시, 26기 이하는 더보기)
@@ -1732,7 +1705,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                             style={styles.toggleButton}
                           >
                             <Text style={styles.toggleButtonText}>
-                              {showOlderGenerations ? '26기 이하 접기' : '26기 이하 더보기'}
+                              {showOlderGenerations ? L('profile.collapseCampsUpTo26th') : L('profile.showCampsUpTo26th')}
                             </Text>
                             <Text style={styles.toggleButtonIcon}>
                               {showOlderGenerations ? '▲' : '▼'}
@@ -1804,7 +1777,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                         <View style={styles.jobCodeBadges}>
                           {isActive && (
                             <View style={styles.activeBadge}>
-                              <Text style={styles.activeBadgeText}>{isForeign ? 'Active' : '활성'}</Text>
+                              <Text style={styles.activeBadgeText}>{L('common.active')}</Text>
                             </View>
                           )}
                           {jobCode.code && (
@@ -1896,7 +1869,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                   onDelete={() => userData.foreignTeacher?.foreignIdCardUrl && handleDeleteDoc('idCard', userData.foreignTeacher.foreignIdCardUrl)}
                 />
                 <DocRow
-                  label="Bank Book (통장사본)"
+                  label={L('profile.bankBook')}
                   hint="JPG / PNG / PDF"
                   url={userData.foreignTeacher.bankBookUrl}
                   isUploading={uploadingDoc === 'bankBook'}
@@ -1930,12 +1903,12 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>
-                  {isForeign ? 'Linked Accounts' : '계정 연동 관리'}
+                  {L('profile.linkedAccounts')}
                 </Text>
               </View>
               <View style={styles.socialAccountsContainer}>
                 <Text style={styles.socialSectionLabel}>
-                  {isForeign ? 'Currently linked accounts' : '현재 연동된 계정'}
+                  {L('profile.currentlyLinkedAccounts')}
                 </Text>
                 {userData.authProviders?.map((provider: any) => {
                   const isPassword = provider.providerId === 'password';
@@ -1954,11 +1927,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                           <Text style={styles.socialAccountName}>
                             {provider.providerId === 'google.com' ? 'Google' :
                              provider.providerId === 'naver' || provider.providerId === 'naver.com'
-                               ? (isForeign ? 'Naver' : '네이버') :
+                               ? (L('profile.naver')) :
                              provider.providerId === 'kakao'
-                               ? (isForeign ? 'Kakao' : '카카오') :
+                               ? (L('profile.kakao')) :
                              provider.providerId === 'apple.com' ? 'Apple'
-                               : (isForeign ? 'Email / Password' : '이메일/비밀번호')}
+                               : (L('profile.emailPassword'))}
                           </Text>
                           {provider.email && (
                             <Text style={styles.socialAccountEmail}>{provider.email}</Text>
@@ -1970,17 +1943,17 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                           onPress={() => handleSocialUnlink(provider.providerId)}
                           style={styles.unlinkButton}
                         >
-                          <Text style={styles.unlinkButtonText}>{isForeign ? 'Unlink' : '해제'}</Text>
+                          <Text style={styles.unlinkButtonText}>{L('profile.unlink')}</Text>
                         </TouchableOpacity>
                       ) : (
-                        <Text style={styles.socialAccountRequiredText}>{isForeign ? 'Primary' : '기본'}</Text>
+                        <Text style={styles.socialAccountRequiredText}>{L('common.primary')}</Text>
                       )}
                     </View>
                   );
                 })}
                 
                 <Text style={[styles.socialSectionLabel, { marginTop: 16 }]}>
-                  {isForeign ? 'Available to link' : '추가 연동 가능'}
+                  {L('profile.availableToLink')}
                 </Text>
                 
                 {/* Google 연동 버튼 */}
@@ -1990,7 +1963,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                     onPress={() => handleSocialLink('google.com')}
                   >
                     <Text style={styles.socialLinkIcon}>🔵</Text>
-                    <Text style={styles.socialLinkText}>{isForeign ? 'Link Google' : 'Google 연동'}</Text>
+                    <Text style={styles.socialLinkText}>{L('profile.linkGoogle')}</Text>
                   </TouchableOpacity>
                 )}
                 
@@ -2001,7 +1974,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                     onPress={() => handleSocialLink('naver')}
                   >
                     <Text style={styles.socialLinkIcon}>🟢</Text>
-                    <Text style={styles.socialLinkText}>네이버 연동</Text>
+                    <Text style={styles.socialLinkText}>{L('profile.linkNaver')}</Text>
                   </TouchableOpacity>
                 )}
                 
@@ -2012,7 +1985,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
                     onPress={() => handleSocialLink('apple.com')}
                   >
                     <Text style={styles.socialLinkIcon}>🍎</Text>
-                    <Text style={styles.socialLinkText}>{isForeign ? 'Link Apple' : 'Apple 연동'}</Text>
+                    <Text style={styles.socialLinkText}>{L('profile.linkApple')}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -2022,7 +1995,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
           {/* 설정 섹션 */}
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{isForeign ? 'Settings' : '설정'}</Text>
+              <Text style={styles.sectionTitle}>{L('profile.settings')}</Text>
             </View>
             <TouchableOpacity
               style={styles.settingsMenuItem}
@@ -2031,7 +2004,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             >
               <View style={styles.settingsMenuItemContent}>
                 <Ionicons name="notifications-outline" size={20} color="#3b82f6" />
-                <Text style={styles.settingsMenuItemText}>{isForeign ? 'Notification Settings' : '알림 설정'}</Text>
+                <Text style={styles.settingsMenuItemText}>{L('common.notificationSettings')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
             </TouchableOpacity>
@@ -2042,7 +2015,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             >
               <View style={styles.settingsMenuItemContent}>
                 <Ionicons name="location-outline" size={20} color="#10b981" />
-                <Text style={styles.settingsMenuItemText}>{isForeign ? 'Location Settings' : '위치 설정'}</Text>
+                <Text style={styles.settingsMenuItemText}>{L('common.locationSettings')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color="#cbd5e1" />
             </TouchableOpacity>
@@ -2057,7 +2030,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             >
               <Ionicons name="shield-checkmark-outline" size={16} color="#64748b" />
               <Text style={styles.legalButtonText}>
-                {isForeign ? 'Privacy Policy' : '개인정보처리방침'}
+                {L('common.privacyPolicy')}
               </Text>
             </TouchableOpacity>
             <View style={styles.legalButtonDivider} />
@@ -2068,7 +2041,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             >
               <Ionicons name="document-text-outline" size={16} color="#64748b" />
               <Text style={styles.legalButtonText}>
-                {isForeign ? 'Terms of Service' : '서비스 이용약관'}
+                {L('common.termsOfService')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -2081,7 +2054,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               activeOpacity={0.7}
             >
               <Ionicons name="person-remove-outline" size={15} color="#ef4444" />
-              <Text style={styles.deactivateButtonText}>{isForeign ? 'Delete Account' : '회원 탈퇴'}</Text>
+              <Text style={styles.deactivateButtonText}>{L('common.deleteAccount')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -2090,7 +2063,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               activeOpacity={0.7}
             >
               <Ionicons name="log-out-outline" size={15} color="#ffffff" />
-              <Text style={styles.logoutButtonText}>{isForeign ? 'Logout' : '로그아웃'}</Text>
+              <Text style={styles.logoutButtonText}>{L('profile.logout')}</Text>
             </TouchableOpacity>
           </View>
         </View>

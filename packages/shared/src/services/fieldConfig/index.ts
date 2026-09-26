@@ -1,6 +1,7 @@
 import { doc, getDoc, setDoc, type Firestore } from 'firebase/firestore';
 import type { CampType, STSheetStudent } from '../../types/student';
 import type { STSheetFieldConfig, FieldSectionConfig, FieldItemConfig } from '../../types/fieldConfig';
+import { tr } from '../../i18n';
 
 const COLLECTION = 'stSheetFieldConfig';
 
@@ -245,19 +246,19 @@ export function getFixedFieldValue(
       return student.studentId || null;
     case 'classInfo': {
       if (!student.classNumber && !student.className && !student.classMentor) return null;
-      const mentorLabel = isForeign ? 'mentor' : '멘토';
-      const classSuffix = isForeign ? ' class' : '반';
+      const mentorLabel = tr(isForeign, 'students.mentor');
+      const classSuffix = tr(isForeign, 'students.class2');
       return `${student.classNumber || '-'} | ${student.className || '-'}${classSuffix} | ${student.classMentor || '-'} ${mentorLabel}`;
     }
     case 'unitInfo': {
       if (!student.unit && !student.unitMentor && !student.roomNumber) return null;
-      const unitSuffix = isForeign ? ' unit' : '유닛';
-      const roomSuffix = isForeign ? '' : '호';
-      const roomPrefix = isForeign ? 'Room ' : '';
+      const unitSuffix = tr(isForeign, 'students.unit');
+      const roomSuffix = tr(isForeign, 'students.text');
+      const roomPrefix = tr(isForeign, 'students.room2');
       return `${student.unit || student.unitMentor || '-'}${unitSuffix} | ${roomPrefix}${student.roomNumber || '-'}${roomSuffix}`;
     }
     case 'profile': {
-      const genderLabel = student.gender === 'M' ? (isForeign ? 'M' : '남') : (isForeign ? 'F' : '여');
+      const genderLabel = student.gender === 'M' ? (tr(isForeign, 'students.m')) : (tr(isForeign, 'students.f'));
       return `${student.name} | ${student.englishName || '-'} | ${student.grade} | ${genderLabel}`;
     }
     case 'ssn':
@@ -269,9 +270,7 @@ export function getFixedFieldValue(
     case 'airport': {
       if (campType !== 'EJ') return null;
       if (!student.departureRoute && !student.arrivalRoute) return null;
-      return isForeign
-        ? `Arrival: ${student.departureRoute || '-'} | Departure: ${student.arrivalRoute || '-'}`
-        : `${student.departureRoute || '-'} 입소 | ${student.arrivalRoute || '-'} 퇴소`;
+      return tr(isForeign, 'students.arrivalV0DepartureV1', { v0: student.departureRoute || '-', v1: student.arrivalRoute || '-' });
     }
     case 'passport': {
       if (campType !== 'S') return null;

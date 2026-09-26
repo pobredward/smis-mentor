@@ -23,6 +23,7 @@ import { requestContactsPermission, getContactsPermissionStatus, saveSingleParen
 import { ContactsPermissionDisclosureModal } from './ContactsPermissionDisclosureModal';
 import { authenticatedFetch } from '../utils/apiClient';
 import { db } from '../config/firebase';
+import { L } from '@smis-mentor/shared';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_HEIGHT = SCREEN_HEIGHT * 0.78;
@@ -89,7 +90,7 @@ const EditableRow = React.memo(({
             multiline={isMultiline}
             numberOfLines={isMultiline ? 3 : 1}
             autoFocus
-            placeholder="내용을 입력하세요"
+            placeholder={L('common.enterDetails')}
             placeholderTextColor="#cbd5e1"
           />
           <View style={styles.editButtons}>
@@ -101,7 +102,7 @@ const EditableRow = React.memo(({
             >
               {isSavingThis
                 ? <ActivityIndicator size="small" color="#fff" />
-                : <Text style={styles.editBtnSaveText}>저장</Text>
+                : <Text style={styles.editBtnSaveText}>{L('common.save')}</Text>
               }
             </TouchableOpacity>
             <TouchableOpacity
@@ -110,7 +111,7 @@ const EditableRow = React.memo(({
               style={[styles.editBtn, styles.editBtnCancel]}
               accessibilityRole="button"
             >
-              <Text style={styles.editBtnCancelText}>취소</Text>
+              <Text style={styles.editBtnCancelText}>{L('common.cancel')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -131,9 +132,9 @@ const EditableRow = React.memo(({
             style={styles.editIconBtn}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityRole="button"
-            accessibilityLabel={`${label} 수정`}
+            accessibilityLabel={L('students.edit', { v0: label })}
           >
-            <Text style={styles.editIconText}>수정</Text>
+            <Text style={styles.editIconText}>{L('task.edit')}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -251,7 +252,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
       if (!response.ok) {
         const err = await response.json().catch(() => ({ error: '' })) as { error?: string };
         logger.error('저장 API 응답 오류:', { status: response.status, error: err.error });
-        throw new Error(err.error || `저장 실패 (${response.status})`);
+        throw new Error(err.error || L('students.saveFailed', { v0: response.status }));
       }
 
       // 레거시 필드는 최상위에, 동적 필드는 displayFields 하위에 저장
@@ -276,8 +277,8 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
       setEditingField(null);
     } catch (e: unknown) {
       logger.error('모바일 학생 카드 저장 실패:', e);
-      const message = e instanceof Error ? e.message : '저장에 실패했습니다. 다시 시도해주세요.';
-      Alert.alert('저장 실패', message);
+      const message = e instanceof Error ? e.message : L('common.failedToSavePleaseTry');
+      Alert.alert(L('common.saveFailed'), message);
     } finally {
       setFieldSaving(false);
     }
@@ -469,7 +470,7 @@ const StudentCard = React.memo(({
                         <TouchableOpacity
                           onPress={() => onSaveContact(s)}
                           style={styles.saveContactBtn}
-                          accessibilityLabel="보호자 연락처 저장"
+                          accessibilityLabel={L('students.saveParentContacts')}
                           accessibilityRole="button"
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         >

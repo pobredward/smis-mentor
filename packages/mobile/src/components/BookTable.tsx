@@ -9,6 +9,7 @@ import {
   type TimetableClassColumn,
   type TimetableSubject,
 } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 interface Props {
   classes: TimetableClassColumn[];
@@ -61,15 +62,15 @@ export function BookTable({ classes, classInfo, books, subjects, isForeign = fal
   return (
     <View style={s.wrap}>
       <View style={s.head}>
-        <Text style={s.title}>{isForeign ? 'Books' : '교재'}</Text>
-        <Text style={s.hint}>{isForeign ? 'by level code' : '반마다 코드 하나로 정해집니다'}</Text>
+        <Text style={s.title}>{L('schedule.books')}</Text>
+        <Text style={s.hint}>{L('schedule.byLevelCode')}</Text>
       </View>
 
       <View style={s.card}>
         {/* 헤더 */}
         <View style={s.row}>
           <View style={[s.labelCell, { width: LABEL_W }]}>
-            <Text style={s.labelText}>{isForeign ? 'Code' : '코드'}</Text>
+            <Text style={s.labelText}>{L('schedule.code')}</Text>
           </View>
           {classes.map((c) => {
             const info = classInfo[c.classCode];
@@ -84,7 +85,7 @@ export function BookTable({ classes, classInfo, books, subjects, isForeign = fal
                   </Text>
                 )}
                 <Text style={[s.code, { fontSize: font }]} numberOfLines={1}>
-                  {codeOf(c) || '미정'}
+                  {codeOf(c) || L('lodging.tbd')}
                 </Text>
               </View>
             );
@@ -120,7 +121,7 @@ export function BookTable({ classes, classInfo, books, subjects, isForeign = fal
               {classes.map((c) => (
                 <View key={c.classCode} style={[s.cell, { width: colW, height: ROW_H }]}>
                   <Text style={[s.code, { fontSize: font }]} numberOfLines={1}>
-                    {spareOf(c) || '미정'}
+                    {spareOf(c) || L('lodging.tbd')}
                   </Text>
                 </View>
               ))}
@@ -155,7 +156,7 @@ export function BookTable({ classes, classInfo, books, subjects, isForeign = fal
       {classes.some((c) => {
         const code = codeOf(c) || spareOf(c);
         return code && !booksFor(books, code);
-      }) && <Text style={s.warn}>교재 리스트에 없는 코드가 있습니다 (? 표시).</Text>}
+      }) && <Text style={s.warn}>{L('content.someCodesAreNotIn')}</Text>}
     </View>
   );
 }

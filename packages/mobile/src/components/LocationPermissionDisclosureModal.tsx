@@ -9,6 +9,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { L } from '@smis-mentor/shared';
 
 interface LocationPermissionDisclosureModalProps {
   visible: boolean;
@@ -63,46 +64,38 @@ export function LocationPermissionDisclosureModal({
             </View>
 
             <Text style={styles.title}>
-              {isForeign ? 'Location Data Collection Notice' : '위치 정보 수집 안내'}
+              {L('location.locationDataCollectionNotice2')}
             </Text>
 
             {/* Google Play 정책 필수 형식 요약 문단 — 제목 바로 아래에 스크롤 없이 보여야 함 */}
             <View style={styles.mandatoryDisclosure}>
               <Text style={styles.mandatoryText}>
-                {isForeign
-                  ? 'SMIS Mentor collects location data (GPS coordinates) to enable the location sharing feature in the Camp tab. This data is collected in the background and when the app is closed or not in use. This data is not used for advertising.'
-                  : 'SMIS Mentor는 캠프 탭의 위치 공유 기능을 위해 위치 데이터(GPS 좌표)를 수집합니다. 앱이 종료된 경우(when the app is closed) 및 백그라운드(background) 상태에서도 수집됩니다. 이 데이터는 광고 목적으로 사용되지 않습니다.'}
+                {L('common.smisMentorCollectsLocationData')}
               </Text>
             </View>
 
             {/* 권한이 이미 있는 경우: 재활성화임을 명확히 안내 */}
             {hasPermission && (
               <Text style={styles.resumeNotice}>
-                {isForeign
-                  ? 'Location sharing will restart. Please review the data collection details below.'
-                  : '위치 공유를 다시 시작합니다. 아래 수집 내용을 확인해 주세요.'}
+                {L('location.locationSharingWillRestartPlease')}
               </Text>
             )}
 
             {/* 수집하는 정보 */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>
-                {isForeign ? 'Data Collected' : '수집하는 정보'}
+                {L('location.dataCollected')}
               </Text>
               <View style={styles.bulletItem}>
                 <Ionicons name="radio-button-on" size={8} color="#3b82f6" style={styles.bullet} />
                 <Text style={styles.bulletText}>
-                  {isForeign
-                    ? 'GPS-based real-time location (latitude & longitude)'
-                    : 'GPS 기반 실시간 위치(위도·경도)'}
+                  {L('location.gpsBasedRealTimeLocation')}
                 </Text>
               </View>
               <View style={styles.bulletItem}>
                 <Ionicons name="radio-button-on" size={8} color="#3b82f6" style={styles.bullet} />
                 <Text style={styles.bulletText}>
-                  {isForeign
-                    ? 'Device battery level and charging status'
-                    : '기기 배터리 잔량 및 충전 상태'}
+                  {L('location.deviceBatteryLevelAndCharging')}
                 </Text>
               </View>
             </View>
@@ -110,12 +103,10 @@ export function LocationPermissionDisclosureModal({
             {/* 사용 목적 */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>
-                {isForeign ? 'Purpose' : '수집 목적'}
+                {L('location.purpose')}
               </Text>
               <Text style={styles.bodyText}>
-                {isForeign
-                  ? 'Used to share real-time locations among camp staff. Location data is not used for advertising, analytics, or any other purpose.'
-                  : '같은 캠프 스태프끼리 실시간으로 위치를 공유하기 위해 사용됩니다. 위치 정보는 광고·분석 등 다른 목적으로 사용되지 않습니다.'}
+                {L('location.usedToShareRealTime')}
               </Text>
             </View>
 
@@ -124,46 +115,36 @@ export function LocationPermissionDisclosureModal({
               <View style={styles.bgWarningHeader}>
                 <Ionicons name="information-circle" size={18} color="#d97706" />
                 <Text style={styles.bgWarningTitle}>
-                  {isForeign
-                    ? 'Background & Always-On Location Collection'
-                    : '백그라운드 및 상시 위치 수집'}
+                  {L('location.backgroundAlwaysOnLocationCollection')}
                 </Text>
               </View>
               <Text style={styles.bgWarningText}>
-                {isForeign
-                  ? `While location sharing is on, your location is collected in the background, when the app is minimized, when you are using another app, and even when the app is closed or not in use.${Platform.OS === 'android' ? ' A persistent foreground service notification will appear in the status bar while active.' : ''}\n\nUpdates occur every 15 seconds or when you move 20 meters to preserve battery life.`
-                  : `위치 공유가 켜진 동안에는 앱을 최소화하거나(background) 다른 앱을 사용 중이거나 앱이 종료된 경우(when the app is closed)에도 위치가 수집됩니다.${Platform.OS === 'android' ? ' 공유 중에는 알림 바에 포그라운드 서비스 알림이 상시 표시됩니다.' : ''}\n\n배터리 소모를 줄이기 위해 15초 간격 또는 20m 이동 시에만 업데이트합니다.`}
+                {L('location.whileLocationSharingIsOn', { v0: Platform.OS === 'android' ? ' A persistent foreground service notification will appear in the status bar while active.' : '', v1: Platform.OS === 'android' ? ' 공유 중에는 알림 바에 포그라운드 서비스 알림이 상시 표시됩니다.' : '' })}
               </Text>
             </View>
 
             {/* 공유 대상 */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>
-                {isForeign ? 'Who Can See Your Location' : '공유 대상'}
+                {L('location.whoCanSeeYourLocation')}
               </Text>
               <Text style={styles.bodyText}>
-                {isForeign
-                  ? 'Visible only to staff in the same camp. Not shared with any external third parties.'
-                  : '같은 캠프 코드에 속한 스태프에게만 표시됩니다. 외부 제3자와는 공유하지 않습니다.'}
+                {L('location.visibleOnlyToStaffIn')}
               </Text>
             </View>
 
             {/* 보관 및 중지 */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>
-                {isForeign ? 'Stop Collection' : '수집 중단'}
+                {L('location.stopCollection')}
               </Text>
               <Text style={styles.bodyText}>
-                {isForeign
-                  ? 'Turning off the location sharing switch immediately stops collection and deactivates your location data.'
-                  : '위치 공유 스위치를 끄면 즉시 수집이 중단되고 위치 데이터가 비활성 처리됩니다.'}
+                {L('location.turningOffTheLocationSharing')}
               </Text>
             </View>
 
             <Text style={styles.privacyNote}>
-              {isForeign
-                ? 'See Privacy Policy §9 for more details.'
-                : '자세한 내용은 개인정보처리방침 §9를 확인하세요.'}
+              {L('location.seePrivacyPolicy9For')}
             </Text>
           </ScrollView>
 
@@ -174,10 +155,10 @@ export function LocationPermissionDisclosureModal({
               onPress={onDeny}
               activeOpacity={0.75}
               accessible
-              accessibilityLabel={isForeign ? 'Cancel' : '취소'}
+              accessibilityLabel={L('common.cancel')}
               accessibilityRole="button"
             >
-              <Text style={styles.denyText}>{isForeign ? 'Cancel' : '취소'}</Text>
+              <Text style={styles.denyText}>{L('common.cancel')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -188,7 +169,7 @@ export function LocationPermissionDisclosureModal({
               accessibilityLabel={
                 isForeign
                   ? hasPermission ? 'Confirm & Start Sharing' : 'Agree and Continue'
-                  : hasPermission ? '확인하고 공유 시작' : '동의하고 계속'
+                  : hasPermission ? L('location.confirmAndStartSharing') : L('location.agreeAndContinue')
               }
               accessibilityRole="button"
             >
@@ -196,7 +177,7 @@ export function LocationPermissionDisclosureModal({
               <Text style={styles.acceptText}>
                 {isForeign
                   ? hasPermission ? 'Confirm & Start Sharing' : 'Agree & Continue'
-                  : hasPermission ? '확인하고 공유 시작' : '동의하고 계속'}
+                  : hasPermission ? L('location.confirmAndStartSharing') : L('location.agreeAndContinue')}
               </Text>
             </TouchableOpacity>
           </View>

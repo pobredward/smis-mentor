@@ -19,6 +19,7 @@ import {
   type LodgingRoomView,
   type STSheetStudent,
 } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 export type LodgingTarget = { kind: 'room'; room: LodgingRoomView } | { kind: 'place'; place: LodgingPlaceView };
 
@@ -74,7 +75,7 @@ export default function LodgingDetail({
           <button
             onClick={onClose}
             className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-            aria-label="닫기"
+            aria-label={L('common.close')}
           >
             ✕
           </button>
@@ -111,7 +112,7 @@ function RoomHead({ room }: { room: LodgingRoomView }) {
         </span>
       </div>
       <p className="mt-0.5 text-xs text-gray-500">
-        {room.wing === 'main' ? '본관' : '별관'} {room.floor}층
+        {room.wing === 'main' ? L('lodging.mainBuilding') : L('lodging.annex')} {room.floor}{L('lodging.f')}
         {room.label ? ` · ${room.label}` : ''}
         {room.note ? ` · ${room.note}` : ''}
       </p>
@@ -130,8 +131,8 @@ function PlaceHead({ place }: { place: LodgingPlaceView }) {
         </span>
       </div>
       <p className="mt-0.5 text-xs text-gray-500">
-        지하 1층{place.area ? ` · ${place.area}㎡` : ''}
-        {place.cap ? ` · ${place.cap}명 수용` : ''}
+        {L('lodging.b1')}{place.area ? ` · ${place.area}㎡` : ''}
+        {place.cap ? L('lodging.capacity', { v0: place.cap }) : ''}
         {place.purpose ? ` · ${place.purpose}` : ''}
       </p>
     </div>
@@ -196,13 +197,13 @@ function RoomBody({
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
           {room.teachers.length > 0 && (
             <>
-              <dt className="text-gray-500">{isForeign ? 'Teachers' : '선생님'}</dt>
+              <dt className="text-gray-500">{L('lodging.teachers')}</dt>
               <dd className="text-gray-900">{room.teachers.join(', ')}</dd>
             </>
           )}
           {room.unitMentor && room.students.length > 0 && (
             <>
-              <dt className="text-gray-500">{isForeign ? 'Unit mentor' : '유닛 멘토'}</dt>
+              <dt className="text-gray-500">{L('lodging.unitMentor')}</dt>
               <dd className="text-gray-900">{room.unitMentor}</dd>
             </>
           )}
@@ -228,7 +229,7 @@ function RoomBody({
         </div>
       ) : (
         <p className="text-sm text-gray-500">
-          {isForeign ? 'No students in this room.' : '시트에 이 방으로 배정된 학생이 없습니다.'}
+          {L('lodging.noStudentsInThisRoom')}
         </p>
       )}
 
@@ -238,16 +239,16 @@ function RoomBody({
           onClick={startEdit}
           className="w-full rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
         >
-          용도·선생님 편집
+          {L('lodging.editUseTeachers')}
         </button>
       )}
 
       {isAdmin && editing && (
         <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-          <Field label="용도">
+          <Field label={L('lodging.use')}>
             <div className="flex flex-wrap gap-1">
               <Chip on={purpose === ''} onClick={() => setPurpose('')}>
-                자동
+                {L('lodging.auto')}
               </Chip>
               {LODGING_PURPOSES.filter((p) => p !== '빈방').map((p) => (
                 <Chip key={p} on={purpose === p} onClick={() => setPurpose(p)}>
@@ -258,18 +259,18 @@ function RoomBody({
             <input
               value={purpose}
               onChange={(e) => setPurpose(e.target.value)}
-              placeholder="직접 입력 (비우면 자동: 명단 있으면 학생방)"
+              placeholder={L('lodging.enterManuallyLeaveBlankFor')}
               className="mt-1.5 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
             />
           </Field>
-          <Field label="칸에 찍히는 한 줄" hint="예: Middle · Speaking">
+          <Field label={L('lodging.oneLineShownInEach')} hint={L('lodging.eGMiddleSpeaking')}>
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
             />
           </Field>
-          <Field label="선생님 (이 방에 묵는 사람)">
+          <Field label={L('lodging.teachersStayingInThisRoom')}>
             {teachers.length > 0 && (
               <div className="mb-1.5 flex flex-wrap gap-1">
                 {teachers.map((t) => (
@@ -278,7 +279,7 @@ function RoomBody({
                     <button
                       onClick={() => setTeachers(teachers.filter((x) => x !== t))}
                       className="text-gray-400 hover:text-red-600"
-                      aria-label={`${t} 빼기`}
+                      aria-label={L('lodging.remove', { v0: t })}
                     >
                       ✕
                     </button>
@@ -295,7 +296,7 @@ function RoomBody({
                   addTeacher(teacherInput);
                 }
               }}
-              placeholder="이름 입력 후 Enter, 또는 아래에서 고르기"
+              placeholder={L('lodging.typeANameAndPress2')}
               className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
             />
             {candidates.length > 0 && (
@@ -308,7 +309,7 @@ function RoomBody({
               </div>
             )}
           </Field>
-          <Field label="메모">
+          <Field label={L('common.memo')}>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -322,14 +323,14 @@ function RoomBody({
               className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700"
               disabled={saving}
             >
-              취소
+              {L('common.cancel')}
             </button>
             <button
               onClick={save}
               className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               disabled={saving}
             >
-              {saving ? '저장 중…' : '저장'}
+              {saving ? L('common.saving') : L('common.save')}
             </button>
           </div>
         </div>
@@ -366,7 +367,7 @@ function PlaceBody({
         <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">{place.settingNote}</p>
       ) : (
         <p className="text-sm text-gray-500">
-          {place.kind === 'hall' ? '강당·홀 — 전체 집합이나 야외수업조 편성에 씁니다.' : '시설 — 명단은 없습니다.'}
+          {place.kind === 'hall' ? L('lodging.hallUsedForAssembliesOr') : L('lodging.facilityNoRoster')}
         </p>
       )}
       {isAdmin && !editing && (
@@ -374,19 +375,19 @@ function PlaceBody({
           onClick={startEdit}
           className="w-full rounded-md bg-gray-900 px-3 py-2 text-sm font-medium text-white hover:bg-gray-800"
         >
-          이 캠프에서의 용도 편집
+          {L('lodging.editUseForThisCamp')}
         </button>
       )}
       {isAdmin && editing && (
         <div className="space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-3">
-          <Field label="용도" hint="예: 전체 집합, 원어민 수업, 저녁 식사">
+          <Field label={L('lodging.use')} hint={L('lodging.eGAssemblyNativeTeacher2')}>
             <input
               value={purpose}
               onChange={(e) => setPurpose(e.target.value)}
               className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
             />
           </Field>
-          <Field label="메모">
+          <Field label={L('common.memo')}>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -400,7 +401,7 @@ function PlaceBody({
               className="rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-700"
               disabled={saving}
             >
-              취소
+              {L('common.cancel')}
             </button>
             <button
               onClick={async () => {
@@ -410,7 +411,7 @@ function PlaceBody({
               className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
               disabled={saving}
             >
-              {saving ? '저장 중…' : '저장'}
+              {saving ? L('common.saving') : L('common.save')}
             </button>
           </div>
         </div>
@@ -500,11 +501,11 @@ function StudentCard({
       <div className="space-y-0.5 text-[10px] text-gray-600">
         <p className="truncate">{occ.englishName || '-'}</p>
         <p className="truncate text-[9px]">
-          {isForeign ? 'Class' : '반'}:{occ.classMentor || '-'}
-          {occ.className ? `(${occ.className}반)` : ''}
+          {L('common.class')}:{occ.classMentor || '-'}
+          {occ.className ? L('common.class2', { v0: occ.className }) : ''}
         </p>
         <p className="truncate text-[9px]">
-          {isForeign ? 'Room' : '방'}:{occ.unitMentor || '-'}({roomNum}호)
+          {L('common.room')}:{occ.unitMentor || '-'}({roomNum}{L('lodging.room')}
         </p>
         {extra && <p className="truncate text-[9px] font-semibold text-green-600">{extra}</p>}
       </div>

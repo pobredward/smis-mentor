@@ -1,3 +1,4 @@
+import { localizeLabels, L } from '../i18n';
 import { sameCampGroup } from '../utils/campAccess';
 import { Timestamp } from 'firebase/firestore';
 
@@ -37,13 +38,13 @@ export const INVENTORY_UNITS = ['개', '정', '포', '병', '통', '장', '매',
  */
 export const INVENTORY_USAGES = ['oral', 'topical', 'supply', 'equipment', 'operational'] as const;
 export type InventoryUsage = (typeof INVENTORY_USAGES)[number];
-export const INVENTORY_USAGE_LABELS: Record<InventoryUsage, string> = {
+export const INVENTORY_USAGE_LABELS: Record<InventoryUsage, string> = localizeLabels({
   oral: '먹는 약',
   topical: '바르는·붙이는 약',
   supply: '처치 소모품',
   equipment: '비품',
   operational: '일반 소모품',
-};
+});
 /** 품목 추가 화면에서 보여줄 순서 (먹는 약 → 바르는 약 → 처치 소모품 → 일반 소모품 → 비품) */
 export const INVENTORY_USAGE_ORDER: readonly InventoryUsage[] = ['oral', 'topical', 'supply', 'operational', 'equipment'];
 /** 분류별로 먼저 보여줄 유형 (나머지는 '기타 유형'으로 접어둠) */
@@ -181,7 +182,7 @@ export const USE_REASONS = ['수업', '레크·행사', '생활', '학생 지급
 /** 일괄 실사 사유 */
 export const STOCKTAKE_REASONS = ['기수 시작 실사', '중간 점검', '기수 종료 실사', '입력 실수 정정'] as const;
 
-export const INVENTORY_MOVEMENT_LABELS: Record<InventoryMovementReason, string> = {
+export const INVENTORY_MOVEMENT_LABELS: Record<InventoryMovementReason, string> = localizeLabels({
   dose: '약 복용',
   dose_adjust: '복용 수량 수정',
   dose_revert: '복용 기록 삭제(복구)',
@@ -189,28 +190,27 @@ export const INVENTORY_MOVEMENT_LABELS: Record<InventoryMovementReason, string> 
   adjust: '수기 조정',
   use: '사용',
   transfer: '그룹 간 이동',
-};
+});
 
 /** 그룹 간 이동 사유 — 버튼으로 빠르게 (선택) */
 export const TRANSFER_REASONS = ['재고 나눠주기', '부족한 그룹 지원', '보관 장소 정리', '행사·수업 준비', '반납'] as const;
 
 /** 입출고 기록 화면의 묶음 필터 */
-export const MOVEMENT_FILTERS = [
+export const MOVEMENT_FILTERS = localizeLabels([
   { key: 'all', label: '전체', reasons: [] as InventoryMovementReason[] },
   { key: 'in', label: '입고', reasons: ['restock'] as InventoryMovementReason[] },
   { key: 'use', label: '사용', reasons: ['use'] as InventoryMovementReason[] },
   { key: 'dose', label: '환자 투약', reasons: ['dose', 'dose_adjust', 'dose_revert'] as InventoryMovementReason[] },
   { key: 'transfer', label: '그룹 간 이동', reasons: ['transfer'] as InventoryMovementReason[] },
   { key: 'adjust', label: '수기 조정', reasons: ['adjust'] as InventoryMovementReason[] },
-] as const;
+] as const);
 export type MovementFilterKey = (typeof MOVEMENT_FILTERS)[number]['key'];
 
 /** 한 줄 설명 — 그룹 간 이동은 보낸/받은 방향과 상대 그룹까지 */
 export function movementLabel(m: Pick<InventoryMovement, 'reason' | 'delta' | 'refLabel' | 'counterGroupName'>): string {
   if (m.reason === 'transfer') {
-    return m.delta < 0
-      ? `${m.counterGroupName ?? '다른 그룹'}(으)로 보냄`
-      : `${m.counterGroupName ?? '다른 그룹'}에서 받음`;
+    const other = m.counterGroupName ?? L('inventory.otherGroup');
+    return m.delta < 0 ? L('inventory.sentToN', { v0: other }) : L('inventory.receivedFromN', { v0: other });
   }
   return m.refLabel || INVENTORY_MOVEMENT_LABELS[m.reason];
 }
@@ -479,12 +479,12 @@ export type SupplyStore = (typeof SUPPLY_STORES)[number];
 
 export const SUPPLY_REQUEST_STATUSES = ['requested', 'onhold', 'purchased', 'rejected'] as const;
 export type SupplyRequestStatus = (typeof SUPPLY_REQUEST_STATUSES)[number];
-export const SUPPLY_REQUEST_STATUS_LABELS: Record<SupplyRequestStatus, string> = {
+export const SUPPLY_REQUEST_STATUS_LABELS: Record<SupplyRequestStatus, string> = localizeLabels({
   requested: '요청',
   onhold: '보류',
   purchased: '구매 완료',
   rejected: '반려',
-};
+});
 /** 누구를 위한 요청인가: 학생 / 멘토 / 캠프 공용 재고(구매 후 재고에 입고) */
 export type SupplyForType = 'student' | 'mentor' | 'camp';
 
@@ -660,11 +660,11 @@ export const supplySettleKind = (r: Pick<SupplyRequest, 'forType'>): SupplySettl
 export type SupplyLineSettleKind = 'envelope' | 'transfer' | 'parent';
 export const supplyLineSettleKind = (r: Pick<SupplyRequest, 'forType'>, line: Pick<SupplyRequestLine, 'parentBill'>): SupplyLineSettleKind | null =>
   line.parentBill ? 'parent' : supplySettleKind(r);
-export const SUPPLY_SETTLE_LABELS: Record<SupplyLineSettleKind, { title: string; verb: string; icon: string }> = {
+export const SUPPLY_SETTLE_LABELS: Record<SupplyLineSettleKind, { title: string; verb: string; icon: string }> = localizeLabels({
   envelope: { title: '용돈봉투', verb: '봉투에서 빼서 전달', icon: '📒' },
   transfer: { title: '본인 송금', verb: '송금', icon: '💸' },
   parent: { title: '학부모 청구', verb: '학부모님께 청구', icon: '🧾' },
-};
+});
 
 /** 정산할 품목 1줄 (구매 완료 + 금액 있음) */
 export interface SupplySettleLine {
@@ -803,11 +803,11 @@ export function supplyProgress(
 
 export const PURCHASE_STATUSES = ['needed', 'ordered', 'received'] as const;
 export type PurchaseStatus = (typeof PURCHASE_STATUSES)[number];
-export const PURCHASE_STATUS_LABELS: Record<PurchaseStatus, string> = {
+export const PURCHASE_STATUS_LABELS: Record<PurchaseStatus, string> = localizeLabels({
   needed: '구매 필요',
   ordered: '주문함',
   received: '입고 완료',
-};
+});
 
 /** 구매 목록 항목 (요청 취합분 또는 수동 추가) — 캠프별 */
 export interface PurchaseItem {
@@ -835,11 +835,11 @@ export interface PurchaseItem {
 
 export const LOST_ITEM_STATUSES = ['found', 'claimed', 'discarded'] as const;
 export type LostItemStatus = (typeof LOST_ITEM_STATUSES)[number];
-export const LOST_ITEM_STATUS_LABELS: Record<LostItemStatus, string> = {
+export const LOST_ITEM_STATUS_LABELS: Record<LostItemStatus, string> = localizeLabels({
   found: '보관 중',
   claimed: '주인 찾음',
   discarded: '폐기',
-};
+});
 
 /**
  * 분실물 종류
@@ -850,15 +850,15 @@ export const LOST_ITEM_STATUS_LABELS: Record<LostItemStatus, string> = {
 export const LOST_ITEM_KINDS = ['found', 'lost'] as const;
 export type LostItemKind = (typeof LOST_ITEM_KINDS)[number];
 export const lostItemKind = (l: Pick<LostItem, 'kind'>): LostItemKind => l.kind ?? 'found';
-export const LOST_KIND_LABELS: Record<LostItemKind, { tab: string; action: string; en: string }> = {
+export const LOST_KIND_LABELS: Record<LostItemKind, { tab: string; action: string; en: string }> = localizeLabels({
   found: { tab: '주운 물건', action: '주웠어요', en: 'Found' },
   lost:  { tab: '찾는 물건', action: '잃어버렸어요', en: 'Lost' },
-};
+});
 /** 같은 status 라도 종류에 따라 다르게 읽힌다 */
-export const LOST_STATUS_LABELS_BY_KIND: Record<LostItemKind, Record<LostItemStatus, string>> = {
+export const LOST_STATUS_LABELS_BY_KIND: Record<LostItemKind, Record<LostItemStatus, string>> = localizeLabels({
   found: { found: '보관 중', claimed: '주인 찾음', discarded: '폐기' },
   lost:  { found: '찾는 중', claimed: '찾음',      discarded: '못 찾음' },
-};
+});
 export const lostStatusLabel = (l: Pick<LostItem, 'kind' | 'status'>): string =>
   LOST_STATUS_LABELS_BY_KIND[lostItemKind(l)][l.status];
 /** 아직 진행 중인 건 (보관 중 · 찾는 중) */

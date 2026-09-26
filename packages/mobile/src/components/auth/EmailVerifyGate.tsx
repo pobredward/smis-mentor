@@ -8,6 +8,7 @@ import { auth } from '../../config/firebase';
 import { useAuth } from '../../context/AuthContext';
 import { mobileAuthenticatedPost } from '../../services/apiClient';
 import { signOut } from '../../services/authService';
+import { L } from '@smis-mentor/shared';
 
 export function EmailVerifyGate() {
   const { userData, refreshUserData } = useAuth();
@@ -16,7 +17,6 @@ export function EmailVerifyGate() {
   const [editing, setEditing] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [, force] = useState(0);
-  const en = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
   const docVerified = (userData as { isEmailVerified?: boolean } | null)?.isEmailVerified === true;
   const needs = !!userData && !docVerified && !!auth.currentUser && !auth.currentUser.emailVerified;
 
@@ -31,16 +31,16 @@ export function EmailVerifyGate() {
         await mobileAuthenticatedPost('/api/auth/email-verification', { action: 'sync' });
         await refreshUserData();
         force((n) => n + 1);
-        Alert.alert(en ? 'Verified' : '인증 완료', en ? 'Your email has been verified.' : '이메일 인증이 완료되었습니다.');
+        Alert.alert(L('profile.verified'), L('profile.yourEmailHasBeenVerified'));
       } else if (!silent) {
-        Alert.alert(en ? 'Not yet' : '아직 인증 전', en ? 'Please tap the link in the email first.' : '메일의 링크를 먼저 눌러주세요.');
+        Alert.alert(L('profile.notVerifiedYet'), L('profile.pleaseTapTheLinkIn'));
       }
     } catch {
-      if (!silent) Alert.alert(en ? 'Error' : '오류', en ? 'Could not check. Please try again.' : '확인하지 못했습니다. 다시 시도해주세요.');
+      if (!silent) Alert.alert(L('common.error'), L('profile.couldNotVerifyPleaseTry'));
     } finally {
       setChecking(false);
     }
-  }, [en, refreshUserData]);
+  }, [refreshUserData]);
 
   // 메일 앱에서 링크를 누르고 돌아오면 자동 확인
   useEffect(() => {
@@ -62,25 +62,25 @@ export function EmailVerifyGate() {
     try {
       const r = await mobileAuthenticatedPost<{ verified?: boolean }>('/api/auth/email-verification', { action: 'resend' });
       if (r.verified) { await check(true); return; }
-      Alert.alert(en ? 'Sent' : '발송 완료', en ? 'We sent the verification email again.' : '인증 메일을 다시 보냈습니다.');
+      Alert.alert(L('profile.sent'), L('profile.verificationEmailSentAgain'));
     } catch (e) {
-      Alert.alert(en ? 'Error' : '오류', (e as Error)?.message || (en ? 'Failed to send.' : '보내지 못했습니다.'));
+      Alert.alert(L('common.error'), (e as Error)?.message || (L('profile.couldNotSend')));
     } finally {
       setSending(false);
     }
   };
 
   const changeEmail = async () => {
-    if (!/^\S+@\S+\.\S+$/.test(newEmail.trim())) { Alert.alert(en ? 'Check email' : '확인', en ? 'Please enter a valid email.' : '올바른 이메일을 입력해주세요.'); return; }
+    if (!/^\S+@\S+\.\S+$/.test(newEmail.trim())) { Alert.alert(L('common.ok'), L('profile.pleaseEnterAValidEmail')); return; }
     setSending(true);
     try {
       await mobileAuthenticatedPost('/api/user/change-email', { email: newEmail.trim() });
       await auth.currentUser?.reload();
       await refreshUserData();
       setEditing(false);
-      Alert.alert(en ? 'Changed' : '변경 완료', en ? 'We sent a verification email to the new address.' : '새 주소로 인증 메일을 보냈습니다.');
+      Alert.alert(L('profile.changed'), L('profile.verificationEmailSentToThe'));
     } catch (e) {
-      Alert.alert(en ? 'Error' : '오류', (e as Error)?.message || (en ? 'Could not change the email.' : '이메일을 바꾸지 못했습니다.'));
+      Alert.alert(L('common.error'), (e as Error)?.message || (L('profile.couldNotChangeTheEmail')));
     } finally {
       setSending(false);
     }
@@ -91,37 +91,37 @@ export function EmailVerifyGate() {
     <Modal visible={needs} animationType="fade" presentationStyle="fullScreen" onRequestClose={() => undefined}>
       <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#fff', justifyContent: 'center', padding: 24 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <Text style={{ fontSize: 40 }}>📧</Text>
-        <Text style={{ fontSize: 22, fontWeight: '800', color: '#111827', marginTop: 8 }}>{en ? 'Verify your email' : '이메일 인증이 필요합니다'}</Text>
+        <Text style={{ fontSize: 22, fontWeight: '800', color: '#111827', marginTop: 8 }}>{L('profile.verifyYourEmail')}</Text>
         <Text style={{ fontSize: 14, color: '#4b5563', marginTop: 10, lineHeight: 21 }}>
-          {en ? 'We sent a verification link to' : '아래 주소로 인증 메일을 보냈습니다.'}{'\n'}
+          {L('profile.weSentAVerificationLink')}{'\n'}
           <Text style={{ fontWeight: '700', color: '#111827' }}>{userData?.email}</Text>{'\n'}
-          {en ? 'Tap the link in the email, then come back to the app. Check your spam folder too.' : '메일의 링크를 누른 뒤 앱으로 돌아오세요. 메일이 보이지 않으면 스팸함도 확인해주세요.'}
+          {L('profile.tapTheLinkInThe')}
         </Text>
 
         <TouchableOpacity onPress={() => check(false)} disabled={checking} style={[btn, { backgroundColor: '#2563eb', marginTop: 24, opacity: checking ? 0.6 : 1 }]}>
-          {checking ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{en ? 'I have verified' : '인증 완료했어요'}</Text>}
+          {checking ? <ActivityIndicator color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{L('profile.iHaveVerified')}</Text>}
         </TouchableOpacity>
         <TouchableOpacity onPress={resend} disabled={sending} style={[btn, { borderWidth: 1, borderColor: '#d1d5db', marginTop: 10, opacity: sending ? 0.6 : 1 }]}>
-          <Text style={{ color: '#374151', fontWeight: '600', fontSize: 15 }}>{en ? 'Resend email' : '인증 메일 다시 보내기'}</Text>
+          <Text style={{ color: '#374151', fontWeight: '600', fontSize: 15 }}>{L('profile.resendEmail')}</Text>
         </TouchableOpacity>
 
         {editing ? (
           <View style={{ marginTop: 20, gap: 8 }}>
             <TextInput value={newEmail} onChangeText={setNewEmail} autoCapitalize="none" keyboardType="email-address" autoCorrect={false}
-              placeholder={en ? 'Correct email address' : '올바른 이메일 주소'}
+              placeholder={L('profile.correctEmailAddress')}
               style={{ borderWidth: 1, borderColor: '#d1d5db', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 15 }} />
             <View style={{ flexDirection: 'row', gap: 8 }}>
-              <TouchableOpacity onPress={() => setEditing(false)} style={[btn, { flex: 1, borderWidth: 1, borderColor: '#d1d5db' }]}><Text>{en ? 'Cancel' : '취소'}</Text></TouchableOpacity>
-              <TouchableOpacity onPress={changeEmail} disabled={sending} style={[btn, { flex: 1, backgroundColor: '#1f2937' }]}><Text style={{ color: '#fff', fontWeight: '600' }}>{en ? 'Change & resend' : '바꾸고 다시 보내기'}</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setEditing(false)} style={[btn, { flex: 1, borderWidth: 1, borderColor: '#d1d5db' }]}><Text>{L('common.cancel')}</Text></TouchableOpacity>
+              <TouchableOpacity onPress={changeEmail} disabled={sending} style={[btn, { flex: 1, backgroundColor: '#1f2937' }]}><Text style={{ color: '#fff', fontWeight: '600' }}>{L('profile.changeResend')}</Text></TouchableOpacity>
             </View>
           </View>
         ) : (
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 24 }}>
             <TouchableOpacity onPress={() => { setNewEmail(userData?.email || ''); setEditing(true); }}>
-              <Text style={{ fontSize: 13, color: '#6b7280', textDecorationLine: 'underline' }}>{en ? 'Wrong email address?' : '이메일 주소가 틀렸나요?'}</Text>
+              <Text style={{ fontSize: 13, color: '#6b7280', textDecorationLine: 'underline' }}>{L('profile.wrongEmailAddress')}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => { void signOut(); }}>
-              <Text style={{ fontSize: 13, color: '#9ca3af', textDecorationLine: 'underline' }}>{en ? 'Log out' : '로그아웃'}</Text>
+              <Text style={{ fontSize: 13, color: '#9ca3af', textDecorationLine: 'underline' }}>{L('profile.logOut2')}</Text>
             </TouchableOpacity>
           </View>
         )}

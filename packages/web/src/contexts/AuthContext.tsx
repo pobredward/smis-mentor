@@ -10,6 +10,7 @@ import { getUserByEmail, getUserById, updateUserActiveJobCode } from '@/lib/fire
 import { removeCache, CACHE_STORE } from '@/lib/cacheUtils';
 import { User } from '@/types';
 import { logger, ensureActiveJobExperience } from '@smis-mentor/shared';
+import { setCurrentLocale, localeOfUser } from '@smis-mentor/shared';
 
 type AuthContextType = {
   currentUser: FirebaseUser | null;
@@ -292,6 +293,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     waitForAuthReady,
     updateActiveJobCode,
   }), [currentUser, userData, loading, authReady, refreshUserData, waitForAuthReady, updateActiveJobCode]);
+
+  // 화면 언어 = 로그인한 사람 (계정 언어 설정 → 없으면 역할). 자식이 그리기 전에 맞춘다
+  setCurrentLocale(localeOfUser(userData));
 
   return (
     <AuthContext.Provider value={value}>

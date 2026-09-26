@@ -1,4 +1,4 @@
-import { resolveActiveJobCodeId } from '@smis-mentor/shared';
+import { resolveActiveJobCodeId, L, dataLabel } from '@smis-mentor/shared';
 import React, { useState, useEffect, useRef } from 'react';
 import { logger, toDriveImageUrl } from '@smis-mentor/shared';
 import {
@@ -184,12 +184,12 @@ export const StudentList: React.FC<StudentListProps> = ({
 
   const handleSync = async () => {
     if (!isAdmin) {
-      Alert.alert('권한 없음', '동기화는 관리자만 수행할 수 있습니다.');
+      Alert.alert(L('students.noPermission'), L('common.onlyAdministratorsCanSync'));
       return;
     }
 
     if (!campCode) {
-      Alert.alert('알림', '캠프 코드를 불러오는 중입니다.');
+      Alert.alert(L('task.notice'), L('common.loadingCampCode'));
       return;
     }
 
@@ -201,11 +201,11 @@ export const StudentList: React.FC<StudentListProps> = ({
       await queryClient.invalidateQueries({ queryKey: ['students', campCode] });
       await refetch();
       
-      Alert.alert('성공', '데이터 동기화가 완료되었습니다.');
+      Alert.alert(L('common.success'), L('common.dataSyncComplete'));
     } catch (error) {
       logger.error('동기화 실패:', error);
-      const message = error instanceof Error ? error.message : '동기화에 실패했습니다.';
-      Alert.alert('동기화 실패', message);
+      const message = error instanceof Error ? error.message : L('common.syncFailed');
+      Alert.alert(L('students.syncFailed'), message);
     } finally {
       setSyncing(false);
     }
@@ -213,12 +213,12 @@ export const StudentList: React.FC<StudentListProps> = ({
 
   const handleToggleTemporaryData = async () => {
     if (!isAdmin) {
-      Alert.alert('권한 없음', '설정 변경은 관리자만 수행할 수 있습니다.');
+      Alert.alert(L('students.noPermission'), L('common.onlyAdministratorsCanChangeSettings'));
       return;
     }
 
     if (!campCode) {
-      Alert.alert('알림', '캠프 코드를 불러오는 중입니다.');
+      Alert.alert(L('task.notice'), L('common.loadingCampCode'));
       return;
     }
 
@@ -231,10 +231,10 @@ export const StudentList: React.FC<StudentListProps> = ({
       await queryClient.invalidateQueries({ queryKey: ['students', campCode] });
       await refetch();
       
-      Alert.alert('성공', `임시 데이터 표시가 ${newSetting ? '활성화' : '비활성화'}되었습니다.`);
+      Alert.alert(L('common.success'), L('common.sampleDataDisplayHasBeen', { v0: newSetting ? L('common.enabledWord') : L('common.disabledWord') }));
     } catch (error) {
       logger.error('설정 변경 실패:', error);
-      Alert.alert('오류', '설정 변경에 실패했습니다.');
+      Alert.alert(L('common.error'), L('common.failedToChangeTheSetting'));
     }
   };
 
@@ -243,7 +243,7 @@ export const StudentList: React.FC<StudentListProps> = ({
     const validStudents = studentsToSave.filter((s) => s.parentPhone);
 
     if (validStudents.length === 0) {
-      Alert.alert('알림', '저장할 연락처가 없습니다.\n(부모님 연락처가 있는 학생이 없습니다.)');
+      Alert.alert(L('task.notice'), L('students.noContactsToSaveNo'));
       return;
     }
 
@@ -264,8 +264,8 @@ export const StudentList: React.FC<StudentListProps> = ({
     if (isTemporaryData) {
       setBulkPreviewStudents([]);
       Alert.alert(
-        '연락처 저장 불가',
-        '현재 임시 데이터가 표시 중입니다.\n실제 학생 데이터가 등록된 후 저장할 수 있습니다.\n\n테스트가 필요하다면 개별 학생 카드를 클릭하여 연락처 저장 아이콘을 이용하고, 이후 직접 삭제해 주세요.',
+        L('students.cannotSaveContacts'),
+        L('students.sampleDataIsCurrentlyShown'),
       );
       return;
     }
@@ -283,14 +283,14 @@ export const StudentList: React.FC<StudentListProps> = ({
 
       setIsSavingContacts(false);
 
-      const lines = [`저장: ${result.saved}명`, `중복 건너뜀: ${result.skipped}명`];
-      if (result.failed > 0) lines.push(`실패: ${result.failed}명`);
+      const lines = [L('students.importSaved', { v0: result.saved }), L('students.importSkipped', { v0: result.skipped })];
+      if (result.failed > 0) lines.push(L('students.importFailed', { v0: result.failed }));
 
-      Alert.alert('저장 완료', lines.join('\n'));
+      Alert.alert(L('common.saved'), lines.join('\n'));
     } catch (error) {
       setIsSavingContacts(false);
       logger.error('연락처 저장 실패:', error);
-      Alert.alert('오류', '연락처 저장 중 오류가 발생했습니다.');
+      Alert.alert(L('common.error'), L('students.anErrorOccurredWhileSaving'));
     }
   };
 
@@ -299,7 +299,7 @@ export const StudentList: React.FC<StudentListProps> = ({
     const validStudents = studentsToDelete.filter((s) => s.parentPhone);
 
     if (validStudents.length === 0) {
-      Alert.alert('알림', '삭제할 연락처가 없습니다.');
+      Alert.alert(L('task.notice'), L('students.noContactsToDelete'));
       return;
     }
 
@@ -311,15 +311,15 @@ export const StudentList: React.FC<StudentListProps> = ({
       return;
     }
 
-    const targetLabel = selectedMentor ? `"${selectedMentor}" 그룹` : '전체';
+    const targetLabel = selectedMentor ? L('common.groupQuoted', { v0: dataLabel(selectedMentor) }) : L('common.all');
 
     Alert.alert(
-      '연락처 일괄 삭제',
-      `${targetLabel}의 학생 연락처 ${validStudents.length}명을 기기에서 삭제합니다.\n\n이름이 정확히 일치하는 연락처만 삭제됩니다.\n\n계속하시겠습니까?`,
+      L('students.deleteAllContacts'),
+      L('students.deleteStudentContactsForFrom', { v0: targetLabel, v1: validStudents.length }),
       [
-        { text: '취소', style: 'cancel' },
+        { text: L('common.cancel'), style: 'cancel' },
         {
-          text: '삭제',
+          text: L('common.delete'),
           style: 'destructive',
           onPress: async () => {
             setContactDeleteProgress({ done: 0, total: validStudents.length });
@@ -334,14 +334,14 @@ export const StudentList: React.FC<StudentListProps> = ({
 
               setIsDeletingContacts(false);
 
-              const lines = [`삭제: ${result.deleted}명`, `저장 안 됨 (건너뜀): ${result.notFound}명`];
-              if (result.failed > 0) lines.push(`실패: ${result.failed}명`);
+              const lines = [L('students.deleted', { v0: result.deleted }), L('students.notSavedSkipped', { v0: result.notFound })];
+              if (result.failed > 0) lines.push(L('students.failed', { v0: result.failed }));
 
-              Alert.alert('삭제 완료', lines.join('\n'));
+              Alert.alert(L('students.deleted2'), lines.join('\n'));
             } catch (error) {
               setIsDeletingContacts(false);
               logger.error('연락처 삭제 실패:', error);
-              Alert.alert('오류', '연락처 삭제 중 오류가 발생했습니다.');
+              Alert.alert(L('common.error'), L('students.anErrorOccurredWhileDeleting'));
             }
           },
         },
@@ -478,15 +478,15 @@ export const StudentList: React.FC<StudentListProps> = ({
     } else if (action === 'delete') {
       const studentsToDelete = selectedMentor ? (groupedByMentor[selectedMentor] ?? []) : allStudents;
       const validStudents = studentsToDelete.filter((s) => s.parentPhone);
-      const targetLabel = selectedMentor ? `"${selectedMentor}" 그룹` : '전체';
+      const targetLabel = selectedMentor ? L('common.groupQuoted', { v0: dataLabel(selectedMentor) }) : L('common.all');
 
       Alert.alert(
-        '연락처 일괄 삭제',
-        `${targetLabel}의 학생 연락처 ${validStudents.length}명을 기기에서 삭제합니다.\n\n이름이 정확히 일치하는 연락처만 삭제됩니다.\n\n계속하시겠습니까?`,
+        L('students.deleteAllContacts'),
+        L('students.deleteStudentContactsForFrom', { v0: targetLabel, v1: validStudents.length }),
         [
-          { text: '취소', style: 'cancel' },
+          { text: L('common.cancel'), style: 'cancel' },
           {
-            text: '삭제',
+            text: L('common.delete'),
             style: 'destructive',
             onPress: async () => {
               setContactDeleteProgress({ done: 0, total: validStudents.length });
@@ -498,13 +498,13 @@ export const StudentList: React.FC<StudentListProps> = ({
                   campCode ?? undefined,
                 );
                 setIsDeletingContacts(false);
-                const lines = [`삭제: ${result.deleted}명`, `저장 안 됨 (건너뜀): ${result.notFound}명`];
-                if (result.failed > 0) lines.push(`실패: ${result.failed}명`);
-                Alert.alert('삭제 완료', lines.join('\n'));
+                const lines = [L('students.deleted', { v0: result.deleted }), L('students.notSavedSkipped', { v0: result.notFound })];
+                if (result.failed > 0) lines.push(L('students.failed', { v0: result.failed }));
+                Alert.alert(L('students.deleted2'), lines.join('\n'));
               } catch (err) {
                 setIsDeletingContacts(false);
                 logger.error('연락처 삭제 실패:', err);
-                Alert.alert('오류', '연락처 삭제 중 오류가 발생했습니다.');
+                Alert.alert(L('common.error'), L('students.anErrorOccurredWhileDeleting'));
               }
             },
           },
@@ -522,8 +522,8 @@ export const StudentList: React.FC<StudentListProps> = ({
     return (
       <View style={styles.centerContainer}>
         <Ionicons name="lock-closed-outline" size={64} color="#cbd5e1" />
-        <Text style={styles.loginRequiredTitle}>{isForeign ? 'Login Required' : '로그인 필요'}</Text>
-        <Text style={styles.emptyText}>{isForeign ? 'Please log in to access this page.' : '로그인 후 이용 가능합니다.'}</Text>
+        <Text style={styles.loginRequiredTitle}>{L('common.loginRequired')}</Text>
+        <Text style={styles.emptyText}>{L('common.pleaseLogInToAccess')}</Text>
       </View>
     );
   }
@@ -532,7 +532,7 @@ export const StudentList: React.FC<StudentListProps> = ({
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>{isForeign ? 'Loading student list...' : '학생 목록 로딩 중...'}</Text>
+        <Text style={styles.loadingText}>{L('students.loadingStudentList')}</Text>
       </View>
     );
   }
@@ -550,19 +550,19 @@ export const StudentList: React.FC<StudentListProps> = ({
       <View style={styles.header}>
         <Text style={styles.headerTitle}>
           {filterType === 'class'
-            ? (isForeign ? 'Class Roster' : '반 명단')
+            ? (L('students.classRoster'))
             : filterType === 'room'
-            ? (isForeign ? 'Room Roster' : '방 명단')
+            ? (L('common.roomRoster'))
             : filterType === 'departure'
-            ? (isForeign ? 'Arrival Roster' : '입소 명단')
-            : (isForeign ? 'Departure Roster' : '퇴소 명단')}
+            ? (L('students.arrivalRoster'))
+            : (L('students.departureRoster'))}
         </Text>
         <View style={styles.headerActions}>
           {isSearchExpanded ? (
             <View style={styles.searchContainer}>
               <TextInput
                 style={styles.searchInput}
-                placeholder={isForeign ? 'Search by name (KR/EN)...' : '이름 검색 (한글/영문)...'}
+                placeholder={L('common.searchByNameKrEn')}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoFocus
@@ -590,7 +590,7 @@ export const StudentList: React.FC<StudentListProps> = ({
             style={[styles.saveContactsButton, isTemporaryData && styles.saveContactsButtonDisabled]}
             onPress={handleSaveContacts}
             disabled={isSavingContacts || isDeletingContacts || allStudents.length === 0}
-            accessibilityLabel="연락처 저장"
+            accessibilityLabel={L('students.saveContacts')}
             accessibilityRole="button"
           >
             <Ionicons name="person-add-outline" size={18} color="#fff" />
@@ -599,7 +599,7 @@ export const StudentList: React.FC<StudentListProps> = ({
             style={[styles.deleteContactsButton, (isSavingContacts || isDeletingContacts || allStudents.length === 0) && styles.deleteContactsButtonDisabled]}
             onPress={handleDeleteContacts}
             disabled={isSavingContacts || isDeletingContacts || allStudents.length === 0}
-            accessibilityLabel="연락처 삭제"
+            accessibilityLabel={L('students.deleteContacts')}
             accessibilityRole="button"
           >
             <Ionicons name="person-remove-outline" size={18} color="#fff" />
@@ -612,7 +612,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                 disabled={syncing}
               >
                 <Text style={styles.syncButtonText}>
-                  {syncing ? (isForeign ? 'Syncing...' : '동기화 중...') : (isForeign ? 'Sync' : '동기화')}
+                  {syncing ? (L('students.syncing')) : (L('students.sync'))}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -624,8 +624,8 @@ export const StudentList: React.FC<StudentListProps> = ({
               >
                 <Text style={styles.toggleButtonText}>
                   {useTemporaryDataSetting
-                    ? (isForeign ? 'Temp OFF' : '임시OFF')
-                    : (isForeign ? 'Temp ON' : '임시ON')}
+                    ? (L('students.tempOff'))
+                    : (L('students.tempOn'))}
                 </Text>
               </TouchableOpacity>
             </>
@@ -638,9 +638,9 @@ export const StudentList: React.FC<StudentListProps> = ({
         <View style={styles.modalOverlay}>
           <View style={styles.modalBox}>
             <ActivityIndicator size="large" color="#ef4444" />
-            <Text style={styles.modalTitle}>연락처 삭제 중...</Text>
+            <Text style={styles.modalTitle}>{L('students.deletingContacts')}</Text>
             <Text style={styles.modalProgress}>
-              {contactDeleteProgress.done} / {contactDeleteProgress.total}명
+              {contactDeleteProgress.done} / {contactDeleteProgress.total}{L('common.people2')}
             </Text>
           </View>
         </View>
@@ -652,18 +652,18 @@ export const StudentList: React.FC<StudentListProps> = ({
           {isSavingContacts ? (
             <View style={styles.modalBox}>
               <ActivityIndicator size="large" color="#3b82f6" />
-              <Text style={styles.modalTitle}>연락처 저장 중...</Text>
+              <Text style={styles.modalTitle}>{L('students.savingContacts')}</Text>
               <Text style={styles.modalProgress}>
-                {contactSaveProgress.done} / {contactSaveProgress.total}명
+                {contactSaveProgress.done} / {contactSaveProgress.total}{L('common.people2')}
               </Text>
             </View>
           ) : (
             <View style={styles.bulkPreviewBox}>
               <Text style={styles.bulkPreviewTitle}>
-                연락처 저장 ({bulkPreviewStudents.length}명)
+                {L('students.saveContacts2')}{bulkPreviewStudents.length}{L('common.people')}
               </Text>
               <Text style={styles.bulkPreviewSubtitle}>
-                이미 동일한 이름으로 저장된 연락처는 건너뜁니다.
+                {L('students.contactsAlreadySavedWithThe')}
               </Text>
               <ScrollView
                 style={styles.bulkPreviewList}
@@ -675,22 +675,22 @@ export const StudentList: React.FC<StudentListProps> = ({
                       {buildContactDisplayName(s, campCode ?? undefined)}
                     </Text>
                     {Platform.OS === 'android' ? (
-                      <Text style={styles.bulkPreviewPhone}>번호: {formatTo010(s.parentPhone)}</Text>
+                      <Text style={styles.bulkPreviewPhone}>{L('students.no')} {formatTo010(s.parentPhone)}</Text>
                     ) : (
                       <>
                         <Text style={styles.bulkPreviewPhone}>
-                          {s.parentName || '부모님'}: {formatTo010(s.parentPhone)}
+                          {s.parentName || L('students.parents2')}: {formatTo010(s.parentPhone)}
                         </Text>
                         {formatToPlus82(s.parentPhone) && (
                           <Text style={styles.bulkPreviewPhone}>
-                            {s.parentName || '부모님'}2: {formatToPlus82(s.parentPhone)}
+                            {s.parentName || L('students.parents2')}2: {formatToPlus82(s.parentPhone)}
                           </Text>
                         )}
                       </>
                     )}
                     {!!buildContactNote(s) && (
                       <Text style={styles.bulkPreviewNote} numberOfLines={2}>
-                        메모: {buildContactNote(s)}
+                        {L('students.memo')} {buildContactNote(s)}
                       </Text>
                     )}
                   </View>
@@ -701,13 +701,13 @@ export const StudentList: React.FC<StudentListProps> = ({
                   style={styles.bulkPreviewCancel}
                   onPress={() => setBulkPreviewStudents([])}
                 >
-                  <Text style={styles.bulkPreviewCancelText}>취소</Text>
+                  <Text style={styles.bulkPreviewCancelText}>{L('common.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.bulkPreviewConfirm}
                   onPress={handleBulkSaveConfirm}
                 >
-                  <Text style={styles.bulkPreviewConfirmText}>저장</Text>
+                  <Text style={styles.bulkPreviewConfirmText}>{L('common.save')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -720,12 +720,12 @@ export const StudentList: React.FC<StudentListProps> = ({
         <View style={styles.warningBanner}>
           <Ionicons name="information-circle" size={16} color="#d97706" />
           <Text style={styles.warningText}>
-            <Text style={styles.warningBold}>{isForeign ? 'Temporary data. ' : '임시 데이터입니다. '}</Text>
+            <Text style={styles.warningBold}>{L('students.temporaryData')}</Text>
             {hasRealData
-              ? (isForeign ? 'Temporary data display is enabled by an administrator.' : '관리자가 임시 데이터 표시를 활성화했습니다.')
+              ? (L('students.temporaryDataDisplayIsEnabled'))
               : filterType === 'class'
-                ? (isForeign ? 'The actual roster will be shown once class assignments are complete.' : '반 배정이 완료되면 실제 명단으로 표기됩니다.')
-                : (isForeign ? 'The actual roster will be shown once room assignments are complete.' : '방 배정이 완료되면 실제 명단으로 표기됩니다.')}
+                ? (L('students.theActualRosterWillBe'))
+                : (L('common.theActualRosterWillBe'))}
           </Text>
         </View>
       )}
@@ -756,7 +756,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                       styles.filterChipText,
                       selectedMentor === mentor && styles.filterChipTextActive
                     ]}>
-                      {mentor}
+                      {dataLabel(mentor)}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -783,7 +783,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                       styles.filterChipText,
                       selectedMentor === mentor && styles.filterChipTextActive
                     ]}>
-                      {mentor}
+                      {dataLabel(mentor)}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -823,7 +823,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                       styles.filterChipText,
                       selectedMentor === group && styles.filterChipTextActive
                     ]}>
-                      {group}
+                      {dataLabel(group)}
                     </Text>
                     {instructor && (
                       <Text style={[
@@ -859,7 +859,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                   styles.filterChipText,
                   selectedMentor === mentor && styles.filterChipTextActive
                 ]}>
-                  {mentor}
+                  {dataLabel(mentor)}
                 </Text>
                 {classMentorMap[mentor] && (
                   <Text style={[
@@ -879,9 +879,7 @@ export const StudentList: React.FC<StudentListProps> = ({
       {searchQuery.trim() && (
         <View style={styles.searchResultHeader}>
           <Text style={styles.searchResultText}>
-            {isForeign
-              ? `"${searchQuery}" results: ${filteredStudents.length} student${filteredStudents.length !== 1 ? 's' : ''}`
-              : `"${searchQuery}" 검색 결과: ${filteredStudents.length}명`}
+            {L('students.v0ResultsV1StudentV2', { v0: searchQuery, v1: filteredStudents.length, v2: filteredStudents.length !== 1 ? 's' : '' })}
           </Text>
         </View>
       )}
@@ -897,7 +895,7 @@ export const StudentList: React.FC<StudentListProps> = ({
         >
           {displayStudents.length === 0 ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>{isForeign ? 'Please select a unit.' : '유닛을 선택해주세요.'}</Text>
+              <Text style={styles.emptyText}>{L('common.pleaseSelectAUnit')}</Text>
             </View>
           ) : (() => {
             // 호수별로 그룹화
@@ -905,7 +903,7 @@ export const StudentList: React.FC<StudentListProps> = ({
               displayStudents
                 .sort((a, b) => (a.roomNumber || '').localeCompare(b.roomNumber || ''))
                 .reduce((acc, student) => {
-                  const room = student.roomNumber || (isForeign ? 'Unassigned' : '미배정');
+                  const room = student.roomNumber || (L('students.unassigned'));
                   if (!acc[room]) acc[room] = [];
                   acc[room].push(student);
                   return acc;
@@ -940,7 +938,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                     <View style={styles.doubleRoomGrid}>
                       {finalRooms.map(([roomNum, roomStudents]) => (
                         <View key={roomNum} style={styles.singleRoomGroup}>
-                          <Text style={styles.roomHeaderSmall}>{roomNum}호</Text>
+                          <Text style={styles.roomHeaderSmall}>{roomNum}{L('students.text')}</Text>
                           <View style={styles.smallRoomCards}>
                             {roomStudents.map((item) => {
                               const globalIndex = displayStudents.findIndex(s => s.studentId === item.studentId);
@@ -966,7 +964,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                 // 일반 호수 (2인실이 아니거나, 혼자인 2인실)
                 result.push(
                   <View key={roomNumber} style={styles.roomSection}>
-                    <Text style={styles.roomHeader}>{roomNumber}호</Text>
+                    <Text style={styles.roomHeader}>{roomNumber}{L('students.text')}</Text>
                     <View style={styles.roomGrid}>
                       {students.map((item) => {
                         const globalIndex = displayStudents.findIndex(s => s.studentId === item.studentId);
@@ -1012,12 +1010,12 @@ export const StudentList: React.FC<StudentListProps> = ({
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>
                 {searchQuery.trim()
-                  ? '검색 결과가 없습니다.'
+                  ? L('students.noResults')
                   : filterType === 'departure'
-                  ? '입소조를 선택해주세요.'
+                  ? L('students.pleaseSelectAnArrivalGroup')
                   : filterType === 'arrival'
-                  ? '퇴소조를 선택해주세요.'
-                  : '반을 선택해주세요.'}
+                  ? L('students.pleaseSelectADepartureGroup')
+                  : L('students.pleaseSelectAClass')}
               </Text>
             </View>
           }

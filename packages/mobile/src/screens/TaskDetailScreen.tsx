@@ -40,6 +40,8 @@ import {
   formatDuration,
 } from '../services/taskService';
 import { RootStackParamList } from '../navigation/types';
+import { currentIntlLocale } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 type TaskDetailRouteProp = RouteProp<RootStackParamList, 'TaskDetail'>;
 type TaskDetailNavigationProp = NativeStackNavigationProp<RootStackParamList, 'TaskDetail'>;
@@ -98,22 +100,22 @@ export default function TaskDetailScreen() {
     if (!task) return;
 
     Alert.alert(
-      '알림 전송',
-      '미완료한 사용자들에게 푸시 알림을 전송하시겠습니까?',
+      L('task.sendNotification'),
+      L('task.sendAPushNotificationTo'),
       [
-        { text: '취소', style: 'cancel' },
+        { text: L('common.cancel'), style: 'cancel' },
         {
-          text: '전송',
+          text: L('task.send'),
           onPress: async () => {
             try {
               // 관리자는 전체, 부매니저는 자기 그룹 미완료자에게만 (서버가 판단)
               const data = await remindTaskViaApi(task.id);
               const missed = missedSummary(data.missed);
-              const head = data.sent > 0 ? `${data.sent}명에게 알림을 보냈습니다.` : '알림을 받을 수 있는 미완료자가 없습니다.';
-              Alert.alert(missed ? '알림을 못 받은 사람이 있어요' : '전송 완료', missed ? `${head}\n\n${missed}` : head);
+              const head = data.sent > 0 ? L('task.notificationSentToPeople', { v0: data.sent }) : L('task.noIncompletePeopleCanReceive');
+              Alert.alert(missed ? L('task.somePeopleDidnTReceive') : L('task.sent'), missed ? `${head}\n\n${missed}` : head);
             } catch (error: unknown) {
               logger.error('푸시 알림 전송 실패:', error);
-              Alert.alert('오류', error instanceof Error && error.message ? error.message : '알림 전송에 실패했습니다.');
+              Alert.alert(L('common.error'), error instanceof Error && error.message ? error.message : L('task.failedToSendTheNotification'));
             }
           },
         },
@@ -125,14 +127,14 @@ export default function TaskDetailScreen() {
     try {
       const taskData = await getTaskById(taskId);
       if (!taskData) {
-        Alert.alert('오류', '업무를 찾을 수 없습니다.');
+        Alert.alert(L('common.error'), L('common.taskNotFound'));
         handleBack();
         return;
       }
       setTask(taskData);
     } catch (error) {
       logger.error('업무 로드 오류:', error);
-      Alert.alert('오류', '업무를 불러오는 중 오류가 발생했습니다.');
+      Alert.alert(L('common.error'), L('common.anErrorOccurredWhileLoading'));
       handleBack();
     } finally {
       setLoading(false);
@@ -149,7 +151,7 @@ export default function TaskDetailScreen() {
       await loadTask();
     } catch (error) {
       logger.error('업무 완료 토글 오류:', error);
-      Alert.alert('오류', '업무 상태 변경 중 오류가 발생했습니다.');
+      Alert.alert(L('common.error'), L('common.anErrorOccurredWhileChanging'));
     }
   };
 
@@ -159,26 +161,26 @@ export default function TaskDetailScreen() {
     const run = async (scope: 'one' | 'group') => {
       try {
         await deleteTaskViaApi(task.id, scope);
-        Alert.alert('성공', '업무가 삭제되었습니다.');
+        Alert.alert(L('common.success'), L('task.taskDeleted'));
         handleBack();
       } catch (error) {
         logger.error('업무 삭제 오류:', error);
-        Alert.alert('오류', error instanceof Error && error.message ? error.message : '업무 삭제 중 오류가 발생했습니다.');
+        Alert.alert(L('common.error'), error instanceof Error && error.message ? error.message : L('common.anErrorOccurredWhileDeleting'));
       }
     };
 
     Alert.alert(
-      '업무 삭제',
-      task.groupId ? '여러 날짜에 묶인 업무입니다. 어떻게 삭제할까요?' : '정말 이 업무를 삭제하시겠습니까?',
+      L('task.deleteTask'),
+      task.groupId ? L('task.thisTaskSpansMultipleDates2') : L('task.areYouSureYouWant'),
       task.groupId
         ? [
-            { text: '취소', style: 'cancel' },
-            { text: '이 날짜만', onPress: () => run('one') },
-            { text: '모든 날짜', style: 'destructive', onPress: () => run('group') },
+            { text: L('common.cancel'), style: 'cancel' },
+            { text: L('task.thisDateOnly'), onPress: () => run('one') },
+            { text: L('task.allDates'), style: 'destructive', onPress: () => run('group') },
           ]
         : [
-            { text: '취소', style: 'cancel' },
-            { text: '삭제', style: 'destructive', onPress: () => run('one') },
+            { text: L('common.cancel'), style: 'cancel' },
+            { text: L('common.delete'), style: 'destructive', onPress: () => run('one') },
           ],
     );
   };
@@ -262,7 +264,7 @@ export default function TaskDetailScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>로딩 중...</Text>
+        <Text style={styles.loadingText}>{L('task.loading')}</Text>
       </View>
     );
   }
@@ -272,7 +274,7 @@ export default function TaskDetailScreen() {
   }
 
   const isCompleted = task.completions.some(c => c.userId === userData?.userId);
-  const dateStr = task.date.toDate().toLocaleDateString('ko-KR', {
+  const dateStr = task.date.toDate().toLocaleDateString(currentIntlLocale(), {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
@@ -291,7 +293,7 @@ export default function TaskDetailScreen() {
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#1f2937" />
-          <Text style={styles.backText}>뒤로</Text>
+          <Text style={styles.backText}>{L('common.back')}</Text>
         </TouchableOpacity>
 
         <View style={styles.headerActions}>
@@ -313,7 +315,7 @@ export default function TaskDetailScreen() {
               styles.completeButtonText,
               isCompleted && styles.completeButtonTextActive,
             ]}>
-              {isCompleted ? '✓ 완료됨' : '완료 표시'}
+              {isCompleted ? L('common.completed') : L('misc.markComplete')}
             </Text>
           </TouchableOpacity>
           )}
@@ -346,7 +348,7 @@ export default function TaskDetailScreen() {
 
           {/* 대상 역할 */}
           <View style={styles.section}>
-            <Text style={styles.sectionLabel}>대상 역할</Text>
+            <Text style={styles.sectionLabel}>{L('common.targetRoles')}</Text>
             <View style={styles.badgeContainer}>
               {task.targetRoles.map(role => (
                 <View key={role} style={styles.roleBadge}>
@@ -359,7 +361,7 @@ export default function TaskDetailScreen() {
           {/* 대상 그룹 */}
           {task.targetGroups && task.targetGroups.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>대상 그룹</Text>
+              <Text style={styles.sectionLabel}>{L('common.targetGroups')}</Text>
               <View style={styles.badgeContainer}>
                 {task.targetGroups.map(group => (
                   <View key={group} style={styles.groupBadge}>
@@ -373,7 +375,7 @@ export default function TaskDetailScreen() {
           {/* 설명 */}
           {task.description && (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>상세 설명</Text>
+              <Text style={styles.sectionLabel}>{L('common.description')}</Text>
               <Text style={styles.description}>{task.description}</Text>
             </View>
           )}
@@ -381,7 +383,7 @@ export default function TaskDetailScreen() {
           {/* 링크 */}
           {linkAttachments.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>링크</Text>
+              <Text style={styles.sectionLabel}>{L('common.links')}</Text>
               {linkAttachments.map((attachment, idx) => (
                 <TouchableOpacity
                   key={idx}
@@ -403,7 +405,7 @@ export default function TaskDetailScreen() {
           {/* 이미지 */}
           {imageAttachments.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>이미지</Text>
+              <Text style={styles.sectionLabel}>{L('common.images')}</Text>
               {imageAttachments.map((attachment, idx) => (
                 <TouchableOpacity
                   key={idx}
@@ -424,7 +426,7 @@ export default function TaskDetailScreen() {
           {/* 기타 파일 */}
           {otherAttachments.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>첨부파일</Text>
+              <Text style={styles.sectionLabel}>{L('common.attachments')}</Text>
               {otherAttachments.map((attachment, idx) => (
                 <TouchableOpacity
                   key={idx}
@@ -449,7 +451,7 @@ export default function TaskDetailScreen() {
           {/* 완료 현황 (관리자 · 부매니저) */}
           {(isAdmin || (isSubManager && canRemind)) && currentCampCodeId && (
             <View style={styles.section}>
-              <Text style={styles.sectionLabel}>완료 현황{isSubManager && viewer.group ? ` · ${viewer.group}` : ''}</Text>
+              <Text style={styles.sectionLabel}>{L('task.completion')}{isSubManager && viewer.group ? ` · ${viewer.group}` : ''}</Text>
               
               {(() => {
                 const targetUsers = getTaskTargetUsers(task, campUsers, currentCampCodeId);
@@ -461,14 +463,14 @@ export default function TaskDetailScreen() {
                 return (
                   <View>
                     <Text style={styles.completionCountText}>
-                      {completedCount}/{totalCount} 명 완료
+                      {completedCount}/{totalCount} {L('task.done3')}
                     </Text>
 
                     {/* 완료한 사용자 */}
                     {sortedCompletedUsers.length > 0 && (
                       <View style={styles.completionSection}>
                         <Text style={styles.completionSectionTitle}>
-                          ✓ 완료 ({sortedCompletedUsers.length}명)
+                          {L('task.done2')}{sortedCompletedUsers.length}{L('common.people')}
                         </Text>
                         <View style={styles.badgeContainer}>
                           {sortedCompletedUsers.map((user) => {
@@ -492,7 +494,7 @@ export default function TaskDetailScreen() {
                       <View style={styles.completionSection}>
                         <View style={styles.incompleteSectionHeader}>
                           <Text style={styles.incompleteSectionTitle}>
-                            ✗ 미완료 ({sortedIncompleteUsers.length}명)
+                            {L('task.notDone')}{sortedIncompleteUsers.length}{L('common.people')}
                           </Text>
                           {canRemind && (
                           <TouchableOpacity 
@@ -501,7 +503,7 @@ export default function TaskDetailScreen() {
                           >
                             <Ionicons name="notifications-outline" size={16} color="#ffffff" />
                             <Text style={styles.sendReminderButtonText}>
-                              알림 보내기
+                              {L('task.sendReminder')}
                             </Text>
                           </TouchableOpacity>
                           )}
@@ -546,7 +548,7 @@ export default function TaskDetailScreen() {
               pressed && styles.buttonPressed,
             ]}
           >
-            <Text style={styles.copyButtonText}>복사</Text>
+            <Text style={styles.copyButtonText}>{L('task.copy2')}</Text>
           </Pressable>
           <Pressable
             onPress={(e) => {
@@ -561,7 +563,7 @@ export default function TaskDetailScreen() {
               pressed && styles.buttonPressed,
             ]}
           >
-            <Text style={styles.editActionButtonText}>수정</Text>
+            <Text style={styles.editActionButtonText}>{L('task.edit')}</Text>
           </Pressable>
           {canEditTask && (
             <Pressable
@@ -577,7 +579,7 @@ export default function TaskDetailScreen() {
                 pressed && styles.buttonPressed,
               ]}
             >
-              <Text style={styles.deleteActionButtonText}>삭제</Text>
+              <Text style={styles.deleteActionButtonText}>{L('common.delete')}</Text>
             </Pressable>
           )}
         </View>

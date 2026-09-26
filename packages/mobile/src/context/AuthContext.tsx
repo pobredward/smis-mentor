@@ -1,4 +1,5 @@
 import { logger } from '@smis-mentor/shared';
+import { setCurrentLocale, localeOfUser } from '@smis-mentor/shared';
 import React, {
   createContext,
   useContext,
@@ -564,6 +565,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setIsSharingLocation,
     ]
   );
+
+  // 화면 언어 = 로그인한 사람 (계정 언어 설정 → 없으면 역할). 자식이 그리기 전에 맞춘다
+  setCurrentLocale(localeOfUser(userData));
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

@@ -17,6 +17,7 @@ import { useAuth } from '../context/AuthContext';
 import { ProfileEditScreen } from '../screens/ProfileEditScreen';
 import { PostDetailScreen } from '../screens/PostDetailScreen';
 import { PostWriteScreen } from '../screens/PostWriteScreen';
+import { L } from '@smis-mentor/shared';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
@@ -58,6 +59,8 @@ function AppStack() {
 
   return (
     <Stack.Navigator
+      // 설정에서 화면 언어를 바꾸면 화면을 새로 그려 모든 문구에 바로 적용 (역할 기준 자동이면 바뀌지 않음)
+      key={userData?.locale ?? 'auto'}
       screenOptions={{
         headerShown: false,
       }}
@@ -93,7 +96,7 @@ function AppStack() {
         component={CampDetailScreen}
         options={({ route }) => ({
           headerShown: true,
-          title: route.params?.itemTitle || (isForeign ? 'Detail' : '자료 상세'),
+          title: route.params?.itemTitle || (L('nav.detail')),
           presentation: 'card',
           animation: 'slide_from_right',
         })}
@@ -103,7 +106,7 @@ function AppStack() {
         component={CampEditorScreen}
         options={{
           headerShown: true,
-          title: isForeign ? 'Edit Page' : '페이지 편집',
+          title: L('nav.editPage'),
           presentation: 'card',
           animation: 'slide_from_right',
         }}
@@ -113,7 +116,7 @@ function AppStack() {
         component={SettingsScreen}
         options={{
           headerShown: true,
-          title: isForeign ? 'Notification Settings' : '설정',
+          title: L('nav.notificationSettings'),
           presentation: 'card',
           animation: 'slide_from_right',
         }}
@@ -123,7 +126,7 @@ function AppStack() {
         component={LocationSettingsScreen}
         options={{
           headerShown: true,
-          title: isForeign ? 'Location Settings' : '위치 설정',
+          title: L('common.locationSettings'),
           presentation: 'card',
           animation: 'slide_from_right',
         }}
@@ -143,7 +146,7 @@ function AppStack() {
         component={PrivacyPolicyScreen}
         options={{
           headerShown: true,
-          title: isForeign ? 'Privacy Policy' : '개인정보처리방침',
+          title: L('common.privacyPolicy'),
           presentation: 'card',
           animation: 'slide_from_right',
         }}
@@ -153,7 +156,7 @@ function AppStack() {
         component={TermsOfServiceScreen}
         options={{
           headerShown: true,
-          title: isForeign ? 'Terms of Service' : '서비스 이용약관',
+          title: L('common.termsOfService'),
           presentation: 'card',
           animation: 'slide_from_right',
         }}

@@ -40,7 +40,7 @@ import {
 import { LocationPermissionDisclosureModal } from '../components/LocationPermissionDisclosureModal';
 import type { Unsubscribe } from 'firebase/firestore';
 import type { UserRole } from '@smis-mentor/shared';
-import { getGroupLabel } from '@smis-mentor/shared';
+import { getGroupLabel, L } from '@smis-mentor/shared';
 
 // Google Play 정책: 사용자가 위치 수집 disclosure에 동의했음을 기록하는 키
 // 앱 설치 후 최초 1회 동의 기록. 재설치 시 다시 동의 필요.
@@ -68,7 +68,7 @@ const getBatteryDisplay = (
   isCharging: boolean
 ): { icon: string; color: string; label: string } => {
   if (isCharging) {
-    return { icon: 'battery-charging', color: '#10b981', label: '충전 중' };
+    return { icon: 'battery-charging', color: '#10b981', label: L('location.charging') };
   }
   if (level === null) {
     return { icon: 'battery-unknown', color: '#94a3b8', label: '-' };
@@ -84,17 +84,17 @@ const getBatteryDisplay = (
 const getRoleLabel = (role: UserRole | string): string => {
   switch (role) {
     case 'admin':
-      return '관리자';
+      return L('common.roleAdmin');
     case 'mentor':
-      return '멘토';
+      return L('common.roleMentor');
     case 'mentor_temp':
-      return '멘토(임시)';
+      return L('common.roleMentorTemp');
     case 'foreign':
-      return '원어민';
+      return L('common.roleForeign');
     case 'foreign_temp':
-      return '원어민(임시)';
+      return L('common.roleForeignTemp');
     default:
-      return '스태프';
+      return L('common.roleStaff');
   }
 };
 
@@ -140,7 +140,7 @@ const UserMarker = React.memo(
         </View>
         <View style={[styles.markerArrow, { borderTopColor: color }]} />
         <Text style={[styles.markerName, { color }]} numberOfLines={1}>
-          {isMe ? '나' : location.displayName}
+          {isMe ? L('location.me') : location.displayName}
         </Text>
       </View>
     );
@@ -455,14 +455,12 @@ export function LocationSharingScreen() {
   // Google Play 정책: 백그라운드 권한 요청은 별도 공개 화면에서 처리
   const showBackgroundPermissionGuide = useCallback(() => {
     Alert.alert(
-      isForeign ? 'Enable Background Location' : '백그라운드 위치 설정',
-      isForeign
-        ? 'Location sharing is active while the app is open. To keep sharing in the background, enable "Always" location access in Location Settings.'
-        : '앱을 사용하는 동안 위치 공유가 활성화되었습니다. 앱을 최소화해도 계속 공유하려면 위치 설정에서 백그라운드 위치를 허용해 주세요.',
+      L('location.enableBackgroundLocation'),
+      L('location.locationSharingIsActiveWhile'),
       [
-        { text: isForeign ? 'Later' : '나중에', style: 'cancel' },
+        { text: L('location.later'), style: 'cancel' },
         {
-          text: isForeign ? 'Location Settings' : '위치 설정',
+          text: L('common.locationSettings'),
           onPress: () => navigation.navigate('LocationSettings'),
         },
       ]
@@ -493,13 +491,11 @@ export function LocationSharingScreen() {
 
         if (fgResult === 'denied') {
           Alert.alert(
-            isForeign ? 'Location Permission Required' : '위치 권한 필요',
-            isForeign
-              ? 'Location access is required to use location sharing. Please allow it in your device settings.'
-              : '위치 공유를 사용하려면 설정에서 위치 권한을 허용해야 합니다.',
+            L('location.locationPermissionRequired'),
+            L('location.locationAccessIsRequiredTo'),
             [
-              { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
-              { text: isForeign ? 'Open Settings' : '설정 열기', onPress: () => Linking.openSettings() },
+              { text: L('common.cancel'), style: 'cancel' },
+              { text: L('common.openSettings'), onPress: () => Linking.openSettings() },
             ]
           );
           return;
@@ -522,9 +518,9 @@ export function LocationSharingScreen() {
 
       if (!success) {
         Alert.alert(
-          isForeign ? 'Failed to Start Sharing' : '위치 공유 시작 실패',
-          isForeign ? 'Please try again.' : '잠시 후 다시 시도해 주세요.',
-          [{ text: isForeign ? 'OK' : '확인' }]
+          L('location.failedToStartSharing'),
+          L('location.pleaseTryAgain'),
+          [{ text: L('common.ok') }]
         );
         return;
       }
@@ -611,9 +607,9 @@ export function LocationSharingScreen() {
     return (
       <View style={styles.centered}>
         <Ionicons name="map-outline" size={48} color="#cbd5e1" />
-        <Text style={styles.emptyTitle}>캠프 미배정</Text>
+        <Text style={styles.emptyTitle}>{L('location.noCampAssigned')}</Text>
         <Text style={styles.emptyDescription}>
-          활성 캠프가 없어 위치 공유를 사용할 수 없습니다.
+          {L('location.locationSharingIsUnavailableWithout')}
         </Text>
       </View>
     );
@@ -642,33 +638,25 @@ export function LocationSharingScreen() {
         <View style={styles.inlineDisclosureRow}>
           <Ionicons name="information-circle" size={16} color="#1d4ed8" />
           <Text style={styles.inlineDisclosureTitle}>
-            {isForeign ? 'Location Data Collection Notice' : '위치 데이터 수집 안내'}
+            {L('location.locationDataCollectionNotice')}
           </Text>
         </View>
         <Text style={styles.inlineDisclosureText}>
-          {isForeign
-            ? 'SMIS Mentor collects GPS location and battery status to enable real-time location sharing among camp staff, even when the app is in the background or closed. Data is shared only with staff in the same camp and is not provided to third parties.'
-            : 'SMIS Mentor는 캠프 스태프 간 실시간 위치 공유를 위해 GPS 위치 및 배터리 상태를 수집합니다. 앱이 종료되거나 백그라운드 상태일 때도 수집이 지속될 수 있으며, 같은 캠프 스태프에게만 공유되고 외부 제3자와는 공유하지 않습니다.'}
+          {L('location.smisMentorCollectsGpsLocation')}
         </Text>
       </View>
 
       {/* 위치 공유 컨트롤 패널 */}
       <View style={styles.controlPanel}>
         <Text style={styles.controlTitle}>
-          {isForeign ? 'Share My Location' : '내 위치 공유'}
+          {L('location.shareMyLocation')}
         </Text>
         <Text style={styles.controlSubtitle}>
           {isSharing
-            ? isForeign
-              ? `Sharing · ${sharingCount} participants`
-              : `공유 중 · ${sharingCount}명 참여`
+            ? L('location.sharingV0Participants', { v0: sharingCount })
             : sharingCount > 0
-            ? isForeign
-              ? `${sharingCount} sharing`
-              : `${sharingCount}명이 공유 중`
-            : isForeign
-            ? 'No one sharing'
-            : '아무도 공유하지 않음'}
+            ? L('location.v0Sharing', { v0: sharingCount })
+            : L('location.noOneSharing')}
         </Text>
         <View style={styles.controlRight}>
           {isToggling && (
@@ -694,9 +682,7 @@ export function LocationSharingScreen() {
         <View style={styles.iosShareNotice}>
           <Ionicons name="warning-outline" size={13} color="#92400e" />
           <Text style={styles.iosShareNoticeText}>
-            {isForeign
-              ? 'Swiping the app closed will stop location sharing. Use the Home button instead.'
-              : '앱을 스와이프로 종료하면 위치 공유가 중단됩니다. 홈 버튼으로만 내려주세요.'}
+            {L('location.swipingTheAppClosedWill')}
           </Text>
         </View>
       )}
@@ -742,7 +728,7 @@ export function LocationSharingScreen() {
               style={styles.mapButton}
               onPress={handleGoToMyLocation}
               accessible
-              accessibilityLabel="내 위치로 이동"
+              accessibilityLabel={L('location.goToMyLocation')}
               accessibilityRole="button"
             >
               <Ionicons name="locate" size={20} color="#3b82f6" />
@@ -753,7 +739,7 @@ export function LocationSharingScreen() {
               style={styles.mapButton}
               onPress={handleFitAll}
               accessible
-              accessibilityLabel="전체 보기"
+              accessibilityLabel={L('schedule.showAll')}
               accessibilityRole="button"
             >
               <Ionicons name="expand-outline" size={20} color="#64748b" />
@@ -768,8 +754,8 @@ export function LocationSharingScreen() {
               <Ionicons name="people-outline" size={32} color="#94a3b8" />
               <Text style={styles.emptyOverlayText}>
                 {isSharing
-                  ? '위치를 공유 중입니다.\n다른 스태프가 공유하면 지도에 표시됩니다.'
-                  : '위치 공유를 켜면\n같은 캠프 스태프끼리\n실시간으로 위치를 확인할 수 있습니다.'}
+                  ? L('location.youReSharingYourLocation')
+                  : L('location.turnOnLocationSharingTo')}
               </Text>
             </View>
           </View>
@@ -888,11 +874,11 @@ const UserInfoCard = React.memo(
             <View style={styles.userCardInfo}>
               <View style={styles.userCardNameRow}>
                 <Text style={styles.userCardName}>
-                  {isMe ? `나 (${location.displayName})` : location.displayName}
+                  {isMe ? L('location.me2', { v0: location.displayName }) : location.displayName}
                 </Text>
                 {isMe && (
                   <View style={styles.userCardMeBadge}>
-                    <Text style={styles.userCardMeBadgeText}>나</Text>
+                    <Text style={styles.userCardMeBadgeText}>{L('location.me')}</Text>
                   </View>
                 )}
               </View>
@@ -921,7 +907,7 @@ const UserInfoCard = React.memo(
                 )}
               </View>
               <View style={styles.userCardStatusRow}>
-                <Text style={styles.userCardStatus}>위치 공유 중</Text>
+                <Text style={styles.userCardStatus}>{L('common.sharingLocation')}</Text>
                 <BatteryBadge
                   level={location.batteryLevel ?? null}
                   isCharging={location.isCharging ?? false}
@@ -935,21 +921,21 @@ const UserInfoCard = React.memo(
             <TouchableOpacity
               style={styles.userCardActionBtn}
               onPress={onLocate}
-              accessibilityLabel="이 위치로 이동"
+              accessibilityLabel={L('location.goToThisLocation')}
               accessibilityRole="button"
             >
               <Ionicons name="navigate-outline" size={18} color="#3b82f6" />
-              <Text style={styles.userCardActionText}>위치로</Text>
+              <Text style={styles.userCardActionText}>{L('location.go')}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.userCardActionBtn, styles.userCardCloseBtn]}
               onPress={onClose}
-              accessibilityLabel="닫기"
+              accessibilityLabel={L('common.close')}
               accessibilityRole="button"
             >
               <Ionicons name="close" size={18} color="#64748b" />
-              <Text style={[styles.userCardActionText, { color: '#64748b' }]}>닫기</Text>
+              <Text style={[styles.userCardActionText, { color: '#64748b' }]}>{L('common.close')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1012,7 +998,7 @@ const ScrollLegend = React.memo(
               onPress={() => onSelect(loc)}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel={`${loc.displayName} 위치로 이동`}
+              accessibilityLabel={L('location.goToSLocation', { v0: loc.displayName })}
             >
               {/* 아바타 */}
               {loc.photoURL ? (
@@ -1031,7 +1017,7 @@ const ScrollLegend = React.memo(
               {/* 이름 + 배터리 (세로 배치) */}
               <View style={styles.legendTextCol}>
                 <Text style={styles.legendName} numberOfLines={1}>
-                  {isMe ? '나' : loc.displayName}
+                  {isMe ? L('location.me') : loc.displayName}
                 </Text>
                 <View style={styles.legendBattery}>
                   <Ionicons name={batIcon as any} size={10} color={batColor} />

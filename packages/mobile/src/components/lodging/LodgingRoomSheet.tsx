@@ -32,6 +32,7 @@ import {
   type STSheetStudent,
 } from '@smis-mentor/shared';
 import { StudentCardContent } from '../StudentCardContent';
+import { L } from '@smis-mentor/shared';
 
 export type LodgingTarget = { kind: 'room'; room: LodgingRoomView } | { kind: 'place'; place: LodgingPlaceView };
 
@@ -73,7 +74,7 @@ export function LodgingRoomSheet({
       <View style={styles.fill}>
         {/* 바깥(어두운 곳)을 누르면 닫힌다 — 화면 전체를 덮는 판을 카드 뒤에 깔고,
             카드를 가운데 두는 층은 빈 곳의 터치를 그 판으로 흘려보낸다 (box-none) */}
-        <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel="닫기" />
+        <Pressable style={styles.backdrop} onPress={onClose} accessibilityRole="button" accessibilityLabel={L('common.close')} />
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.center}>
           <View style={styles.sheet}>
           {target?.kind === 'room' && (
@@ -164,7 +165,7 @@ function RoomBody({
             </View>
           </View>
           <Text style={styles.meta}>
-            {room.wing === 'main' ? '본관' : '별관'} {room.floor}층
+            {room.wing === 'main' ? L('lodging.mainBuilding') : L('lodging.annex')} {room.floor}{L('lodging.f')}
             {room.label ? ` · ${room.label}` : ''}
             {room.note ? ` · ${room.note}` : ''}
           </Text>
@@ -178,13 +179,13 @@ function RoomBody({
           <View style={styles.kv}>
             {room.teachers.length > 0 && (
               <Text style={styles.kvText}>
-                <Text style={styles.kvKey}>{isForeign ? 'Teachers  ' : '선생님  '}</Text>
+                <Text style={styles.kvKey}>{L('lodging.teachers2')}</Text>
                 {room.teachers.join(', ')}
               </Text>
             )}
             {!!room.unitMentor && room.students.length > 0 && (
               <Text style={styles.kvText}>
-                <Text style={styles.kvKey}>{isForeign ? 'Unit mentor  ' : '유닛 멘토  '}</Text>
+                <Text style={styles.kvKey}>{L('lodging.unitMentor2')}</Text>
                 {room.unitMentor}
               </Text>
             )}
@@ -214,21 +215,21 @@ function RoomBody({
             })}
           </View>
         ) : (
-          <Text style={styles.empty}>{isForeign ? 'No students in this room.' : '시트에 이 방으로 배정된 학생이 없습니다.'}</Text>
+          <Text style={styles.empty}>{L('lodging.noStudentsInThisRoom')}</Text>
         )}
 
 
         {isAdmin && !editing && (
           <TouchableOpacity style={styles.darkBtn} onPress={startEdit}>
-            <Text style={styles.darkBtnText}>용도·선생님 편집</Text>
+            <Text style={styles.darkBtnText}>{L('lodging.editUseTeachers')}</Text>
           </TouchableOpacity>
         )}
 
         {isAdmin && editing && (
           <View style={styles.form}>
-            <Text style={styles.fieldLabel}>용도</Text>
+            <Text style={styles.fieldLabel}>{L('lodging.use')}</Text>
             <View style={styles.chips}>
-              <Chip on={purpose === ''} onPress={() => setPurpose('')} label="자동" />
+              <Chip on={purpose === ''} onPress={() => setPurpose('')} label={L('lodging.auto')} />
               {LODGING_PURPOSES.filter((p) => p !== '빈방').map((p) => (
                 <Chip key={p} on={purpose === p} onPress={() => setPurpose(p)} label={p} />
               ))}
@@ -236,15 +237,15 @@ function RoomBody({
             <TextInput
               value={purpose}
               onChangeText={setPurpose}
-              placeholder="직접 입력 (비우면 자동: 명단 있으면 학생방)"
+              placeholder={L('lodging.enterManuallyLeaveBlankFor')}
               placeholderTextColor="#9ca3af"
               style={styles.input}
             />
             <Text style={styles.fieldLabel}>
-              칸에 찍히는 한 줄 <Text style={styles.hint}>예: Middle · Speaking</Text>
+              {L('lodging.oneLineShownInEach')} <Text style={styles.hint}>{L('lodging.eGMiddleSpeaking')}</Text>
             </Text>
             <TextInput value={label} onChangeText={setLabel} style={styles.input} />
-            <Text style={styles.fieldLabel}>선생님 (이 방에 묵는 사람)</Text>
+            <Text style={styles.fieldLabel}>{L('lodging.teachersStayingInThisRoom')}</Text>
             {teachers.length > 0 && (
               <View style={styles.chips}>
                 {teachers.map((t) => (
@@ -256,7 +257,7 @@ function RoomBody({
               value={teacherInput}
               onChangeText={setTeacherInput}
               onSubmitEditing={() => addTeacher(teacherInput)}
-              placeholder="이름 입력 후 완료, 또는 아래에서 고르기"
+              placeholder={L('lodging.typeANameAndPress')}
               placeholderTextColor="#9ca3af"
               style={styles.input}
               blurOnSubmit={false}
@@ -268,11 +269,11 @@ function RoomBody({
                 ))}
               </View>
             )}
-            <Text style={styles.fieldLabel}>메모</Text>
+            <Text style={styles.fieldLabel}>{L('common.memo')}</Text>
             <TextInput value={note} onChangeText={setNote} style={[styles.input, styles.multi]} multiline />
             <View style={styles.formBtns}>
               <TouchableOpacity style={styles.ghostBtn} onPress={() => setEditing(false)} disabled={saving}>
-                <Text style={styles.ghostBtnText}>취소</Text>
+                <Text style={styles.ghostBtnText}>{L('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.primaryBtn, saving && { opacity: 0.5 }]}
@@ -282,7 +283,7 @@ function RoomBody({
                   setEditing(false);
                 }}
               >
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>저장</Text>}
+                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{L('common.save')}</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -321,8 +322,8 @@ function PlaceBody({
             </View>
           </View>
           <Text style={styles.meta}>
-            지하 1층{place.area ? ` · ${place.area}㎡` : ''}
-            {place.cap ? ` · ${place.cap}명 수용` : ''}
+            {L('lodging.b1')}{place.area ? ` · ${place.area}㎡` : ''}
+            {place.cap ? L('lodging.capacity', { v0: place.cap }) : ''}
             {place.purpose ? ` · ${place.purpose}` : ''}
           </Text>
         </View>
@@ -335,7 +336,7 @@ function PlaceBody({
           <Text style={styles.note}>{place.settingNote}</Text>
         ) : (
           <Text style={styles.empty}>
-            {place.kind === 'hall' ? '강당·홀 — 전체 집합이나 야외수업조 편성에 씁니다.' : '시설 — 명단은 없습니다.'}
+            {place.kind === 'hall' ? L('lodging.hallUsedForAssembliesOr') : L('lodging.facilityNoRoster')}
           </Text>
         )}
         {isAdmin && !editing && (
@@ -347,20 +348,20 @@ function PlaceBody({
               setEditing(true);
             }}
           >
-            <Text style={styles.darkBtnText}>이 캠프에서의 용도 편집</Text>
+            <Text style={styles.darkBtnText}>{L('lodging.editUseForThisCamp')}</Text>
           </TouchableOpacity>
         )}
         {isAdmin && editing && (
           <View style={styles.form}>
             <Text style={styles.fieldLabel}>
-              용도 <Text style={styles.hint}>예: 전체 집합, 원어민 수업</Text>
+              {L('lodging.use')} <Text style={styles.hint}>{L('lodging.eGAssemblyNativeTeacher')}</Text>
             </Text>
             <TextInput value={purpose} onChangeText={setPurpose} style={styles.input} />
-            <Text style={styles.fieldLabel}>메모</Text>
+            <Text style={styles.fieldLabel}>{L('common.memo')}</Text>
             <TextInput value={note} onChangeText={setNote} style={[styles.input, styles.multi]} multiline />
             <View style={styles.formBtns}>
               <TouchableOpacity style={styles.ghostBtn} onPress={() => setEditing(false)} disabled={saving}>
-                <Text style={styles.ghostBtnText}>취소</Text>
+                <Text style={styles.ghostBtnText}>{L('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.primaryBtn, saving && { opacity: 0.5 }]}
@@ -370,7 +371,7 @@ function PlaceBody({
                   setEditing(false);
                 }}
               >
-                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>저장</Text>}
+                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>{L('common.save')}</Text>}
               </TouchableOpacity>
             </View>
           </View>

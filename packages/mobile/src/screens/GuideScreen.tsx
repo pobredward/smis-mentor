@@ -7,6 +7,7 @@ import { useWebViewCache } from '../context/WebViewCacheContext';
 import { useAuth } from '../context/AuthContext';
 import { AddLinkModal } from '../components';
 import { generationResourcesService, ResourceLink, ResourceLinkRole } from '../services';
+import { L } from '@smis-mentor/shared';
 
 // 권한별 배경색 반환 함수
 const getRoleBgColor = (targetRole?: ResourceLinkRole): string => {
@@ -97,24 +98,24 @@ export function GuideScreen() {
     if (!activeJobCodeId) return;
 
     Alert.alert(
-      isForeign ? 'Confirm Delete' : '삭제 확인',
-      isForeign ? 'Are you sure you want to delete this guide?' : '이 인솔표를 삭제하시겠습니까?',
+      L('common.confirmDelete'),
+      L('content.areYouSureYouWant2'),
       [
-        { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
+        { text: L('common.cancel'), style: 'cancel' },
         {
-          text: isForeign ? 'Delete' : '삭제',
+          text: L('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await generationResourcesService.deleteLink(activeJobCodeId, 'guideLinks', guideId);
               await refreshResources();
-              Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Guide deleted.' : '인솔표가 삭제되었습니다.');
+              Alert.alert(L('common.success'), L('content.guideDeleted'));
               if (selectedGuideId === guideId && guides.length > 1) {
                 setSelectedGuideId(guides[0].id);
               }
             } catch (error) {
               logger.error('인솔표 삭제 실패:', error);
-              Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to delete guide.' : '인솔표 삭제에 실패했습니다.');
+              Alert.alert(L('common.error'), L('content.failedToDeleteGuide'));
             }
           },
         },
@@ -137,7 +138,7 @@ export function GuideScreen() {
       await refreshResources();
     } catch (error) {
       logger.error('순서 변경 실패:', error);
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update order.' : '순서 변경에 실패했습니다.');
+      Alert.alert(L('common.error'), L('content.failedToUpdateOrder'));
     }
   };
 
@@ -151,7 +152,7 @@ export function GuideScreen() {
 
   const handleEditGuide = async () => {
     if (!activeJobCodeId || !editingGuide || !editTitle.trim() || !editUrl.trim()) {
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter a title and URL.' : '제목과 URL을 모두 입력해주세요.');
+      Alert.alert(L('common.error'), L('content.pleaseEnterATitleAnd'));
       return;
     }
 
@@ -165,10 +166,10 @@ export function GuideScreen() {
       await generationResourcesService.reorderLinks(activeJobCodeId, 'guideLinks', updatedGuides);
       await refreshResources();
       setShowEditModal(false);
-      Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Guide updated.' : '인솔표가 수정되었습니다.');
+      Alert.alert(L('common.success'), L('content.guideUpdated'));
     } catch (error) {
       logger.error('인솔표 수정 실패:', error);
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update guide.' : '인솔표 수정에 실패했습니다.');
+      Alert.alert(L('common.error'), L('content.failedToUpdateGuide'));
     }
   };
 
@@ -176,8 +177,8 @@ export function GuideScreen() {
     return (
       <View style={styles.centerContainer}>
         <Ionicons name="lock-closed-outline" size={64} color="#cbd5e1" />
-        <Text style={styles.loginRequiredTitle}>{isForeign ? 'Login Required' : '로그인 필요'}</Text>
-        <Text style={styles.emptyText}>{isForeign ? 'Please log in to access this page.' : '로그인 후 이용 가능합니다.'}</Text>
+        <Text style={styles.loginRequiredTitle}>{L('common.loginRequired')}</Text>
+        <Text style={styles.emptyText}>{L('common.pleaseLogInToAccess')}</Text>
       </View>
     );
   }
@@ -186,7 +187,7 @@ export function GuideScreen() {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>{isForeign ? 'Loading guides...' : '인솔표 로딩 중...'}</Text>
+        <Text style={styles.loadingText}>{L('content.loadingGuides')}</Text>
       </View>
     );
   }
@@ -194,13 +195,13 @@ export function GuideScreen() {
   if (filteredGuides.length === 0) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.emptyText}>{isForeign ? 'No guides registered.' : '등록된 인솔표가 없습니다.'}</Text>
+        <Text style={styles.emptyText}>{L('content.noGuidesRegistered')}</Text>
         {isAdmin && (
           <TouchableOpacity
             style={styles.addButtonLarge}
             onPress={() => setShowAddModal(true)}
           >
-            <Text style={styles.addButtonLargeText}>+ {isForeign ? 'Add first guide' : '첫 인솔표 추가하기'}</Text>
+            <Text style={styles.addButtonLargeText}>+ {L('content.addFirstGuide')}</Text>
           </TouchableOpacity>
         )}
         {isAdmin && (
@@ -340,7 +341,7 @@ export function GuideScreen() {
         {isLoading && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#3b82f6" />
-            <Text style={styles.loadingText}>인솔표 로딩 중...</Text>
+            <Text style={styles.loadingText}>{L('content.loadingEscortSheet')}</Text>
           </View>
         )}
         
@@ -379,19 +380,19 @@ export function GuideScreen() {
         <View style={styles.editModalOverlay}>
           <View style={styles.editModalContainer}>
             <View style={styles.editModalHeader}>
-              <Text style={styles.editModalTitle}>인솔표 수정</Text>
+              <Text style={styles.editModalTitle}>{L('content.editEscortSheet')}</Text>
               <TouchableOpacity onPress={() => setShowEditModal(false)}>
                 <Text style={styles.editModalClose}>✕</Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.editModalContent}>
-              <Text style={styles.editModalLabel}>제목</Text>
+              <Text style={styles.editModalLabel}>{L('content.title')}</Text>
               <TextInput
                 style={styles.editModalInput}
                 value={editTitle}
                 onChangeText={setEditTitle}
-                placeholder="예: 1주차 인솔표"
+                placeholder={L('content.eGWeek1Escort')}
               />
 
               <Text style={styles.editModalLabel}>URL</Text>
@@ -408,13 +409,13 @@ export function GuideScreen() {
                   style={[styles.editModalButton, styles.editModalButtonCancel]}
                   onPress={() => setShowEditModal(false)}
                 >
-                  <Text style={styles.editModalButtonTextCancel}>취소</Text>
+                  <Text style={styles.editModalButtonTextCancel}>{L('common.cancel')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.editModalButton, styles.editModalButtonSave]}
                   onPress={handleEditGuide}
                 >
-                  <Text style={styles.editModalButtonTextSave}>저장</Text>
+                  <Text style={styles.editModalButtonTextSave}>{L('common.save')}</Text>
                 </TouchableOpacity>
               </View>
             </View>

@@ -11,6 +11,7 @@ import { campPageService, getDisplayItems } from '@/lib/campPageService';
 import { NotionPage } from '@/components/notion/NotionPage';
 import type { DisplayItem, CampPageCategory } from '@smis-mentor/shared';
 import toast from 'react-hot-toast';
+import { L } from '@smis-mentor/shared';
 
 const CampPageEditor = dynamic(() => import('./CampPageEditor'), {
   ssr: false,
@@ -77,7 +78,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
         const foundItem = displayItems.find(i => i.id === itemId);
         
         if (!foundItem) {
-          toast.error('항목을 찾을 수 없습니다.');
+          toast.error(L('content.itemNotFound'));
           router.back();
           return;
         }
@@ -91,7 +92,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
           (userData?.role === 'foreign' && foundItem.targetRole === 'foreign');
 
         if (!hasAccess) {
-          toast.error('접근 권한이 없습니다.');
+          toast.error(L('content.youDonTHaveAccess'));
           router.back();
           return;
         }
@@ -99,7 +100,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
         setItem(foundItem);
       } catch (error) {
         logger.error('항목 로드 실패:', error);
-        toast.error('항목을 불러오는데 실패했습니다.');
+        toast.error(L('content.failedToLoadTheItem'));
         router.back();
       } finally {
         setLoading(false);
@@ -138,10 +139,10 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
       // 현재 페이지 상태 즉시 갱신
       setItem(prev => prev ? { ...prev, content: html } : prev);
       
-      toast.success('저장되었습니다.');
+      toast.success(L('content.saved'));
     } catch (error) {
       logger.error('페이지 저장 실패:', error);
-      toast.error('저장에 실패했습니다.');
+      toast.error(L('content.failedToSave'));
     } finally {
       setIsSaving(false);
     }
@@ -161,10 +162,10 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || window.location.origin;
       const shareUrl = `${baseUrl}/share/${category}/${itemId}`;
       await navigator.clipboard.writeText(shareUrl);
-      toast.success('공유 링크가 복사되었습니다!');
+      toast.success(L('content.shareLinkCopied'));
     } catch (error) {
       logger.error('링크 복사 실패:', error);
-      toast.error('링크 복사에 실패했습니다.');
+      toast.error(L('common.failedToCopyTheLink'));
     } finally {
       setIsCopying(false);
     }
@@ -174,7 +175,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-        <p className="mt-4 text-gray-600">로딩 중...</p>
+        <p className="mt-4 text-gray-600">{L('task.loading')}</p>
       </div>
     );
   }
@@ -182,7 +183,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
   if (!item) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
-        <p className="text-gray-600">항목을 찾을 수 없습니다.</p>
+        <p className="text-gray-600">{L('content.itemNotFound')}</p>
       </div>
     );
   }
@@ -211,7 +212,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
                   <h1 className="text-xl font-bold text-gray-900">{item.title}</h1>
                 </div>
                 <p className="text-sm text-gray-500 mt-1">
-                  {item.type === 'page' ? '페이지' : '외부 링크'}
+                  {item.type === 'page' ? L('content.page2') : L('content.externalLink')}
                 </p>
               </div>
             </div>
@@ -223,12 +224,12 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
                   onClick={handleCopyShareLink}
                   disabled={isCopying}
                   className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium flex items-center gap-2 disabled:opacity-50"
-                  title="공유 링크 복사"
+                  title={L('content.copyShareLink')}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
                   </svg>
-                  {isCopying ? '복사 중...' : '공유'}
+                  {isCopying ? L('content.copying') : L('common.share')}
                 </button>
               )}
               
@@ -240,7 +241,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                   </svg>
-                  편집
+                  {L('common.edit')}
                 </button>
               )}
             </div>
@@ -264,7 +265,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
               </div>
             ) : (
               <div className="bg-white md:rounded-lg md:shadow-sm">
-                <CampPageViewer content={item.content || '<p>내용이 없습니다.</p>'} pageKey={itemId} />
+                <CampPageViewer content={item.content || '<p>' + L('content.noContent') + '</p>'} pageKey={itemId} />
               </div>
             )}
           </>
@@ -278,14 +279,14 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
                 <svg className="w-12 h-12 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
-                <p className="text-gray-600 mb-4">이 링크는 외부 페이지입니다</p>
+                <p className="text-gray-600 mb-4">{L('content.thisLinkIsAnExternal')}</p>
                 <a
                   href={item.url}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  새 탭에서 열기
+                  {L('content.openInNewTab')}
                 </a>
               </div>
             )}

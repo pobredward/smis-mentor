@@ -10,8 +10,9 @@ import { LocationSharingScreen } from './LocationSharingScreen';
 import { PatientScreen } from './PatientScreen';
 import { InventoryScreen } from './InventoryScreen';
 import { useAuth } from '../context/AuthContext';
-import { hasCampAccess, isCampStaffRole } from '@smis-mentor/shared';
+import { hasCampAccess, isCampStaffRole, L } from '@smis-mentor/shared';
 import { useCampTab, registerNavigateToTasksTab, unregisterNavigateToTasksTab, registerNavigateToCampTab, unregisterNavigateToCampTab } from '../context/CampTabContext';
+import { isEnglishUI } from '@smis-mentor/shared';
 
 // 위치 탭은 잠시 숨겨 둔다 — 다시 열려면 true (화면 코드는 그대로 있다)
 const SHOW_LOCATION_TAB = false;
@@ -47,15 +48,15 @@ export function CampScreen() {
         { id: 'inventory', title: 'Inventory' },
       ]
     : [
-        { id: 'education', title: '교육' },
-        { id: 'lesson', title: '수업' },
-        { id: 'tasks', title: '업무' },
-        { id: 'schedule', title: '시간표' },
-        { id: 'guide', title: '숙소' },
-        { id: 'roster', title: '명단' },
-        { id: 'patient', title: '환자' },
-        ...(SHOW_LOCATION_TAB ? [{ id: 'location' as const, title: '위치' }] : []),
-        { id: 'inventory', title: '재고' },
+        { id: 'education', title: L('nav.education') },
+        { id: 'lesson', title: L('nav.lessons') },
+        { id: 'tasks', title: L('nav.tasks') },
+        { id: 'schedule', title: L('nav.schedule') },
+        { id: 'guide', title: L('nav.lodging') },
+        { id: 'roster', title: L('nav.roster') },
+        { id: 'patient', title: L('nav.patient') },
+        ...(SHOW_LOCATION_TAB ? [{ id: 'location' as const, title: L('nav.location') }] : []),
+        { id: 'inventory', title: L('nav.inventory') },
       ];
 
   const tabs = allTabs;
@@ -69,15 +70,15 @@ export function CampScreen() {
     return (
       <View style={styles.noCampContainer}>
         <Text style={styles.noCampIcon}>⏳</Text>
-        <Text style={styles.noCampTitle}>{isForeign ? 'Waiting for camp access' : isPendingAccount ? '가입 승인 대기 중' : '배정된 캠프가 없어요'}</Text>
+        <Text style={styles.noCampTitle}>{isEnglishUI() ? 'Waiting for camp access' : isPendingAccount ? L('nav.awaitingApproval') : L('nav.noCampAssigned')}</Text>
         <Text style={styles.noCampDescription}>
-          {isForeign
+          {isEnglishUI()
             ? 'You have not been assigned to a camp yet.\nPlease wait until an administrator grants you access.'
             : isPendingAccount
-              ? '가입이 승인되면 캠프 탭을 사용할 수 있어요.'
+              ? L('nav.youCanUseTheCamp')
               : userData?.role === 'admin'
-                ? '마이페이지에서 캠프를 활성화하면 캠프 탭을 볼 수 있어요.'
-                : '관리자가 캠프에 배정하면 바로 열립니다.'}
+                ? L('nav.activateACampOnMy')
+                : L('nav.itOpensAsSoonAs')}
         </Text>
       </View>
     );

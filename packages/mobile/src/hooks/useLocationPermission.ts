@@ -8,6 +8,7 @@ import {
   requestBackgroundLocationPermission,
   type LocationPermissionLevel,
 } from '../services/locationSharingService';
+import { L } from '@smis-mentor/shared';
 
 export type { LocationPermissionLevel };
 
@@ -63,14 +64,12 @@ export function useLocationPermission({
       } else {
         setPermissionLevel('denied');
         Alert.alert(
-          isForeign ? 'Permission Denied' : '위치 권한 거부됨',
-          isForeign
-            ? 'You can enable location access in your device settings.'
-            : '기기 설정에서 위치 접근을 허용할 수 있습니다.',
+          L('location.permissionDenied'),
+          L('location.youCanEnableLocationAccess'),
           [
-            { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
+            { text: L('common.cancel'), style: 'cancel' },
             {
-              text: isForeign ? 'Open Settings' : '설정 열기',
+              text: L('common.openSettings'),
               onPress: () => Linking.openSettings(),
             },
           ]
@@ -96,14 +95,12 @@ export function useLocationPermission({
 
       if (result !== 'always') {
         Alert.alert(
-          isForeign ? 'Background Location Denied' : '백그라운드 위치 권한 거부됨',
-          isForeign
-            ? 'To enable background location, please select "Allow all the time" in your device settings.'
-            : '백그라운드 위치 공유를 사용하려면 기기 설정에서 "항상 허용"을 선택해 주세요.',
+          L('location.backgroundLocationDenied'),
+          L('location.toEnableBackgroundLocationPlease'),
           [
-            { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
+            { text: L('common.cancel'), style: 'cancel' },
             {
-              text: isForeign ? 'Open Settings' : '설정 열기',
+              text: L('common.openSettings'),
               onPress: () => Linking.openSettings(),
             },
           ]

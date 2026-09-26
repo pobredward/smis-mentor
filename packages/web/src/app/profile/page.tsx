@@ -16,7 +16,9 @@ import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useCampDataPrefetch } from '@/hooks/useCampDataPrefetch';
 import NotificationSettingsCard from '@/components/profile/NotificationSettingsCard';
+import LanguageSettingCard from '@/components/profile/LanguageSettingCard';
 import { BasicInfoSection, CampProfileSection, RrnSection, AddressSection, EducationSection, ExperienceSection, IntroSection, ReferralSection } from '@/components/profile/ProfileSections';
+import { L } from '@smis-mentor/shared';
 
 export default function ProfilePage() {
   const { userData, waitForAuthReady, refreshUserData, updateActiveJobCode } = useAuth();
@@ -187,7 +189,7 @@ export default function ProfilePage() {
       // 짧은 딜레이 후 완료 메시지
       setTimeout(() => {
         setPrefetchingCamp(false);
-        toast.success('기수가 변경되었습니다.');
+        toast.success(L('misc.campGenerationChanged'));
       }, 500);
       
     } catch (error) {
@@ -195,7 +197,7 @@ export default function ProfilePage() {
       console.error('❌ ProfilePage: 캠프 변경 실패');
       console.error('💥 에러:', error);
       console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      toast.error('기수 변경에 실패했습니다.');
+      toast.error(L('profile.failedToChangeTheCamp'));
       setPrefetchingCamp(false);
     } finally {
       setChangingJobCode(false);
@@ -206,7 +208,7 @@ export default function ProfilePage() {
   const reauthenticateUser = async (password: string): Promise<boolean> => {
     try {
       if (!auth.currentUser || !userData?.email) {
-        throw new Error('사용자 정보를 찾을 수 없습니다.');
+        throw new Error(L('home.userInformationNotFound'));
       }
       
       const credential = EmailAuthProvider.credential(userData.email, password);
@@ -216,11 +218,11 @@ export default function ProfilePage() {
     } catch (error: any) {
       console.error('❌ 재인증 실패:', error);
       
-      let errorMessage = '재인증에 실패했습니다.';
+      let errorMessage = L('profile.reAuthenticationFailed2');
       if (error.code === 'auth/wrong-password') {
-        errorMessage = '비밀번호가 올바르지 않습니다.';
+        errorMessage = L('profile.incorrectPassword');
       } else if (error.code === 'auth/invalid-credential') {
-        errorMessage = '인증 정보가 올바르지 않습니다.';
+        errorMessage = L('profile.invalidCredentials');
       }
       
       toast.error(errorMessage);
@@ -248,7 +250,7 @@ export default function ProfilePage() {
     try {
       setDeactivating(true);
       await deactivateUser(userData.userId);
-      toast.success('회원 탈퇴가 완료되었습니다.');
+      toast.success(L('misc.yourAccountHasBeenDeleted'));
       
       // 로그아웃 처리
       await signOut(auth);
@@ -263,7 +265,7 @@ export default function ProfilePage() {
         setDeactivating(false); // 로딩 상태 해제
         setShowDeactivateModal(false); // 모달 닫기
         
-        if (window.confirm('보안을 위해 재인증이 필요합니다. 계속하시겠습니까?')) {
+        if (window.confirm(L('profile.forSecurityYouNeedTo'))) {
           const reauthSuccess = await showReauthPrompt();
           if (reauthSuccess) {
             // 재인증 성공 시 다시 탈퇴 시도
@@ -275,7 +277,7 @@ export default function ProfilePage() {
       }
       
       // 다른 에러의 경우
-      let errorMessage = '회원 탈퇴 중 오류가 발생했습니다.';
+      let errorMessage = L('misc.anErrorOccurredWhileDeleting');
       if (error instanceof Error) {
         errorMessage = error.message;
       }
@@ -290,7 +292,7 @@ export default function ProfilePage() {
   // 소셜 계정 연동 핸들러
   const handleLink = async (providerId: SocialProvider) => {
     if (!userData?.userId) {
-      toast.error('사용자 정보를 찾을 수 없습니다.');
+      toast.error(L('home.userInformationNotFound'));
       return;
     }
 
@@ -298,7 +300,7 @@ export default function ProfilePage() {
     const currentUser = auth.currentUser;
     if (!currentUser) {
       // ✅ 세션 만료 - 명확한 안내 및 리다이렉트
-      toast.error('로그인 세션이 만료되었습니다. 다시 로그인해주세요.');
+      toast.error(L('misc.yourSessionHasExpiredPlease'));
       setTimeout(() => {
         router.push('/sign-in?redirect=/profile');
       }, 2000);
@@ -353,7 +355,7 @@ export default function ProfilePage() {
 
         // (구 방식) 임시 비밀번호 생성·저장 제거 — 네이버 재로그인은 서버 검증 Custom Token 으로 처리
 
-        toast.success('네이버 계정이 성공적으로 연동되었습니다.');
+        toast.success(L('misc.naverAccountLinkedSuccessfully'));
         await refreshUserData();
         return;
       } else if (providerId === 'apple.com') {
@@ -370,10 +372,10 @@ export default function ProfilePage() {
           tempFirebaseUid,
         });
       } else if (providerId === 'kakao') {
-        toast.error('카카오 연동은 준비 중입니다.');
+        toast.error(L('misc.kakaoLinkingIsComingSoon'));
         return;
       } else {
-        toast.error('지원하지 않는 소셜 제공자입니다.');
+        toast.error(L('misc.unsupportedSocialProvider'));
         return;
       }
 
@@ -429,9 +431,9 @@ export default function ProfilePage() {
               const providerName = providerId === 'google.com' ? '구글' : '애플';
               console.warn(`⚠️ ${providerName} credential 이미 사용 중 → Firestore에만 저장`);
             } else if (authError.code === 'auth/provider-already-linked') {
-              throw new Error('이미 이 제공자가 연결되어 있습니다.');
+              throw new Error(L('misc.thisProviderIsAlreadyLinked'));
             } else if (authError.code === 'auth/email-already-in-use') {
-              throw new Error('이 이메일은 이미 다른 계정에서 사용 중입니다.');
+              throw new Error(L('misc.thisEmailIsAlreadyUsed'));
             } else {
               throw authError;
             }
@@ -456,23 +458,23 @@ export default function ProfilePage() {
         arrayUnion
       );
 
-      toast.success('소셜 계정이 성공적으로 연동되었습니다.');
+      toast.success(L('profile.socialAccountLinkedSuccessfully'));
       
       // 5. 사용자 데이터 새로고침
       await refreshUserData();
     } catch (error: any) {
       console.error('소셜 계정 연동 오류:', error);
       
-      let errorMessage = '소셜 계정 연동 중 오류가 발생했습니다. 다시 시도해주세요.';
+      let errorMessage = L('misc.anErrorOccurredWhileLinking');
       
       if (error.message === 'POPUP_BLOCKED') {
-        errorMessage = '팝업이 차단되었습니다. 브라우저 설정에서 팝업을 허용한 후 다시 시도해주세요.';
+        errorMessage = L('misc.thePopupWasBlockedAllow');
       } else if (error.message === 'POPUP_CLOSED') {
-        errorMessage = '로그인 창이 닫혔습니다. 다시 시도해주세요.';
+        errorMessage = L('misc.theLoginWindowWasClosed');
       } else if (error.message?.includes('이미')) {
         errorMessage = error.message;
       } else if (error.code === 'auth/requires-recent-login') {
-        errorMessage = '보안을 위해 다시 로그인한 후 연동을 시도해주세요.';
+        errorMessage = L('misc.forSecurityPleaseLogIn');
       } else if (error.message) {
         errorMessage = error.message;
       }
@@ -590,13 +592,13 @@ export default function ProfilePage() {
     });
 
     if (!userData?.userId || !userData?.email) {
-      toast.error('사용자 정보를 찾을 수 없습니다. 페이지를 새로고침해주세요.');
+      toast.error(L('misc.userInformationNotFoundPlease'));
       return;
     }
 
     const providerName = getSocialProviderName(providerId);
     
-    if (!confirm(`${providerName} 계정 연동을 해제하시겠습니까?`)) {
+    if (!confirm(L('profile.areYouSureYouWant', { v0: providerName }))) {
       return;
     }
 
@@ -612,7 +614,7 @@ export default function ProfilePage() {
       const userByEmail = await getUserByEmail(userData.email);
       
       if (!userByEmail) {
-        throw new Error('사용자 정보를 찾을 수 없습니다.');
+        throw new Error(L('home.userInformationNotFound'));
       }
       
       console.log('✅ 이메일로 사용자 발견:', {
@@ -638,7 +640,7 @@ export default function ProfilePage() {
           const userDoc = await transaction.get(userRef);
           
           if (!userDoc.exists()) {
-            throw new Error('사용자 문서를 찾을 수 없습니다.');
+            throw new Error(L('profile.userDocumentNotFound'));
           }
           
           const latestUserData = userDoc.data();
@@ -672,11 +674,11 @@ export default function ProfilePage() {
           let restoreIdToken: string | null = null;
           try {
             // ⏳ 로딩 토스트
-            toast.loading('Firebase Auth 계정 정리 중...', { id: 'delete-orphan' });
+            toast.loading(L('misc.cleaningUpFirebaseAuthAccount'), { id: 'delete-orphan' });
             
             // 1. 현재 사용자 정보 저장 (+ 복원용 ID token)
             const originalUser = auth.currentUser;
-            if (!originalUser) throw new Error('현재 사용자 없음');
+            if (!originalUser) throw new Error(L('misc.noCurrentUser'));
             restoreIdToken = await originalUser.getIdToken(true);
             
             // 2. 소셜 계정으로 임시 로그인
@@ -724,8 +726,8 @@ export default function ProfilePage() {
             
             toast.dismiss('delete-orphan');
             toast.success(
-              `${providerDisplayName} 계정 연동이 완전히 해제되었습니다.\n` +
-              'Firebase Auth에서도 삭제되었습니다.',
+              L('misc.accountHasBeenFullyUnlinked', { v0: providerDisplayName }) +
+              L('misc.itWasAlsoRemovedFrom'),
               { duration: 4000 }
             );
             showSuccessToast = false;
@@ -736,7 +738,7 @@ export default function ProfilePage() {
             // 실패 시 원래 계정 복원 시도 (원래 세션의 ID token 으로)
             try {
               if (auth.currentUser?.uid !== userData.userId) {
-                if (!restoreIdToken) throw new Error('복원용 세션 증명 없음');
+                if (!restoreIdToken) throw new Error(L('misc.noSessionProofForRestore'));
                 await signInWithCustomTokenFromFunction(userData.userId, { kind: 'firebase', idToken: restoreIdToken });
               }
             } catch (restoreError) {
@@ -744,9 +746,9 @@ export default function ProfilePage() {
             }
             
             toast(
-              `${providerDisplayName} 계정 연동이 해제되었습니다.\n\n` +
-              `Firebase Auth의 ${socialProviderBeforeUnlink.email}은\n` +
-              '매일 자동으로 정리됩니다.',
+              L('misc.accountHasBeenUnlinked', { v0: providerDisplayName }) +
+              L('misc.inFirebaseAuth', { v0: socialProviderBeforeUnlink.email }) +
+              L('misc.isCleanedUpAutomaticallyEvery'),
               { 
                 icon: 'ℹ️',
                 duration: 5000 
@@ -758,14 +760,14 @@ export default function ProfilePage() {
       }
       
       if (showSuccessToast) {
-        toast.success(`${providerName} 계정 연동이 해제되었습니다.`);
+        toast.success(L('profile.v0AccountHasBeenUnlinked', { v0: providerName }));
       }
       
       // 사용자 데이터 새로고침
       await refreshUserData();
     } catch (error: any) {
       console.error('연동 해제 오류:', error);
-      toast.error(error.message || '연동 해제 중 오류가 발생했습니다. 다시 시도해주세요.');
+      toast.error(error.message || L('misc.anErrorOccurredWhileUnlinking'));
     } finally {
       setIsUnlinking(false);
     }
@@ -798,9 +800,9 @@ export default function ProfilePage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
                 </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">캠프 데이터 로딩 중</h3>
+                <h3 className="text-xl font-bold text-gray-900 mb-2">{L('profile.loadingCampData')}</h3>
                 <p className="text-gray-600 text-center mb-6">
-                  빠른 탐색을 위해 데이터를 미리 불러오는 중입니다
+                  {L('profile.preloadingDataForFasterBrowsing')}
                 </p>
                 
                 {/* 진행률 바 */}
@@ -827,7 +829,7 @@ export default function ProfilePage() {
                       <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                     )}
                     <span className={`text-sm ${prefetchStage === 'cache' ? 'text-blue-600 font-semibold' : (prefetchStage === 'update' || prefetchStage === 'data' || prefetchStage === 'complete') ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
-                      기존 캐시 정리
+                      {L('profile.clearingOldCache')}
                     </span>
                   </div>
                   
@@ -842,7 +844,7 @@ export default function ProfilePage() {
                       <div className="w-5 h-5 border-2 border-gray-300 rounded-full" />
                     )}
                     <span className={`text-sm ${prefetchStage === 'update' ? 'text-blue-600 font-semibold' : (prefetchStage === 'data' || prefetchStage === 'complete') ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
-                      캠프 변경
+                      {L('profile.changingCamp')}
                     </span>
                   </div>
                   
@@ -857,7 +859,7 @@ export default function ProfilePage() {
                       <div className="w-5 h-5 border-2 border-gray-300 rounded-full" />
                     )}
                     <span className={`text-sm ${prefetchStage === 'data' ? 'text-blue-600 font-semibold' : prefetchStage === 'complete' ? 'text-green-600 font-semibold' : 'text-gray-400'}`}>
-                      캠프 데이터 로딩
+                      {L('profile.loadingCampData2')}
                     </span>
                   </div>
                 </div>
@@ -871,7 +873,7 @@ export default function ProfilePage() {
         )}
 
         <div className="mb-4">
-          <h1 className="text-xl sm:text-2xl font-bold">{isForeign ? 'My Page' : '마이페이지'}</h1>
+          <h1 className="text-xl sm:text-2xl font-bold">{L('common.myPage')}</h1>
         </div>
 
         {/* 기본 정보 (사진·이름·연락처) */}
@@ -882,10 +884,8 @@ export default function ProfilePage() {
           <div className="border-b px-4 sm:px-6 py-3">
             <h2 className="text-lg font-semibold">
               {userData.role === 'admin'
-                ? '전체 캠프 코드'
-                : isForeign
-                  ? 'SMIS Camp History'
-                  : 'SMIS 캠프 참여 이력'}
+                ? L('profile.allCampCodes')
+                : L('common.smisCampHistory')}
             </h2>
           </div>
           
@@ -896,9 +896,7 @@ export default function ProfilePage() {
               </div>
             ) : jobCodes.length === 0 ? (
               <p className="text-gray-500 text-center py-4">
-                {isForeign
-                  ? 'No camp history registered. Camp codes will appear here once assigned by an administrator.'
-                  : '등록된 참여 이력이 없습니다.'}
+                {L('common.noCampHistoryRegisteredCamp')}
               </p>
             ) : userData.role === 'admin' ? (
               // Admin: generation별 뱃지 형태 (27기 이상만 표시, 26기 이하는 더보기)
@@ -952,7 +950,7 @@ export default function ProfilePage() {
                                       : 'bg-blue-500 text-white border border-blue-600 cursor-default'
                                     : 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 hover:border-gray-400 cursor-pointer'
                                 } ${changingJobCode && !isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                title={isTemporary ? '임시 활성화됨 (직무 경험에 추가되지 않음)' : undefined}
+                                title={isTemporary ? L('misc.temporarilyActivatedNotAddedTo') : undefined}
                               >
                                 {job.code}
                                 {isTemporary && (
@@ -973,12 +971,12 @@ export default function ProfilePage() {
                           >
                             {showOlderGenerations ? (
                               <>
-                                <span>26기 이하 접기</span>
+                                <span>{L('profile.collapseCampsUpTo26th')}</span>
                                 <span className="text-xs">▲</span>
                               </>
                             ) : (
                               <>
-                                <span>26기 이하 더보기</span>
+                                <span>{L('profile.showCampsUpTo26th')}</span>
                                 <span className="text-xs">▼</span>
                               </>
                             )}
@@ -1004,7 +1002,7 @@ export default function ProfilePage() {
                                               : 'bg-blue-500 text-white border border-blue-600 cursor-default'
                                             : 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 hover:border-gray-400 cursor-pointer'
                                         } ${changingJobCode && !isActive ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                        title={isTemporary ? '임시 활성화됨 (직무 경험에 추가되지 않음)' : undefined}
+                                        title={isTemporary ? L('misc.temporarilyActivatedNotAddedTo') : undefined}
                                       >
                                         {job.code}
                                         {isTemporary && (
@@ -1064,7 +1062,7 @@ export default function ProfilePage() {
                         </div>
                         {isActive && (
                           <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">
-                            {isForeign ? 'Active' : '활성'}
+                            {L('common.active')}
                           </span>
                         )}
                       </div>
@@ -1072,7 +1070,7 @@ export default function ProfilePage() {
                       <div className="hidden sm:flex items-center gap-x-1.5 flex-wrap">
                         {isActive && (
                           <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-500 text-white font-semibold flex-shrink-0">
-                            {isForeign ? 'Active' : '활성'}
+                            {L('common.active')}
                           </span>
                         )}
                         {job.code && (
@@ -1117,7 +1115,7 @@ export default function ProfilePage() {
                   { type: 'cv', label: 'CV (Curriculum Vitae)', hint: 'PDF / Word', url: userData.foreignTeacher.cvUrl, accept: '.pdf,.doc,.docx,image/jpeg,image/png', accent: 'indigo' },
                   { type: 'passport', label: 'Passport Photo', hint: 'JPG / PNG', url: userData.foreignTeacher.passportPhotoUrl, accept: 'image/jpeg,image/png', accent: 'green' },
                   { type: 'idCard', label: 'Foreign Resident ID Card', hint: 'JPG / PNG / PDF', url: userData.foreignTeacher.foreignIdCardUrl, accept: 'image/jpeg,image/png,application/pdf', accent: 'amber' },
-                  { type: 'bankBook', label: 'Bank Book (통장사본)', hint: 'JPG / PNG / PDF', url: userData.foreignTeacher.bankBookUrl, accept: 'image/jpeg,image/png,application/pdf', accent: 'teal' },
+                  { type: 'bankBook', label: L('profile.bankBook'), hint: 'JPG / PNG / PDF', url: userData.foreignTeacher.bankBookUrl, accept: 'image/jpeg,image/png,application/pdf', accent: 'teal' },
                   { type: 'eslCert', label: 'ESL Certificate (TESOL/TEFL/CELTA)', hint: 'JPG / PNG / PDF', url: userData.foreignTeacher.eslCertUrl, accept: 'image/jpeg,image/png,application/pdf', accent: 'violet' },
                 ] as const
               ).map(({ type, label, hint, url, accept, accent }) => {
@@ -1214,16 +1212,17 @@ export default function ProfilePage() {
           <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
             <div className="px-4 sm:px-6 py-4">
               <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                {isForeign ? 'Linked Accounts' : '현재 연동된 계정'}
+                {L('common.linkedAccounts')}
               </h3>
               <p className="text-sm text-gray-500">
-                {isForeign ? 'No linked social accounts.' : '연동된 소셜 계정이 없습니다.'}
+                {L('misc.noLinkedSocialAccounts')}
               </p>
             </div>
           </div>
         )}
 
         {/* 알림 설정 섹션 */}
+        <LanguageSettingCard />
         <NotificationSettingsCard />
 
         {/* 회원 탈퇴 섹션 */}
@@ -1232,7 +1231,7 @@ export default function ProfilePage() {
             onClick={() => setShowDeactivateModal(true)}
             className="text-red-500 text-sm underline hover:text-red-700"
           >
-            {isForeign ? 'Delete Account' : '회원 탈퇴'}
+            {L('common.deleteAccount')}
           </button>
         </div>
         </div>
@@ -1243,17 +1242,13 @@ export default function ProfilePage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
             <h3 className="text-lg font-medium text-gray-900 mb-4">
-              {isForeign ? 'Confirm Account Deletion' : '회원 탈퇴 확인'}
+              {L('common.confirmAccountDeletion')}
             </h3>
             <p className="text-gray-700 mb-4">
-              {isForeign
-                ? 'Are you sure you want to delete your account? After deletion, you will not be able to log in with the same email, and all account information will be deactivated.'
-                : '정말로 회원 탈퇴를 진행하시겠습니까? 탈퇴 후에는 동일한 이메일로 다시 로그인할 수 없으며, 모든 계정 정보가 비활성화됩니다.'}
+              {L('misc.areYouSureYouWant')}
             </p>
             <p className="text-gray-700 mb-6 text-sm">
-              {isForeign
-                ? 'If necessary, you can recover your account through the administrator.'
-                : '필요한 경우 관리자를 통해 계정을 복구할 수 있습니다.'}
+              {L('misc.ifNecessaryYouCanRecover')}
             </p>
             <div className="flex justify-end gap-3">
               <Button
@@ -1261,14 +1256,14 @@ export default function ProfilePage() {
                 onClick={() => setShowDeactivateModal(false)}
                 disabled={deactivating}
               >
-                {isForeign ? 'Cancel' : '취소'}
+                {L('common.cancel')}
               </Button>
               <Button
                 variant="danger"
                 onClick={handleDeactivateAccount}
                 isLoading={deactivating}
               >
-                {isForeign ? 'Delete' : '탈퇴하기'}
+                {L('common.delete2')}
               </Button>
             </div>
           </div>

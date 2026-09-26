@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { stSheetService, jobCodesService, placementOverrideService, STSheetStudent, CampCode, CampType } from '@/lib/stSheetService';
 import { authenticatedPost, authenticatedGet } from '@/lib/apiClient';
+import { L, isEnglishUI } from '@smis-mentor/shared';
 
 type EditPermission = 'readonly' | 'all' | 'mentor';
 
@@ -105,7 +106,7 @@ export default function RoomContent() {
       setEditingField(null);
     } catch (e) {
       logger.error('학생 카드 저장 실패:', e);
-      alert('저장에 실패했습니다. 다시 시도해주세요.');
+      alert(L('common.failedToSavePleaseTry'));
     } finally {
       setFieldSaving(false);
     }
@@ -171,7 +172,7 @@ export default function RoomContent() {
       setHasRealData(hasReal);
     } catch (error) {
       logger.error('❌ [RoomContent] 학생 목록 로드 실패:', error);
-      alert('학생 목록을 불러오는데 실패했습니다.');
+      alert(L('common.failedToLoadTheStudent'));
     } finally {
       setLoading(false);
     }
@@ -185,12 +186,12 @@ export default function RoomContent() {
 
   const handleSync = async () => {
     if (!isAdmin) {
-      alert('동기화는 관리자만 수행할 수 있습니다.');
+      alert(L('common.onlyAdministratorsCanSync'));
       return;
     }
 
     if (!campCode) {
-      alert('캠프 코드를 불러오는 중입니다.');
+      alert(L('common.loadingCampCode'));
       return;
     }
 
@@ -198,10 +199,10 @@ export default function RoomContent() {
       setSyncing(true);
       await stSheetService.syncSTSheet(campCode);
       await loadAllStudents();
-      alert('데이터 동기화가 완료되었습니다.');
+      alert(L('common.dataSyncComplete'));
     } catch (error) {
       logger.error('동기화 실패:', error);
-      alert('동기화에 실패했습니다.');
+      alert(L('common.syncFailed'));
     } finally {
       setSyncing(false);
     }
@@ -209,12 +210,12 @@ export default function RoomContent() {
 
   const handleToggleTemporaryData = async () => {
     if (!isAdmin) {
-      alert('설정 변경은 관리자만 수행할 수 있습니다.');
+      alert(L('common.onlyAdministratorsCanChangeSettings'));
       return;
     }
 
     if (!campCode) {
-      alert('캠프 코드를 불러오는 중입니다.');
+      alert(L('common.loadingCampCode'));
       return;
     }
 
@@ -223,10 +224,10 @@ export default function RoomContent() {
       await stSheetService.setUseTemporaryDataSetting(campCode, newSetting);
       setUseTemporaryDataSetting(newSetting);
       await loadAllStudents();
-      alert(`임시 데이터 표시가 ${newSetting ? '활성화' : '비활성화'}되었습니다.`);
+      alert(L('common.sampleDataDisplayHasBeen', { v0: newSetting ? L('common.enabledWord') : L('common.disabledWord') }));
     } catch (error) {
       logger.error('설정 변경 실패:', error);
-      alert('설정 변경에 실패했습니다.');
+      alert(L('common.failedToChangeTheSetting'));
     }
   };
 
@@ -301,7 +302,7 @@ export default function RoomContent() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-sm text-gray-600">{isForeign ? 'Loading room roster...' : '방명단 로딩 중...'}</p>
+          <p className="text-sm text-gray-600">{L('lodging.loadingRoomRoster')}</p>
         </div>
       </div>
     );
@@ -325,7 +326,7 @@ export default function RoomContent() {
             />
           </svg>
         </div>
-        <p className="text-center">{isForeign ? 'Please sign in to continue.' : '로그인 후 이용 가능합니다.'}</p>
+        <p className="text-center">{L('common.pleaseSignInToContinue')}</p>
       </div>
     );
   }
@@ -336,16 +337,16 @@ export default function RoomContent() {
         <svg className="w-16 h-16 text-gray-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">{isForeign ? 'No active camp selected' : '활성 캠프를 선택해주세요'}</h3>
-        {isForeign ? (
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">{L('common.noActiveCampSelected')}</h3>
+        {isEnglishUI() ? (
           <>
             <p className="text-sm text-gray-600">Activate a camp on My Page to</p>
             <p className="text-sm text-gray-600">view the room roster for that camp.</p>
           </>
         ) : (
           <>
-            <p className="text-sm text-gray-600">마이페이지에서 참여 중인 캠프를 활성화하면</p>
-            <p className="text-sm text-gray-600">해당 캠프의 방명단을 확인할 수 있습니다.</p>
+            <p className="text-sm text-gray-600">{L('common.activateYourCampOnMy')}</p>
+            <p className="text-sm text-gray-600">{L('lodging.toViewThatCampS')}</p>
           </>
         )}
       </div>
@@ -356,7 +357,7 @@ export default function RoomContent() {
     <div className="flex flex-col h-full bg-gray-50">
       {/* 헤더 */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-gray-900">{isForeign ? 'Room Roster' : '방 명단'}</h1>
+        <h1 className="text-lg font-semibold text-gray-900">{L('common.roomRoster')}</h1>
         <div className="flex items-center gap-2">
           {isSearchExpanded ? (
             <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-2">
@@ -364,7 +365,7 @@ export default function RoomContent() {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={isForeign ? 'Search by name (KR/EN)...' : '이름 검색 (한글/영문)...'}
+                placeholder={L('common.searchByNameKrEn')}
                 className="bg-transparent border-none outline-none text-sm w-40"
                 autoFocus
               />
@@ -393,7 +394,7 @@ export default function RoomContent() {
                 disabled={syncing}
                 className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                {syncing ? '동기화 중...' : '동기화'}
+                {syncing ? L('students.syncing') : L('students.sync')}
               </button>
               <button
                 onClick={handleToggleTemporaryData}
@@ -402,9 +403,9 @@ export default function RoomContent() {
                     ? 'bg-amber-600 text-white hover:bg-amber-700'
                     : 'bg-gray-600 text-white hover:bg-gray-700'
                 }`}
-                title={useTemporaryDataSetting ? '임시 데이터 표시 중' : '실제 데이터 표시 중'}
+                title={useTemporaryDataSetting ? L('common.showingSampleData') : L('common.showingRealData')}
               >
-                {useTemporaryDataSetting ? '임시데이터 OFF' : '임시데이터 ON'}
+                {useTemporaryDataSetting ? L('common.sampleDataOff') : L('common.sampleDataOn')}
               </button>
             </>
           )}
@@ -419,11 +420,11 @@ export default function RoomContent() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <p className="text-xs text-amber-800">
-              <span className="font-semibold">{isForeign ? 'This is temporary data.' : '임시 데이터입니다.'}</span>
+              <span className="font-semibold">{L('common.thisIsTemporaryData')}</span>
               <span className="ml-1">
                 {hasRealData 
-                  ? (isForeign ? 'Temporary data display has been enabled by the administrator.' : '관리자가 임시 데이터 표시를 활성화했습니다.')
-                  : (isForeign ? 'The actual roster will be shown once room assignments are complete.' : '방 배정이 완료되면 실제 명단으로 표기됩니다.')}
+                  ? (L('common.temporaryDataDisplayHasBeen'))
+                  : (L('common.theActualRosterWillBe'))}
               </span>
             </p>
           </div>
@@ -487,9 +488,9 @@ export default function RoomContent() {
                       : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
                   }`}
                 >
-                  <span>{isForeign ? 'TBD' : '미정'}</span>
+                  <span>{L('lodging.tbd')}</span>
                   <span className={`text-[10px] font-normal ${selectedMentor === '미정' ? 'text-gray-200' : 'text-gray-400'}`}>
-                    {groupedByMentor['미정'].length}명
+                    {groupedByMentor['미정'].length}{L('common.people2')}
                   </span>
                 </button>
               </div>
@@ -502,9 +503,7 @@ export default function RoomContent() {
       {searchQuery.trim() && (
         <div className="bg-white border-b border-gray-200 px-4 py-2">
           <p className="text-sm text-gray-600">
-            {isForeign
-              ? `Search results for "${searchQuery}": ${displayStudents.length} students`
-              : `"${searchQuery}" 검색 결과: ${displayStudents.length}명`}
+            {L('common.searchResultsForV0V1', { v0: searchQuery, v1: displayStudents.length })}
           </p>
         </div>
       )}
@@ -513,12 +512,12 @@ export default function RoomContent() {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {displayStudents.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500">{isForeign ? 'Please select a unit.' : '유닛을 선택해주세요.'}</p>
+            <p className="text-gray-500">{L('common.pleaseSelectAUnit')}</p>
           </div>
         ) : (
           roomGroups.map(([roomNumber, students], roomIdx) => (
             <div key={`room-${roomNumber}-${roomIdx}`} className="bg-white rounded-lg p-4 border border-gray-200">
-              <h3 className="text-sm font-bold text-gray-700 mb-3">{isForeign ? `Room ${roomNumber}` : `${roomNumber}호`}</h3>
+              <h3 className="text-sm font-bold text-gray-700 mb-3">{L('lodging.roomV0', { v0: roomNumber })}</h3>
               <div className="grid grid-cols-4 gap-1">
                 {students.map((student, studentIdx) => {
                   const gradeNum = student.grade?.replace(/[^0-9]/g, '') ?? '';
@@ -574,10 +573,10 @@ export default function RoomContent() {
                     <div className="space-y-0.5 text-[10px] text-gray-600">
                       <p className="truncate">{student.englishName || '-'}</p>
                       <p className="truncate text-[8px]">
-                        {isForeign ? 'Class' : '반'}:{student.classMentor || '-'}{student.className ? `(${student.className}반)` : ''}
+                        {L('common.class')}:{student.classMentor || '-'}{student.className ? L('common.class2', { v0: student.className }) : ''}
                       </p>
                       <p className="truncate text-[8px]">
-                        {isForeign ? 'Room' : '방'}:{student.unitMentor || '-'}{student.roomNumber ? `(${student.roomNumber}호)` : ''}
+                        {L('common.room')}:{student.unitMentor || '-'}{student.roomNumber ? L('common.room2', { v0: student.roomNumber }) : ''}
                       </p>
                     </div>
                     </div>
@@ -613,7 +612,7 @@ export default function RoomContent() {
                     {profilePhotoUrl ? (
                       <img
                         src={profilePhotoUrl}
-                        alt={`${selectedStudent.name} 프로필`}
+                        alt={L('common.sProfile', { v0: selectedStudent.name })}
                         className="w-full aspect-square rounded-2xl object-cover border border-gray-200 mb-4"
                         onLoad={() => {
                           logger.info('✅ [RoomContent] 프로필사진 로드 성공:', selectedStudent.name, profilePhotoUrl);
@@ -676,7 +675,7 @@ export default function RoomContent() {
                         {profilePhotoUrl ? (
                           <img
                             src={profilePhotoUrl}
-                            alt={`${selectedStudent.name} 프로필`}
+                            alt={L('common.sProfile', { v0: selectedStudent.name })}
                             className="w-80 h-80 rounded-2xl object-cover border border-gray-200"
                             onError={(e) => {
                               e.currentTarget.style.display = 'none';
@@ -779,7 +778,7 @@ export default function RoomContent() {
                                       onChange={e => setEditingField(prev => prev ? { ...prev, value: e.target.value } : null)}
                                       onKeyDown={e => { if (e.key === 'Escape') handleCancelFieldEdit(); }}
                                       className="flex-1 text-xs text-gray-900 border border-blue-400 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
-                                      placeholder="내용을 입력하세요"
+                                      placeholder={L('common.enterDetails')}
                                     />
                                   ) : (
                                     <input
@@ -794,10 +793,10 @@ export default function RoomContent() {
                                   )}
                                   <div className={`flex ${isTextArea ? 'flex-col' : ''} gap-1 shrink-0`}>
                                     <button onClick={handleSaveField} disabled={isSavingThis} className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700 disabled:opacity-50">
-                                      {isSavingThis ? '…' : '저장'}
+                                      {isSavingThis ? '…' : L('common.save')}
                                     </button>
                                     <button onClick={handleCancelFieldEdit} disabled={isSavingThis} className="text-xs text-gray-500 px-2 py-1 rounded hover:bg-gray-100 disabled:opacity-50">
-                                      취소
+                                      {L('common.cancel')}
                                     </button>
                                   </div>
                                 </>
@@ -811,7 +810,7 @@ export default function RoomContent() {
                                       onClick={() => handleStartFieldEdit(field.fieldKey, field.sheetHeader, field.isLegacy)}
                                       className="text-xs text-blue-500 hover:text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-50 shrink-0 transition-colors"
                                     >
-                                      수정
+                                      {L('task.edit')}
                                     </button>
                                   )}
                                 </>
@@ -832,7 +831,7 @@ export default function RoomContent() {
                   onClick={() => setSelectedStudent(null)}
                   className="w-full px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
                 >
-                  {isForeign ? 'Close' : '닫기'}
+                  {L('common.close')}
                 </button>
               </div>
             </div>

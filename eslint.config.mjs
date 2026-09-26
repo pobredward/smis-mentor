@@ -22,6 +22,14 @@ export const relaxedRules = {
     "no-case-declarations": "warn",
     // shared 는 패키지 이름(@smis-mentor/shared)으로만 가져온다 — 상대 경로로 src/dist 를 직접 가져오면
     // web·mobile 이 서로 다른 사본을 보게 된다 (드리프트)
+    // 화면 문구는 사전(shared/i18n)으로 — isForeign ? '영어' : '한국어' 를 새로 쓰지 않는다 (L('ns.key') 사용)
+    "no-restricted-syntax": ["error", {
+      selector: "ConditionalExpression[test.name=/^isForeign/][consequent.type=/^(Literal|TemplateLiteral)$/][alternate.type=/^(Literal|TemplateLiteral)$/]",
+      message: "화면 문구는 shared i18n 사전에 넣고 L('ns.key') 로 쓰세요.",
+    }, {
+      selector: "ConditionalExpression[test.callee.name='isEnglishUI'][consequent.type=/^(Literal|TemplateLiteral)$/][alternate.type=/^(Literal|TemplateLiteral)$/]",
+      message: "화면 문구는 shared i18n 사전에 넣고 L('ns.key') 로 쓰세요.",
+    }],
     "no-restricted-imports": ["error", { patterns: [{ group: ["**/shared/src", "**/shared/src/**", "**/shared/dist/**"], message: "@smis-mentor/shared 로 가져오세요." }] }],
   },
 };

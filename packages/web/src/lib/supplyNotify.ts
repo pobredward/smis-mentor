@@ -18,9 +18,13 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getAdminFirestore } from './firebase-admin';
 import {
-  notificationAllowed, pushReachOf, STOCK_MANAGER_GROUP_ROLES, isStockGroupOf,
-  type NotificationKey, type NotificationSettings, type PushReachState,
+  notificationAllowed, pushReachOf, STOCK_MANAGER_GROUP_ROLES, isStockGroupOf, localeOfUser, t,
+  type NotificationKey, type NotificationSettings, type PushReachState, type Locale, type MessageKey, type MessageVars,
 } from '@smis-mentor/shared';
+
+/** 받는 사람 언어별 문구 (원어민이거나 영어를 고른 사람은 영어) */
+type Msg = string | ((lang: Locale) => string);
+const msg = (key: MessageKey, vars?: (lang: Locale) => MessageVars): Msg => (lang) => t(lang, key, vars?.(lang));
 
 /** 못 받은 이유 — 푸시 상태 + '이 종류를 껐음' */
 export type MissedState = PushReachState | 'typeOff';
@@ -37,6 +41,8 @@ const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 type Doc = FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot;
 interface UserLite {
   id: string; name: string; role?: string; tokens: string[];
+  /** 알림 언어 */
+  locale: Locale;
   settings?: NotificationSettings;
   /** 푸시 수신 가능 여부 판단용 원본 (pushTokens · notificationPermission 포함) */
   raw: Record<string, unknown>;
@@ -55,7 +61,7 @@ export type SupplyNotifyEvent =
   | { type: 'comment'; requestId: string }
   | { type: 'stock_low'; campCode: string; itemId: string; groupId: string };
 
-const won = (n?: number) => `${(n ?? 0).toLocaleString('ko-KR')}원`;
+const won = (n: number | undefined, lang: Locale) => t(lang, 'push.won', { n: (n ?? 0).toLocaleString(lang === 'en' ? 'en-US' : 'ko-KR') });
 
 async function jobCodeIdOf(campCode: string): Promise<string | undefined> {
   const db = getAdminFirestore();
@@ -77,6 +83,7 @@ async function campUsers(campCode: string): Promise<UserLite[]> {
       id: d.id,
       name: String(u.name ?? '').trim(),
       role: u.role,
+      locale: localeOfUser(u),
       tokens: Object.keys(u.pushTokens ?? {}).filter(t => /^(Exponent|Expo)PushToken\[.+\]$/.test(t)),
       settings: u.notificationSettings as NotificationSettings | undefined,
       raw: u as Record<string, unknown>,
@@ -90,7 +97,7 @@ async function campUsers(campCode: string): Promise<UserLite[]> {
  * (보낸 사람이 "○○ 선생님은 알림을 못 받아요"를 바로 알고 켜 달라고 말할 수 있게).
  * @param key 알림 종류 — 받는 사람이 이 종류를 껐으면 보내지 않는다
  */
-async function send(key: NotificationKey, targets: UserLite[], title: string, body: string, data: Record<string, unknown>, exceptUid?: string): Promise<number> {
+async function send(key: NotificationKey, targets: UserLite[], title: Msg, body: Msg, data: Record<string, unknown>, exceptUid?: string): Promise<number> {
   const seen = new Set<string>();
   const intended = targets.filter(u => u && u.id !== exceptUid && !seen.has(u.id) && seen.add(u.id));
   const list: UserLite[] = [];
@@ -104,7 +111,8 @@ async function send(key: NotificationKey, targets: UserLite[], title: string, bo
     if (state) missed.push({ name: u.name, state, key });
     else list.push(u);
   });
-  const messages = list.flatMap(u => u.tokens.map(to => ({ to, sound: 'default', title, body, priority: 'high', channelId: 'default', data: { ...data, screen: 'Camp', tab: 'inventory' } })));
+  const text = (m: Msg, lang: Locale) => (typeof m === 'function' ? m(lang) : m);
+  const messages = list.flatMap(u => u.tokens.map(to => ({ to, sound: 'default', title: text(title, u.locale), body: text(body, u.locale), priority: 'high', channelId: 'default', data: { ...data, screen: 'Camp', tab: 'inventory' } })));
   for (let i = 0; i < messages.length; i += 100) {
     try {
       await fetch(EXPO_PUSH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' }, body: JSON.stringify(messages.slice(i, i + 100)) });
@@ -113,16 +121,16 @@ async function send(key: NotificationKey, targets: UserLite[], title: string, bo
   return list.length;
 }
 
-function forLabel(r: FirebaseFirestore.DocumentData): string {
-  if (r.forType === 'camp') return '캠프 공용';
-  if (r.forType === 'student') return `${r.studentName ?? '학생'}${r.studentClass ? `(${r.studentClass})` : ''}`;
-  return `${r.requesterName ?? ''} 쌤`;
+function forLabel(r: FirebaseFirestore.DocumentData, lang: Locale): string {
+  if (r.forType === 'camp') return t(lang, 'push.forCamp');
+  if (r.forType === 'student') return `${r.studentName ?? t(lang, 'push.forStudent')}${r.studentClass ? `(${r.studentClass})` : ''}`;
+  return t(lang, 'push.forMentor', { name: r.requesterName ?? '' });
 }
-function itemsLabel(r: FirebaseFirestore.DocumentData, lineIds?: string[]): string {
+function itemsLabel(r: FirebaseFirestore.DocumentData, lang: Locale, lineIds?: string[]): string {
   const lines = (r.items ?? []) as Array<{ id: string; name: string; quantity: number; unit: string }>;
   const pick = lineIds ? lines.filter(l => lineIds.includes(l.id)) : lines;
   const head = pick.slice(0, 2).map(l => `${l.name} ${l.quantity}${l.unit}`).join(', ');
-  return pick.length > 2 ? `${head} 외 ${pick.length - 2}개` : head;
+  return pick.length > 2 ? t(lang, 'push.itemsMore', { head, count: pick.length - 2 }) : head;
 }
 
 export interface NotifyResult {
@@ -150,7 +158,7 @@ async function runNotifySupply(ev: SupplyNotifyEvent, actorUid: string): Promise
     const uid = s.data()?.defaultBuyerId;
     if (!uid) return 0;
     const users = await campUsers(ev.campCode);
-    return send('supplyBuyer', users.filter(u => u.id === uid), '🛒 기본 구매 담당이 되었어요', '담당이 따로 없는 구매 요청을 사 와서 품목별로 완료해주세요.', { type: 'supply' }, actorUid);
+    return send('supplyBuyer', users.filter(u => u.id === uid), msg('push.defaultBuyerTitle'), msg('push.defaultBuyerBody'), { type: 'supply' }, actorUid);
   }
 
   if (ev.type === 'stock_low') {
@@ -163,9 +171,10 @@ async function runNotifySupply(ev: SupplyNotifyEvent, actorUid: string): Promise
     const min = Number(st.data()?.minStocks?.[ev.groupId] ?? it.data()?.minStockDefault ?? 0);
     if (!(min > 0 && n < min)) return 0;
     const users = await campUsers(ev.campCode);
-    const name = it.data()?.name ?? '품목';
+    const itemName = (lang: Locale) => it.data()?.name ?? t(lang, 'push.itemDefault');
     const stockManagers = users.filter(u => u.role === 'admin' || (!!u.exp?.groupRole && STOCK_MANAGER_GROUP_ROLES.includes(u.exp.groupRole)));
-    return send('stockLow', stockManagers, `📉 ${name} 부족`, `${gr.data()?.name ?? ''} 그룹 ${n}${it.data()?.unit ?? ''} 남음 (최소 ${min}) — 재고 요청 탭에서 요청으로 올릴 수 있어요.`, { type: 'stock', itemId: ev.itemId }, actorUid);
+    return send('stockLow', stockManagers, msg('push.stockLowTitle', (l) => ({ item: itemName(l) })),
+      msg('push.stockLowBody', () => ({ group: gr.data()?.name ?? '', count: n, unit: it.data()?.unit ?? '', min })), { type: 'stock', itemId: ev.itemId }, actorUid);
   }
 
   if (ev.type === 'stock_taken') {
@@ -180,9 +189,9 @@ async function runNotifySupply(ev: SupplyNotifyEvent, actorUid: string): Promise
     // 가져간 그룹과 연결된 캠프 그룹의 부매니저
     const managers = users.filter(u => !!u.exp?.groupRole && STOCK_MANAGER_GROUP_ROLES.includes(u.exp.groupRole)
       && isStockGroupOf({ campGroupName: fromGroup.campGroupName, name: fromGroup.name }, u.exp.group));
-    const name = it.data()?.name ?? '품목';
-    return send('stockTransfer', managers, `🔁 ${name} ${ev.quantity}${it.data()?.unit ?? ''} 이동`,
-      `${ev.byName} 선생님이 ${fromGroup.name}에서 ${to.data()?.name ?? '다른 그룹'}(으)로 가져갔어요.`,
+    return send('stockTransfer', managers,
+      msg('push.stockTakenTitle', (l) => ({ item: it.data()?.name ?? t(l, 'push.itemDefault'), qty: ev.quantity, unit: it.data()?.unit ?? '' })),
+      msg('push.stockTakenBody', (l) => ({ by: ev.byName, from: fromGroup.name, to: to.data()?.name ?? t(l, 'push.otherGroup') })),
       { type: 'stock', itemId: ev.itemId }, actorUid);
   }
 
@@ -195,8 +204,8 @@ async function runNotifySupply(ev: SupplyNotifyEvent, actorUid: string): Promise
     const byBuyer = new Map<string, typeof reqs>();
     reqs.forEach(r => { if (r.buyerId) { if (!byBuyer.has(r.buyerId)) byBuyer.set(r.buyerId, []); byBuyer.get(r.buyerId)!.push(r); } });
     for (const [uid, list] of byBuyer) {
-      total += await send('supplyBuyer', users.filter(u => u.id === uid), '🛒 사 올 물건이 생겼어요',
-        list.length === 1 ? `${forLabel(list[0])} · ${itemsLabel(list[0])}` : `요청 ${list.length}건 — 재고 요청 › 내 구매에서 확인하세요.`,
+      total += await send('supplyBuyer', users.filter(u => u.id === uid), msg('push.buyerAssignedTitle'),
+        (l) => (list.length === 1 ? `${forLabel(list[0], l)} · ${itemsLabel(list[0], l)}` : t(l, 'push.buyerAssignedMany', { count: list.length })),
         { type: 'supply', requestId: list.length === 1 ? list[0].id : undefined, view: 'buy' }, actorUid);
     }
     return total;
@@ -216,25 +225,26 @@ async function runNotifySupply(ev: SupplyNotifyEvent, actorUid: string): Promise
   switch (ev.type) {
     case 'request_created': {
       const targets = buyerUid ? byId(buyerUid) : admins;
-      return send('supplyRequest', targets, `🛒 새 구매 요청 · ${forLabel(r)}`, `${itemsLabel(r)} — ${r.requesterName ?? ''}`, { ...data, view: 'buy' }, actorUid);
+      return send('supplyRequest', targets, msg('push.requestCreatedTitle', (l) => ({ for: forLabel(r, l) })), (l) => `${itemsLabel(r, l)} — ${r.requesterName ?? ''}`, { ...data, view: 'buy' }, actorUid);
     }
     case 'status': {
       if (r.status !== 'rejected' && r.status !== 'onhold') return 0;
-      const title = r.status === 'rejected' ? '구매 요청이 반려됐어요' : '⏸ 구매 요청이 보류됐어요';
+      const title = msg(r.status === 'rejected' ? 'push.rejectedTitle' : 'push.onholdTitle');
       const note = r.statusNote ? ` · ${r.statusNote}` : '';
-      return send('supplyProgress', byId(r.requesterId), title, `${forLabel(r)} · ${itemsLabel(r)}${note}`, data, actorUid);
+      return send('supplyProgress', byId(r.requesterId), title, (l) => `${forLabel(r, l)} · ${itemsLabel(r, l)}${note}`, data, actorUid);
     }
     case 'comment': {
       const last = (r.comments ?? []).slice(-1)[0];
       if (!last) return 0;
-      return send('supplyComment', [...byId(r.requesterId), ...byId(buyerUid)], `💬 ${last.name}: ${forLabel(r)} 요청`, String(last.text).slice(0, 120), data, actorUid);
+      return send('supplyComment', [...byId(r.requesterId), ...byId(buyerUid)], msg('push.commentTitle', (l) => ({ name: last.name, for: forLabel(r, l) })), String(last.text).slice(0, 120), data, actorUid);
     }
     case 'settled': {
       const done = (r.done ?? {}) as Record<string, { byId?: string; amount?: number }>;
       const byBuyer = new Map<string, number>();
       ev.lineIds.forEach(id => { const d = done[id]; if (d?.byId && r.settlements?.[id]) byBuyer.set(d.byId, (byBuyer.get(d.byId) ?? 0) + (d.amount ?? 0)); });
       let total = 0;
-      for (const [uid, amount] of byBuyer) total += await send('supplySettle', byId(uid), '💰 정산 완료', `${forLabel(r)} · ${won(amount)} 정산됐어요 (${r.forType === 'student' ? '용돈봉투' : '송금'})`, data, actorUid);
+      for (const [uid, amount] of byBuyer) total += await send('supplySettle', byId(uid), msg('push.settledTitle'),
+        msg('push.settledBody', (l) => ({ for: forLabel(r, l), amount: won(amount, l), how: t(l, r.forType === 'student' ? 'push.howEnvelope' : 'push.howTransfer') })), data, actorUid);
       return total;
     }
     case 'lines_done': {
@@ -244,22 +254,25 @@ async function runNotifySupply(ev: SupplyNotifyEvent, actorUid: string): Promise
       const buyerName = done[ev.lineIds[0]]?.by ?? '';
       let total = 0;
       // 요청자에게 — 구매 완료 소식
-      total += await send('supplyProgress', byId(r.requesterId), '✅ 구매 완료', `${forLabel(r)} · ${itemsLabel(r, ev.lineIds)} — ${buyerName} 쌤이 사 왔어요`, data, actorUid);
+      total += await send('supplyProgress', byId(r.requesterId), msg('push.purchasedTitle'),
+        msg('push.purchasedBody', (l) => ({ for: forLabel(r, l), items: itemsLabel(r, l, ev.lineIds), buyer: buyerName })), data, actorUid);
       if (!(amount > 0)) return total;
       // 정산할 사람
       const parentLines = lines.filter(l => l.parentBill);
       if (parentLines.length || r.forType === 'camp') {
-        total += await send('supplyIntake', admins, r.forType === 'camp' ? '📥 캠프 공용 물품 구매 완료' : '🧾 학부모 청구할 물품',
-          `${forLabel(r)} · ${itemsLabel(r, ev.lineIds)} · ${won(amount)}${r.forType === 'camp' ? ' — 재고 입고해주세요' : ''}`, data, actorUid);
+        total += await send('supplyIntake', admins, msg(r.forType === 'camp' ? 'push.intakeCampTitle' : 'push.intakeParentTitle'),
+          (l) => `${forLabel(r, l)} · ${itemsLabel(r, l, ev.lineIds)} · ${won(amount, l)}${r.forType === 'camp' ? t(l, 'push.intakeCampSuffix') : ''}`, data, actorUid);
       }
       if (r.forType === 'student' && lines.some(l => !l.parentBill)) {
         // 담임: 요청 당시 담임 이름 → 없으면 반코드로 배정된 담임
         const mentorName = String(r.classMentor ?? '').trim();
         const mentors = users.filter(u => (mentorName && u.name === mentorName) || (!mentorName && r.studentClassCode && u.exp?.classCode === r.studentClassCode && (!u.exp?.groupRole || u.exp.groupRole === '담임')));
-        total += await send('supplySettle', mentors, '📒 용돈봉투 정산 요청', `${forLabel(r)} · ${won(amount)} — 봉투에서 빼서 ${buyerName} 쌤께 전달해주세요`, { ...data, view: 'settle' }, actorUid);
+        total += await send('supplySettle', mentors, msg('push.envelopeTitle'),
+          msg('push.envelopeBody', (l) => ({ for: forLabel(r, l), amount: won(amount, l), buyer: buyerName })), { ...data, view: 'settle' }, actorUid);
       } else if (r.forType === 'mentor' && lines.some(l => !l.parentBill) && r.requesterId !== actorUid) {
         const payTo = Object.values(done).find(d => (d as { payTo?: string }).payTo) as { payTo?: string } | undefined;
-        total += await send('supplySettle', byId(r.requesterId), '💸 송금 요청', `${buyerName} 쌤께 ${won(amount)}${payTo?.payTo ? ` · ${payTo.payTo}` : ''}`, { ...data, view: 'settle' }, actorUid);
+        total += await send('supplySettle', byId(r.requesterId), msg('push.transferTitle'),
+          msg('push.transferBody', (l) => ({ buyer: buyerName, amount: won(amount, l), payTo: payTo?.payTo ? ` · ${payTo.payTo}` : '' })), { ...data, view: 'settle' }, actorUid);
       }
       return total;
     }

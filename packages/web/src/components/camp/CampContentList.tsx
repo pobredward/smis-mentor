@@ -14,6 +14,7 @@ import { DEFAULT_EMOJIS } from '@smis-mentor/shared';
 import toast from 'react-hot-toast';
 import { campQueryKeys } from '@/hooks/useCampDataPrefetch';
 import { campPageRoleLabel as getRoleLabel, snippetAround } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 interface CampContentListProps {
   category: CampPageCategory;
@@ -125,7 +126,7 @@ export default function CampContentList({
 
   const handleAddItem = async () => {
     if (!activeJobCodeId || !newTitle.trim() || !userData?.userId) {
-      toast.error('제목을 입력해주세요.');
+      toast.error(L('content.pleaseEnterATitle'));
       return;
     }
 
@@ -142,7 +143,7 @@ export default function CampContentList({
         });
       } else {
         if (!newUrl.trim()) {
-          toast.error('URL을 입력해주세요.');
+          toast.error(L('content.pleaseEnterAUrl'));
           return;
         }
         await generationResourcesService.addLink(
@@ -162,10 +163,10 @@ export default function CampContentList({
       setNewEmoji('📄');
       setShowEmojiPicker(false);
       invalidateCache();
-      toast.success('추가되었습니다.');
+      toast.success(L('content.added'));
     } catch (error) {
       logger.error('항목 추가 실패:', error);
-      toast.error('추가에 실패했습니다.');
+      toast.error(L('content.failedToAdd'));
     }
   };
 
@@ -180,7 +181,7 @@ export default function CampContentList({
 
   const handleSaveEditItem = async () => {
     if (!editingItem || !activeJobCodeId || !editTitle.trim() || !userData?.userId) {
-      toast.error('제목을 입력해주세요.');
+      toast.error(L('content.pleaseEnterATitle'));
       return;
     }
 
@@ -196,15 +197,15 @@ export default function CampContentList({
 
       setEditingItem(null);
       invalidateCache();
-      toast.success('수정되었습니다.');
+      toast.success(L('content.updated'));
     } catch (error) {
       logger.error('항목 수정 실패:', error);
-      toast.error('수정에 실패했습니다.');
+      toast.error(L('content.failedToUpdate'));
     }
   };
 
   const handleDeleteItem = async (item: DisplayItem) => {
-    if (!activeJobCodeId || !confirm(`"${item.title}"을(를) 삭제하시겠습니까?`)) return;
+    if (!activeJobCodeId || !confirm(L('content.delete', { v0: item.title }))) return;
 
     try {
       if (item.type === 'page') {
@@ -214,10 +215,10 @@ export default function CampContentList({
       }
       
       invalidateCache();
-      toast.success('삭제되었습니다.');
+      toast.success(L('content.deleted'));
     } catch (error) {
       logger.error('항목 삭제 실패:', error);
-      toast.error('삭제에 실패했습니다.');
+      toast.error(L('content.failedToDelete'));
     }
   };
 
@@ -244,10 +245,10 @@ export default function CampContentList({
       
       await campPageService.reorderPages(activeJobCodeId, category, pageIds);
       invalidateCache();
-      toast.success('순서가 변경되었습니다.');
+      toast.success(L('content.orderChanged'));
     } catch (error) {
       logger.error('순서 변경 실패:', error);
-      toast.error('순서 변경에 실패했습니다.');
+      toast.error(L('content.failedToChangeTheOrder'));
     }
   };
 
@@ -265,10 +266,10 @@ export default function CampContentList({
       
       await campPageService.reorderPages(activeJobCodeId, category, pageIds);
       invalidateCache();
-      toast.success('순서가 변경되었습니다.');
+      toast.success(L('content.orderChanged'));
     } catch (error) {
       logger.error('순서 변경 실패:', error);
-      toast.error('순서 변경에 실패했습니다.');
+      toast.error(L('content.failedToChangeTheOrder'));
     }
   };
 
@@ -276,7 +277,7 @@ export default function CampContentList({
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
-        <p className="mt-4 text-gray-600">{isForeign ? 'Loading...' : '자료 로딩 중...'}</p>
+        <p className="mt-4 text-gray-600">{L('content.loading')}</p>
       </div>
     );
   }
@@ -289,7 +290,7 @@ export default function CampContentList({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
         </div>
-        <p className="text-center">{isForeign ? 'Please sign in to continue.' : '로그인 후 이용 가능합니다.'}</p>
+        <p className="text-center">{L('common.pleaseSignInToContinue')}</p>
       </div>
     );
   }
@@ -299,7 +300,7 @@ export default function CampContentList({
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-4">
         {emptyIcon}
         <h3 className="text-lg font-semibold text-gray-900 mb-2">
-          {isForeign ? 'No active camp selected' : '활성 캠프를 선택해주세요'}
+          {L('common.noActiveCampSelected')}
         </h3>
         {emptyDescription.map((line, i) => (
           <p key={i} className="text-sm text-gray-600">{line}</p>
@@ -320,7 +321,7 @@ export default function CampContentList({
               onClick={() => setShowAddModal(true)}
               className="mt-4 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
             >
-              + 첫 자료 추가하기
+              {L('content.addTheFirstItem')}
             </button>
           )}
         </div>
@@ -359,8 +360,8 @@ export default function CampContentList({
             <h1 className="text-2xl font-bold text-gray-900">{categoryTitle}</h1>
             <p className="text-sm text-gray-600 mt-1">
               {trimmedQuery
-                ? `"${searchQuery}" 검색 결과 ${filteredItems.length}개`
-                : `총 ${roleFilteredItems.length}개의 자료`}
+                ? L('content.results', { v0: searchQuery, v1: filteredItems.length })
+                : L('content.v0Items', { v0: roleFilteredItems.length })}
             </p>
           </div>
           
@@ -371,7 +372,7 @@ export default function CampContentList({
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            자료 추가
+            {L('content.addItem')}
           </button>
         </div>
 
@@ -399,7 +400,7 @@ export default function CampContentList({
               <div className="mb-8">
                 <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-2 h-2 bg-gray-400 rounded-full"></span>
-                  공통 자료
+                  {L('content.common')}
                   <span className="text-sm font-normal text-gray-500">({groupedItems.common.length})</span>
                 </h2>
                 <div className="grid grid-cols-2 gap-4">
@@ -425,7 +426,7 @@ export default function CampContentList({
               <div className="mb-8">
                 <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                  멘토 전용 자료
+                  {L('content.mentorsOnly')}
                   <span className="text-sm font-normal text-gray-500">({groupedItems.mentor.length})</span>
                 </h2>
                 <div className="grid grid-cols-2 gap-4">
@@ -451,7 +452,7 @@ export default function CampContentList({
               <div className="mb-8">
                 <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-2 h-2 bg-purple-500 rounded-full"></span>
-                  원어민 전용 자료
+                  {L('content.foreignTeachersOnly')}
                   <span className="text-sm font-normal text-gray-500">({groupedItems.foreign.length})</span>
                 </h2>
                 <div className="grid grid-cols-2 gap-4">
@@ -477,10 +478,10 @@ export default function CampContentList({
               <div className="mb-8">
                 <h2 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
                   <span className="w-2 h-2 bg-amber-400 rounded-full"></span>
-                  만료된 자료
+                  {L('content.expired')}
                   <span className="text-sm font-normal text-gray-500">({groupedItems.expired.length})</span>
                   <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 font-normal">
-                    관리자만 표시
+                    {L('content.adminsOnly')}
                   </span>
                 </h2>
                 <div className="grid grid-cols-2 gap-4 opacity-75">
@@ -554,12 +555,8 @@ export default function CampContentList({
           <h1 className="text-2xl font-bold text-gray-900">{categoryTitle}</h1>
           <p className="text-sm text-gray-600 mt-1">
             {trimmedQuery
-              ? isForeign
-                ? `${filteredItems.length} results for "${searchQuery}"`
-                : `"${searchQuery}" 검색 결과 ${filteredItems.length}개`
-              : isForeign
-                ? `${roleFilteredItems.length} items`
-                : `총 ${roleFilteredItems.length}개의 자료`}
+              ? L('content.v0ResultsForV1', { v0: filteredItems.length, v1: searchQuery })
+              : L('content.v0Items', { v0: roleFilteredItems.length })}
           </p>
         </div>
       </div>
@@ -643,14 +640,14 @@ function SearchBar({
         type="text"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
-        placeholder={isForeign ? 'Search by title or content...' : '제목 또는 내용으로 검색...'}
+        placeholder={L('content.searchByTitleOrContent')}
         className="w-full pl-9 pr-9 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
       />
       {searchQuery && (
         <button
           onClick={() => setSearchQuery('')}
           className="absolute inset-y-0 right-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
-          aria-label={isForeign ? 'Clear search' : '검색 초기화'}
+          aria-label={L('content.clearSearch')}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -715,10 +712,10 @@ function SearchResultList({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
         <p className="text-sm font-medium text-gray-500">
-          {isForeign ? `No results for "${query}"` : `"${query}"에 해당하는 자료가 없습니다`}
+          {L('content.noResultsForV0', { v0: query })}
         </p>
         <p className="text-xs text-gray-400 mt-1">
-          {isForeign ? 'Try a different keyword' : '다른 키워드로 검색해보세요'}
+          {L('content.tryADifferentKeyword')}
         </p>
       </div>
     );
@@ -840,7 +837,7 @@ function ItemCard({
                     onEdit(item);
                   }}
                   className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
-                  title="수정"
+                  title={L('task.edit')}
                 >
                   <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -854,7 +851,7 @@ function ItemCard({
                       onMoveUp();
                     }}
                     className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
-                    title="위로 이동"
+                    title={L('content.moveUp')}
                   >
                     <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
@@ -871,7 +868,7 @@ function ItemCard({
                   onDelete(item);
                 }}
                 className="w-5 h-5 flex items-center justify-center hover:bg-red-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
-                title="삭제"
+                title={L('common.delete')}
               >
                 <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -885,7 +882,7 @@ function ItemCard({
                     onMoveDown();
                   }}
                   className="w-5 h-5 flex items-center justify-center hover:bg-blue-50 rounded border border-gray-200 bg-white/80 backdrop-blur-sm"
-                  title="아래로 이동"
+                  title={L('content.moveDown')}
                 >
                   <svg className="w-2.5 h-2.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -965,7 +962,7 @@ function AddModal({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">자료 추가</h3>
+          <h3 className="text-lg font-semibold text-gray-900">{L('content.addItem')}</h3>
           <button
             onClick={() => {
               setShowAddModal(false);
@@ -986,7 +983,7 @@ function AddModal({
           {/* 유형 선택 (allowLinks가 true일 때만 표시) */}
           {allowLinks && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">유형</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{L('content.type')}</label>
               <div className="flex gap-2">
                 <button
                   onClick={() => setAddType('page')}
@@ -996,7 +993,7 @@ function AddModal({
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  📄 페이지
+                  {L('content.page')}
                 </button>
                 <button
                   onClick={() => setAddType('link')}
@@ -1006,19 +1003,19 @@ function AddModal({
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-                  🔗 링크
+                  {L('content.link')}
                 </button>
               </div>
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{L('content.title')}</label>
             <input
               type="text"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              placeholder="예: 1주차 자료"
+              placeholder={L('content.eGWeek1Materials')}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -1026,14 +1023,14 @@ function AddModal({
           {/* 이모지 선택 (페이지 타입일 때만) */}
           {addType === 'page' && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">아이콘</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{L('content.icon')}</label>
               <button
                 type="button"
                 onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 hover:bg-gray-50"
               >
                 <span className="text-2xl">{newEmoji}</span>
-                <span className="text-sm text-gray-600">클릭하여 변경</span>
+                <span className="text-sm text-gray-600">{L('content.clickToChange')}</span>
               </button>
               
               {showEmojiPicker && (
@@ -1072,16 +1069,16 @@ function AddModal({
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">대상 권한</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{L('content.audience')}</label>
             <select
               value={newTargetRole}
               onChange={(e) => setNewTargetRole(e.target.value as CampPageRole)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="common">공통 (모든 사용자)</option>
-              <option value="mentor">멘토 전용</option>
-              <option value="foreign">원어민 전용</option>
-              <option value="expired">만료 (관리자만 표시)</option>
+              <option value="common">{L('content.commonEveryone')}</option>
+              <option value="mentor">{L('content.mentorsOnly2')}</option>
+              <option value="foreign">{L('content.foreignTeachersOnly2')}</option>
+              <option value="expired">{L('content.expiredAdminsOnly')}</option>
             </select>
           </div>
           
@@ -1096,14 +1093,14 @@ function AddModal({
               }}
               className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              취소
+              {L('common.cancel')}
             </button>
             <button
               onClick={handleAddItem}
               disabled={!newTitle.trim() || (addType === 'link' && !newUrl.trim())}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              추가
+              {L('task.add')}
             </button>
           </div>
         </div>
@@ -1141,7 +1138,7 @@ function EditModal({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">페이지 수정</h3>
+          <h3 className="text-lg font-semibold text-gray-900">{L('content.editPage')}</h3>
           <button
             onClick={() => {
               setEditingItem(null);
@@ -1157,25 +1154,25 @@ function EditModal({
         
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">제목</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{L('content.title')}</label>
             <input
               type="text"
               value={editTitle}
               onChange={(e) => setEditTitle(e.target.value)}
-              placeholder="예: 1주차 자료"
+              placeholder={L('content.eGWeek1Materials')}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">아이콘</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{L('content.icon')}</label>
             <button
               type="button"
               onClick={() => setShowEditEmojiPicker(!showEditEmojiPicker)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center gap-2 hover:bg-gray-50"
             >
               <span className="text-2xl">{editEmoji}</span>
-              <span className="text-sm text-gray-600">클릭하여 변경</span>
+              <span className="text-sm text-gray-600">{L('content.clickToChange')}</span>
             </button>
             
             {showEditEmojiPicker && (
@@ -1200,16 +1197,16 @@ function EditModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">대상 권한</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{L('content.audience')}</label>
             <select
               value={editTargetRole}
               onChange={(e) => setEditTargetRole(e.target.value as CampPageRole)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="common">공통 (모든 사용자)</option>
-              <option value="mentor">멘토 전용</option>
-              <option value="foreign">원어민 전용</option>
-              <option value="expired">만료 (관리자만 표시)</option>
+              <option value="common">{L('content.commonEveryone')}</option>
+              <option value="mentor">{L('content.mentorsOnly2')}</option>
+              <option value="foreign">{L('content.foreignTeachersOnly2')}</option>
+              <option value="expired">{L('content.expiredAdminsOnly')}</option>
             </select>
           </div>
           
@@ -1221,14 +1218,14 @@ function EditModal({
               }}
               className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              취소
+              {L('common.cancel')}
             </button>
             <button
               onClick={handleSaveEditItem}
               disabled={!editTitle.trim()}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              저장
+              {L('common.save')}
             </button>
           </div>
         </div>

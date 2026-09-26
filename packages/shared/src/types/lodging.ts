@@ -1,3 +1,4 @@
+import { localizeLabels } from '../i18n';
 // 숙소 탭 — 건물(고정) + 캠프별 방 용도·선생님 배치 + ST 시트 방호수로 만든 명단
 import type { STSheetStudent } from './student';
 import { compareGroupNames } from './campTimetable';
@@ -196,7 +197,7 @@ export function lodgingMyRooms(
   return out;
 }
 
-export const LODGING_PLACE_KIND_LABEL: Record<LodgingPlaceKind, string> = {
+export const LODGING_PLACE_KIND_LABEL: Record<LodgingPlaceKind, string> = localizeLabels({
   hall: '홀·강당',
   dining: '식당',
   shop: '상점',
@@ -205,7 +206,7 @@ export const LODGING_PLACE_KIND_LABEL: Record<LodgingPlaceKind, string> = {
   ev: '승강기',
   fun: '오락',
   etc: '기타',
-};
+});
 
 export const LODGING_PLACE_COLORS: Record<LodgingPlaceKind, { bg: string; ink: string }> = {
   hall: { bg: '#E3EEDB', ink: '#2F4A1F' },
@@ -401,16 +402,16 @@ export function annexCorridorRow(building: LodgingBuilding, floor: number): numb
 
 export type LodgingFilterKey = 'group' | 'airport';
 
-export const LODGING_FILTER_LABEL: Record<LodgingFilterKey, string> = {
+export const LODGING_FILTER_LABEL: Record<LodgingFilterKey, string> = localizeLabels({
   group: '그룹',
   airport: '공항',
-};
+});
 
 /** 값이 비어 있는 학생을 가리키는 칩 이름 */
-export const LODGING_FILTER_EMPTY_LABEL: Record<LodgingFilterKey, string> = {
+export const LODGING_FILTER_EMPTY_LABEL: Record<LodgingFilterKey, string> = localizeLabels({
   group: '그룹 없음',
   airport: '공항 미정',
-};
+});
 
 /** 학생 한 명의 그룹명, 또는 입소공항 (없으면 퇴소공항) */
 export function occupantFilterValue(o: LodgingOccupant, key: LodgingFilterKey): string {

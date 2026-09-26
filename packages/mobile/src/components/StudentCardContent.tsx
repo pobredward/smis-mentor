@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { toDriveImageUrl, type STSheetStudent } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 /** 명단 탭(반·호수·입퇴소)과 숙소 방 시트가 같이 쓰는 학생 카드 속 — 사진·이름·반·방 */
 interface StudentCardContentProps {
@@ -25,13 +26,13 @@ export const StudentCardContent = React.memo(({ item, isForeign, filterType, ext
   const classNumberLine = [item.classNumber, item.studentId].filter(Boolean).join(' | ') || null;
 
   // 반 담당자: `반:classMentor(className반)` 형식
-  const classPrefix = isForeign ? 'Class' : '반';
+  const classPrefix = L('common.class');
   const classLine = item.classMentor
     ? `${classPrefix}:${item.classMentor}${item.className ? `(${item.className}반)` : ''}`
     : null;
 
   // 방/호수: `방:unitMentor(roomNumber호)` 형식
-  const unitPrefix = isForeign ? 'Room' : '방';
+  const unitPrefix = L('common.room');
   const unitMentorName = item.unitMentor || item.unit;
   const unitLine = unitMentorName
     ? `${unitPrefix}:${unitMentorName}${item.roomNumber ? `(${item.roomNumber}호)` : ''}`

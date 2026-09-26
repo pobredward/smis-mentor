@@ -7,6 +7,7 @@ import RoomContent from './RoomContent';
 import FamilyContent from './FamilyContent';
 import DepartureContent from './DepartureContent';
 import ArrivalContent from './ArrivalContent';
+import { L, isEnglishUI } from '@smis-mentor/shared';
 
 type RosterSubTab = 'class' | 'room' | 'departure' | 'arrival';
 
@@ -22,18 +23,18 @@ export default function RosterContent({ isFamilyCamp, isEJCamp }: RosterContentP
   const [activeSubTab, setActiveSubTab] = useState<RosterSubTab>('class');
 
   const subTabs: { id: RosterSubTab; title: string }[] = [
-    { id: 'class', title: isForeign ? 'Class' : '반명단' },
+    { id: 'class', title: L('students.class') },
     {
       id: 'room',
-      title: isForeign
+      title: isEnglishUI()
         ? (isFamilyCamp ? 'Family' : 'Room')
-        : (isFamilyCamp ? '가족명단' : '방명단'),
+        : (isFamilyCamp ? L('students.familyList') : L('students.room')),
     },
     // 입소/퇴소 명단은 E/J 캠프에만 노출
     ...(isEJCamp
       ? [
-          { id: 'departure' as RosterSubTab, title: '입소명단' },
-          { id: 'arrival' as RosterSubTab, title: '퇴소명단' },
+          { id: 'departure' as RosterSubTab, title: L('students.arrivalList') },
+          { id: 'arrival' as RosterSubTab, title: L('students.departureList') },
         ]
       : []),
   ];

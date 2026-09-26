@@ -7,6 +7,7 @@
 // 기존 문서와 호환 — generalNotifications·taskReminders 키를 그대로 쓴다.
 
 import { STOCK_MANAGER_GROUP_ROLES } from './inventory';
+import { tr } from '../i18n';
 
 /** 알림 종류 키 (= notificationSettings 의 필드명) */
 export const NOTIFICATION_KEYS = [
@@ -287,9 +288,7 @@ export function missedSummary(
     const label = MISSED_STATE_LABELS[state] ?? { ko: '알림 꺼짐', en: 'notifications off' };
     return `${names.join(', ')} (${isForeign ? label.en : label.ko})`;
   });
-  return isForeign
-    ? `Not delivered to ${parts.join(' · ')} — ask them to turn notifications on.`
-    : `${parts.join(' · ')} 님은 알림을 받지 못했어요. 알림을 켜 달라고 알려주세요.`;
+  return tr(isForeign, 'notification.notDeliveredToV0Ask', { v0: parts.join(' · ') });
 }
 
 // ==================== 분실물 알림 대상 미리보기 ====================

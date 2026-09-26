@@ -25,6 +25,7 @@ import { DEFAULT_EMOJIS } from '@smis-mentor/shared';
 import type { LinkType, ResourceLinkRole } from '../services/generationResourcesService';
 import { RootStackParamList } from '../navigation/types';
 import { campPageRoleLabel as getRoleLabel, snippetAround, htmlToSearchText as extractText } from '@smis-mentor/shared';
+import { L } from '@smis-mentor/shared';
 
 interface CampContentListProps {
   category: CampPageCategory;
@@ -110,7 +111,7 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
       setItems(displayItems);
     } catch (error) {
       logger.error(`${category} 로드 실패:`, error);
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to load materials.' : '자료를 불러오는데 실패했습니다.');
+      Alert.alert(L('common.error'), L('content.failedToLoadMaterials'));
     } finally {
       setLoading(false);
     }
@@ -140,7 +141,7 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
 
   const handleAddItem = async () => {
     if (!activeJobCodeId || !newTitle.trim() || !userData?.userId) {
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter a title.' : '제목을 입력해주세요.');
+      Alert.alert(L('common.error'), L('content.pleaseEnterATitle'));
       return;
     }
 
@@ -161,10 +162,10 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
       setNewEmoji('📄');
       setShowEmojiPicker(false);
       await loadItems();
-      Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Added successfully.' : '추가되었습니다.');
+      Alert.alert(L('common.success'), L('content.addedSuccessfully'));
     } catch (error) {
       logger.error('항목 추가 실패:', error);
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to add.' : '추가에 실패했습니다.');
+      Alert.alert(L('common.error'), L('content.failedToAdd'));
     }
   };
 
@@ -172,12 +173,12 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
     if (!activeJobCodeId) return;
 
     Alert.alert(
-      isForeign ? 'Confirm Delete' : '삭제 확인',
-      isForeign ? `Are you sure you want to delete "${item.title}"?` : `"${item.title}"을(를) 삭제하시겠습니까?`,
+      L('common.confirmDelete'),
+      L('content.areYouSureYouWant', { v0: item.title }),
       [
-        { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
+        { text: L('common.cancel'), style: 'cancel' },
         {
-          text: isForeign ? 'Delete' : '삭제',
+          text: L('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
@@ -188,10 +189,10 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
               }
               
               await loadItems();
-              Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Deleted successfully.' : '삭제되었습니다.');
+              Alert.alert(L('common.success'), L('content.deletedSuccessfully'));
             } catch (error) {
               logger.error('항목 삭제 실패:', error);
-              Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to delete.' : '삭제에 실패했습니다.');
+              Alert.alert(L('common.error'), L('content.failedToDelete'));
             }
           },
         },
@@ -210,7 +211,7 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
 
   const handleSaveEditItem = async () => {
     if (!editingItem || !activeJobCodeId || !editTitle.trim() || !userData?.userId) {
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Please enter a title.' : '제목을 입력해주세요.');
+      Alert.alert(L('common.error'), L('content.pleaseEnterATitle'));
       return;
     }
 
@@ -226,10 +227,10 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
 
       setEditingItem(null);
       await loadItems();
-      Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Updated successfully.' : '수정되었습니다.');
+      Alert.alert(L('common.success'), L('content.updatedSuccessfully'));
     } catch (error) {
       logger.error('항목 수정 실패:', error);
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update.' : '수정에 실패했습니다.');
+      Alert.alert(L('common.error'), L('content.failedToUpdate'));
     }
   };
 
@@ -238,22 +239,22 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
       // 링크 타입: 브라우저에서 열기 또는 앱에서 열기 선택
       Alert.alert(
         item.title,
-        isForeign ? 'How would you like to open this link?' : '링크를 어떻게 여시겠습니까?',
+        L('content.howWouldYouLikeTo'),
         [
           {
-            text: isForeign ? 'Open in Browser' : '브라우저에서 열기',
+            text: L('content.openInBrowser'),
             onPress: async () => {
               const url = item.url || '';
               const canOpen = await Linking.canOpenURL(url);
               if (canOpen) {
                 await Linking.openURL(url);
               } else {
-                Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Cannot open this link.' : '링크를 열 수 없습니다.');
+                Alert.alert(L('common.error'), L('content.cannotOpenThisLink'));
               }
             },
           },
           {
-            text: isForeign ? 'Open in App' : '앱에서 열기',
+            text: L('content.openInApp'),
             onPress: () => {
               navigation.navigate('CampDetail', {
                 category,
@@ -262,7 +263,7 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
               });
             },
           },
-          { text: isForeign ? 'Cancel' : '취소', style: 'cancel' },
+          { text: L('common.cancel'), style: 'cancel' },
         ]
       );
     } else {
@@ -289,10 +290,10 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
       
       await campPageService.reorderPages(activeJobCodeId, category, pageIds);
       await loadItems();
-      Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Order updated.' : '순서가 변경되었습니다.');
+      Alert.alert(L('common.success'), L('content.orderUpdated'));
     } catch (error) {
       logger.error('순서 변경 실패:', error);
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update order.' : '순서 변경에 실패했습니다.');
+      Alert.alert(L('common.error'), L('content.failedToUpdateOrder'));
     }
   };
 
@@ -310,10 +311,10 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
       
       await campPageService.reorderPages(activeJobCodeId, category, pageIds);
       await loadItems();
-      Alert.alert(isForeign ? 'Success' : '성공', isForeign ? 'Order updated.' : '순서가 변경되었습니다.');
+      Alert.alert(L('common.success'), L('content.orderUpdated'));
     } catch (error) {
       logger.error('순서 변경 실패:', error);
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to update order.' : '순서 변경에 실패했습니다.');
+      Alert.alert(L('common.error'), L('content.failedToUpdateOrder'));
     }
   };
 
@@ -321,7 +322,7 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>{isForeign ? 'Loading materials...' : '자료 로딩 중...'}</Text>
+        <Text style={styles.loadingText}>{L('content.loadingMaterials')}</Text>
       </View>
     );
   }
@@ -329,7 +330,7 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
   if (!userData || !activeJobCodeId) {
     return (
       <View style={styles.centerContainer}>
-        <Text style={styles.emptyText}>{isForeign ? 'Please select an active camp.' : '활성 캠프를 선택해주세요'}</Text>
+        <Text style={styles.emptyText}>{L('content.pleaseSelectAnActiveCamp')}</Text>
       </View>
     );
   }
@@ -348,13 +349,13 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
           />
         }
       >
-        <Text style={styles.emptyTitle}>{isForeign ? 'No materials registered.' : '등록된 자료가 없습니다'}</Text>
+        <Text style={styles.emptyTitle}>{L('content.noMaterialsRegistered')}</Text>
         {isAdmin && (
           <TouchableOpacity
             style={styles.addButtonLarge}
             onPress={() => setShowAddModal(true)}
           >
-            <Text style={styles.addButtonLargeText}>+ {isForeign ? 'Add first material' : '첫 자료 추가하기'}</Text>
+            <Text style={styles.addButtonLargeText}>+ {L('content.addFirstMaterial')}</Text>
           </TouchableOpacity>
         )}
 
@@ -408,12 +409,8 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
               <Text style={styles.headerTitle}>{categoryTitle}</Text>
               <Text style={styles.headerSubtitle}>
                 {trimmedQuery
-                  ? isForeign
-                    ? `${filteredItems.length} results for "${searchQuery}"`
-                    : `"${searchQuery}" 검색 결과 ${filteredItems.length}개`
-                  : isForeign
-                    ? `${roleFilteredItems.length} materials`
-                    : `총 ${roleFilteredItems.length}개의 자료`}
+                  ? L('content.v0ResultsForV1', { v0: filteredItems.length, v1: searchQuery })
+                  : L('content.v0Materials', { v0: roleFilteredItems.length })}
               </Text>
             </View>
             
@@ -421,7 +418,7 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
               style={styles.addButton}
               onPress={() => setShowAddModal(true)}
             >
-              <Text style={styles.addButtonText}>+ {isForeign ? 'Add' : '자료 추가'}</Text>
+              <Text style={styles.addButtonText}>+ {L('content.add')}</Text>
             </TouchableOpacity>
           </View>
 
@@ -447,7 +444,7 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
                     <View style={[styles.sectionDot, { backgroundColor: '#9ca3af' }]} />
-                    <Text style={styles.sectionTitle}>{isForeign ? 'Common' : '공통 자료'}</Text>
+                    <Text style={styles.sectionTitle}>{L('content.common')}</Text>
                     <Text style={styles.sectionCount}>({groupedItems.common.length})</Text>
                   </View>
                   <View style={styles.sectionContent}>
@@ -472,7 +469,7 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
                     <View style={[styles.sectionDot, { backgroundColor: '#3b82f6' }]} />
-                    <Text style={styles.sectionTitle}>{isForeign ? 'Mentor Only' : '멘토 전용 자료'}</Text>
+                    <Text style={styles.sectionTitle}>{L('content.mentorOnly')}</Text>
                     <Text style={styles.sectionCount}>({groupedItems.mentor.length})</Text>
                   </View>
                   <View style={styles.sectionContent}>
@@ -497,7 +494,7 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
                     <View style={[styles.sectionDot, { backgroundColor: '#a855f7' }]} />
-                    <Text style={styles.sectionTitle}>{isForeign ? 'Foreign Teacher Only' : '원어민 전용 자료'}</Text>
+                    <Text style={styles.sectionTitle}>{L('content.foreignTeacherOnly')}</Text>
                     <Text style={styles.sectionCount}>({groupedItems.foreign.length})</Text>
                   </View>
                   <View style={styles.sectionContent}>
@@ -571,12 +568,8 @@ export function CampContentList({ category, linkType, categoryTitle, isForeign }
           <Text style={styles.headerTitle}>{categoryTitle}</Text>
           <Text style={styles.headerSubtitle}>
             {trimmedQuery
-              ? isForeign
-                ? `${filteredItems.length} results for "${searchQuery}"`
-                : `"${searchQuery}" 검색 결과 ${filteredItems.length}개`
-              : isForeign
-                ? `${roleFilteredItems.length} materials`
-                : `총 ${roleFilteredItems.length}개의 자료`}
+              ? L('content.v0ResultsForV1', { v0: filteredItems.length, v1: searchQuery })
+              : L('content.v0Materials', { v0: roleFilteredItems.length })}
           </Text>
         </View>
       </View>
@@ -655,7 +648,7 @@ function SearchBar({
         style={styles.searchInput}
         value={searchQuery}
         onChangeText={setSearchQuery}
-        placeholder={isForeign ? 'Search by title or content...' : '제목 또는 내용으로 검색...'}
+        placeholder={L('content.searchByTitleOrContent')}
         placeholderTextColor="#9ca3af"
         returnKeyType="search"
         clearButtonMode={Platform.OS === 'ios' ? 'while-editing' : 'never'}
@@ -665,7 +658,7 @@ function SearchBar({
           onPress={() => setSearchQuery('')}
           style={styles.searchClearButton}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          accessibilityLabel={isForeign ? 'Clear search' : '검색 초기화'}
+          accessibilityLabel={L('content.clearSearch')}
           accessibilityRole="button"
         >
           <Text style={styles.searchClearText}>✕</Text>
@@ -733,10 +726,10 @@ function SearchResultList({
       <View style={styles.searchEmptyContainer}>
         <Text style={styles.searchEmptyIcon}>🔍</Text>
         <Text style={styles.searchEmptyTitle}>
-          {isForeign ? `No results for "${query}"` : `"${query}"에 해당하는 자료가 없습니다`}
+          {L('content.noResultsForV0', { v0: query })}
         </Text>
         <Text style={styles.searchEmptySubtitle}>
-          {isForeign ? 'Try a different keyword' : '다른 키워드로 검색해보세요'}
+          {L('content.tryADifferentKeyword')}
         </Text>
       </View>
     );
@@ -1505,7 +1498,7 @@ function AddModal({
       <View style={styles.modalOverlay}>
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>페이지 추가</Text>
+            <Text style={styles.modalTitle}>{L('content.addPage')}</Text>
             <TouchableOpacity onPress={onClose}>
               <Text style={styles.modalClose}>✕</Text>
             </TouchableOpacity>
@@ -1513,23 +1506,23 @@ function AddModal({
 
           <ScrollView style={styles.modalContent}>
             {/* 제목 */}
-            <Text style={styles.label}>제목</Text>
+            <Text style={styles.label}>{L('content.title')}</Text>
             <TextInput
               style={styles.input}
               value={newTitle}
               onChangeText={setNewTitle}
-              placeholder="예: 1주차 자료"
+              placeholder={L('content.eGWeek1Materials')}
               placeholderTextColor="#9CA3AF"
             />
 
             {/* 이모지 선택 */}
-            <Text style={styles.label}>아이콘</Text>
+            <Text style={styles.label}>{L('content.icon')}</Text>
             <TouchableOpacity
               style={styles.emojiButton}
               onPress={() => setShowEmojiPicker(!showEmojiPicker)}
             >
               <Text style={styles.emojiButtonIcon}>{newEmoji}</Text>
-              <Text style={styles.emojiButtonText}>클릭하여 변경</Text>
+              <Text style={styles.emojiButtonText}>{L('content.clickToChange')}</Text>
             </TouchableOpacity>
             
             {showEmojiPicker && (
@@ -1554,7 +1547,7 @@ function AddModal({
             )}
 
             {/* 권한 */}
-            <Text style={styles.label}>대상 권한</Text>
+            <Text style={styles.label}>{L('content.audience')}</Text>
             <View style={styles.roleButtons}>
               {(['common', 'mentor', 'foreign'] as CampPageRole[]).map((role) => (
                 <TouchableOpacity
@@ -1580,7 +1573,7 @@ function AddModal({
             {/* 버튼 */}
             <View style={styles.modalButtons}>
               <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-                <Text style={styles.cancelButtonText}>취소</Text>
+                <Text style={styles.cancelButtonText}>{L('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
@@ -1590,7 +1583,7 @@ function AddModal({
                 onPress={onAdd}
                 disabled={!newTitle.trim()}
               >
-                <Text style={styles.addModalButtonText}>추가</Text>
+                <Text style={styles.addModalButtonText}>{L('task.add')}</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>
@@ -1630,7 +1623,7 @@ function EditModal({
       <View style={styles.modalOverlay}>
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>페이지 수정</Text>
+            <Text style={styles.modalTitle}>{L('content.editPage')}</Text>
             <TouchableOpacity onPress={() => setEditingItem(null)}>
               <Text style={styles.modalClose}>✕</Text>
             </TouchableOpacity>
@@ -1638,23 +1631,23 @@ function EditModal({
 
           <ScrollView style={styles.modalContent}>
             {/* 제목 */}
-            <Text style={styles.label}>제목</Text>
+            <Text style={styles.label}>{L('content.title')}</Text>
             <TextInput
               style={styles.input}
               value={editTitle}
               onChangeText={setEditTitle}
-              placeholder="예: 1주차 자료"
+              placeholder={L('content.eGWeek1Materials')}
               placeholderTextColor="#9CA3AF"
             />
 
             {/* 이모지 선택 */}
-            <Text style={styles.label}>아이콘</Text>
+            <Text style={styles.label}>{L('content.icon')}</Text>
             <TouchableOpacity
               style={styles.emojiButton}
               onPress={() => setShowEditEmojiPicker(!showEditEmojiPicker)}
             >
               <Text style={styles.emojiButtonIcon}>{editEmoji}</Text>
-              <Text style={styles.emojiButtonText}>클릭하여 변경</Text>
+              <Text style={styles.emojiButtonText}>{L('content.clickToChange')}</Text>
             </TouchableOpacity>
             
             {showEditEmojiPicker && (
@@ -1679,7 +1672,7 @@ function EditModal({
             )}
 
             {/* 권한 */}
-            <Text style={styles.label}>대상 권한</Text>
+            <Text style={styles.label}>{L('content.audience')}</Text>
             <View style={styles.roleButtons}>
               {(['common', 'mentor', 'foreign'] as CampPageRole[]).map((role) => (
                 <TouchableOpacity
@@ -1705,7 +1698,7 @@ function EditModal({
             {/* 버튼 */}
             <View style={styles.modalButtons}>
               <TouchableOpacity style={styles.cancelButton} onPress={() => setEditingItem(null)}>
-                <Text style={styles.cancelButtonText}>취소</Text>
+                <Text style={styles.cancelButtonText}>{L('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
@@ -1715,7 +1708,7 @@ function EditModal({
                 onPress={handleSaveEditItem}
                 disabled={!editTitle.trim()}
               >
-                <Text style={styles.addModalButtonText}>저장</Text>
+                <Text style={styles.addModalButtonText}>{L('common.save')}</Text>
               </TouchableOpacity>
             </View>
           </ScrollView>

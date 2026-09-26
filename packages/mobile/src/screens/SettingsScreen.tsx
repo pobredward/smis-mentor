@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import Constants from 'expo-constants';
-import { logger } from '@smis-mentor/shared';
+import { logger, LOCALES, type Locale } from '@smis-mentor/shared';
+import { doc, updateDoc, deleteField, Timestamp } from 'firebase/firestore';
+import { db } from '../config/firebase';
 import {
   View,
   Text,
@@ -44,12 +46,28 @@ const NOTIFICATION_ICONS: Record<NotificationKey, keyof typeof Ionicons.glyphMap
 };
 import { RootStackParamList } from '../navigation/types';
 import { useNotificationPermission } from '../hooks/useNotificationPermission';
+import { L, isEnglishUI } from '@smis-mentor/shared';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
 export function SettingsScreen() {
   const navigation = useNavigation<NavigationProp>();
   const { userData, refreshUserData, isSharingLocation, setIsSharingLocation } = useAuth();
+  const [savingLocale, setSavingLocale] = useState(false);
+  /** 화면 언어 바꾸기 — 빈 값이면 필드를 지워 자동(역할 기준)으로. 저장 후 화면을 새로 그린다 */
+  const changeLocale = async (value: Locale | '') => {
+    if (!userData || savingLocale || (userData.locale ?? '') === value) return;
+    setSavingLocale(true);
+    try {
+      await updateDoc(doc(db, 'users', userData.userId), { locale: value ? value : deleteField(), updatedAt: Timestamp.now() });
+      await refreshUserData();
+    } catch (e) {
+      logger.error('언어 변경 실패:', e);
+      Alert.alert(L('common.error'), L('settings.languageSaveFailed'));
+    } finally {
+      setSavingLocale(false);
+    }
+  };
   // 위치 공유: 위치 탭이 보이지 않는 상황에서도 여기서 항상 끌 수 있어야 한다 (백그라운드 위치 정책)
   const [bgLocationRunning, setBgLocationRunning] = useState(false);
   const [stoppingLocation, setStoppingLocation] = useState(false);
@@ -70,9 +88,9 @@ export function SettingsScreen() {
       await forceStopAllLocationSharing(db, userData.userId);
       setIsSharingLocation(false);
       setBgLocationRunning(false);
-      Alert.alert(isForeign ? 'Location sharing off' : '위치 공유 중지', isForeign ? 'Location sharing has been turned off on this device.' : '이 기기의 위치 공유를 껐습니다.');
+      Alert.alert(L('settings.locationSharingOff'), L('settings.locationSharingHasBeenTurned'));
     } catch {
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to stop location sharing.' : '위치 공유를 끄지 못했습니다.');
+      Alert.alert(L('common.error'), L('settings.failedToStopLocationSharing'));
     } finally {
       setStoppingLocation(false);
     }
@@ -103,7 +121,7 @@ export function SettingsScreen() {
       await unblockUser(userData.userId, uid);
       await refreshUserData();
     } catch {
-      Alert.alert(isForeign ? 'Error' : '오류', isForeign ? 'Failed to unblock.' : '차단 해제에 실패했습니다.');
+      Alert.alert(L('common.error'), L('settings.failedToUnblock'));
     } finally {
       setUnblocking(null);
     }
@@ -147,8 +165,8 @@ export function SettingsScreen() {
     } catch (error) {
       logger.error('알림 설정 로드 실패:', error);
       Alert.alert(
-        isForeign ? 'Error' : '오류',
-        isForeign ? 'Failed to load notification settings.' : '알림 설정을 불러오는데 실패했습니다.'
+        L('common.error'),
+        L('settings.failedToLoadNotificationSettings')
       );
     } finally {
       setLoading(false);
@@ -172,8 +190,8 @@ export function SettingsScreen() {
       logger.error('알림 설정 업데이트 실패:', error);
       setSettings(prev);
       Alert.alert(
-        isForeign ? 'Error' : '오류',
-        isForeign ? 'Failed to update notification settings.' : '알림 설정 변경에 실패했습니다.'
+        L('common.error'),
+        L('settings.failedToUpdateNotificationSettings')
       );
     } finally {
       setSaving(false);
@@ -185,10 +203,10 @@ export function SettingsScreen() {
       <View style={styles.centerContainer}>
         <Ionicons name="lock-closed-outline" size={64} color="#cbd5e1" />
         <Text style={styles.emptyTitle}>
-          {isForeign ? 'Login Required' : '로그인 필요'}
+          {L('common.loginRequired')}
         </Text>
         <Text style={styles.emptyText}>
-          {isForeign ? 'Please log in to access this page.' : '로그인 후 이용 가능합니다.'}
+          {L('common.pleaseLogInToAccess')}
         </Text>
       </View>
     );
@@ -199,7 +217,7 @@ export function SettingsScreen() {
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#3b82f6" />
         <Text style={styles.loadingText}>
-          {isForeign ? 'Loading settings...' : '설정을 불러오는 중...'}
+          {L('settings.loadingSettings')}
         </Text>
       </View>
     );
@@ -212,19 +230,19 @@ export function SettingsScreen() {
       color: permissionStatus === 'denied' ? '#ef4444' : '#f59e0b',
       bg: permissionStatus === 'denied' ? '#fef2f2' : '#fffbeb',
       border: permissionStatus === 'denied' ? '#fecaca' : '#fde68a',
-      title: isForeign
+      title: isEnglishUI()
         ? permissionStatus === 'denied' ? 'Notifications Blocked' : 'Enable Notifications'
-        : permissionStatus === 'denied' ? '알림이 차단되어 있습니다' : '알림 허용이 필요합니다',
-      description: isForeign
+        : permissionStatus === 'denied' ? L('common.notificationsAreBlocked') : L('settings.notificationsNeedToBeAllowed'),
+      description: isEnglishUI()
         ? permissionStatus === 'denied'
           ? 'Tap below to open settings and enable notifications.'
           : 'Tap below to allow notifications for this app.'
         : permissionStatus === 'denied'
-          ? '아래 버튼을 눌러 설정에서 알림을 허용해 주세요.'
-          : '아래 버튼을 눌러 알림을 허용해 주세요.',
-      buttonText: isForeign
+          ? L('settings.tapTheButtonBelowTo2')
+          : L('settings.tapTheButtonBelowTo'),
+      buttonText: isEnglishUI()
         ? permissionStatus === 'denied' ? 'Open Settings' : 'Allow Notifications'
-        : permissionStatus === 'denied' ? '설정 열기' : '알림 허용하기',
+        : permissionStatus === 'denied' ? L('common.openSettings') : L('settings.enableNotifications'),
     };
   })();
 
@@ -276,17 +294,43 @@ export function SettingsScreen() {
         </View>
       )}
 
+      {/* 화면 언어 — 비워 두면 계정 유형으로 (원어민 영어) */}
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="language-outline" size={24} color="#3b82f6" />
+          <Text style={styles.sectionTitle}>{L('settings.language')}</Text>
+        </View>
+        <Text style={styles.sectionDescription}>{L('settings.languageDesc')}</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+          {([{ value: '', label: L('settings.languageAuto') }, ...LOCALES] as Array<{ value: Locale | ''; label: string }>).map((o) => {
+            const selected = (userData?.locale ?? '') === o.value;
+            return (
+              <TouchableOpacity
+                key={o.value || 'auto'}
+                disabled={savingLocale}
+                onPress={() => changeLocale(o.value)}
+                style={{
+                  paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, borderWidth: 1,
+                  borderColor: selected ? '#2563eb' : '#e5e7eb', backgroundColor: selected ? '#2563eb' : '#fff',
+                  opacity: savingLocale ? 0.5 : 1,
+                }}
+              >
+                <Text style={{ color: selected ? '#fff' : '#374151', fontSize: 14 }}>{o.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Ionicons name="notifications-outline" size={24} color="#3b82f6" />
           <Text style={styles.sectionTitle}>
-            {isForeign ? 'Notification Settings' : '알림 설정'}
+            {L('common.notificationSettings')}
           </Text>
         </View>
         <Text style={styles.sectionDescription}>
-          {isForeign
-            ? 'Turn everything off at once, or choose the kinds you want. Types shown here depend on your role in the camp.'
-            : '전체를 한 번에 끄거나, 종류별로 고를 수 있어요. 보이는 종류는 캠프에서의 역할에 따라 달라집니다.'}
+          {L('settings.turnEverythingOffAtOnce')}
         </Text>
 
         {/* 전체 on/off */}
@@ -297,11 +341,11 @@ export function SettingsScreen() {
                 <Ionicons name={masterOn ? 'notifications' : 'notifications-off'} size={24} color={masterOn ? '#10b981' : '#9ca3af'} />
               </View>
               <View style={styles.settingTextContainer}>
-                <Text style={styles.settingLabel}>{isForeign ? 'All notifications' : '전체 알림'}</Text>
+                <Text style={styles.settingLabel}>{L('settings.allNotifications')}</Text>
                 <Text style={styles.settingDescription}>
                   {masterOn
-                    ? (isForeign ? 'On — each kind can be set below.' : '켜짐 — 아래에서 종류별로 조절할 수 있어요.')
-                    : (isForeign ? 'Off — no push notifications at all.' : '꺼짐 — 어떤 푸시 알림도 오지 않아요.')}
+                    ? (L('settings.onEachKindCanBe'))
+                    : (L('settings.offNoPushNotificationsAt'))}
                 </Text>
               </View>
             </View>
@@ -321,7 +365,7 @@ export function SettingsScreen() {
             {visibleTypes.map(({ groupKey, types }) => (
               <View key={groupKey} style={{ gap: 14 }}>
                 <Text style={styles.groupHeader}>
-                  {isForeign ? NOTIFICATION_GROUP_LABELS[groupKey].en : NOTIFICATION_GROUP_LABELS[groupKey].ko}
+                  {isEnglishUI() ? NOTIFICATION_GROUP_LABELS[groupKey].en : NOTIFICATION_GROUP_LABELS[groupKey].ko}
                 </Text>
                 {types.map(t => {
                   const on = settings[t.key] !== false;
@@ -332,8 +376,8 @@ export function SettingsScreen() {
                           <Ionicons name={NOTIFICATION_ICONS[t.key]} size={22} color={masterOn && on ? '#3b82f6' : '#9ca3af'} />
                         </View>
                         <View style={styles.settingTextContainer}>
-                          <Text style={styles.settingLabel}>{isForeign ? t.labelEn : t.label}</Text>
-                          <Text style={styles.settingDescription}>{isForeign ? t.descEn : t.desc}</Text>
+                          <Text style={styles.settingLabel}>{isEnglishUI() ? t.labelEn : t.label}</Text>
+                          <Text style={styles.settingDescription}>{isEnglishUI() ? t.descEn : t.desc}</Text>
                         </View>
                       </View>
                       <Switch
@@ -356,26 +400,22 @@ export function SettingsScreen() {
         <View style={styles.infoCard}>
           <Ionicons name="information-circle-outline" size={20} color="#6b7280" />
           <Text style={styles.infoText}>
-            {isForeign
-              ? 'You can change your notification settings at any time. If notification permission has been denied in your system settings, you will not receive notifications even after enabling them here.'
-              : '알림 설정은 언제든지 변경할 수 있습니다. 시스템 설정에서 알림 권한이 거부된 경우, 설정을 변경하더라도 알림을 받을 수 없습니다.'}
+            {L('settings.youCanChangeYourNotification')}
           </Text>
         </View>
         {permissionStatus === 'granted' && (
           <TouchableOpacity
             style={styles.permissionGrantedBadge}
             onPress={() => Alert.alert(
-              isForeign ? 'Notifications Enabled' : '알림 허용됨',
-              isForeign
-                ? 'Notifications are enabled for this app.'
-                : '이 앱의 알림이 허용되어 있습니다.'
+              L('settings.notificationsEnabled'),
+              L('settings.notificationsAreEnabledForThis')
             )}
-            accessibilityLabel={isForeign ? 'Notifications enabled' : '알림 허용됨'}
+            accessibilityLabel={L('settings.notificationsEnabled2')}
             accessibilityRole="button"
           >
             <Ionicons name="checkmark-circle" size={16} color="#10b981" />
             <Text style={styles.permissionGrantedText}>
-              {isForeign ? 'Notifications enabled' : '알림 허용됨'}
+              {L('settings.notificationsEnabled2')}
             </Text>
           </TouchableOpacity>
         )}
@@ -383,25 +423,25 @@ export function SettingsScreen() {
 
       <View style={styles.footerSection}>
         <Text style={styles.footerTitle}>
-          {isForeign ? 'Location Sharing' : '위치 공유'}
+          {L('settings.locationSharing')}
         </Text>
         <Text style={styles.sectionDescription}>
           {isSharingLocation || bgLocationRunning
-            ? (isForeign ? 'Your location is currently being shared with camp staff (including in the background).' : '현재 캠프 운영진에게 위치를 공유하고 있습니다 (백그라운드 포함).')
-            : (isForeign ? 'Location sharing is off.' : '위치 공유가 꺼져 있습니다.')}
+            ? (L('settings.yourLocationIsCurrentlyBeing'))
+            : (L('settings.locationSharingIsOff'))}
           {'\n'}
-          {isForeign ? 'Location records are automatically deleted 14 days after the last update.' : '위치 기록은 마지막 갱신 후 14일이 지나면 자동 삭제됩니다.'}
+          {L('settings.locationRecordsAreAutomaticallyDeleted')}
         </Text>
         <TouchableOpacity
           style={styles.footerLink}
           onPress={handleStopLocation}
           disabled={stoppingLocation}
           accessibilityRole="button"
-          accessibilityLabel={isForeign ? 'Turn off location sharing' : '위치 공유 끄기'}
+          accessibilityLabel={L('settings.turnOffLocationSharing')}
         >
           <View style={styles.footerLinkContent}>
             <Ionicons name="location-outline" size={20} color={isSharingLocation || bgLocationRunning ? '#dc2626' : '#6b7280'} />
-            <Text style={styles.footerLinkText}>{isForeign ? 'Turn off location sharing now' : '지금 위치 공유 끄기'}</Text>
+            <Text style={styles.footerLinkText}>{L('settings.turnOffLocationSharingNow')}</Text>
           </View>
           {stoppingLocation ? <ActivityIndicator size="small" color="#6b7280" /> : <Ionicons name="chevron-forward" size={20} color="#9ca3af" />}
         </TouchableOpacity>
@@ -409,21 +449,21 @@ export function SettingsScreen() {
 
       <View style={styles.footerSection}>
         <Text style={styles.footerTitle}>
-          {isForeign ? 'Blocked Users (Community)' : '차단한 사용자 (게시판)'}
+          {L('settings.blockedUsersCommunity')}
         </Text>
         {blockedUsers.length === 0 ? (
           <Text style={styles.sectionDescription}>
-            {isForeign ? 'No blocked users. You can block an author from a post menu.' : '차단한 사용자가 없습니다. 게시글 메뉴에서 작성자를 차단할 수 있습니다.'}
+            {L('settings.noBlockedUsersYouCan')}
           </Text>
         ) : (
           blockedUsers.map((uid) => (
             <View key={uid} style={styles.footerLink}>
               <View style={styles.footerLinkContent}>
                 <Ionicons name="ban-outline" size={20} color="#6b7280" />
-                <Text style={styles.footerLinkText}>{blockedNames[uid] || (isForeign ? 'User' : '사용자') + ` (${uid.slice(0, 6)}…)`}</Text>
+                <Text style={styles.footerLinkText}>{blockedNames[uid] || (L('settings.user')) + ` (${uid.slice(0, 6)}…)`}</Text>
               </View>
-              <TouchableOpacity onPress={() => handleUnblock(uid)} disabled={unblocking === uid} accessibilityRole="button" accessibilityLabel={isForeign ? 'Unblock' : '차단 해제'}>
-                {unblocking === uid ? <ActivityIndicator size="small" color="#6b7280" /> : <Text style={{ color: '#2563eb', fontWeight: '600' }}>{isForeign ? 'Unblock' : '해제'}</Text>}
+              <TouchableOpacity onPress={() => handleUnblock(uid)} disabled={unblocking === uid} accessibilityRole="button" accessibilityLabel={L('settings.unblock')}>
+                {unblocking === uid ? <ActivityIndicator size="small" color="#6b7280" /> : <Text style={{ color: '#2563eb', fontWeight: '600' }}>{L('settings.unblock2')}</Text>}
               </TouchableOpacity>
             </View>
           ))
@@ -432,7 +472,7 @@ export function SettingsScreen() {
 
       <View style={styles.footerSection}>
         <Text style={styles.footerTitle}>
-          {isForeign ? 'Legal' : '법률 문서'}
+          {L('settings.legal')}
         </Text>
         
         <TouchableOpacity 
@@ -442,7 +482,7 @@ export function SettingsScreen() {
           <View style={styles.footerLinkContent}>
             <Ionicons name="shield-checkmark-outline" size={20} color="#6b7280" />
             <Text style={styles.footerLinkText}>
-              {isForeign ? 'Privacy Policy' : '개인정보처리방침'}
+              {L('common.privacyPolicy')}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
@@ -455,7 +495,7 @@ export function SettingsScreen() {
           <View style={styles.footerLinkContent}>
             <Ionicons name="document-text-outline" size={20} color="#6b7280" />
             <Text style={styles.footerLinkText}>
-              {isForeign ? 'Terms of Service' : '서비스 이용약관'}
+              {L('common.termsOfService')}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
@@ -464,7 +504,7 @@ export function SettingsScreen() {
 
       <View style={styles.appInfo}>
         <Text style={styles.appVersion}>SMIS Mentor v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
-        <Text style={styles.copyright}>© 2026 (주)에스엠아이에스. All rights reserved.</Text>
+        <Text style={styles.copyright}>{L('settings.n2026SmisCoLtdAll')}</Text>
       </View>
     </ScrollView>
   );

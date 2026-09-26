@@ -14,6 +14,7 @@ import {
   type NotificationSettings,
   type NotificationType,
 } from '@smis-mentor/shared';
+import { L, isEnglishUI } from '@smis-mentor/shared';
 
 /**
  * 마이페이지 › 알림 설정
@@ -58,7 +59,7 @@ export default function NotificationSettingsCard() {
       await setDoc(doc(db, 'users', uid), { notificationSettings: patch }, { merge: true });
     } catch (e) {
       console.error('알림 설정 저장 오류:', e);
-      setError(isForeign ? 'Failed to save. Please try again.' : '저장하지 못했습니다. 다시 시도해주세요.');
+      setError(L('settings.failedToSavePleaseTry'));
     } finally {
       setSaving(null);
     }
@@ -77,27 +78,25 @@ export default function NotificationSettingsCard() {
     <div className="bg-white shadow-md rounded-lg overflow-hidden mb-6">
       <div className="px-4 sm:px-6 py-4 border-b border-gray-100 flex items-center gap-2">
         {masterOn ? <FiBell className="w-5 h-5 text-emerald-600" /> : <FiBellOff className="w-5 h-5 text-gray-400" />}
-        <h2 className="text-base font-bold text-gray-900">{isForeign ? 'Notification Settings' : '알림 설정'}</h2>
+        <h2 className="text-base font-bold text-gray-900">{L('common.notificationSettings')}</h2>
         <span className="ml-auto text-xs text-gray-400">
-          {isForeign ? 'Push notifications on the app' : '앱 푸시 알림'}
+          {L('settings.pushNotificationsOnTheApp')}
         </span>
       </div>
 
       <div className="px-4 sm:px-6 py-4 space-y-4">
         <p className="text-xs text-gray-500">
-          {isForeign
-            ? 'Turn everything off at once, or choose the kinds you want. Types shown here depend on your role in the camp.'
-            : '전체를 한 번에 끄거나, 종류별로 고를 수 있어요. 보이는 종류는 캠프에서의 역할에 따라 달라집니다.'}
+          {L('settings.turnEverythingOffAtOnce')}
         </p>
 
         {/* 전체 */}
         <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3">
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-gray-900">{isForeign ? 'All notifications' : '전체 알림'}</p>
+            <p className="text-sm font-bold text-gray-900">{L('settings.allNotifications')}</p>
             <p className="text-xs text-gray-500 mt-0.5">
               {masterOn
-                ? (isForeign ? 'On — set each kind below.' : '켜짐 — 아래에서 종류별로 조절할 수 있어요.')
-                : (isForeign ? 'Off — no push notifications at all.' : '꺼짐 — 어떤 푸시 알림도 오지 않아요.')}
+                ? (L('settings.onSetEachKindBelow'))
+                : (L('settings.offNoPushNotificationsAt'))}
             </p>
           </div>
           <Toggle on={masterOn} disabled={saving === 'generalNotifications'} onClick={() => toggle('generalNotifications')} />
@@ -108,7 +107,7 @@ export default function NotificationSettingsCard() {
           {groups.map(({ g, types }) => (
             <div key={g} className="mb-4 last:mb-0">
               <p className="text-[11px] font-bold text-gray-500 mb-1.5">
-                {isForeign ? NOTIFICATION_GROUP_LABELS[g].en : NOTIFICATION_GROUP_LABELS[g].ko}
+                {isEnglishUI() ? NOTIFICATION_GROUP_LABELS[g].en : NOTIFICATION_GROUP_LABELS[g].ko}
               </p>
               <div className="rounded-xl border border-gray-200 divide-y divide-gray-100">
                 {types.map(t => {
@@ -116,8 +115,8 @@ export default function NotificationSettingsCard() {
                   return (
                     <div key={t.key} className="flex items-center gap-3 px-3 py-2.5">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800">{isForeign ? t.labelEn : t.label}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{isForeign ? t.descEn : t.desc}</p>
+                        <p className="text-sm font-semibold text-gray-800">{isEnglishUI() ? t.labelEn : t.label}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{isEnglishUI() ? t.descEn : t.desc}</p>
                       </div>
                       <Toggle on={masterOn && on} disabled={saving === t.key} onClick={() => toggle(t.key)} />
                     </div>
@@ -130,9 +129,7 @@ export default function NotificationSettingsCard() {
 
         {error && <p className="text-xs text-red-600">{error}</p>}
         <p className="text-[11px] text-gray-400">
-          {isForeign
-            ? 'Notifications are delivered to the mobile app. If you denied permission in your phone settings, you will not receive them even when enabled here.'
-            : '알림은 모바일 앱으로 갑니다. 휴대폰 설정에서 알림을 거부했다면 여기서 켜도 받을 수 없어요.'}
+          {L('settings.notificationsAreDeliveredToThe')}
         </p>
       </div>
     </div>
