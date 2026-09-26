@@ -1,37 +1,19 @@
 /**
  * 수업 자료 관련 유틸리티 함수
  */
+import type { LessonMaterialData, LessonMaterialTemplate, SectionData } from '../types/lessonMaterial';
 
-export interface LessonMaterialData {
-  id: string;
-  title: string;
-  templateId?: string;
-  userCode?: string;
-  order?: number;
-}
-
-export interface LessonMaterialTemplate {
-  id: string;
-  code: string;
-  title: string;
-  order?: number;
-}
-
-export interface SectionData {
-  id: string;
-  title: string;
-  viewUrl?: string;
-  originalUrl?: string;
-  order?: number;
-  templateSectionId?: string; // 템플릿 섹션 ID (템플릿 기반 섹션인 경우)
-}
+/** 유틸은 필요한 필드만 본다 — 전체 타입은 types/lessonMaterial.ts */
+type MaterialLike = Pick<LessonMaterialData, 'id' | 'templateId' | 'userCode'>;
+type TemplateLike = Pick<LessonMaterialTemplate, 'id' | 'code'>;
+type SectionLike = Partial<Pick<SectionData, 'viewUrl' | 'originalUrl'>>;
 
 /**
  * 수업 자료에서 실제 링크가 있는 섹션만 필터링
  * @param sections 섹션 배열
  * @returns 링크가 있는 섹션만 포함된 배열
  */
-export function filterSectionsWithLinks(sections: SectionData[]): SectionData[] {
+export function filterSectionsWithLinks<T extends SectionLike>(sections: T[]): T[] {
   return sections.filter(section => section.viewUrl || section.originalUrl);
 }
 
@@ -42,8 +24,8 @@ export function filterSectionsWithLinks(sections: SectionData[]): SectionData[] 
  * @returns 기수 배열 (내림차순)
  */
 export function getGenerationCodes(
-  materials: LessonMaterialData[],
-  templates: LessonMaterialTemplate[]
+  materials: MaterialLike[],
+  templates: TemplateLike[]
 ): string[] {
   const materialCodeMap: Record<string, string> = {};
   
@@ -82,11 +64,11 @@ export function getGenerationCodes(
  * @param generation 기수 코드 (예: "27기")
  * @returns 필터링된 수업 자료 배열
  */
-export function filterMaterialsByGeneration(
-  materials: LessonMaterialData[],
-  templates: LessonMaterialTemplate[],
+export function filterMaterialsByGeneration<T extends MaterialLike>(
+  materials: T[],
+  templates: TemplateLike[],
   generation: string
-): LessonMaterialData[] {
+): T[] {
   return materials.filter(m => {
     if (m.templateId) {
       const tpl = templates.find(t => t.id === m.templateId);
@@ -104,8 +86,8 @@ export function filterMaterialsByGeneration(
  * @returns 기수 코드
  */
 export function getMaterialGenerationCode(
-  material: LessonMaterialData,
-  templates: LessonMaterialTemplate[]
+  material: MaterialLike,
+  templates: TemplateLike[]
 ): string {
   if (material.templateId) {
     const tpl = templates.find(t => t.id === material.templateId);

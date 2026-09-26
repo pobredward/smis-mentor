@@ -19,3 +19,4 @@ export * from './notification';
 export type { User, JobBoard, ApplicationHistory, Review } from './legacy';
 
 export * from './community';
+export * from './lessonMaterial';

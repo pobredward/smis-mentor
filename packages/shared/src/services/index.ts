@@ -25,3 +25,6 @@ export * from './interviewLinks';
 export * from './generationResources';
 export * from './personalTask';
 export * from './campTask';
+export * from './lessonMaterial';
+export * from './campDisplay';
+export * from './batchRead';
