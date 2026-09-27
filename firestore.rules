@@ -900,6 +900,20 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // 학생 전자기기 (학생 상세 모달 "전자기기") — 잠금 해제 정보 포함, 캠프 스태프 전원 열람·기록
+    match /studentDevices/{deviceId} {
+      allow read: if isCampStaff();
+      allow create: if isCampStaff() &&
+        request.resource.data.createdById == request.auth.uid &&
+        request.resource.data.keys().hasAll(['campCode', 'studentId', 'kind', 'model', 'lockType', 'location', 'createdBy', 'createdById', 'createdAt']) &&
+        request.resource.data.location in ['student', 'unit', 'office', 'returned'];
+      allow update: if isCampStaff() &&
+        fieldUnchanged('campCode') && fieldUnchanged('studentId') &&
+        fieldUnchanged('createdById') && fieldUnchanged('createdAt') &&
+        request.resource.data.location in ['student', 'unit', 'office', 'returned'];
+      allow delete: if isCampStaff();
+    }
+
     // 약 복용 재고 원장 (서버 전용)
     match /inventoryDoseLedger/{recordId} {
       allow read: if isAdmin();

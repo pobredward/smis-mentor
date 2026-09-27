@@ -24,6 +24,7 @@ import { ContactsPermissionDisclosureModal } from './ContactsPermissionDisclosur
 import { authenticatedFetch } from '../utils/apiClient';
 import { db } from '../config/firebase';
 import { StudentAllowanceTab, useStudentAllowance } from './StudentAllowanceTab';
+import { StudentDevicesTab, useStudentDevices } from './StudentDevicesTab';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -189,6 +190,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
   const allowance = useStudentAllowance(campCode, campType, student, base ? recordsById[base.studentId] ?? null : null, visible);
   const actor = useMemo(() => ({ uid: userData?.userId ?? '', name: userData?.name ?? '' }), [userData?.userId, userData?.name]);
+  const devices = useStudentDevices(campCode, base?.studentId, visible);
 
   const tabs = useMemo(() => (student ? studentTabsFor(student, campType, fieldConfig) : []), [student, campType, fieldConfig]);
   const activeTab: StudentTabId = tabs.includes(tab) ? tab : 'basic';
@@ -289,6 +291,8 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   const openCount = (records ?? []).filter(isOpenPatientRecord).length;
   const allowancePending = allowance.pending.length;
   const negative = allowance.balances.filter(b => b.balance < 0);
+  const uncollected = (devices ?? []).filter(d => d.location === 'student').length;
+  const needCharge = (devices ?? []).filter(d => d.needsCharge && d.location !== 'returned').length;
 
   const selectTab = (t: StudentTabId) => { setTab(t); setEditingField(null); };
 
@@ -343,12 +347,20 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             </View>
           </View>
 
-          {(medAlert || openCount > 0 || allowancePending > 0 || negative.length > 0) && (
+          {(medAlert || openCount > 0 || allowancePending > 0 || negative.length > 0 || uncollected > 0 || needCharge > 0) && (
             <View style={styles.alerts}>
               {!!medAlert && (
                 <TouchableOpacity style={styles.alertRed} onPress={() => selectTab('health')} activeOpacity={0.8}>
                   <Text style={styles.alertRedTitle}>⚠️ {L('studentModal.medicationAlert')}</Text>
                   <Text style={styles.alertRedBody} numberOfLines={2}>{medAlert}</Text>
+                </TouchableOpacity>
+              )}
+              {(uncollected > 0 || needCharge > 0) && (
+                <TouchableOpacity style={styles.alertSky} onPress={() => selectTab('devices')} activeOpacity={0.8}>
+                  <Text style={styles.alertSkyText}>📱 {[
+                    uncollected > 0 ? L('studentDevice.uncollectedBadge', { v0: uncollected }) : '',
+                    needCharge > 0 ? L('studentDevice.chargeBadge', { v0: needCharge }) : '',
+                  ].filter(Boolean).join(' · ')}</Text>
                 </TouchableOpacity>
               )}
               {(allowancePending > 0 || negative.length > 0) && (
@@ -416,6 +428,9 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                       allowanceNode={index === currentIndex && campCode
                         ? <StudentAllowanceTab data={allowance} student={merge(item)} campCode={campCode} roster={students} actor={actor} />
                         : null}
+                      devicesNode={index === currentIndex && campCode
+                        ? <StudentDevicesTab devices={devices} student={merge(item)} campCode={campCode} roster={students} actor={actor} />
+                        : null}
                     />
                   </ScrollView>
                 )}
@@ -445,6 +460,7 @@ interface TabBodyProps {
   onCancelEdit: () => void;
   onSaveContact: (s: STSheetStudent) => void;
   allowanceNode: React.ReactNode;
+  devicesNode: React.ReactNode;
 }
 
 function TabBody(props: TabBodyProps) {
@@ -530,16 +546,8 @@ function TabBody(props: TabBodyProps) {
 
   const sections = (t: StudentTabId) => sectionsForTab(config, t).map(renderSection);
 
-  const comingSoon = (icon: keyof typeof Ionicons.glyphMap, bodyKey: MessageKey) => (
-    <View style={styles.soon}>
-      <Ionicons name={icon} size={32} color="#9ca3af" />
-      <Text style={styles.soonTitle}>{L('studentModal.comingSoon')}</Text>
-      <Text style={styles.soonBody}>{L(bodyKey)}</Text>
-    </View>
-  );
-
   if (tab === 'allowance') return props.allowanceNode ? <>{props.allowanceNode}</> : <ActivityIndicator style={{ marginTop: 24 }} color="#3b82f6" />;
-  if (tab === 'devices') return comingSoon('phone-portrait-outline', 'studentModal.devicesSoon');
+  if (tab === 'devices') return props.devicesNode ? <>{props.devicesNode}</> : <ActivityIndicator style={{ marginTop: 24 }} color="#3b82f6" />;
 
   if (tab === 'health') {
     const contacts = guardianContacts(s);
@@ -680,6 +688,8 @@ const styles = StyleSheet.create({
   alertRedTitle: { fontSize: 12, fontWeight: '700', color: '#b91c1c' },
   alertRedBody: { fontSize: 12, color: '#991b1b', marginTop: 2 },
   alertAmber: { backgroundColor: '#fffbeb', borderColor: '#fde68a', borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
+  alertSky: { backgroundColor: '#f0f9ff', borderColor: '#bae6fd', borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
+  alertSkyText: { fontSize: 12, fontWeight: '700', color: '#075985' },
   alertOrange: { backgroundColor: '#fff7ed', borderColor: '#fed7aa', borderWidth: 1, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 6 },
   alertOrangeText: { fontSize: 12, fontWeight: '700', color: '#9a3412' },
   alertAmberText: { fontSize: 12, fontWeight: '700', color: '#92400e' },

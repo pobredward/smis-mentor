@@ -17,6 +17,7 @@ import { placementOverrideService, type STSheetStudent, type CampCode, type Camp
 import { authenticatedPost } from '@/lib/apiClient';
 import { db } from '@/lib/firebase';
 import StudentAllowanceTab, { useStudentAllowance } from './StudentAllowanceTab';
+import StudentDevicesTab, { useStudentDevices } from './StudentDevicesTab';
 
 type EditPermission = 'readonly' | 'all' | 'mentor';
 
@@ -103,6 +104,7 @@ export default function StudentDetailModal({
 
   const allowance = useStudentAllowance(campCode, campType, student, base ? recordsById[base.studentId] ?? null : null);
   const actor = useMemo(() => ({ uid: userData?.userId ?? '', name: userData?.name ?? '' }), [userData?.userId, userData?.name]);
+  const devices = useStudentDevices(campCode, base?.studentId);
 
   const tabs = useMemo(() => (student ? studentTabsFor(student, campType, config) : []), [student, campType, config]);
   const activeTab: StudentTabId = tabs.includes(tab) ? tab : 'basic';
@@ -168,6 +170,8 @@ export default function StudentDetailModal({
   const openCount = (records ?? []).filter(isOpenPatientRecord).length;
   const allowancePending = allowance.pending.length;
   const negative = allowance.balances.filter(b => b.balance < 0);
+  const uncollected = (devices ?? []).filter(d => d.location === 'student').length;
+  const needCharge = (devices ?? []).filter(d => d.needsCharge && d.location !== 'returned').length;
   const genderLabel = student.gender === 'M' ? L('students.m') : L('students.f');
 
   const avatar = (cls: string, iconCls: string) => (
@@ -201,6 +205,15 @@ export default function StudentDetailModal({
           className={`w-full text-left rounded-xl border border-red-200 bg-red-50 ${compact ? 'px-2.5 py-1.5' : 'p-3'}`}>
           <p className="text-xs font-semibold text-red-700">⚠️ {L('studentModal.medicationAlert')}</p>
           <p className={`text-xs text-red-800 mt-0.5 whitespace-pre-wrap break-words ${compact ? 'line-clamp-2' : 'line-clamp-4'}`}>{medAlert}</p>
+        </button>
+      )}
+      {(uncollected > 0 || needCharge > 0) && (
+        <button type="button" onClick={() => setTab('devices')}
+          className={`w-full text-left rounded-xl border border-sky-200 bg-sky-50 text-xs font-semibold text-sky-800 ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}>
+          📱 {[
+            uncollected > 0 ? L('studentDevice.uncollectedBadge', { v0: uncollected }) : '',
+            needCharge > 0 ? L('studentDevice.chargeBadge', { v0: needCharge }) : '',
+          ].filter(Boolean).join(' · ')}
         </button>
       )}
       {(allowancePending > 0 || negative.length > 0) && (
@@ -443,7 +456,9 @@ export default function StudentDetailModal({
     case 'allowance': body = campCode
       ? <StudentAllowanceTab data={allowance} student={student} campCode={campCode} roster={students} actor={actor} />
       : comingSoon('💰', 'studentModal.allowanceSoon'); break;
-    case 'devices': body = comingSoon('📱', 'studentModal.devicesSoon'); break;
+    case 'devices': body = campCode
+      ? <StudentDevicesTab devices={devices} student={student} campCode={campCode} roster={students} actor={actor} />
+      : comingSoon('📱', 'studentModal.devicesSoon'); break;
     case 'study': body = <>{levelProgress}{sectionBlocks('study')}</>; break;
     case 'survey': body = <>{sectionBlocks('survey')}</>; break;
     default: body = <>{sectionBlocks('basic')}</>;
@@ -493,7 +508,7 @@ export default function StudentDetailModal({
                 {unitLine && <p className="text-[11px] text-gray-600 truncate">{unitLine}</p>}
               </div>
             </div>
-            {(medAlert || openCount > 0 || allowancePending > 0 || negative.length > 0) && <div className="px-4 pb-3 space-y-1.5">{alerts(true)}</div>}
+            {(medAlert || openCount > 0 || allowancePending > 0 || negative.length > 0 || uncollected > 0 || needCharge > 0) && <div className="px-4 pb-3 space-y-1.5">{alerts(true)}</div>}
             {renderExtra && <div className="px-4 pb-3">{renderExtra(student)}</div>}
           </div>
 
