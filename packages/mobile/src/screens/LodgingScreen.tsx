@@ -53,7 +53,7 @@ import { L } from '@smis-mentor/shared';
 type ViewKey = 'all' | 'b1' | 'f1' | 'f2' | 'f3' | 'f4' | '3d';
 const VIEW_KEYS: readonly string[] = ['all', 'b1', 'f1', 'f2', 'f3', 'f4', '3d'];
 const VIEW_KEY = (jobCodeId: string) => `SMIS_LODGING_VIEW_${jobCodeId}`;
-const ROWS_KEY = 'SMIS_LODGING_FILTER_ROWS';
+const ROWS_KEY = 'SMIS_LODGING_FILTER_ROWS_V2'; // v2: 기본 접힘으로 바뀌어 예전 기억값은 무시
 const FILTER_KEYS: LodgingFilterKey[] = ['group', 'airport'];
 /** B1 배치도를 그리는 폭 — 판에서 손가락으로 확대해 본다 */
 const B1_WIDTH = 960;
@@ -101,12 +101,13 @@ export function LodgingScreen() {
   const detailColumns = FILTER_KEYS.filter((k) => filterOptions[k].length > 0);
 
   // 눈 단추로 접어 둔 줄 — 캠프와 상관없이 기억
-  const [rowClosed, setRowClosed] = useState<Record<LodgingFilterKey, boolean>>({ group: false, airport: false });
+  // 기본은 접힘(off) — 눈 단추로 펼치면 그때부터 기억
+  const [rowClosed, setRowClosed] = useState<Record<LodgingFilterKey, boolean>>({ group: true, airport: true });
   useEffect(() => {
     AsyncStorage.getItem(ROWS_KEY)
       .then((v) => {
         const o = v ? JSON.parse(v) : null;
-        if (o && typeof o === 'object') setRowClosed({ group: !!o.group, airport: !!o.airport });
+        if (o && typeof o === 'object') setRowClosed({ group: o.group !== false, airport: o.airport !== false });
       })
       .catch(() => {});
   }, []);

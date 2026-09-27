@@ -170,7 +170,7 @@ export function StudentDevicesTab({ devices, student, campCode, roster, actor, c
               </View>
             ) : (
               <View style={s.lockBox}>
-                <Text style={[s.muted, { width: 64 }]}>🔓 {L('studentDevice.lock')}</Text>
+                <Text style={[s.muted, { flexShrink: 0 }]} numberOfLines={1}>🔓 {L('studentDevice.lock')}</Text>
                 <LockDisplay d={d} />
               </View>
             )}
