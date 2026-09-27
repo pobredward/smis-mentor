@@ -2007,7 +2007,14 @@ function ProgressTab({
   type LogEntry = { log: ProgressLog; isSynthetic: boolean; rawIndex: number };
   const allEntries: LogEntry[] = rawLogs.map((log, i) => ({ log, isSynthetic: false, rawIndex: i }));
   if (syntheticInitial) allEntries.push({ log: syntheticInitial, isSynthetic: true, rawIndex: -1 });
-  const logs = allEntries.reverse();
+  // 보고 시각 기준 최신이 위로 (같은 시각이면 최초보고가 아래). 가상 최초보고도 시각대로 자리 잡음
+  const tsOf = (l: ProgressLog) => (l.loggedAt && typeof (l.loggedAt as { toMillis?: () => number }).toMillis === 'function' ? l.loggedAt.toMillis() : 0);
+  const logs = allEntries
+    .map((e, order) => ({ e, order }))
+    .sort((a, b) => tsOf(b.e.log) - tsOf(a.e.log)
+      || (a.e.log.status === '최초보고' ? 1 : 0) - (b.e.log.status === '최초보고' ? 1 : 0)
+      || b.order - a.order)
+    .map(x => x.e);
 
   return (
     <div className="space-y-4">

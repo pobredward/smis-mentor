@@ -28,7 +28,8 @@ export const getCampDevices = async (db: Firestore, campCode: string): Promise<S
 };
 
 export type StudentDeviceInput = Pick<StudentDevice,
-  'kind' | 'model' | 'feature' | 'lockType' | 'lockCode' | 'location' | 'needsCharge' | 'batteryNote' | 'note'>;
+  'kind' | 'model' | 'feature' | 'lockType' | 'lockCode' | 'location' | 'holderName' | 'holderId' | 'needsCharge'
+  | 'batteryPercent' | 'batteryNote' | 'chargerTypes' | 'note'>;
 
 export const addStudentDevice = async (
   db: Firestore, campCode: string,
@@ -48,6 +49,10 @@ export const addStudentDevice = async (
     batteryNote: input.batteryNote?.trim() || undefined,
     note: input.note?.trim() || undefined,
     needsCharge: input.needsCharge || undefined,
+    batteryPercent: input.batteryPercent ?? undefined,
+    chargerTypes: input.chargerTypes?.length ? input.chargerTypes : undefined,
+    holderName: input.location === 'teacher' ? input.holderName?.trim() || undefined : undefined,
+    holderId: input.location === 'teacher' ? input.holderId || undefined : undefined,
     createdBy: actor.name, createdById: actor.uid, createdAt: now, updatedAt: now, updatedBy: actor.name,
   }));
   return ref.id;
@@ -55,7 +60,7 @@ export const addStudentDevice = async (
 
 /** 기기 정보 수정 (위치 변경은 moveStudentDevices 로) */
 export const updateStudentDevice = async (
-  db: Firestore, id: string, patch: Partial<Omit<StudentDeviceInput, 'location'>>, actor: DeviceActor,
+  db: Firestore, id: string, patch: Partial<Omit<StudentDeviceInput, 'location' | 'holderName' | 'holderId'>>, actor: DeviceActor,
 ): Promise<void> => {
   await updateDoc(doc(db, COL, id), {
     ...Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, v === undefined || v === '' ? null : v])),
@@ -63,16 +68,20 @@ export const updateStudentDevice = async (
   });
 };
 
-/** 보관 위치 이동 (여러 대 한 번에) — 이동 이력 남김 */
+/** 보관 위치 이동 (여러 대 한 번에) — 이동 이력 남김. 'teacher' 면 맡은 선생님(holder) 필수 */
 export const moveStudentDevices = async (
-  db: Firestore, devices: Pick<StudentDevice, 'id' | 'location'>[], to: DeviceLocation, actor: DeviceActor,
+  db: Firestore, devices: Pick<StudentDevice, 'id' | 'location' | 'holderName'>[], to: DeviceLocation, actor: DeviceActor,
+  holder?: { name: string; id?: string },
 ): Promise<void> => {
   const now = Timestamp.now();
   const batch = writeBatch(db);
-  devices.filter(d => d.location !== to).forEach(d => {
+  const holderName = to === 'teacher' ? holder?.name?.trim() || null : null;
+  devices.filter(d => d.location !== to || (to === 'teacher' && d.holderName !== holderName)).forEach(d => {
     batch.update(doc(db, COL, d.id), {
       location: to,
-      moves: arrayUnion({ at: now, by: actor.name, byId: actor.uid, from: d.location, to }),
+      holderName,
+      holderId: to === 'teacher' ? holder?.id || null : null,
+      moves: arrayUnion(clean({ at: now, by: actor.name, byId: actor.uid, from: d.location, to, holder: holderName || undefined })),
       updatedAt: now, updatedBy: actor.name,
     });
   });

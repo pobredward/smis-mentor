@@ -17,7 +17,7 @@ import { placementOverrideService, type STSheetStudent, type CampCode, type Camp
 import { authenticatedPost } from '@/lib/apiClient';
 import { db } from '@/lib/firebase';
 import StudentAllowanceTab, { useStudentAllowance } from './StudentAllowanceTab';
-import StudentDevicesTab, { useStudentDevices } from './StudentDevicesTab';
+import StudentDevicesTab, { useStudentDevices, useDeviceContext } from './StudentDevicesTab';
 
 type EditPermission = 'readonly' | 'all' | 'mentor';
 
@@ -105,6 +105,7 @@ export default function StudentDetailModal({
   const allowance = useStudentAllowance(campCode, campType, student, base ? recordsById[base.studentId] ?? null : null);
   const actor = useMemo(() => ({ uid: userData?.userId ?? '', name: userData?.name ?? '' }), [userData?.userId, userData?.name]);
   const devices = useStudentDevices(campCode, base?.studentId);
+  const deviceCtx = useDeviceContext(campCode, activeJobCodeId);
 
   const tabs = useMemo(() => (student ? studentTabsFor(student, campType, config) : []), [student, campType, config]);
   const activeTab: StudentTabId = tabs.includes(tab) ? tab : 'basic';
@@ -170,7 +171,7 @@ export default function StudentDetailModal({
   const openCount = (records ?? []).filter(isOpenPatientRecord).length;
   const allowancePending = allowance.pending.length;
   const negative = allowance.balances.filter(b => b.balance < 0);
-  const uncollected = (devices ?? []).filter(d => d.location === 'student').length;
+  const uncollected = (devices ?? []).filter(d => d.location === 'student').length; // 잠깐 지급(lent)은 미수거로 치지 않음
   const needCharge = (devices ?? []).filter(d => d.needsCharge && d.location !== 'returned').length;
   const genderLabel = student.gender === 'M' ? L('students.m') : L('students.f');
 
@@ -457,7 +458,7 @@ export default function StudentDetailModal({
       ? <StudentAllowanceTab data={allowance} student={student} campCode={campCode} roster={students} actor={actor} />
       : comingSoon('💰', 'studentModal.allowanceSoon'); break;
     case 'devices': body = campCode
-      ? <StudentDevicesTab devices={devices} student={student} campCode={campCode} roster={students} actor={actor} />
+      ? <StudentDevicesTab devices={devices} student={student} campCode={campCode} roster={students} actor={actor} ctx={deviceCtx.ctx} staff={deviceCtx.staff} />
       : comingSoon('📱', 'studentModal.devicesSoon'); break;
     case 'study': body = <>{levelProgress}{sectionBlocks('study')}</>; break;
     case 'survey': body = <>{sectionBlocks('survey')}</>; break;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from './_expect';
-import { parsePattern, patternToCode, nextDeviceLocation, isDeviceUncollected, isDeviceSheetHeader } from '../src/types/studentDevice';
+import { parsePattern, patternToCode, nextDeviceLocation, isDeviceUncollected, isDeviceSheetHeader, deviceLocationDetail } from '../src/types/studentDevice';
 
 describe('studentDevice', () => {
   it('패턴 문자열 ↔ 점 순서', () => {
@@ -20,5 +20,16 @@ describe('studentDevice', () => {
     expect(isDeviceSheetHeader('기기 3 잠금')).toBe(true);
     expect(isDeviceSheetHeader('기기')).toBe(false);
     expect(isDeviceSheetHeader('복용약 & 알레르기')).toBe(false);
+  });
+  it('보관 위치 상세 — 방 담당 방·그룹 교무실 호수·선생님', () => {
+    const ctx = {
+      groups: [{ name: 'Spring', classCodes: ['J01', 'J02'] }],
+      rooms: { '222': { purpose: '교무실', label: 'Spring 교무실' }, '311': { purpose: '멘토방', teachers: ['윤수빈 멘토'] }, '405': { teachers: ['김선생'] }, '220': { purpose: '교실', teachers: ['윤수빈'] } },
+    };
+    const st = { unitMentor: '윤수빈', classNumber: 'J01.02' };
+    expect(deviceLocationDetail('unit', st, ctx)).toBe('윤수빈 · 311호');
+    expect(deviceLocationDetail('office', st, ctx)).toBe('Spring · 222호');
+    expect(deviceLocationDetail('teacher', st, ctx, '김선생')).toBe('김선생 · 405호');
+    expect(deviceLocationDetail('office', { classNumber: 'J09.01' }, ctx)).toBe('');
   });
 });

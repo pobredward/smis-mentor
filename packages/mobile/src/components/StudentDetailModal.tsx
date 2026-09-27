@@ -15,7 +15,7 @@ import {
   L, dataLabel, logger, resolveActiveJobCodeId, toDriveImageUrl, getFieldConfig, getFieldValue, getFixedFieldValue,
   getDefaultFieldConfig, getStudentPatientRecords, studentTabsFor, sectionsForTab, visibleDynamicFields,
   hasMedicationInfo, isOpenPatientRecord, formatAllowance, placementSummary, guardianContacts, dialablePhone, STUDENT_TAB_LABEL_KEYS,
-  type STSheetFieldConfig, type FieldSectionConfig, type FieldItemConfig, type PatientRecord, type StudentTabId, type MessageKey,
+  type STSheetFieldConfig, type FieldSectionConfig, type FieldItemConfig, type PatientRecord, type StudentTabId,
   type STSheetStudent, type CampType,
 } from '@smis-mentor/shared';
 import { useAuth } from '../context/AuthContext';
@@ -24,7 +24,7 @@ import { ContactsPermissionDisclosureModal } from './ContactsPermissionDisclosur
 import { authenticatedFetch } from '../utils/apiClient';
 import { db } from '../config/firebase';
 import { StudentAllowanceTab, useStudentAllowance } from './StudentAllowanceTab';
-import { StudentDevicesTab, useStudentDevices } from './StudentDevicesTab';
+import { StudentDevicesTab, useStudentDevices, useDeviceContext } from './StudentDevicesTab';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -191,6 +191,9 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   const allowance = useStudentAllowance(campCode, campType, student, base ? recordsById[base.studentId] ?? null : null, visible);
   const actor = useMemo(() => ({ uid: userData?.userId ?? '', name: userData?.name ?? '' }), [userData?.userId, userData?.name]);
   const devices = useStudentDevices(campCode, base?.studentId, visible);
+  const deviceCtx = useDeviceContext(campCode, activeJobCodeId, visible);
+  // 가로 페이지 높이 — 각 페이지(세로 ScrollView)가 남은 높이를 정확히 채워야 세로 스크롤이 된다
+  const [pageHeight, setPageHeight] = useState(0);
 
   const tabs = useMemo(() => (student ? studentTabsFor(student, campType, fieldConfig) : []), [student, campType, fieldConfig]);
   const activeTab: StudentTabId = tabs.includes(tab) ? tab : 'basic';
@@ -393,6 +396,8 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
           {/* 학생별 페이지 (좌우 스와이프) */}
           <FlatList
             ref={listRef}
+            style={{ flex: 1 }}
+            onLayout={e => setPageHeight(e.nativeEvent.layout.height)}
             data={students}
             keyExtractor={(s, i) => s.studentId || String(i)}
             horizontal
@@ -405,11 +410,11 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             windowSize={3}
             initialNumToRender={1}
             maxToRenderPerBatch={2}
-            extraData={{ activeTab, currentIndex, editingField, fieldSaving, overrides, recordsById, fieldConfig }}
+            extraData={{ activeTab, currentIndex, editingField, fieldSaving, overrides, recordsById, fieldConfig, pageHeight, devices, deviceCtx, allowance }}
             renderItem={({ item, index }) => (
-              <View style={{ width: SCREEN_WIDTH, flex: 1 }}>
+              <View style={{ width: SCREEN_WIDTH, height: pageHeight || undefined }}>
                 {Math.abs(index - currentIndex) > 1 ? null : (
-                  <ScrollView style={styles.page} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled">
+                  <ScrollView style={styles.page} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
                     <TabBody
                       student={merge(item)}
                       tab={activeTab}
@@ -429,7 +434,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                         ? <StudentAllowanceTab data={allowance} student={merge(item)} campCode={campCode} roster={students} actor={actor} />
                         : null}
                       devicesNode={index === currentIndex && campCode
-                        ? <StudentDevicesTab devices={devices} student={merge(item)} campCode={campCode} roster={students} actor={actor} />
+                        ? <StudentDevicesTab devices={devices} student={merge(item)} campCode={campCode} roster={students} actor={actor} ctx={deviceCtx.ctx} staff={deviceCtx.staff} />
                         : null}
                     />
                   </ScrollView>

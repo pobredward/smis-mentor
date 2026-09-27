@@ -906,11 +906,11 @@ service cloud.firestore {
       allow create: if isCampStaff() &&
         request.resource.data.createdById == request.auth.uid &&
         request.resource.data.keys().hasAll(['campCode', 'studentId', 'kind', 'model', 'lockType', 'location', 'createdBy', 'createdById', 'createdAt']) &&
-        request.resource.data.location in ['student', 'unit', 'office', 'returned'];
+        request.resource.data.location in ['student', 'unit', 'office', 'teacher', 'lent', 'returned'];
       allow update: if isCampStaff() &&
         fieldUnchanged('campCode') && fieldUnchanged('studentId') &&
         fieldUnchanged('createdById') && fieldUnchanged('createdAt') &&
-        request.resource.data.location in ['student', 'unit', 'office', 'returned'];
+        request.resource.data.location in ['student', 'unit', 'office', 'teacher', 'lent', 'returned'];
       allow delete: if isCampStaff();
     }
 

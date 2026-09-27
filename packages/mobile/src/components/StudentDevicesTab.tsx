@@ -6,34 +6,62 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet, Modal, ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { doc, getDoc } from 'firebase/firestore';
 import {
-  L, logger, DEVICE_KINDS, DEVICE_LOCK_TYPES, DEVICE_LOCATIONS, parsePattern, patternToCode,
+  L, logger, GADGET_KINDS, DEVICE_LOCK_TYPES, DEVICE_LOCATIONS, CHARGER_TYPES, parsePattern, patternToCode,
+  deviceLocationDetail, getUsersByJobCodeId, isCampStaffRole, isCharger, matchingChargers,
   subscribeStudentDevices, getCampDevices, addStudentDevice, updateStudentDevice, moveStudentDevices, deleteStudentDevice,
-  type StudentDevice, type DeviceKind, type DeviceLockType, type DeviceLocation, type MessageKey, type STSheetStudent,
+  type StudentDevice, type DeviceKind, type DeviceLockType, type DeviceLocation, type ChargerType, type MessageKey,
+  type STSheetStudent, type DeviceLocationContext,
 } from '@smis-mentor/shared';
 import { db } from '../config/firebase';
 
 const KIND_KEY: Record<DeviceKind, MessageKey> = {
   phone: 'studentDevice.kindPhone', tablet: 'studentDevice.kindTablet', watch: 'studentDevice.kindWatch',
-  laptop: 'studentDevice.kindLaptop', etc: 'studentDevice.kindEtc',
+  laptop: 'studentDevice.kindLaptop', etc: 'studentDevice.kindEtc', charger: 'studentDevice.kindCharger',
 };
 const KIND_ICON: Record<DeviceKind, keyof typeof Ionicons.glyphMap> = {
-  phone: 'phone-portrait-outline', tablet: 'tablet-portrait-outline', watch: 'watch-outline', laptop: 'laptop-outline', etc: 'hardware-chip-outline',
+  phone: 'phone-portrait-outline', tablet: 'tablet-portrait-outline', watch: 'watch-outline', laptop: 'laptop-outline', etc: 'headset-outline', charger: 'flash-outline',
 };
 const LOCK_KEY: Record<DeviceLockType, MessageKey> = {
   pin: 'studentDevice.lockPin', pattern: 'studentDevice.lockPattern', password: 'studentDevice.lockPassword', none: 'studentDevice.lockNone',
 };
 const LOC_KEY: Record<DeviceLocation, MessageKey> = {
-  student: 'studentDevice.locStudent', unit: 'studentDevice.locUnit', office: 'studentDevice.locOffice', returned: 'studentDevice.locReturned',
+  student: 'studentDevice.locStudent', unit: 'studentDevice.locUnit', office: 'studentDevice.locOffice',
+  teacher: 'studentDevice.locTeacher', lent: 'studentDevice.locLent', returned: 'studentDevice.locReturned',
 };
 const LOC_COLOR: Record<DeviceLocation, [string, string]> = {
-  student: ['#fef2f2', '#b91c1c'], unit: ['#eff6ff', '#1d4ed8'], office: ['#eef2ff', '#4338ca'], returned: ['#f3f4f6', '#6b7280'],
+  student: ['#fef2f2', '#b91c1c'], unit: ['#eff6ff', '#1d4ed8'], office: ['#eef2ff', '#4338ca'],
+  teacher: ['#f5f3ff', '#6d28d9'], lent: ['#fffbeb', '#b45309'], returned: ['#f3f4f6', '#6b7280'],
+};
+const CHG_KEY: Record<ChargerType, MessageKey> = {
+  usbc: 'studentDevice.chg_usbc', lightning: 'studentDevice.chg_lightning', micro: 'studentDevice.chg_micro',
+  wireless: 'studentDevice.chg_wireless', etc: 'studentDevice.chg_etc',
 };
 
-function locationHolder(loc: DeviceLocation, s: Pick<STSheetStudent, 'unitMentor' | 'unit' | 'classNumber'>): string {
-  if (loc === 'unit') return s.unitMentor || s.unit || '';
-  if (loc === 'office') return s.classNumber?.substring(0, 3) || '';
-  return '';
+export interface StaffOption { id: string; name: string }
+
+/** 보관 위치 상세(방 담당 방·그룹 교무실 호수)와 선생님 목록 — 캠프 설정·캠프 스태프에서 */
+export function useDeviceContext(campCode: string | undefined, jobCodeId: string | undefined, active: boolean) {
+  const [ctx, setCtx] = useState<DeviceLocationContext>({});
+  const [staff, setStaff] = useState<StaffOption[]>([]);
+  useEffect(() => {
+    if (!active || !campCode) return;
+    getDoc(doc(db, 'campSettings', campCode))
+      .then(snap => { const d = snap.data() ?? {}; setCtx({ groups: d.groups ?? [], rooms: d.lodging?.rooms ?? {} }); })
+      .catch(e => logger.warn('[devices] campSettings', e));
+  }, [active, campCode]);
+  useEffect(() => {
+    if (!active || !jobCodeId) return;
+    getUsersByJobCodeId(db, jobCodeId)
+      .then(users => setStaff(users
+        .filter(u => isCampStaffRole(u.role))
+        .map(u => ({ id: u.userId ?? u.id ?? '', name: u.name }))
+        .filter(u => u.name)
+        .sort((a, b) => a.name.localeCompare(b.name, 'ko'))))
+      .catch(e => logger.warn('[devices] staff', e));
+  }, [active, jobCodeId]);
+  return { ctx, staff };
 }
 
 export interface DeviceActorInfo { uid: string; name: string }
@@ -81,20 +109,23 @@ function LockDisplay({ d }: { d: StudentDevice }) {
 }
 
 // ── 탭 ─────────────────────────────────────────────────────────
-export function StudentDevicesTab({ devices, student, campCode, roster, actor }: {
+export function StudentDevicesTab({ devices, student, campCode, roster, actor, ctx, staff }: {
   devices: StudentDevice[] | null; student: STSheetStudent; campCode: string; roster: STSheetStudent[]; actor: DeviceActorInfo;
+  ctx: DeviceLocationContext; staff: StaffOption[];
 }) {
-  const [edit, setEdit] = useState<StudentDevice | 'new' | null>(null);
+  const [pickFor, setPickFor] = useState<StudentDevice | null>(null);
+  const [edit, setEdit] = useState<StudentDevice | 'new' | 'newCharger' | null>(null);
   const [bulk, setBulk] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [openHistory, setOpenHistory] = useState<string | null>(null);
 
-  const move = async (d: StudentDevice, to: DeviceLocation) => {
+  const move = async (d: StudentDevice, to: DeviceLocation, holder?: StaffOption) => {
+    if (to === 'teacher' && !holder) { setPickFor(d); return; }
     setBusyId(d.id);
-    try { await moveStudentDevices(db, [d], to, actor); } catch (e) { logger.error('[devices] move', e); Alert.alert(L('studentDevice.saveFailed')); } finally { setBusyId(null); }
+    try { await moveStudentDevices(db, [d], to, actor, holder); } catch (e) { logger.error('[devices] move', e); Alert.alert(L('studentDevice.saveFailed')); } finally { setBusyId(null); }
   };
-  const toggleCharge = (d: StudentDevice) => {
-    updateStudentDevice(db, d.id, { needsCharge: !d.needsCharge }, actor).catch(e => logger.error('[devices] charge', e));
+  const patch = (d: StudentDevice, p: Parameters<typeof updateStudentDevice>[2]) => {
+    updateStudentDevice(db, d.id, p, actor).catch(e => { logger.error('[devices] patch', e); Alert.alert(L('studentDevice.saveFailed')); });
   };
 
   return (
@@ -102,6 +133,9 @@ export function StudentDevicesTab({ devices, student, campCode, roster, actor }:
       <View style={s.btnRow}>
         <TouchableOpacity style={[s.btn, s.btnPrimary]} onPress={() => setEdit('new')}>
           <Ionicons name="add" size={16} color="#fff" /><Text style={s.btnPrimaryText}>{L('studentDevice.add')}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[s.btn, s.btnOutline]} onPress={() => setEdit('newCharger')}>
+          <Text style={[s.btnOutlineText, { color: '#374151' }]}>🔌 {L('studentDevice.addCharger')}</Text>
         </TouchableOpacity>
         {roster.length > 1 && (
           <TouchableOpacity style={[s.btn, s.btnOutline]} onPress={() => setBulk(true)}>
@@ -128,18 +162,26 @@ export function StudentDevicesTab({ devices, student, campCode, roster, actor }:
               <TouchableOpacity onPress={() => setEdit(d)} hitSlop={8}><Text style={s.link}>{L('common.edit')}</Text></TouchableOpacity>
             </View>
 
-            <View style={s.lockBox}>
-              <Text style={[s.muted, { width: 64 }]}>🔓 {L('studentDevice.lock')}</Text>
-              <LockDisplay d={d} />
-            </View>
+            {isCharger(d) ? (
+              <View style={[s.chipWrap, { alignItems: 'center', marginBottom: 10 }]}>
+                <Text style={s.muted}>{L('studentDevice.chargerPorts')}</Text>
+                {(d.chargerTypes ?? []).map(t => <Text key={t} style={s.portBadge}>{L(CHG_KEY[t])}</Text>)}
+                {!!d.note && <Text style={s.muted}>· {d.note}</Text>}
+              </View>
+            ) : (
+              <View style={s.lockBox}>
+                <Text style={[s.muted, { width: 64 }]}>🔓 {L('studentDevice.lock')}</Text>
+                <LockDisplay d={d} />
+              </View>
+            )}
 
             <Text style={[s.muted, { marginBottom: 6 }]}>{L('studentDevice.location')}</Text>
             <View style={s.chipWrap}>
               {DEVICE_LOCATIONS.map(loc => {
                 const on = d.location === loc;
-                const holder = locationHolder(loc, student);
+                const holder = on || loc !== 'teacher' ? deviceLocationDetail(loc, student, ctx, d.holderName) : '';
                 return (
-                  <TouchableOpacity key={loc} disabled={busyId === d.id || on} onPress={() => move(d, loc)}
+                  <TouchableOpacity key={loc} disabled={busyId === d.id || (on && loc !== 'teacher')} onPress={() => move(d, loc)}
                     style={[s.locChip, on && { backgroundColor: LOC_COLOR[loc][0], borderColor: LOC_COLOR[loc][1] }]}>
                     <Text style={[s.locText, on && { color: LOC_COLOR[loc][1], fontWeight: '700' }]}>
                       {on ? '● ' : ''}{L(LOC_KEY[loc])}{holder ? ` (${holder})` : ''}
@@ -149,13 +191,40 @@ export function StudentDevicesTab({ devices, student, campCode, roster, actor }:
               })}
             </View>
 
+            {!isCharger(d) && (<>
             <View style={[s.chipWrap, { marginTop: 10, alignItems: 'center' }]}>
-              <TouchableOpacity onPress={() => toggleCharge(d)} style={[s.chargeChip, d.needsCharge && s.chargeChipOn]}>
+              <TouchableOpacity onPress={() => patch(d, { needsCharge: !d.needsCharge })} style={[s.chargeChip, d.needsCharge && s.chargeChipOn]}>
                 <Text style={[s.chargeText, d.needsCharge && { color: '#92400e', fontWeight: '700' }]}>🔋 {L('studentDevice.needsCharge')}{d.needsCharge ? ' ✓' : ''}</Text>
               </TouchableOpacity>
+              {d.needsCharge && (
+                <View style={s.pctRow}>
+                  <Text style={s.muted}>{L('studentDevice.batteryPercent')}</Text>
+                  <TextInput key={`${d.id}-${d.batteryPercent ?? ''}`} defaultValue={d.batteryPercent != null ? String(d.batteryPercent) : ''} keyboardType="number-pad"
+                    placeholder="--" placeholderTextColor="#cbd5e1" style={s.pctInput}
+                    onEndEditing={e => { const t = e.nativeEvent.text.replace(/\D/g, ''); const v = t === '' ? undefined : Math.min(100, Number(t)); if (v !== d.batteryPercent) patch(d, { batteryPercent: v }); }} />
+                  <Text style={s.muted}>%</Text>
+                </View>
+              )}
               {!!d.batteryNote && <Text style={s.noteText}>{d.batteryNote}</Text>}
               {!!d.note && <Text style={s.muted}>· {d.note}</Text>}
             </View>
+
+            <View style={[s.chipWrap, { marginTop: 8, alignItems: 'center' }]}>
+              <Text style={s.muted}>{L('studentDevice.chargePort')}</Text>
+              {CHARGER_TYPES.map(t => {
+                const on = (d.chargerTypes ?? []).includes(t);
+                return (
+                  <TouchableOpacity key={t} onPress={() => patch(d, { chargerTypes: on ? (d.chargerTypes ?? []).filter(x => x !== t) : [...(d.chargerTypes ?? []), t] })}
+                    style={[s.chgChip, on && s.chgChipOn]}>
+                    <Text style={[s.chgText, on && { color: '#fff' }]}>{L(CHG_KEY[t])}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+              {!!d.chargerTypes?.length && (matchingChargers(d, devices ?? []).length
+                ? <Text style={[s.portStatus, { backgroundColor: '#ecfdf5', color: '#047857' }]}>🔌 {L('studentDevice.chargerOk')}</Text>
+                : <Text style={[s.portStatus, { backgroundColor: '#fef2f2', color: '#dc2626' }]}>🔌 {L('studentDevice.chargerNoMatch')}</Text>)}
+            </View>
+            </>)}
 
             {!!d.moves?.length && (
               <View style={{ marginTop: 8 }}>
@@ -163,15 +232,16 @@ export function StudentDevicesTab({ devices, student, campCode, roster, actor }:
                   <Text style={s.muted}>{L('studentDevice.history')} ({d.moves.length}) {openHistory === d.id ? '▴' : '▾'}</Text>
                 </TouchableOpacity>
                 {openHistory === d.id && d.moves.slice().reverse().map((m, i) => (
-                  <Text key={i} style={s.tiny}>{md(m.at?.toDate?.())} · {m.by} · {L(LOC_KEY[m.from])} → {L(LOC_KEY[m.to])}</Text>
+                  <Text key={i} style={s.tiny}>{md(m.at?.toDate?.())} · {m.by} · {L(LOC_KEY[m.from])} → {L(LOC_KEY[m.to])}{m.holder ? ` (${m.holder})` : ''}</Text>
                 ))}
               </View>
             )}
           </View>
         ))}
 
-      {edit && <DeviceSheet device={edit === 'new' ? null : edit} student={student} campCode={campCode} actor={actor} onClose={() => setEdit(null)} />}
-      {bulk && <BulkSheet campCode={campCode} roster={roster} actor={actor} onClose={() => setBulk(false)} />}
+      {edit && <DeviceSheet device={edit === 'new' || edit === 'newCharger' ? null : edit} charger={edit === 'newCharger' || (typeof edit === 'object' && isCharger(edit))} student={student} campCode={campCode} actor={actor} staff={staff} onClose={() => setEdit(null)} />}
+      {bulk && <BulkSheet campCode={campCode} roster={roster} actor={actor} staff={staff} onClose={() => setBulk(false)} />}
+      {pickFor && <TeacherPicker staff={staff} onClose={() => setPickFor(null)} onPick={h => { const d = pickFor; setPickFor(null); move(d, 'teacher', h); }} />}
     </View>
   );
 }
@@ -205,11 +275,15 @@ function Chip({ on, onPress, children }: { on: boolean; onPress: () => void; chi
   );
 }
 
-function DeviceSheet({ device, student, campCode, actor, onClose }: {
-  device: StudentDevice | null; student: STSheetStudent; campCode: string; actor: DeviceActorInfo; onClose: () => void;
+function DeviceSheet({ device, charger, student, campCode, actor, staff, onClose }: {
+  device: StudentDevice | null; charger: boolean; student: STSheetStudent; campCode: string; actor: DeviceActorInfo; staff: StaffOption[]; onClose: () => void;
 }) {
-  const [kind, setKind] = useState<DeviceKind>(device?.kind ?? 'phone');
-  const [model, setModel] = useState(device?.model ?? '');
+  const [holder, setHolder] = useState<StaffOption | null>(device?.holderName ? { id: device.holderId ?? '', name: device.holderName } : null);
+  const [picking, setPicking] = useState(false);
+  const [batteryPercent, setBatteryPercent] = useState(device?.batteryPercent != null ? String(device.batteryPercent) : '');
+  const [chargerTypes, setChargerTypes] = useState<ChargerType[]>(device?.chargerTypes ?? []);
+  const [kind, setKind] = useState<DeviceKind>(device?.kind ?? (charger ? 'charger' : 'phone'));
+  const [model, setModel] = useState(device?.model ?? (charger ? L('studentDevice.chargerDefaultName') : ''));
   const [feature, setFeature] = useState(device?.feature ?? '');
   const [lockType, setLockType] = useState<DeviceLockType>(device?.lockType ?? 'pin');
   const [lockCode, setLockCode] = useState(device?.lockCode ?? '');
@@ -221,14 +295,23 @@ function DeviceSheet({ device, student, campCode, actor, onClose }: {
 
   const save = async () => {
     if (!model.trim()) { Alert.alert(L('studentDevice.modelRequired')); return; }
+    if (charger && chargerTypes.length === 0) { Alert.alert(L('studentDevice.chargerPortsRequired')); return; }
     setBusy(true);
     try {
+      if (location === 'teacher' && !holder) { setPicking(true); setBusy(false); return; }
       const code = lockType === 'none' ? '' : lockCode.trim();
+      const t = batteryPercent.replace(/\D/g, '');
+      const pct = t === '' ? undefined : Math.min(100, Number(t));
+      const common = charger
+        ? { kind: 'charger' as DeviceKind, model: model.trim(), feature, lockType: 'none' as DeviceLockType, lockCode: '', needsCharge: false, chargerTypes, batteryNote: '', note }
+        : { kind, model: model.trim(), feature, lockType, lockCode: code, needsCharge, batteryPercent: needsCharge ? pct : undefined, chargerTypes, batteryNote, note };
       if (device) {
-        await updateStudentDevice(db, device.id, { kind, model: model.trim(), feature, lockType, lockCode: code, needsCharge, batteryNote, note }, actor);
-        if (device.location !== location) await moveStudentDevices(db, [device], location, actor);
+        await updateStudentDevice(db, device.id, common, actor);
+        if (device.location !== location || (location === 'teacher' && device.holderName !== holder?.name)) {
+          await moveStudentDevices(db, [device], location, actor, holder ?? undefined);
+        }
       } else {
-        await addStudentDevice(db, campCode, student, { kind, model: model.trim(), feature, lockType, lockCode: code, location, needsCharge, batteryNote, note }, actor);
+        await addStudentDevice(db, campCode, student, { ...common, location, holderName: holder?.name, holderId: holder?.id }, actor);
       }
       onClose();
     } catch (e) { logger.error('[devices] save', e); Alert.alert(L('studentDevice.saveFailed')); setBusy(false); }
@@ -247,7 +330,7 @@ function DeviceSheet({ device, student, campCode, actor, onClose }: {
   const dots = parsePattern(lockCode);
 
   return (
-    <Sheet title={device ? L('studentDevice.edit') : L('studentDevice.add')} onClose={onClose}
+    <Sheet title={charger ? (device ? L('studentDevice.editCharger') : L('studentDevice.addCharger')) : (device ? L('studentDevice.edit') : L('studentDevice.add'))} onClose={onClose}
       footer={(
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {device && <TouchableOpacity onPress={remove} disabled={busy}><Text style={{ color: '#dc2626', fontWeight: '600' }}>{L('common.delete')}</Text></TouchableOpacity>}
@@ -258,16 +341,35 @@ function DeviceSheet({ device, student, campCode, actor, onClose }: {
           </TouchableOpacity>
         </View>
       )}>
-      <Field label={L('studentDevice.kind')}>
-        <View style={s.chipWrap}>{DEVICE_KINDS.map(k => <Chip key={k} on={kind === k} onPress={() => setKind(k)}>{L(KIND_KEY[k])}</Chip>)}</View>
-      </Field>
-      <Field label={L('studentDevice.model')}>
-        <TextInput value={model} onChangeText={setModel} placeholder={L('studentDevice.modelPh')} placeholderTextColor="#9ca3af" style={s.input} />
-      </Field>
+      {charger ? (
+        <>
+          <Text style={s.tiny}>{L('studentDevice.chargerFormHint')}</Text>
+          <Field label={L('studentDevice.chargerPorts')}>
+            <View style={s.chipWrap}>
+              {CHARGER_TYPES.map(t => {
+                const on = chargerTypes.includes(t);
+                return <Chip key={t} on={on} onPress={() => setChargerTypes(p => (on ? p.filter(x => x !== t) : [...p, t]))}>{on ? '☑' : '☐'} {L(CHG_KEY[t])}</Chip>;
+              })}
+            </View>
+          </Field>
+          <Field label={L('studentDevice.chargerName')}>
+            <TextInput value={model} onChangeText={setModel} placeholder={L('studentDevice.chargerNamePh')} placeholderTextColor="#9ca3af" style={s.input} />
+          </Field>
+        </>
+      ) : (
+        <>
+          <Field label={L('studentDevice.kind')}>
+            <View style={s.chipWrap}>{GADGET_KINDS.map(k => <Chip key={k} on={kind === k} onPress={() => setKind(k)}>{L(KIND_KEY[k])}</Chip>)}</View>
+          </Field>
+          <Field label={L('studentDevice.model')}>
+            <TextInput value={model} onChangeText={setModel} placeholder={L('studentDevice.modelPh')} placeholderTextColor="#9ca3af" style={s.input} />
+          </Field>
+        </>
+      )}
       <Field label={L('studentDevice.feature')}>
         <TextInput value={feature} onChangeText={setFeature} placeholder={L('studentDevice.featurePh')} placeholderTextColor="#9ca3af" style={s.input} />
       </Field>
-      <Field label={L('studentDevice.lock')}>
+      {!charger && <Field label={L('studentDevice.lock')}>
         <View style={[s.chipWrap, { marginBottom: 8 }]}>
           {DEVICE_LOCK_TYPES.map(t => <Chip key={t} on={lockType === t} onPress={() => { if (t !== lockType) setLockCode(''); setLockType(t); }}>{L(LOCK_KEY[t])}</Chip>)}
         </View>
@@ -283,17 +385,38 @@ function DeviceSheet({ device, student, campCode, actor, onClose }: {
           <TextInput value={lockCode} onChangeText={setLockCode} keyboardType={lockType === 'pin' ? 'number-pad' : 'default'} autoCapitalize="none"
             style={[s.input, { fontSize: 20, fontWeight: '700', letterSpacing: 4 }]} />
         )}
-      </Field>
+      </Field>}
       <Field label={L('studentDevice.location')}>
-        <View style={s.chipWrap}>{DEVICE_LOCATIONS.map(l => <Chip key={l} on={location === l} onPress={() => setLocation(l)}>{L(LOC_KEY[l])}</Chip>)}</View>
+        <View style={s.chipWrap}>{DEVICE_LOCATIONS.map(l => <Chip key={l} on={location === l} onPress={() => { setLocation(l); if (l === 'teacher') setPicking(true); }}>{L(LOC_KEY[l])}</Chip>)}</View>
+        {location === 'teacher' && (
+          <TouchableOpacity onPress={() => setPicking(true)} style={{ marginTop: 8 }}>
+            <Text style={[s.link, { color: '#6d28d9' }]}>{holder ? `👤 ${holder.name}` : L('studentDevice.pickTeacher')}</Text>
+          </TouchableOpacity>
+        )}
       </Field>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      {!charger && <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text style={{ fontSize: 14, color: '#374151' }}>🔋 {L('studentDevice.needsCharge')}</Text>
         <Switch value={needsCharge} onValueChange={setNeedsCharge} />
-      </View>
-      <Field label={L('studentDevice.batteryNote')}>
+      </View>}
+      {!charger && needsCharge && (
+        <View style={s.pctRow}>
+          <Text style={s.muted}>{L('studentDevice.batteryPercent')}</Text>
+          <TextInput value={batteryPercent} onChangeText={setBatteryPercent} keyboardType="number-pad" placeholder="--" placeholderTextColor="#cbd5e1" style={[s.pctInput, { width: 64 }]} />
+          <Text style={s.muted}>%</Text>
+        </View>
+      )}
+      {!charger && <Field label={L('studentDevice.chargePort')}>
+        <View style={s.chipWrap}>
+          {CHARGER_TYPES.map(t => {
+            const on = chargerTypes.includes(t);
+            return <Chip key={t} on={on} onPress={() => setChargerTypes(p => (on ? p.filter(x => x !== t) : [...p, t]))}>{on ? '☑' : '☐'} {L(CHG_KEY[t])}</Chip>;
+          })}
+        </View>
+      </Field>}
+      {picking && <TeacherPicker staff={staff} onClose={() => setPicking(false)} onPick={h => { setHolder(h); setPicking(false); }} />}
+      {!charger && <Field label={L('studentDevice.batteryNote')}>
         <TextInput value={batteryNote} onChangeText={setBatteryNote} placeholder={L('studentDevice.batteryNotePh')} placeholderTextColor="#9ca3af" style={s.input} />
-      </Field>
+      </Field>}
       <Field label={L('studentDevice.note')}>
         <TextInput value={note} onChangeText={setNote} style={s.input} />
       </Field>
@@ -301,7 +424,8 @@ function DeviceSheet({ device, student, campCode, actor, onClose }: {
   );
 }
 
-function BulkSheet({ campCode, roster, actor, onClose }: { campCode: string; roster: STSheetStudent[]; actor: DeviceActorInfo; onClose: () => void }) {
+function BulkSheet({ campCode, roster, actor, staff, onClose }: { campCode: string; roster: STSheetStudent[]; actor: DeviceActorInfo; staff: StaffOption[]; onClose: () => void }) {
+  const [picking, setPicking] = useState(false);
   const [devices, setDevices] = useState<StudentDevice[] | null>(null);
   const [filter, setFilter] = useState<DeviceLocation | 'all'>('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -317,13 +441,14 @@ function BulkSheet({ campCode, roster, actor, onClose }: { campCode: string; ros
 
   const shown = (devices ?? []).filter(d => filter === 'all' || d.location === filter);
   const allOn = shown.length > 0 && shown.every(d => selected.has(d.id));
-  const moveTo = async (to: DeviceLocation) => {
+  const moveTo = async (to: DeviceLocation, holder?: StaffOption) => {
     const list = (devices ?? []).filter(d => selected.has(d.id));
     if (!list.length) return;
+    if (to === 'teacher' && !holder) { setPicking(true); return; }
     setBusy(true);
     try {
-      await moveStudentDevices(db, list, to, actor);
-      setDevices(prev => (prev ?? []).map(d => (selected.has(d.id) ? { ...d, location: to } : d)));
+      await moveStudentDevices(db, list, to, actor, holder);
+      setDevices(prev => (prev ?? []).map(d => (selected.has(d.id) ? { ...d, location: to, holderName: to === 'teacher' ? holder?.name : undefined } : d)));
       setSelected(new Set());
     } catch (e) { logger.error('[devices] bulk', e); Alert.alert(L('studentDevice.saveFailed')); } finally { setBusy(false); }
   };
@@ -366,12 +491,33 @@ function BulkSheet({ campCode, roster, actor, onClose }: { campCode: string; ros
                   <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={on ? '#2563eb' : '#9ca3af'} />
                   <Text style={s.bulkName} numberOfLines={1}>{d.studentName}</Text>
                   <Text style={s.bulkModel} numberOfLines={1}>{d.model}{d.needsCharge ? ' 🔋' : ''}</Text>
-                  <Text style={[s.locBadge, { backgroundColor: LOC_COLOR[d.location][0], color: LOC_COLOR[d.location][1] }]}>{L(LOC_KEY[d.location])}</Text>
+                  <Text style={[s.locBadge, { backgroundColor: LOC_COLOR[d.location][0], color: LOC_COLOR[d.location][1] }]}>{L(LOC_KEY[d.location])}{d.location === 'teacher' && d.holderName ? ` · ${d.holderName}` : ''}</Text>
                 </TouchableOpacity>
               );
             })}
           </View>
         )}
+      {picking && <TeacherPicker staff={staff} onClose={() => setPicking(false)} onPick={h => { setPicking(false); moveTo('teacher', h); }} />}
+    </Sheet>
+  );
+}
+
+function TeacherPicker({ staff, onPick, onClose }: { staff: StaffOption[]; onPick: (h: StaffOption) => void; onClose: () => void }) {
+  const [q, setQ] = useState('');
+  const list = staff.filter(u => !q.trim() || u.name.includes(q.trim()));
+  return (
+    <Sheet title={L('studentDevice.pickTeacher')} onClose={onClose}>
+      <TextInput autoFocus value={q} onChangeText={setQ} placeholder={L('studentDevice.teacherSearchPh')} placeholderTextColor="#9ca3af" style={s.input} />
+      <View>
+        {list.map(u => (
+          <TouchableOpacity key={u.id || u.name} onPress={() => onPick(u)} style={s.pickRow}><Text style={s.pickText}>{u.name}</Text></TouchableOpacity>
+        ))}
+        {!!q.trim() && !staff.some(u => u.name === q.trim()) && (
+          <TouchableOpacity onPress={() => onPick({ id: '', name: q.trim() })} style={s.pickRow}>
+            <Text style={[s.pickText, { color: '#6d28d9' }]}>+ {L('studentDevice.useTyped', { v0: q.trim() })}</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </Sheet>
   );
 }
@@ -401,6 +547,15 @@ const s = StyleSheet.create({
   chargeChipOn: { backgroundColor: '#fef3c7', borderColor: '#fcd34d' },
   chargeText: { fontSize: 12, color: '#6b7280' },
   noteText: { fontSize: 12, color: '#4b5563' },
+  portBadge: { fontSize: 11, fontWeight: '700', color: '#fff', backgroundColor: '#111827', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: 'hidden' },
+  portStatus: { fontSize: 11, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: 'hidden' },
+  pctRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  pctInput: { width: 48, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingVertical: 4, textAlign: 'center', fontSize: 13, color: '#111827' },
+  chgChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff' },
+  chgChipOn: { backgroundColor: '#111827', borderColor: '#111827' },
+  chgText: { fontSize: 11, color: '#6b7280' },
+  pickRow: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
+  pickText: { fontSize: 15, color: '#111827' },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' },
   sheetTitle: { fontSize: 17, fontWeight: '800', color: '#111827' },
   sheetFooter: { padding: 12, borderTopWidth: 1, borderTopColor: '#f3f4f6' },
