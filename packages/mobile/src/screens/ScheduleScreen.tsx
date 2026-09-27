@@ -269,7 +269,7 @@ export function ScheduleScreen() {
           return (
             <TouchableOpacity
               key={c.key}
-              onPress={() => setCategory(c.key)}
+              onPress={() => { setCategory(c.key); setGuideLabel(null); }}
               style={[s.pill, on ? s.pillOn : filled ? s.pillFilled : s.pillEmpty]}
             >
               <Text style={[s.pillText, on ? s.pillTextOn : filled ? s.pillTextFilled : s.pillTextEmpty]}>
@@ -294,7 +294,7 @@ export function ScheduleScreen() {
             return (
               <TouchableOpacity
                 key={g}
-                onPress={() => chooseGroup(g)}
+                onPress={() => { chooseGroup(g); setGuideLabel(null); }}
                 style={[s.segItem, on && s.segItemOn]}
               >
                 <Text style={[s.segText, on && s.segTextOn]} numberOfLines={1}>
@@ -327,10 +327,20 @@ export function ScheduleScreen() {
             body={isAdmin ? L('schedule.dayPlanEmptyAdmin') : ''}
           />
         )
+      ) : activeCategory === EXCITING_CATEGORY && guideLabel ? (
+        <GuideDetail
+          label={guideLabel}
+          guide={findGuide(guideLabel, data?.timetableGuides)}
+          onBack={() => setGuideLabel(null)}
+        />
       ) : activeCategory === EXCITING_CATEGORY ? (
         <View onLayout={(e) => { excitingTop.current = e.nativeEvent.layout.y; }}>
           <ExcitingDayList
             set={daySet}
+            groupName={activeGroup}
+            guidedLabels={guidedLabels}
+            onOpenGuide={(label) => { setGuideLabel(label); scrollRef.current?.scrollTo({ y: 0, animated: false }); }}
+            nowMinutes={nowMinutes}
             focusDate={focusDate}
             onFocusLayout={(y) => scrollRef.current?.scrollTo({ y: Math.max(0, excitingTop.current + y - 12), animated: true })}
           />

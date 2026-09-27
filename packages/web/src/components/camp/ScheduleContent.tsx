@@ -88,8 +88,6 @@ export default function ScheduleContent() {
   const [editing, setEditing] = useState(false);
   const [dayPlanEditing, setDayPlanEditing] = useState(false);
   const [category, setCategory] = useState<string | null>(null);
-  /** 일정표에서 누른 익사이팅 날짜 — 그 카드로 스크롤 */
-  const [focusDate, setFocusDate] = useState<string | null>(null);
   const [groupName, setGroupName] = useState<string | null>(null);
 
   // 지난번에 고른 그룹 복원 (캠프가 바뀌면 그 캠프 것으로)
@@ -153,7 +151,7 @@ export default function ScheduleContent() {
   });
 
   /** 칸 설명 — 캠프당 한 벌 */
-  const { data: timetableGuides = {} } = useQuery({
+  const { data: timetableGuides = {}, refetch: refetchGuides } = useQuery({
     queryKey: ['campTimetableGuides', campCode],
     queryFn: () => getCampTimetableGuides(db, campCode),
     enabled: !!campCode,
@@ -219,7 +217,6 @@ export default function ScheduleContent() {
     if (!cat) return;
     setCategory(cat);
     if (cat === EXCITING_CATEGORY) {
-      setFocusDate(date);
       setTimeout(() => document.getElementById(`exciting-${date}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
     }
   };
@@ -308,6 +305,7 @@ export default function ScheduleContent() {
         onSaved={() => {
           setDayPlanEditing(false);
           refetchDayPlan();
+          refetchGuides();
         }}
       />
     );
@@ -428,7 +426,15 @@ export default function ScheduleContent() {
           />
         )
       ) : activeCategory === EXCITING_CATEGORY ? (
-        <ExcitingDayList set={daySet} focusDate={focusDate} />
+        guideLabel ? (
+          <GuideDetail
+            label={guideLabel}
+            guide={findGuide(guideLabel, timetableGuides)}
+            onBack={() => setGuideLabel(null)}
+          />
+        ) : (
+          <ExcitingDayList set={daySet} groupName={activeGroup} guidedLabels={guidedLabels} onOpenGuide={setGuideLabel} nowMinutes={nowMinutes} />
+        )
       ) : current && guideLabel ? (
         <GuideDetail
           label={guideLabel}

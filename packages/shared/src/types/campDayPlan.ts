@@ -77,8 +77,13 @@ export interface DayPlanEntry {
   kind: DayKind;
   /** 칸 아래 작게 붙는 메모 (예: "우천 시 실내") */
   note?: string;
-  /** kind === 'exciting' 일 때 시간대별 활동·장소 */
+  /** kind === 'exciting' 일 때 시간대별 활동·장소 — 세트의 모든 그룹 공통 */
   slots?: ExcitingSlot[];
+  /**
+   * 같은 날이라도 그룹마다 가는 곳이 다를 때 (예: Spring 은 런닝맨, Summer 는 항공우주 박물관).
+   * normalizeGroupKey 값 → 그 그룹의 활동표. 있으면 공통(slots)보다 먼저 쓴다.
+   */
+  slotsByGroup?: Record<string, ExcitingSlot[]>;
 }
 
 export interface DayPlanSet {
@@ -182,9 +187,17 @@ export function excitingDates(set: DayPlanSet | undefined): string[] {
     .sort();
 }
 
+/** 이 그룹의 그날 활동표 — 그룹 전용이 있으면 그것, 없으면 공통 */
+export function excitingSlotsFor(entry: DayPlanEntry | undefined, groupName?: string | null): ExcitingSlot[] {
+  if (!entry) return [];
+  const key = normalizeGroupKey(groupName);
+  const own = key ? entry.slotsByGroup?.[key] : undefined;
+  return own?.length ? own : entry.slots ?? [];
+}
+
 /** 지금 시각에 해당하는 익사이팅 칸 */
-export function excitingSlotAt(entry: DayPlanEntry | undefined, minutes: number): ExcitingSlot | undefined {
-  return (entry?.slots ?? []).find((s) => {
+export function excitingSlotAt(entry: DayPlanEntry | undefined, minutes: number, groupName?: string | null): ExcitingSlot | undefined {
+  return excitingSlotsFor(entry, groupName).find((s) => {
     const a = hhmmToMinutes(s.start);
     const b = hhmmToMinutes(s.end);
     return a !== null && b !== null && a <= minutes && minutes < b;
@@ -210,7 +223,7 @@ export function cleanDayPlan(plan: CampDayPlan): CampDayPlan {
       const out: DayPlanEntry = { kind: e.kind };
       if (clean(e.note)) out.note = clean(e.note);
       if (e.kind === 'exciting') {
-        const slots = (e.slots ?? [])
+        const cleanSlots = (list: ExcitingSlot[] | undefined) => (list ?? [])
           .map((x) => ({
             id: x.id || `${date}-${Math.random().toString(36).slice(2, 8)}`,
             start: clean(x.start), end: clean(x.end), activity: clean(x.activity), place: clean(x.place),
@@ -218,7 +231,15 @@ export function cleanDayPlan(plan: CampDayPlan): CampDayPlan {
           }))
           .filter((x) => x.activity || x.place)
           .sort((a, b) => (hhmmToMinutes(a.start) ?? 0) - (hhmmToMinutes(b.start) ?? 0));
+        const slots = cleanSlots(e.slots);
         if (slots.length) out.slots = slots;
+        const byGroup: Record<string, ExcitingSlot[]> = {};
+        Object.entries(e.slotsByGroup ?? {}).forEach(([g, list]) => {
+          const key = normalizeGroupKey(g);
+          const cleaned = cleanSlots(list);
+          if (key && cleaned.length) byGroup[key] = cleaned;
+        });
+        if (Object.keys(byGroup).length) out.slotsByGroup = byGroup;
       }
       days[date] = out;
     });

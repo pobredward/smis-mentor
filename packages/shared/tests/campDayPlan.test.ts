@@ -13,7 +13,8 @@ const plan: CampDayPlan = {
         '2026-07-26': { kind: 'orientation' },
         '2026-07-27': { kind: 'regular' },
         '2026-07-28': { kind: 'regular' },
-        '2026-08-01': { kind: 'exciting', slots: [{ id: 's1', start: '13:00', end: '15:00', activity: '런닝맨', place: '런닝맨 테마파크' }] },
+        '2026-08-01': { kind: 'exciting', slots: [{ id: 's1', start: '13:00', end: '15:00', activity: '런닝맨', place: '런닝맨 테마파크' }],
+          slotsByGroup: { summer: [{ id: 's2', start: '13:10', end: '16:10', activity: '관람', place: '항공우주 박물관' }] } },
         '2026-08-13': { kind: 'final' },
       },
     },
@@ -53,6 +54,9 @@ describe('campDayPlan', () => {
     expect(excitingDates(set)).toEqual(['2026-08-01']);
     expect(excitingSlotAt(set?.days['2026-08-01'], 14 * 60)?.place).toBe('런닝맨 테마파크');
     expect(excitingSlotAt(set?.days['2026-08-01'], 15 * 60)).toBe(undefined);
+    // 같은 세트라도 그룹 전용 활동표가 있으면 그것
+    expect(excitingSlotAt(set?.days['2026-08-01'], 14 * 60, 'Summer')?.place).toBe('항공우주 박물관');
+    expect(excitingSlotAt(set?.days['2026-08-01'], 14 * 60, 'Spring')?.place).toBe('런닝맨 테마파크');
   });
 
   it('달력은 일요일 시작 주 단위, 기간 밖은 null', () => {
@@ -66,13 +70,14 @@ describe('campDayPlan', () => {
   it('저장 전 정리 — 한 그룹은 한 세트에만, 빈 활동 칸 제거', () => {
     const out = cleanDayPlan({ sets: [
       { id: 'x', name: ' ', groups: ['Spring', 'spring'], days: { '2026-08-01': { kind: 'exciting', slots: [{ id: '', start: '15:00', end: '16:00', activity: '', place: '' }, { id: '', start: '09:00', end: '10:00', activity: 'A', place: 'B' }] } } },
-      { id: 'y', name: 'Y', groups: ['SPRING', 'Autumn'], days: { bad: { kind: 'regular' } } },
+      { id: 'y', name: 'Y', groups: ['SPRING', 'Autumn'], days: { bad: { kind: 'regular' }, '2026-08-02': { kind: 'exciting', slotsByGroup: { Autumn: [{ id: '', start: '09:00', end: '10:00', activity: 'A', place: '' }], winter: [] } } } },
     ] });
     expect(out.sets[0].groups).toEqual(['spring']);
     expect(out.sets[1].groups).toEqual(['autumn']);
     expect(out.sets[0].name).toBe('일정 1');
     expect(out.sets[0].days['2026-08-01'].slots?.length).toBe(1);
-    expect(Object.keys(out.sets[1].days).length).toBe(0);
+    expect(Object.keys(out.sets[1].days)).toEqual(['2026-08-02']);
+    expect(Object.keys(out.sets[1].days['2026-08-02'].slotsByGroup ?? {})).toEqual(['autumn']);
   });
 });
 

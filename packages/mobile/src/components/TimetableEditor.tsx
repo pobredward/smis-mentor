@@ -11,17 +11,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import { Image } from 'expo-image';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   DEFAULT_SUBJECTS,
   TIMETABLE_CATEGORIES,
   categoryLabel,
   findCategory,
-  DEFAULT_GUIDE_SECTIONS,
-  guideKeyOf,
-  hasGuideContent,
   timetableLabels,
   booksFor,
   buildEmptyTimetable,
@@ -36,9 +31,6 @@ import {
   updateCampClassInfo,
   updateCampTimetableCommon,
   updateCampTimetableGuides,
-  uploadGuideMedia,
-  guideUploadError,
-  hasItemContent,
   isUnsaved,
   isSameGroup,
   isMergedColumn,
@@ -57,17 +49,15 @@ import {
   type SubjectPartner,
   type TimetableSubject,
   type TimetableGuide,
-  type GuideSection,
-  type GuideItem,
-  type GuideItemType,
   type TimetableClassColumn,
 } from '@smis-mentor/shared';
-import { db, storage } from '../config/firebase';
+import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { campTimetableService } from '../services/campTimetableService';
 import { getUsersByJobCodeId } from '../services/userService';
 import jobCodesService from '../services/jobCodesService';
 import { scheduleQueryKey } from '../services/scheduleBundle';
+import { GuideEditorPanel } from './GuideEditorPanel';
 
 // 불러오는 동안 쓰는 빈 값 — 렌더마다 새 [] / {} 를 만들면 그걸 따르는 effect(setGuides 등)가 끝없이 돈다
 const NO_LIST: never[] = [];
@@ -158,7 +148,6 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
   });
   const [guides, setGuides] = useState<Record<string, TimetableGuide>>({});
   useEffect(() => setGuides(savedGuides), [savedGuides]);
-  const [guideLabel, setGuideLabel] = useState<string | null>(null);
 
   const { data: eslBooks } = useQuery({
     queryKey: ['eslBooks'],
@@ -338,81 +327,7 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
   // ── 칸 설명 ───────────────────────────────────────────────────────
   /** 이 Day 표의 칸에 실제로 찍히는 이름들 — 설명을 붙일 대상 */
   const guideTargets = useMemo(() => (draft ? timetableLabels(draft) : []), [draft]);
-  const guideOf = (label: string): TimetableGuide => guides[guideKeyOf(label)] ?? {};
-  const patchGuide = (label: string, fn: (g: TimetableGuide) => TimetableGuide) =>
-    setGuides((prev) => {
-      const key = guideKeyOf(label);
-      return { ...prev, [key]: fn(prev[key] ?? {}) };
-    });
-  const newId = () => D.newBlockId().slice(-6);
-  const startGuide = (label: string) => {
-    setGuideLabel(label);
-    if (!guides[guideKeyOf(label)]?.sections?.length) {
-      patchGuide(label, (g) => ({
-        ...g,
-        sections: DEFAULT_GUIDE_SECTIONS.map((title) => ({ id: newId(), title, items: [] })),
-      }));
-    }
-  };
-  const patchSection = (label: string, si: number, fn: (s: GuideSection) => GuideSection) =>
-    patchGuide(label, (g) => ({
-      ...g,
-      sections: (g.sections ?? []).map((s, i) => (i === si ? fn(s) : s)),
-    }));
 
-  const addItem = (label: string, si: number, type: GuideItemType) =>
-    patchSection(label, si, (s) => ({ ...s, items: [...s.items, { id: newId(), type }] }));
-  const patchItem = (label: string, si: number, ii: number, patch: Partial<GuideItem>) =>
-    patchSection(label, si, (s) => ({
-      ...s,
-      items: s.items.map((x, i) => (i === ii ? { ...x, ...patch } : x)),
-    }));
-  const removeItem = (label: string, si: number, ii: number) =>
-    patchSection(label, si, (s) => ({ ...s, items: s.items.filter((_, i) => i !== ii) }));
-
-  /** 사진·동영상은 Storage 에 올리고 주소만 설명에 남긴다 */
-  const [uploading, setUploading] = useState<string | null>(null);
-  const pickMedia = async (label: string, si: number, ii: number) => {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('권한 필요', '사진 접근을 허용해 주세요.');
-      return;
-    }
-    const picked = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images', 'videos'],
-      quality: 0.7,
-    });
-    if (picked.canceled || !picked.assets?.length) return;
-
-    const asset = picked.assets[0];
-    const key = `${si}:${ii}`;
-    setUploading(key);
-    try {
-      const res = await fetch(asset.uri);
-      const blob = await res.blob();
-      const name = asset.fileName ?? asset.uri.split('/').pop() ?? 'file';
-      const { url, storagePath } = await uploadGuideMedia(
-        storage,
-        campCode,
-        guideKeyOf(label),
-        blob,
-        name,
-        asset.mimeType ?? (asset.type === 'video' ? 'video/mp4' : 'image/jpeg')
-      );
-      patchItem(label, si, ii, {
-        url,
-        storagePath,
-        type: asset.type === 'video' ? 'video' : 'image',
-        text: name,
-      });
-      Alert.alert('올렸습니다', '저장을 눌러야 반영됩니다.');
-    } catch (e) {
-      Alert.alert('올리지 못했습니다', guideUploadError(e));
-      console.error(e);
-    } finally {
-      setUploading(null);
-    }
-  };
 
   const sorted = draft ? sortBlocks(draft.blocks, draft.layout) : [];
   /** 이름을 직접 넣을 수 있는 역할 — 과목의 원어민 + 수업(Pattern) 멘토 */
@@ -911,180 +826,7 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
 
           {/* 칸 설명 — 시간표에서 그 칸을 눌렀을 때 뜬다 (web 과 같은 구성) */}
           {!isCommon && guideTargets.length > 0 && (
-            <Section
-              title={`칸 설명 (${guideTargets.filter((l) => hasGuideContent(guideOf(l))).length}/${guideTargets.length})`}
-            >
-              <View style={s.wrapRow}>
-                {guideTargets.map((label) => {
-                  const on = label === guideLabel;
-                  const filled = hasGuideContent(guideOf(label));
-                  return (
-                    <TouchableOpacity
-                      key={label}
-                      onPress={() => (on ? setGuideLabel(null) : startGuide(label))}
-                      style={[s.smallChip, on && s.smallChipOn]}
-                    >
-                      <Text style={[s.smallChipText, on && s.smallChipTextOn]}>
-                        {filled ? '• ' : ''}
-                        {label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {!!guideLabel && (
-                <View style={s.guideBox}>
-                  <View style={s.tagRow}>
-                    <Text style={s.guideTitle}>{guideLabel}</Text>
-                    <TouchableOpacity onPress={() => setGuideLabel(null)} style={{ marginLeft: 'auto' }}>
-                      <Text style={s.tagLink}>접기</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <TextInput
-                    value={guideOf(guideLabel).summary ?? ''}
-                    onChangeText={(v) => patchGuide(guideLabel, (g) => ({ ...g, summary: v }))}
-                    style={[s.input, { marginTop: 8 }]}
-                    placeholder="한 줄 요약"
-                    placeholderTextColor="#9ca3af"
-                  />
-
-                  {(guideOf(guideLabel).sections ?? []).map((sec, si) => (
-                    <View key={sec.id} style={s.guideSection}>
-                      <View style={s.classRow}>
-                        <TextInput
-                          value={sec.title}
-                          onChangeText={(v) => patchSection(guideLabel, si, (x) => ({ ...x, title: v }))}
-                          style={[s.input, s.flex1]}
-                          placeholder="섹션 제목 (예: 진행 방법)"
-                          placeholderTextColor="#9ca3af"
-                        />
-                        <TouchableOpacity
-                          onPress={() =>
-                            patchGuide(guideLabel, (g) => ({
-                              ...g,
-                              sections: (g.sections ?? []).filter((_, i) => i !== si),
-                            }))
-                          }
-                          style={s.iconBtn}
-                        >
-                          <Ionicons name="close" size={16} color="#9ca3af" />
-                        </TouchableOpacity>
-                      </View>
-                      {sec.items.map((item, ii) => (
-                        <View key={item.id} style={s.classRow}>
-                          <Text style={s.bullet}>
-                            {item.type === 'text' ? '•' : item.type === 'link' ? '🔗' : '🖼'}
-                          </Text>
-
-                          {item.type === 'text' ? (
-                            <TextInput
-                              value={item.text ?? ''}
-                              onChangeText={(v) => patchItem(guideLabel, si, ii, { text: v })}
-                              style={[s.input, s.flex1]}
-                              placeholder="한 줄에 하나씩"
-                              placeholderTextColor="#9ca3af"
-                            />
-                          ) : item.type === 'link' ? (
-                            <View style={s.flex1}>
-                              <TextInput
-                                value={item.text ?? ''}
-                                onChangeText={(v) => patchItem(guideLabel, si, ii, { text: v })}
-                                style={s.input}
-                                placeholder="링크 이름"
-                                placeholderTextColor="#9ca3af"
-                              />
-                              <TextInput
-                                value={item.url ?? ''}
-                                onChangeText={(v) => patchItem(guideLabel, si, ii, { url: v })}
-                                style={[s.input, { marginTop: 4 }]}
-                                placeholder="https://"
-                                placeholderTextColor="#9ca3af"
-                                autoCapitalize="none"
-                              />
-                            </View>
-                          ) : item.url ? (
-                            <View style={[s.flex1, s.tagRow]}>
-                              {item.type === 'image' ? (
-                                <Image
-                                  source={{ uri: item.url }}
-                                  style={{ width: 36, height: 36, borderRadius: 4 }}
-                                  contentFit="cover"
-                                />
-                              ) : (
-                                <Ionicons name="play-circle-outline" size={28} color="#9ca3af" />
-                              )}
-                              <TextInput
-                                value={item.text ?? ''}
-                                onChangeText={(v) => patchItem(guideLabel, si, ii, { text: v })}
-                                style={[s.input, s.flex1, { marginLeft: 6 }]}
-                                placeholder="설명 (선택)"
-                                placeholderTextColor="#9ca3af"
-                              />
-                            </View>
-                          ) : (
-                            <TouchableOpacity
-                              style={[s.pickBtn, s.flex1]}
-                              onPress={() => pickMedia(guideLabel, si, ii)}
-                              disabled={uploading === `${si}:${ii}`}
-                            >
-                              <Text style={s.pickBtnText}>
-                                {uploading === `${si}:${ii}` ? '올리는 중…' : '사진·동영상 고르기'}
-                              </Text>
-                            </TouchableOpacity>
-                          )}
-
-                          <TouchableOpacity
-                            onPress={() => removeItem(guideLabel, si, ii)}
-                            style={s.iconBtn}
-                          >
-                            <Ionicons name="close" size={14} color="#d1d5db" />
-                          </TouchableOpacity>
-                        </View>
-                      ))}
-                      <View style={[s.wrapRow, { marginTop: 2 }]}>
-                        <TouchableOpacity
-                          onPress={() => addItem(guideLabel, si, 'text')}
-                          style={s.miniBtn}
-                        >
-                          <Text style={s.miniBtnText}>+ 줄</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => addItem(guideLabel, si, 'link')}
-                          style={s.miniBtn}
-                        >
-                          <Text style={s.miniBtnText}>+ 링크</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                          onPress={() => addItem(guideLabel, si, 'image')}
-                          style={s.miniBtn}
-                        >
-                          <Text style={s.miniBtnText}>+ 사진·동영상</Text>
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                  ))}
-
-                  <View style={[s.wrapRow, { marginTop: 6 }]}>
-                    <TouchableOpacity
-                      style={s.miniBtn}
-                      onPress={() =>
-                        patchGuide(guideLabel, (g) => ({
-                          ...g,
-                          sections: [...(g.sections ?? []), { id: newId(), title: '', items: [] }],
-                        }))
-                      }
-                    >
-                      <Text style={s.miniBtnText}>+ 섹션 추가</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={[s.hint, { marginTop: 6 }]}>
-                    줄은 글·링크·사진·동영상을 섞어 넣을 수 있습니다.
-                  </Text>
-                </View>
-              )}
-            </Section>
+            <GuideEditorPanel campCode={campCode} labels={guideTargets} guides={guides} setGuides={setGuides} />
           )}
 
           {/* 교시 — 교시·날짜는 Day 마다 다르므로 공통 탭에는 없다 */}

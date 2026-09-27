@@ -80,7 +80,7 @@ export function studentWhereabouts(
   const line = (...parts: Array<string | undefined>) => parts.filter(Boolean).join(' · ');
 
   if (entry.kind === 'exciting') {
-    const slot = excitingSlotAt(entry, minutes);
+    const slot = excitingSlotAt(entry, minutes, group.name);
     if (!slot) return { ...base, text: dayLabel };
     return {
       ...base,
