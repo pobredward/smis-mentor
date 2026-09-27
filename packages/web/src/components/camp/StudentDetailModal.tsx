@@ -387,8 +387,18 @@ export default function StudentDetailModal({
                 <span className="text-xs text-gray-500 w-12 shrink-0 tabular-nums pt-0.5">{d ? `${d.getMonth() + 1}/${d.getDate()}` : '-'}</span>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-sm font-medium text-gray-900 break-words">{r.symptom || '-'}</span>
-                    <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${open ? 'bg-amber-100 text-amber-800' : 'bg-emerald-50 text-emerald-700'}`}>{dataLabel(r.progressStatus)}</span>
+                    {r.medicationOnly ? (
+                      <>
+                        {/* 약복용 명단 전용(상시약) — 아픈 기록이 아니므로 진행 상태 대신 약 이름 */}
+                        <span className="text-sm font-medium text-gray-900 break-words">{(r.medicationSchedules ?? []).map(m => m.name).filter(Boolean).join(' · ') || '-'}</span>
+                        <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-700">💊 {L('patient.maRegular')}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-sm font-medium text-gray-900 break-words">{r.symptom || '-'}</span>
+                        <span className={`text-[11px] px-1.5 py-0.5 rounded-full ${open ? 'bg-amber-100 text-amber-800' : 'bg-emerald-50 text-emerald-700'}`}>{dataLabel(r.progressStatus)}</span>
+                      </>
+                    )}
                     {(r.types ?? []).map(t => <span key={t} className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">{dataLabel(t)}</span>)}
                   </div>
                   {(r.treatment || visits > 0) && (

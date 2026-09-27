@@ -89,9 +89,9 @@ export function hasMedicationInfo(student: Pick<STSheetStudent, 'medication'>): 
   return !NONE_VALUES.has(v);
 }
 
-/** 아직 완치 처리되지 않은 보건 기록 */
-export function isOpenPatientRecord(r: Pick<PatientRecord, 'progressStatus'>): boolean {
-  return r.progressStatus !== '완치';
+/** 아직 완치 처리되지 않은 보건 기록 — 약복용 명단 전용(상시약) 기록은 아픈 게 아니므로 빼고 */
+export function isOpenPatientRecord(r: Pick<PatientRecord, 'progressStatus' | 'medicationOnly'>): boolean {
+  return r.progressStatus !== '완치' && !r.medicationOnly;
 }
 
 /** 레벨 테스트 입소 → 파이널 요약 (값이 있는 영역만) */

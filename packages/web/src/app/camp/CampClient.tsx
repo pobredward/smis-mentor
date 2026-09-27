@@ -164,7 +164,9 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
 
   return (
     <Layout>
-      <div className="-mx-4 sm:-mx-6 lg:-mx-8 -my-6">
+      {/* 명단·환자는 화면 높이에 맞춘 고정 높이(안에서 스크롤) → 아래 여백을 빼서 페이지가 한 번 더 스크롤되지 않게.
+          나머지 탭은 페이지가 스크롤되므로 아래 여백을 남겨 좁은 화면 하단 탭바(h-16)에 끝이 가리지 않게 */}
+      <div className={`-mx-4 sm:-mx-6 lg:-mx-8 -mt-6 ${activeTab === 'roster' || activeTab === 'patient' ? '-mb-6' : 'md:-mb-6'}`}>
         {/* 커스텀 탭 바 */}
         <div className="bg-white border-b border-gray-200 sticky top-16 z-30">
           <div className="max-w-2xl mx-auto flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -203,11 +205,11 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
           ) : activeTab === 'guide' ? (
             <LodgingContent />
           ) : activeTab === 'roster' ? (
-            <div className="h-[calc(100vh-120px)]">
+            <div className="h-[calc(100dvh-176px)] md:h-[calc(100vh-120px)]">
               <RosterContent isFamilyCamp={isFamilyCamp} isEJCamp={isEJCamp} campTypeReady={campType !== null} />
             </div>
           ) : activeTab === 'patient' ? (
-            <div className="h-[calc(100vh-120px)]">
+            <div className="h-[calc(100dvh-176px)] md:h-[calc(100vh-120px)]">
               <PatientContent />
             </div>
           ) : activeTab === 'inventory' ? (

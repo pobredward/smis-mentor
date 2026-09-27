@@ -59,9 +59,9 @@ function Field({ label, error, children }: { label: string; error?: string; chil
   );
 }
 
-function Info({ label, value }: { label: string; value?: string | number | null }) {
+function Info({ label, value, full }: { label: string; value?: string | number | null; full?: boolean }) {
   return (
-    <View style={s.info}>
+    <View style={[s.info, full && { width: '100%', paddingRight: 0 }]}>
       <Text style={s.infoLabel}>{label}</Text>
       <Text style={[s.infoValue, !value && { color: '#cbd5e1' }]}>{value || '—'}</Text>
     </View>
@@ -572,8 +572,8 @@ export function IntroSection() {
   const u = userData as any;
   const view = (
     <View style={{ gap: 12 }}>
-      <Info label={L('admin.selfIntroduction')} value={u.selfIntroduction} />
-      <Info label={L('profile.motivation')} value={u.jobMotivation} />
+      <Info full label={L('admin.selfIntroduction')} value={u.selfIntroduction} />
+      <Info full label={L('profile.motivation')} value={u.jobMotivation} />
     </View>
   );
   const edit = (

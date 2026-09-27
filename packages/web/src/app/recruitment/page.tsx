@@ -41,7 +41,7 @@ export default function RecruitmentPage() {
       <Suspense fallback={null}>
         <TabFromQuery onChange={setActiveTab} />
       </Suspense>
-      <div className="-mx-4 sm:-mx-6 lg:-mx-8 -my-6">
+      <div className="-mx-4 sm:-mx-6 lg:-mx-8 -mt-6 md:-mb-6">
         {/* 커스텀 탭 바 */}
         <div className="bg-white border-b border-gray-200 sticky top-16 z-30">
           <div className="flex">

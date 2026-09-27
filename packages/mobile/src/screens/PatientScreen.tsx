@@ -18,12 +18,14 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, collection, getDocs, query, where } from 'firebase/firestore';
+import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import * as ImagePicker from 'expo-image-picker';
 import { useQuery } from '@tanstack/react-query';
 import { loadScheduleBundle, scheduleQueryKey } from '../services/scheduleBundle';
 import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../context/AuthContext';
-import { db } from '../config/firebase';
+import { db, storage } from '../config/firebase';
 import {
   subscribePatientRecords,
   addPatientRecord,
@@ -45,6 +47,9 @@ import {
   addMedicationSchedule,
   updateMedicationSchedule,
   removeMedicationSchedule,
+  replaceMedicationSchedule,
+  addMedicationPhoto,
+  removeMedicationPhoto,
   addIsolationCheckSchedule,
   completeIsolationCheckSchedule,
   updateReturnCriteriaChecks,
@@ -85,8 +90,8 @@ import {
   FEVER_THRESHOLDS,
   classifyFever,
   isFeverLevel,
-  dosesForProgressLog, L, dataLabel, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind,
-  isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, dialablePhone, type Whereabouts } from '@smis-mentor/shared';
+  dosesForProgressLog, L, dataLabel, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind, emptyMedListForm, medListFormFrom, medListScheduleOf, toggleMemoPhrase, type MedListForm,
+  isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, normalizeGroupKey, dialablePhone, type Whereabouts } from '@smis-mentor/shared';
 import type {
   PatientRecord,
   PatientType,
@@ -355,6 +360,7 @@ export function PatientScreen() {
   const [showQuickReport, setShowQuickReport] = useState(false);
   const [campGroups, setCampGroups] = useState<CampGroup[]>([]);
   const [campUsers, setCampUsers] = useState<User[]>([]);
+  const [campEndDate, setCampEndDate] = useState(''); // 약 '퇴소까지' 종료일 (web 과 같이 camps 문서에서)
   // 날짜가 바뀌면(자정 넘김) 오늘도 바뀐다 — 켜 둔 채 밤을 넘겨도 복용 체크가 전날로 기록되지 않게
   const [today, setToday] = useState(todayStr());
   useEffect(() => {
@@ -383,6 +389,12 @@ export function PatientScreen() {
           const users = await getUsersByJobCodeId(db, activeJobCodeId);
           setCampUsers(users);
         } catch { /* 없어도 무방 */ }
+        try {
+          const campSnap = await getDocs(query(collection(db, 'camps'), where('code', '==', cc)));
+          const end = campSnap.docs[0]?.data()?.endDate as { toDate?: () => Date } | undefined;
+          const d = end?.toDate?.();
+          if (d) setCampEndDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
+        } catch { /* 없으면 '퇴소까지'는 시작일로 저장 (표시엔 영향 없음) */ }
         try {
           const groups = await getCampGroups(db, cc);
           setCampGroups(groups);
@@ -521,7 +533,7 @@ export function PatientScreen() {
       });
     });
     // 2차: campUsers에서 classMentor 기반 fallback
-    records.forEach(r => {
+    allRecords.forEach(r => {
       if (!r.className || result.has(r.className)) return;
       if (!r.classMentor) return;
       const mentorUser = campUsers.find(u => u.name === r.classMentor);
@@ -540,7 +552,7 @@ export function PatientScreen() {
     // 선생님 환자는 그룹과 상관없이 '선생님' 묶음으로
     result.set(STAFF_PATIENT_CLASS, STAFF_GROUP_KEY);
     return result;
-  }, [records, campUsers, campGroups, activeJobCodeId]);
+  }, [allRecords, campUsers, campGroups, activeJobCodeId]);
 
   const groupOrder = useMemo((): string[] => {
     if (campGroups.length > 0) return campGroups.map(g => g.name.toLowerCase());
@@ -558,21 +570,7 @@ export function PatientScreen() {
     }));
   }, [allRecords, today, filterByMyUnit]);
 
-  const myPendingCount = useMemo(() =>
-    records.filter(r => r.assigneeId === userData?.userId && r.progressStatus !== '완치').length,
-    [records, userData?.userId]
-  );
 
-  const counts = useMemo(() => ({
-    active: activeRecords.length,
-    최초보고: activeRecords.filter(r => r.progressStatus === '최초보고').length,
-    중간보고: activeRecords.filter(r => r.progressStatus === '중간보고').length,
-    내원예정: activeRecords.filter(r =>
-      (r.hospitalVisits ?? []).some(v => v.hospitalStatus === '내원예정')
-    ).length,
-    격리: activeRecords.filter(r => r.types.includes('격리')).length,
-    완치: resolvedRecords.length,
-  }), [activeRecords, resolvedRecords]);
 
   // ==================== 핸들러 ====================
 
@@ -870,6 +868,48 @@ export function PatientScreen() {
     return ordered;
   }, [activeByClass, classNameToGroupKey, groupOrder]);
 
+  /** 유닛 선생님 차례 — 그룹 차례 → 반번호 → 이름 (약복용명단 방 담당 정렬) */
+  const unitRank = useMemo(() => {
+    const rows = campUsers.flatMap(u => {
+      const je = u.jobExperiences?.find(j => j.id === activeJobCodeId) as { group?: string; classCode?: string } | undefined;
+      if (!u.name || !je) return [];
+      const gi = groupOrder.indexOf(normalizeGroupKey(je.group));
+      return [{ name: u.name, gi: gi < 0 ? 98 : gi, cc: je.classCode || '~' }];
+    }).sort((a, b) => a.gi - b.gi || a.cc.localeCompare(b.cc, undefined, { numeric: true }) || a.name.localeCompare(b.name, 'ko'));
+    const map = new Map<string, number>();
+    rows.forEach((r, i) => { if (!map.has(r.name)) map.set(r.name, i); });
+    return map;
+  }, [campUsers, activeJobCodeId, groupOrder]);
+
+  /** 약복용 명단의 식후 섹션을 그룹 → 반으로 묶을 때 */
+  const groupOfClass = useCallback((className: string): [string, number] | null => {
+    const key = classNameToGroupKey.get(className);
+    if (!key || key === STAFF_GROUP_KEY) return null;
+    const idx = groupOrder.indexOf(key);
+    const name = campGroups.find(g => g.name.toLowerCase() === key)?.name ?? GROUP_DISPLAY_NAMES[key] ?? key;
+    return [name, idx < 0 ? 98 : idx];
+  }, [classNameToGroupKey, groupOrder, campGroups]);
+
+  /** 상단 그룹 바로가기 — 캠프 그룹은 늘 보이고(환자 없으면 흐리게), 반 배정 전인 환자는 '미정', 선생님 환자가 있으면 '선생님' (web 과 같은 규칙) */
+  const jumpGroups = useMemo(() => {
+    const present = orderedPatientGroups.map(g => g.key);
+    const keys = [
+      ...(campGroups.length ? groupOrder : present.filter(k => k && k !== STAFF_GROUP_KEY)),
+      ...present.filter(k => k && k !== STAFF_GROUP_KEY),
+      '',
+      ...(present.includes(STAFF_GROUP_KEY) ? [STAFF_GROUP_KEY] : []),
+    ].filter((k, i, arr) => arr.indexOf(k) === i);
+    return keys.map(key => {
+      const rs = (orderedPatientGroups.find(g => g.key === key)?.classes ?? []).flatMap(([, x]) => x);
+      return {
+        key,
+        total: rs.length,
+        first: rs.filter(r => r.progressStatus === '최초보고').length,
+        mid: rs.filter(r => r.progressStatus === '중간보고').length,
+      };
+    });
+  }, [orderedPatientGroups, campGroups.length, groupOrder]);
+
   const groupLabel = (groupKey: string) => groupKey === STAFF_GROUP_KEY
     ? L('patient.staffPatient')
     : campGroups.find(g => g.name.toLowerCase() === groupKey)?.name ?? GROUP_DISPLAY_NAMES[groupKey] ?? (groupKey || L('patient.groupUnknown'));
@@ -909,63 +949,32 @@ export function PatientScreen() {
 
         {/* ── 탭별 서브헤더 */}
         {mainTab === '환자 현황' ? (
-          <View style={styles.headerTop}>
-            <View style={styles.headerLeft}>
-              <View style={styles.headerTitleRow}>
-                <Text style={styles.headerTitle}>{L('patient.patientCare')}</Text>
-                {myPendingCount > 0 && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{myPendingCount}</Text>
-                  </View>
-                )}
-              </View>
-              <View style={styles.pillRow}>
-                {counts.최초보고 > 0 && <Pill label={L('data.progFirstReport')} count={counts.최초보고} color="#dc2626" />}
-                {counts.중간보고 > 0 && <Pill label={L('data.progMidReport')} count={counts.중간보고} color="#ea580c" />}
-                {counts.내원예정 > 0 && <Pill label={L('data.hospitalPlanned')} count={counts.내원예정} color="#4f46e5" />}
-                {counts.격리 > 0 && <Pill label={L('data.ptIsolation')} count={counts.격리} color="#7c3aed" />}
-                {counts.active === 0 && <Text style={styles.emptySmall}>{L('patient.noCurrentPatients')}</Text>}
-              </View>
-              {/* 그룹 바로가기 — 마지막 그룹까지 스크롤하지 않도록. 빨강=최초보고, 주황=중간보고 */}
-              {orderedPatientGroups.length > 1 && (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingTop: 8 }}>
-                  {orderedPatientGroups.map(({ key, classes }, gi) => {
-                    const rs = classes.flatMap(([, x]) => x);
-                    const first = rs.filter(r => r.progressStatus === '최초보고').length;
-                    const mid = rs.filter(r => r.progressStatus === '중간보고').length;
-                    const staffKey = key === STAFF_GROUP_KEY;
-                    return (
-                      <TouchableOpacity
-                        key={key || 'none'}
-                        onPress={() => listRef.current?.scrollToIndex({ index: gi, animated: true, viewOffset: 4 })}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 9, paddingRight: 6, paddingVertical: 5, borderRadius: 8, borderWidth: 1,
-                          borderColor: staffKey ? '#99f6e4' : GROUP_BORDER_COLORS[key] ?? '#e5e7eb', backgroundColor: staffKey ? '#f0fdfa' : GROUP_BG_COLORS[key] ?? '#f9fafb' }}
-                      >
-                        <Text style={{ fontSize: 11, fontWeight: '700', color: staffKey ? '#0f766e' : GROUP_TEXT_COLORS[key] ?? '#4b5563' }}>{groupLabel(key)}</Text>
-                        {first > 0 && <View style={styles.groupJumpRed}><Text style={styles.groupJumpText}>{first}</Text></View>}
-                        {mid > 0 && <View style={styles.groupJumpOrange}><Text style={styles.groupJumpText}>{mid}</Text></View>}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </ScrollView>
-              )}
-            </View>
+          /* 그룹 바로가기 (빨강=최초보고, 주황=중간보고) + 최초보고 버튼 — 한 줄 */
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }} contentContainerStyle={{ gap: 6 }}>
+              {jumpGroups.map(({ key, first, mid, total }) => {
+                const staffKey = key === STAFF_GROUP_KEY;
+                const gi = orderedPatientGroups.findIndex(g => g.key === key);
+                return (
+                  <TouchableOpacity
+                    key={key || 'none'}
+                    disabled={total === 0 || gi < 0}
+                    onPress={() => listRef.current?.scrollToIndex({ index: gi, animated: true, viewOffset: 4 })}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingLeft: 9, paddingRight: 6, paddingVertical: 5, borderRadius: 8, borderWidth: 1,
+                      opacity: total === 0 ? 0.4 : 1,
+                      borderColor: staffKey ? '#99f6e4' : key ? GROUP_BORDER_COLORS[key] ?? '#e5e7eb' : '#e5e7eb',
+                      backgroundColor: staffKey ? '#f0fdfa' : key ? GROUP_BG_COLORS[key] ?? '#f9fafb' : '#fff' }}
+                  >
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: staffKey ? '#0f766e' : key ? GROUP_TEXT_COLORS[key] ?? '#4b5563' : '#4b5563' }}>{groupLabel(key)}</Text>
+                    {first > 0 && <View style={styles.groupJumpRed}><Text style={styles.groupJumpText}>{first}</Text></View>}
+                    {mid > 0 && <View style={styles.groupJumpOrange}><Text style={styles.groupJumpText}>{mid}</Text></View>}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
             <TouchableOpacity style={styles.quickReportBtn} onPress={() => setShowQuickReport(true)}>
               <Ionicons name="add" size={14} color="#fff" />
               <Text style={styles.quickReportBtnText}>{L('data.progFirstReport')}</Text>
-            </TouchableOpacity>
-          </View>
-        ) : mainTab === '약복용명단' ? (
-          <View style={styles.headerTop}>
-            <View style={styles.headerLeft}>
-              <Text style={styles.headerTitle}>{L('patient.medicationList')}</Text>
-              <Text style={styles.subHeaderSub}>
-                {medicationRecords.length > 0 ? L('patient.studentsOnMedication', { v0: medicationRecords.length }) : L('patient.noStudentsOnMedication')}
-              </Text>
-            </View>
-            <TouchableOpacity style={styles.medListAddBtn} onPress={() => setShowMedListAdd(true)}>
-              <Ionicons name="add" size={14} color="#fff" />
-              <Text style={styles.medListAddBtnText}>{L('patient.addToList')}</Text>
             </TouchableOpacity>
           </View>
         ) : null}
@@ -1002,6 +1011,9 @@ export function PatientScreen() {
           records={medicationRecords}
           today={today}
           currentUserName={userData?.name ?? ''}
+          groupOfClass={groupOfClass}
+          unitRank={unitRank}
+          onAdd={() => setShowMedListAdd(true)}
           onCheck={(record, si, t, checked) => handleMedCheck(record, si, t, checked)}
         />
       ) : (
@@ -1137,15 +1149,12 @@ export function PatientScreen() {
           <MedicationListAddModalMobile
             today={today}
             campCode={campCode}
+            campEndDate={campEndDate}
             students={students}
             staffOptions={staffOptions}
             allRecords={allRecords}
             createdBy={userData?.name ?? ''}
             createdById={userData?.userId ?? ''}
-            onCheck={handleMedCheck}
-            onAddSchedule={handleMedScheduleAdd}
-            onUpdateSchedule={handleMedScheduleUpdate}
-            onRemoveSchedule={handleMedScheduleRemove}
             onClose={() => setShowMedListAdd(false)}
           />
         )}
@@ -1215,13 +1224,6 @@ export function PatientScreen() {
 
 // ==================== 뱃지 컴포넌트 ====================
 
-function Pill({ label, count, color }: { label: string; count: number; color: string }) {
-  return (
-    <View style={[styles.pill, { backgroundColor: color + '20' }]}>
-      <Text style={[styles.pillText, { color }]}>{label} {count}</Text>
-    </View>
-  );
-}
 
 // ==================== 약 복용 명단 뷰 ====================
 
@@ -1238,8 +1240,6 @@ const fmtClassM = (name: string) =>
 /** 환자 현황에서 선생님 환자 묶음 키 */
 const STAFF_GROUP_KEY = '__staff';
 
-/** grade 문자열("3F", "4M")에서 성별: F=0(여, 위), M=1(남, 아래) */
-const genderOrderM = (grade?: string) => (grade?.endsWith('F') ? 0 : 1);
 
 /** visitDate 기준 경과일 (0=오늘, 1=어제 등) */
 function daysElapsedM(visitDate: Timestamp): number {
@@ -1259,54 +1259,84 @@ function urgencyScoreM(r: PatientRecord): number {
   return 9;
 }
 
-/** 방담당 정렬: ①여자먼저 ②className 반코드 오름차순 ③이름 */
-const sortRoomRecordsM = (list: PatientRecord[]) =>
-  [...list].sort((a, b) => {
-    const gA = genderOrderM(a.grade), gB = genderOrderM(b.grade);
-    if (gA !== gB) return gA - gB;
-    const cA = a.className ?? '', cB = b.className ?? '';
-    const cmp = cA.localeCompare(cB, 'ko', { numeric: true, sensitivity: 'base' });
-    return cmp !== 0 ? cmp : a.studentName.localeCompare(b.studentName, 'ko');
-  });
+
+/** 호수 차례 (301 → 302 → …), 호수 없으면 뒤로, 같은 방은 이름 차례 */
+const roomNoM = (r: PatientRecord) => {
+  const n = parseInt((r.roomNumber ?? '').replace(/[^0-9]/g, ''), 10);
+  return Number.isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
+};
+const byRoomM = (a: PatientRecord, b: PatientRecord) =>
+  roomNoM(a) - roomNoM(b) || a.studentName.localeCompare(b.studentName, 'ko');
 
 function MedicationListView({
-  records, today, currentUserName, onCheck, onSkipDate,
+  records, today, currentUserName, groupOfClass, unitRank, onAdd, onCheck, onSkipDate,
 }: {
   records: PatientRecord[];
   today: string;
   currentUserName: string;
+  /** 반 이름 → [그룹 표시 이름, 그룹 순서] — 식후 약을 그룹·반으로 묶을 때 */
+  groupOfClass?: (className: string) => [string, number] | null;
+  /** 유닛 선생님 이름 → 차례 (그룹별 선생님 순) — 방 담당은 유닛별로 묶어 보인다 */
+  unitRank?: Map<string, number>;
+  /** 명단 추가 */
+  onAdd?: () => void;
   onCheck: (record: PatientRecord, si: number, t: MedicationTime, checked: boolean) => void;
   onSkipDate?: (record: PatientRecord, si: number, isCurrentlySkip: boolean) => void;
 }) {
-  const [selectedTime, setSelectedTime] = useState<MedicationTime | null>(null);
+  // 선택된 시간대 (null = 전체). 처음에는 지금 시각의 시간대 — 그 시간대에 약이 없으면 전체 (web 과 같은 규칙)
+  const [pickedTime, setSelectedTime] = useState<MedicationTime | null | undefined>(undefined);
   const [confirmPending, setConfirmPending] = useState<{
     record: PatientRecord; si: number; time: MedicationTime; medName: string;
   } | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  // 섹션별 거르기 — 방 담당: 전체·여학생·남학생·내 담당 / 반 담당: 전체·그룹·내 담당 (web 과 같은 규칙)
+  // 거르기는 시간대마다 따로 기억한다 (기상 후에서 '내 담당'을 골라도 취침 전은 그대로)
+  const [roomFilterBy, setRoomFilterBy] = useState<Record<string, 'all' | 'F' | 'M' | 'mine'>>({});
+  const [classFilterBy, setClassFilterBy] = useState<Record<string, string>>({});
+  const isMine = (r: PatientRecord, room: boolean) => (room ? r.unitMentor : r.classMentor) === currentUserName;
+  const isGirl = (r: PatientRecord) => !isStaffPatient(r) && !!r.grade?.endsWith('F');
+  const passRoomBy = (r: PatientRecord, f: string) =>
+    f === 'all' || (f === 'mine' ? isMine(r, true) : f === 'F' ? isGirl(r) : !isStaffPatient(r) && !isGirl(r));
+  const passClassBy = (r: PatientRecord, f: string) =>
+    f === 'all' || (f === 'mine' ? isMine(r, false) : groupOfClass?.(r.className ?? '')?.[0] === f);
+  const passRoom = (r: PatientRecord) => passRoomBy(r, roomFilter);
+  const passClass = (r: PatientRecord) => passClassBy(r, classFilter);
 
   if (records.length === 0) {
     return (
       <View style={styles.centered}>
         <Text style={{ fontSize: 40, marginBottom: 8 }}>💊</Text>
         <Text style={styles.emptyText}>{L('patient.noMedicationScheduledForToday')}</Text>
+        {onAdd && (
+          <TouchableOpacity style={[styles.medListAddBtn, { marginTop: 12 }]} onPress={onAdd}>
+            <Ionicons name="add" size={14} color="#fff" />
+            <Text style={styles.medListAddBtnText}>{L('patient.addToList')}</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
 
   // 시간대별 진행률 계산
   const calcTimeProgress = (time: MedicationTime) => {
-    let total = 0, done = 0;
+    // none(회색·선택 불가)은 거르기 전 기준, 숫자는 그 시간대의 거르기를 반영 (내 담당 0명이면 0/0)
+    let all = 0, total = 0, done = 0;
+    const isRoomTime = time === '기상후' || time === '취침전';
+    const f = isRoomTime ? (roomFilterBy[time] ?? 'all') : (classFilterBy[time] ?? 'all');
     records.forEach(r => {
+      const pass = isRoomTime ? passRoomBy(r, f) : passClassBy(r, f);
       (r.medicationSchedules ?? []).forEach(sched => {
         if (!schedActiveOn(sched, today)) return;
         if (!sched.times.includes(time)) return;
         if ((sched.skipDates ?? []).includes(today)) return; // 휴약일 제외
         if (isMedTimeOff(sched, time, today)) return; // 첫날 시작 전 · 마지막 날 이후
+        all++;
+        if (!pass) return;
         total++;
         if (sched.checkedTimes.includes(makeMedTimeKey(time, today))) done++;
       });
     });
-    return { total, done, allDone: total > 0 && done === total, none: total === 0 };
+    return { total, done, allDone: total > 0 && done === total, none: all === 0 };
   };
 
   const recordsWithTimes = (filterTimes: MedicationTime[]) =>
@@ -1326,6 +1356,19 @@ function MedicationListView({
     '취침전': { group: 'room',  bg: '#eef2ff', text: '#4f46e5', border: '#c7d2fe', selectedBorder: '#6366f1' },
   };
 
+  // 지금 시각의 시간대 — ~09시 기상 후, ~12시 조식 후, ~16시 중식 후, ~20시 석식 후, 그 뒤 취침 전
+  const nowTime = ((): MedicationTime => {
+    const h = new Date().getHours();
+    return h < 9 ? '기상후' : h < 12 ? '조식후' : h < 16 ? '중식후' : h < 20 ? '석식후' : '취침전';
+  })();
+  const selectedTime: MedicationTime | null =
+    pickedTime !== undefined ? pickedTime : calcTimeProgress(nowTime).none ? null : nowTime;
+  const filterKey = selectedTime ?? '__all';
+  const roomFilter = roomFilterBy[filterKey] ?? 'all';
+  const classFilter = classFilterBy[filterKey] ?? 'all';
+  const setRoomFilter = (f: 'all' | 'F' | 'M' | 'mine') => setRoomFilterBy(m => ({ ...m, [filterKey]: f }));
+  const setClassFilter = (f: string) => setClassFilterBy(m => ({ ...m, [filterKey]: f }));
+
   // 필터 적용된 섹션 타임
   const activeRoomTimes = selectedTime
     ? (ROOM_TIMES_M.includes(selectedTime) ? [selectedTime] : [])
@@ -1334,14 +1377,43 @@ function MedicationListView({
     ? (CLASS_TIMES_M.includes(selectedTime) ? [selectedTime] : [])
     : CLASS_TIMES_M;
 
-  // 방담당: 여자먼저 → className 반코드 오름차순 → 이름
-  const roomRecords = sortRoomRecordsM(recordsWithTimes(activeRoomTimes));
-  // 반담당: className 반코드 오름차순 → 이름
-  const classRecords = [...recordsWithTimes(activeClassTimes)].sort((a, b) => {
-    const cA = a.className ?? '', cB = b.className ?? '';
-    const cmp = cA.localeCompare(cB, 'ko', { numeric: true, sensitivity: 'base' });
-    return cmp !== 0 ? cmp : a.studentName.localeCompare(b.studentName, 'ko');
-  });
+  // 방담당(기상·취침): 여학생 / 남학생 / 선생님으로 나누고 호수 차례
+  const roomBase = recordsWithTimes(activeRoomTimes);
+  // 방 담당: 유닛 선생님 차례(그룹별 선생님 순)로 묶고, 같은 유닛 안에서는 호수 차례
+  const unitIdx = (r: PatientRecord) => (r.unitMentor ? unitRank?.get(r.unitMentor) ?? 9000 : 9999);
+  const byUnit = (a: PatientRecord, b: PatientRecord) =>
+    unitIdx(a) - unitIdx(b) || (a.unitMentor ?? '').localeCompare(b.unitMentor ?? '', 'ko') || byRoomM(a, b);
+  const roomRecords = roomBase.filter(passRoom).sort(byUnit);
+  const roomGroups = [
+    { key: 'F', label: L('patient.girls'), color: '#db2777', list: roomRecords.filter(r => !isStaffPatient(r) && r.grade?.endsWith('F')) },
+    { key: 'M', label: L('patient.boys'), color: '#0369a1', list: roomRecords.filter(r => !isStaffPatient(r) && !r.grade?.endsWith('F')) },
+    { key: 'S', label: L('patient.staffPatient'), color: '#0f766e', list: roomRecords.filter(r => isStaffPatient(r)) },
+  ].filter(g => g.list.length > 0);
+  // 반담당(식후): 그룹 → 반으로 묶고, 반 안에서는 호수 차례
+  const classBase = recordsWithTimes(activeClassTimes);
+  const classRecords = classBase.filter(passClass);
+  /** 반 담당 거르기 버튼에 나오는 그룹 (그룹 순서대로) */
+  const classGroupNames = [...new Map(
+    classBase.map(r => groupOfClass?.(r.className ?? '')).filter((g): g is [string, number] => !!g).map(g => [g[0], g[1]] as const)
+  ).entries()].sort((a, b) => a[1] - b[1]).map(([name]) => name);
+  const Chip = ({ on, tone, label, onPress }: { on: boolean; tone: string; label: string; onPress: () => void }) => (
+    <TouchableOpacity onPress={onPress}
+      style={{ borderRadius: 999, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 4, borderColor: on ? tone : '#e5e7eb', backgroundColor: on ? tone : '#fff' }}>
+      <Text style={{ fontSize: 11, fontWeight: '700', color: on ? '#fff' : '#4b5563' }}>{label}</Text>
+    </TouchableOpacity>
+  );
+  const classGroups = (() => {
+    const map = new Map<string, PatientRecord[]>();
+    classRecords.forEach(r => {
+      const k = r.className || '반 미배정';
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(r);
+    });
+    return [...map.entries()]
+      .map(([className, list]) => ({ className, group: groupOfClass?.(className) ?? null, list: list.sort(byRoomM) }))
+      .sort((a, b) => (a.group?.[1] ?? 99) - (b.group?.[1] ?? 99)
+        || a.className.localeCompare(b.className, 'ko', { numeric: true, sensitivity: 'base' }));
+  })();
 
   const roomLabel = selectedTime && ROOM_TIMES_M.includes(selectedTime) ? selectedTime : L('patient.afterWakingBeforeBed2');
   const classLabel = selectedTime && CLASS_TIMES_M.includes(selectedTime) ? selectedTime : L('patient.afterBreakfastLunchDinner2');
@@ -1379,23 +1451,9 @@ function MedicationListView({
         </TouchableOpacity>
       </Modal>
       {/* 시간대별 현황 헤더 */}
-      <View style={[styles.medHeader, { margin: 12, borderRadius: 12, padding: 12, gap: 8 }]}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontWeight: '700', color: '#374151', fontSize: 12 }}>{L('patient.dosesByTime')}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            {selectedTime && (
-              <TouchableOpacity
-                onPress={() => setSelectedTime(null)}
-                style={{ backgroundColor: '#f3f4f6', borderRadius: 4, paddingHorizontal: 8, paddingVertical: 3 }}
-              >
-                <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('patient.all')}</Text>
-              </TouchableOpacity>
-            )}
-            <Text style={{ color: '#9ca3af', fontSize: 10 }}>{records.length}{L('common.people2')}</Text>
-          </View>
-        </View>
-        {/* 5개 시간대 타일 */}
-        <View style={{ flexDirection: 'row', gap: 6 }}>
+      <View style={[styles.medHeader, { marginHorizontal: 12, marginTop: 10, marginBottom: 8, borderRadius: 12, padding: 8 }]}>
+        {/* 5개 시간대 타일 + 명단 추가 */}
+        <View style={{ flexDirection: 'row', gap: 5 }}>
           {MEDICATION_TIMES.map(time => {
             const prog = calcTimeProgress(time);
             const meta = timeMeta[time];
@@ -1403,7 +1461,7 @@ function MedicationListView({
 
             if (prog.none) {
               return (
-                <View key={time} style={{ flex: 1, alignItems: 'center', gap: 2, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f9fafb', paddingVertical: 8, opacity: 0.5 }}>
+                <View key={time} style={{ flex: 1, alignItems: 'center', gap: 2, borderRadius: 8, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#f9fafb', paddingVertical: 6, opacity: 0.5 }}>
                   <Text style={{ fontSize: 9, color: '#d1d5db', fontWeight: '600' }}>{dataLabel(time)}</Text>
                   <Text style={{ fontSize: 9, color: '#d1d5db' }}>-</Text>
                 </View>
@@ -1412,56 +1470,59 @@ function MedicationListView({
             return (
               <TouchableOpacity
                 key={time}
-                onPress={() => setSelectedTime(prev => prev === time ? null : time)}
+                onPress={() => setSelectedTime(selectedTime === time ? null : time)}
                 activeOpacity={0.75}
                 style={{
                   flex: 1, alignItems: 'center', gap: 2, borderRadius: 8,
                   borderWidth: isSelected ? 2 : 1,
                   borderColor: isSelected ? meta.selectedBorder : (prog.allDone ? '#86efac' : meta.border),
                   backgroundColor: prog.allDone ? '#f0fdf4' : meta.bg,
-                  paddingVertical: 8,
+                  paddingVertical: 6,
                   // 선택시 살짝 눌린 느낌
                   transform: [{ scale: isSelected ? 1.04 : 1 }],
                 }}
               >
                 <Text style={{ fontSize: 9, fontWeight: '700', color: prog.allDone && !isSelected ? '#16a34a' : meta.text }}>{dataLabel(time)}</Text>
                 <Text style={{ fontSize: 13, fontWeight: '800', color: prog.allDone && !isSelected ? '#16a34a' : meta.text }}>
-                  {prog.done}/{prog.total}
+                  {prog.allDone ? '✓ ' : ''}{prog.done}/{prog.total}
                 </Text>
-                {prog.allDone
-                  ? <Text style={{ fontSize: 8, color: '#16a34a' }}>{L('patient.done4')}</Text>
-                  : isSelected
-                    ? <Text style={{ fontSize: 8, color: meta.text, opacity: 0.7 }}>{L('patient.selected2')}</Text>
-                    : <Text style={{ fontSize: 8, color: '#d1d5db' }}>{L('patient.tap')}</Text>
-                }
               </TouchableOpacity>
             );
           })}
-        </View>
-        {/* 범례 */}
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#818cf8' }} />
-            <Text style={{ fontSize: 9, color: '#6366f1' }}>{L('patient.roomLead')}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#f97316' }} />
-            <Text style={{ fontSize: 9, color: '#ea580c' }}>{L('patient.classLead')}</Text>
-          </View>
+          {onAdd && (
+            <TouchableOpacity onPress={onAdd} style={{ alignItems: 'center', justifyContent: 'center', borderRadius: 8, backgroundColor: '#f97316', paddingHorizontal: 8 }}>
+              <Ionicons name="add" size={16} color="#fff" />
+              <Text style={{ fontSize: 9, fontWeight: '700', color: '#fff' }}>{L('patient.addShort')}</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
       {/* 방 담당 섹션 */}
-      {activeRoomTimes.length > 0 && roomRecords.length > 0 && (
+      {activeRoomTimes.length > 0 && roomBase.length > 0 && (
         <View>
-          <View style={{ backgroundColor: '#eef2ff', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#c7d2fe', paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#818cf8' }} />
-            <Text style={{ fontWeight: '700', color: '#4f46e5', fontSize: 11 }}>{L('patient.roomLead2')}</Text>
-            <Text style={{ color: '#6366f1', fontSize: 10 }}>{roomLabel}</Text>
-            <Text style={{ marginLeft: 'auto', color: '#6366f1', fontSize: 10 }}>{roomRecords.length}{L('common.people2')}</Text>
+          <View style={{ backgroundColor: '#eef2ff', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#c7d2fe', paddingHorizontal: 16, paddingVertical: 8, gap: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#818cf8' }} />
+              <Text style={{ fontWeight: '700', color: '#4f46e5', fontSize: 11 }}>{L('patient.roomLead2')}</Text>
+              <Text style={{ color: '#6366f1', fontSize: 10 }}>{roomLabel}</Text>
+              <Text style={{ marginLeft: 'auto', color: '#6366f1', fontSize: 10 }}>{roomRecords.length}{L('common.people2')}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+              {([['all', L('patient.filterAll')], ['F', L('patient.girls')], ['M', L('patient.boys')], ['mine', L('patient.filterMine')]] as const).map(([k, label]) => (
+                <Chip key={k} on={roomFilter === k} tone="#6366f1" label={label} onPress={() => setRoomFilter(k)} />
+              ))}
+            </ScrollView>
           </View>
-          <View style={{ paddingHorizontal: 12, paddingTop: 8, gap: 8 }}>
-            {roomRecords.map(record => (
+          {roomRecords.length === 0 && <Text style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, paddingVertical: 24 }}>{L('patient.noneInFilter')}</Text>}
+          {roomGroups.map(g => (
+          <View key={g.key}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 2 }}>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: g.color }}>{g.label}</Text>
+            <Text style={{ fontSize: 10, color: '#9ca3af' }}>{g.list.length}{L('common.people2')}</Text>
+          </View>
+          <View style={{ paddingHorizontal: 12, paddingTop: 6, gap: 8 }}>
+            {g.list.map(record => (
               <MedPatientCard
                 key={record.id}
                 record={record}
@@ -1479,20 +1540,44 @@ function MedicationListView({
               />
             ))}
           </View>
+          </View>
+          ))}
         </View>
       )}
 
       {/* 반 담당 섹션 */}
-      {activeClassTimes.length > 0 && classRecords.length > 0 && (
+      {activeClassTimes.length > 0 && classBase.length > 0 && (
         <View style={{ marginTop: 8 }}>
-          <View style={{ backgroundColor: '#fff7ed', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#fed7aa', paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#f97316' }} />
-            <Text style={{ fontWeight: '700', color: '#c2410c', fontSize: 11 }}>{L('patient.classLead2')}</Text>
-            <Text style={{ color: '#ea580c', fontSize: 10 }}>{classLabel}</Text>
-            <Text style={{ marginLeft: 'auto', color: '#ea580c', fontSize: 10 }}>{classRecords.length}{L('common.people2')}</Text>
+          <View style={{ backgroundColor: '#fff7ed', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#fed7aa', paddingHorizontal: 16, paddingVertical: 8, gap: 6 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#f97316' }} />
+              <Text style={{ fontWeight: '700', color: '#c2410c', fontSize: 11 }}>{L('patient.classLead2')}</Text>
+              <Text style={{ color: '#ea580c', fontSize: 10 }}>{classLabel}</Text>
+              <Text style={{ marginLeft: 'auto', color: '#ea580c', fontSize: 10 }}>{classRecords.length}{L('common.people2')}</Text>
+            </View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+              <Chip on={classFilter === 'all'} tone="#f97316" label={L('patient.filterAll')} onPress={() => setClassFilter('all')} />
+              {classGroupNames.map(g => (
+                <Chip key={g} on={classFilter === g} tone="#f97316" label={g} onPress={() => setClassFilter(g)} />
+              ))}
+              <Chip on={classFilter === 'mine'} tone="#f97316" label={L('patient.filterMine')} onPress={() => setClassFilter('mine')} />
+            </ScrollView>
           </View>
-          <View style={{ paddingHorizontal: 12, paddingTop: 8, gap: 8 }}>
-            {classRecords.map(record => (
+          {classRecords.length === 0 && <Text style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, paddingVertical: 24 }}>{L('patient.noneInFilter')}</Text>}
+          {classGroups.map(g => (
+          <View key={g.className}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 2 }}>
+            {g.group && (
+              <View style={{ backgroundColor: '#ffedd5', borderRadius: 4, paddingHorizontal: 5, paddingVertical: 1 }}>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: '#c2410c' }}>{g.group[0]}</Text>
+              </View>
+            )}
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#c2410c' }}>{fmtClassM(g.className)}</Text>
+            {!!g.list[0]?.classMentor && <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('patient.homeroom')} {g.list[0].classMentor}</Text>}
+            <Text style={{ fontSize: 10, color: '#9ca3af' }}>{g.list.length}{L('common.people2')}</Text>
+          </View>
+          <View style={{ paddingHorizontal: 12, paddingTop: 6, gap: 8 }}>
+            {g.list.map(record => (
               <MedPatientCard
                 key={record.id}
                 record={record}
@@ -1510,8 +1595,11 @@ function MedicationListView({
               />
             ))}
           </View>
+          </View>
+          ))}
         </View>
       )}
+
 
       <View style={{ height: 32 }} />
     </ScrollView>
@@ -2064,75 +2152,124 @@ function PatientCard({
 //  - 그 사람의 진행 중인 환자 기록이 있으면 거기에 약을 붙인다 (처방약 탭과 같은 곳)
 //  - 없으면 '약복용 명단 전용' 기록을 만든다 — 환자 현황에는 나오지 않고 약복용 명단에만 나온다
 
+/** 'YYYY-MM-DD' 에 n일 더하기 */
+const shiftYmd = (ymd: string, n: number) => {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
+};
+const monthDayM = (ymd: string) => { const [, m, d] = ymd.split('-'); return m && d ? `${+m}/${+d}` : ymd; };
+
+/** ‹ 9/28 › — 날짜를 하루씩 옮긴다 (별도 날짜 선택기 없이) */
+function DateStepper({ value, min, onChange }: { value: string; min?: string; onChange: (v: string) => void }) {
+  const canPrev = !min || shiftYmd(value, -1) >= min;
+  const btn = { paddingHorizontal: 8, paddingVertical: 5 };
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, backgroundColor: '#fff' }}>
+      <TouchableOpacity style={btn} disabled={!canPrev} onPress={() => onChange(shiftYmd(value, -1))}>
+        <Ionicons name="chevron-back" size={14} color={canPrev ? '#4b5563' : '#d1d5db'} />
+      </TouchableOpacity>
+      <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827', minWidth: 34, textAlign: 'center' }}>{monthDayM(value)}</Text>
+      <TouchableOpacity style={btn} onPress={() => onChange(shiftYmd(value, 1))}>
+        <Ionicons name="chevron-forward" size={14} color="#4b5563" />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+/**
+ * 약복용 명단 → 추가: 상시약만 (집에서 가져온 약·영양제·렌즈 등). web MedicationListAddModal 과 같은 구성.
+ * 처방약은 환자 카드에서 추가한다. 여기서 올린 약은 약복용 명단 전용 기록에만 들어가고 환자 현황에는 나오지 않는다.
+ */
 function MedicationListAddModalMobile({
-  today, campCode, students, staffOptions, allRecords, createdBy, createdById,
-  onCheck, onAddSchedule, onUpdateSchedule, onRemoveSchedule, onClose,
+  today, campCode, campEndDate, students, staffOptions, allRecords, createdBy, createdById, onClose,
 }: {
   today: string;
   campCode: string;
+  campEndDate: string;
   students: STSheetStudent[];
   staffOptions: StaffOptionM[];
   allRecords: PatientRecord[];
   createdBy: string;
   createdById: string;
-  onCheck: (record: PatientRecord, si: number, t: MedicationTime, checked: boolean) => void;
-  onAddSchedule: (record: PatientRecord, s: Omit<MedicationSchedule, 'checkedTimes'>) => Promise<void>;
-  onUpdateSchedule: (record: PatientRecord, idx: number, s: Omit<MedicationSchedule, 'checkedTimes'>) => Promise<void>;
-  onRemoveSchedule: (record: PatientRecord, idx: number) => Promise<void>;
   onClose: () => void;
 }) {
   const [search, setSearch] = useState('');
   const [person, setPerson] = useState<{ kind: 'student'; s: STSheetStudent } | { kind: 'staff'; u: StaffOptionM } | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState<MedListForm>(() => emptyMedListForm(today));
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [showMore, setShowMore] = useState(false);
+  const [error, setError] = useState('');
+  const [skipPick, setSkipPick] = useState(today);
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const q = search.trim();
   const studentHits = q ? students.filter(s => s.name.includes(q)).slice(0, 8) : [];
   const staffHits = q ? staffOptions.filter(u => u.name.includes(q)).slice(0, 5) : [];
   const personId = person ? (person.kind === 'student' ? person.s.studentId : staffPatientId(person.u.userId)) : '';
+  // 이 사람의 약복용 명단 전용 기록 (방금 만든 것 포함)
   const target = useMemo(() => {
     if (!personId) return undefined;
     if (createdId) return allRecords.find(r => r.id === createdId);
-    return allRecords.find(r => r.studentId === personId && r.progressStatus !== '완치' && !r.medicationOnly)
-      ?? allRecords.find(r => r.studentId === personId && r.medicationOnly);
+    return allRecords.find(r => r.studentId === personId && r.medicationOnly);
   }, [personId, createdId, allRecords]);
+  const schedules = target?.medicationSchedules ?? [];
 
-  const createAndAdd = async (sched: Omit<MedicationSchedule, 'checkedTimes'>) => {
-    if (!person || busy) return;
+  const set = (patch: Partial<MedListForm>) => { setForm(f => ({ ...f, ...patch })); setError(''); };
+  const resetForm = () => { setForm(emptyMedListForm(today)); setEditingIdx(null); setShowMore(false); setError(''); };
+  const hasMore = !!(form.category || form.daysPerWeek || form.skipDates.length || form.firstTime || form.lastTime);
+
+  const createWith = async (sched: Omit<MedicationSchedule, 'checkedTimes'>) => {
+    if (!person) return;
+    const base = person.kind === 'student'
+      ? {
+          studentId: person.s.studentId,
+          studentName: person.s.name,
+          grade: person.s.grade ? `${person.s.grade}${person.s.gender ?? ''}` : undefined,
+          className: person.s.className || undefined,
+          classMentor: person.s.classMentor || undefined,
+          unitMentor: person.s.unitMentor || undefined,
+          roomNumber: person.s.roomNumber || undefined,
+        }
+      : {
+          studentId: staffPatientId(person.u.userId),
+          studentName: person.u.name,
+          patientKind: 'staff' as const,
+          staffUserId: person.u.userId,
+          grade: person.u.role || undefined,
+          className: STAFF_PATIENT_CLASS,
+        };
+    const id = await addPatientRecord(db, {
+      campCode,
+      ...base,
+      medicationOnly: true,
+      types: [],
+      symptom: '',
+      treatment: '',
+      progressStatus: '최초보고',
+      visitDate: Timestamp.now(),
+      medicationSchedules: [{ ...sched, checkedTimes: [] }],
+      recordedBy: createdBy,
+      recordedById: createdById,
+    });
+    setCreatedId(id);
+  };
+
+  const save = async () => {
+    if (busy || !person) return;
+    if (!form.name.trim()) { setError(L('patient.maNeedName')); return; }
+    if (form.times.length === 0) { setError(L('patient.maNeedTime')); return; }
+    const sched = medListScheduleOf(form, campEndDate);
     setBusy(true);
     try {
-      const base = person.kind === 'student'
-        ? {
-            studentId: person.s.studentId,
-            studentName: person.s.name,
-            grade: person.s.grade ? `${person.s.grade}${person.s.gender ?? ''}` : undefined,
-            className: person.s.className || undefined,
-            classMentor: person.s.classMentor || undefined,
-            unitMentor: person.s.unitMentor || undefined,
-            roomNumber: person.s.roomNumber || undefined,
-          }
-        : {
-            studentId: staffPatientId(person.u.userId),
-            studentName: person.u.name,
-            patientKind: 'staff' as const,
-            staffUserId: person.u.userId,
-            grade: person.u.role || undefined,
-            className: STAFF_PATIENT_CLASS,
-          };
-      const id = await addPatientRecord(db, {
-        campCode,
-        ...base,
-        medicationOnly: true,
-        types: [],
-        symptom: '',
-        treatment: '',
-        progressStatus: '최초보고',
-        visitDate: Timestamp.now(),
-        medicationSchedules: [{ ...sched, checkedTimes: [] }],
-        recordedBy: createdBy,
-        recordedById: createdById,
-      });
-      setCreatedId(id);
+      if (editingIdx !== null && target) await replaceMedicationSchedule(db, target.id, schedules, editingIdx, sched);
+      else if (target) await addMedicationSchedule(db, target.id, sched);
+      else await createWith(sched);
+      resetForm();
     } catch (e) {
       Alert.alert(L('common.error'), (e as Error)?.message || L('profile.couldNotSave'));
     } finally {
@@ -2140,13 +2277,87 @@ function MedicationListAddModalMobile({
     }
   };
 
+  const remove = (idx: number) => {
+    if (!target) return;
+    Alert.alert(L('patient.deleteMedication', { v0: schedules[idx]?.name ?? '' }), undefined, [
+      { text: L('common.cancel'), style: 'cancel' },
+      { text: L('common.delete'), style: 'destructive', onPress: async () => {
+        try {
+          await removeMedicationSchedule(db, target.id, schedules, idx);
+          if (editingIdx === idx) resetForm();
+        } catch (e) { Alert.alert(L('common.error'), (e as Error)?.message ?? ''); }
+      } },
+    ]);
+  };
+
+  const startEdit = (idx: number) => {
+    const f = medListFormFrom(schedules[idx]);
+    setForm(f);
+    setEditingIdx(idx);
+    setShowMore(!!(f.category || f.daysPerWeek || f.skipDates.length || f.firstTime || f.lastTime));
+    setError('');
+  };
+
+  const addPhoto = async (idx: number) => {
+    if (!target) return;
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) return;
+    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
+    if (picked.canceled || !picked.assets?.length) return;
+    const asset = picked.assets[0];
+    setUploadingIdx(idx);
+    try {
+      const blob = await (await fetch(asset.uri)).blob();
+      const name = asset.fileName ?? asset.uri.split('/').pop() ?? 'photo.jpg';
+      const sRef = storageRef(storage, `patientRecords/${target.id}/prescriptions/${idx}_${Date.now()}_${name}`);
+      await uploadBytes(sRef, blob, { contentType: asset.mimeType ?? 'image/jpeg' });
+      const url = await getDownloadURL(sRef);
+      await addMedicationPhoto(db, target.id, schedules, idx, url);
+    } catch (e) {
+      Alert.alert(L('common.error'), (e as Error)?.message ?? '');
+    } finally {
+      setUploadingIdx(null);
+    }
+  };
+
+  const removePhoto = (idx: number, url: string) => {
+    if (!target) return;
+    Alert.alert(L('patient.deleteThisPhoto'), undefined, [
+      { text: L('common.cancel'), style: 'cancel' },
+      { text: L('common.delete'), style: 'destructive', onPress: async () => {
+        try { await deleteObject(storageRef(storage, url)); } catch { /* 이미 없어도 무시 */ }
+        try { await removeMedicationPhoto(db, target.id, schedules, idx, url); }
+        catch (e) { Alert.alert(L('common.error'), (e as Error)?.message ?? ''); }
+      } },
+    ]);
+  };
+
+  const periodText = (s: MedicationSchedule) =>
+    s.endDateAuto
+      ? (s.startDate <= today ? L('patient.campEnd2') : L('patient.campEnd3', { v0: monthDayM(s.startDate) }))
+      : `${monthDayM(s.startDate)} ~ ${monthDayM(s.endDate)}`;
+
+  const chip = (key: string, text: string, on: boolean, onPress: () => void, small = false) => (
+    <TouchableOpacity key={key} onPress={onPress}
+      style={{
+        paddingHorizontal: small ? 8 : 11, paddingVertical: small ? 4 : 6, borderRadius: 8, borderWidth: 1,
+        borderColor: on ? (small ? '#fdba74' : '#f97316') : '#e5e7eb',
+        backgroundColor: on ? (small ? '#fff7ed' : '#f97316') : '#fff',
+      }}>
+      <Text style={{ fontSize: small ? 11 : 12, fontWeight: '600', color: on ? (small ? '#c2410c' : '#fff') : '#4b5563' }}>{text}</Text>
+    </TouchableOpacity>
+  );
+  const label = { fontSize: 11, fontWeight: '700' as const, color: '#6b7280', marginBottom: 5 };
+  const wrap = { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 5, alignItems: 'center' as const };
   const row = { padding: 10, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6 };
+  const lastDay = form.untilEnd ? campEndDate : form.endDate;
+
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#fff' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <View style={styles.modalHeader}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.modalTitle}>{L('patient.addToList')}</Text>
-          <Text style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>{L('patient.medListAddHint')}</Text>
+          <Text style={styles.modalTitle}>{L('patient.maTitle')}</Text>
+          <Text style={{ fontSize: 10, color: '#9ca3af', marginTop: 2 }}>{L('patient.maHint')}</Text>
         </View>
         <TouchableOpacity onPress={onClose} style={{ padding: 4 }}>
           <Ionicons name="close" size={22} color="#9ca3af" />
@@ -2155,16 +2366,21 @@ function MedicationListAddModalMobile({
       <ScrollView contentContainerStyle={{ padding: 14, gap: 12, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         {!person ? (
           <View>
-            <Text style={styles.formSectionTitle}>{L('patient.studentOrStaff')}</Text>
-            <TextInput value={search} onChangeText={setSearch} autoFocus placeholder={L('patient.searchByName')} placeholderTextColor="#9ca3af" style={styles.formInput} />
+            <TextInput value={search} onChangeText={setSearch} autoFocus placeholder={L('patient.searchByName')} placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 14, paddingVertical: 10 }]} />
             {(studentHits.length > 0 || staffHits.length > 0) && (
               <View style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 10, marginTop: 4, overflow: 'hidden' }}>
-                {studentHits.map(s => (
-                  <TouchableOpacity key={s.studentId} style={row} onPress={() => setPerson({ kind: 'student', s })}>
-                    <Text style={{ fontWeight: '600', color: '#111827' }}>{s.name}</Text>
-                    <Text style={{ fontSize: 11, color: '#6b7280' }}>{s.grade}{s.gender} · {fmtClassM(s.className ?? '')}</Text>
-                  </TouchableOpacity>
-                ))}
+                {studentHits.map(s => {
+                  const n = allRecords.find(r => r.studentId === s.studentId && r.medicationOnly)?.medicationSchedules?.length ?? 0;
+                  return (
+                    <TouchableOpacity key={s.studentId} style={row} onPress={() => setPerson({ kind: 'student', s })}>
+                      <Text style={{ fontWeight: '600', color: '#111827' }}>{s.name}</Text>
+                      <Text style={{ fontSize: 11, color: '#6b7280', flex: 1 }} numberOfLines={1}>
+                        {s.grade}{s.gender} · {fmtClassM(s.className ?? '')}{s.roomNumber ? ` · ${s.roomNumber}` : ''}
+                      </Text>
+                      {n > 0 && <Text style={{ fontSize: 10, fontWeight: '700', color: '#ea580c' }}>💊 {n}</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
                 {staffHits.map(u => (
                   <TouchableOpacity key={u.userId} style={row} onPress={() => setPerson({ kind: 'staff', u })}>
                     <Text style={{ fontWeight: '600', color: '#111827' }}>{u.name}</Text>
@@ -2180,32 +2396,170 @@ function MedicationListAddModalMobile({
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f9fafb', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 12, padding: 10 }}>
               <Text style={{ fontSize: 14, fontWeight: '800', color: '#111827' }}>{person.kind === 'student' ? person.s.name : person.u.name}</Text>
               <Text style={{ fontSize: 11, color: person.kind === 'staff' ? '#0f766e' : '#2563eb', fontWeight: '600' }}>
-                {person.kind === 'staff' ? L('patient.staffPatient') : fmtClassM(person.s.className ?? '')}
+                {person.kind === 'staff' ? L('patient.staffPatient') : `${fmtClassM(person.s.className ?? '')}${person.s.roomNumber ? ` · ${person.s.roomNumber}` : ''}`}
               </Text>
               {!createdId && (
-                <TouchableOpacity style={{ marginLeft: 'auto' }} onPress={() => { setPerson(null); setSearch(''); }}>
+                <TouchableOpacity style={{ marginLeft: 'auto' }} onPress={() => { setPerson(null); setSearch(''); resetForm(); }}>
                   <Text style={{ fontSize: 11, color: '#9ca3af' }}>{L('patient.change')}</Text>
                 </TouchableOpacity>
               )}
             </View>
-            <Text style={{ fontSize: 11, borderRadius: 8, padding: 8, overflow: 'hidden',
-              backgroundColor: target && !target.medicationOnly ? '#fef2f2' : '#fff7ed',
-              color: target && !target.medicationOnly ? '#b91c1c' : '#c2410c' }}>
-              {target && !target.medicationOnly ? L('patient.medListAddToPatient') : L('patient.medListOnlyNote')}
-            </Text>
-            {busy && <ActivityIndicator color="#f97316" />}
-            <MedicationTabMobile
-              schedules={target?.medicationSchedules ?? []}
-              today={today}
-              autoOpenForm={!target?.medicationSchedules?.length}
-              onCheck={(si, t, checked) => { if (target) onCheck(target, si, t, checked); }}
-              onAddSchedule={(sched) => { if (target) void onAddSchedule(target, sched); else void createAndAdd(sched); }}
-              onUpdateSchedule={target ? (idx, sched) => { void onUpdateSchedule(target, idx, sched); } : undefined}
-              onRemoveSchedule={target ? (idx) => { void onRemoveSchedule(target, idx); } : undefined}
-            />
+
+            {/* 이미 올라간 상시약 */}
+            {schedules.length > 0 && (
+              <View>
+                <Text style={label}>{L('patient.maCurrent', { v0: schedules.length })}</Text>
+                <View style={{ gap: 6 }}>
+                  {schedules.map((s, idx) => (
+                    <View key={idx} style={{ borderWidth: 1, borderRadius: 12, padding: 10, borderColor: editingIdx === idx ? '#fb923c' : '#e5e7eb', backgroundColor: editingIdx === idx ? '#fff7ed' : '#fff' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                        <View style={{ flex: 1, gap: 3 }}>
+                          <View style={wrap}>
+                            <Text style={{ fontSize: 14, fontWeight: '700', color: '#111827' }}>{s.name || '-'}</Text>
+                            {!!s.category && <Text style={{ fontSize: 10, color: '#4b5563', backgroundColor: '#f3f4f6', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, overflow: 'hidden' }}>{dataLabel(s.category)}</Text>}
+                          </View>
+                          <View style={wrap}>
+                            {MEDICATION_TIMES.filter(t => s.times.includes(t)).map(t => (
+                              <Text key={t} style={{ fontSize: 10, fontWeight: '700', color: '#c2410c', backgroundColor: '#ffedd5', paddingHorizontal: 5, paddingVertical: 1, borderRadius: 4, overflow: 'hidden' }}>{dataLabel(t)}</Text>
+                            ))}
+                            <Text style={{ fontSize: 10, color: '#6b7280' }}>{periodText(s)}{s.daysPerWeek ? ` · ${L('patient.maNDays', { v0: s.daysPerWeek })}` : ''}</Text>
+                          </View>
+                          {!!s.memo && <Text style={{ fontSize: 11, color: '#6b7280' }}>{s.memo}</Text>}
+                        </View>
+                        <View style={{ flexDirection: 'row', gap: 10 }}>
+                          <TouchableOpacity onPress={() => startEdit(idx)}><Text style={{ fontSize: 12, fontWeight: '600', color: '#2563eb' }}>{L('common.edit')}</Text></TouchableOpacity>
+                          <TouchableOpacity onPress={() => remove(idx)}><Text style={{ fontSize: 12, fontWeight: '600', color: '#ef4444' }}>{L('common.delete')}</Text></TouchableOpacity>
+                        </View>
+                      </View>
+                      {/* 사진 */}
+                      <View style={[wrap, { marginTop: 6, gap: 6 }]}>
+                        {(s.photos ?? []).map(url => (
+                          <TouchableOpacity key={url} onPress={() => setLightboxUrl(url)} onLongPress={() => removePhoto(idx, url)}>
+                            <Image source={{ uri: url }} style={{ width: 40, height: 40, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb' }} contentFit="cover" />
+                          </TouchableOpacity>
+                        ))}
+                        <TouchableOpacity onPress={() => void addPhoto(idx)} disabled={uploadingIdx !== null}
+                          style={{ height: 40, paddingHorizontal: 8, borderRadius: 6, borderWidth: 1, borderStyle: 'dashed', borderColor: '#d1d5db', justifyContent: 'center', opacity: uploadingIdx !== null ? 0.5 : 1 }}>
+                          <Text style={{ fontSize: 10, fontWeight: '600', color: '#6b7280' }}>{uploadingIdx === idx ? L('patient.maUploading') : `📷 ${L('patient.maAddPhoto')}`}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* 새 약 / 수정 */}
+            <View style={{ borderWidth: 1, borderColor: '#fed7aa', backgroundColor: '#fffbf7', borderRadius: 12, padding: 12, gap: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ fontSize: 12, fontWeight: '800', color: '#c2410c' }}>{editingIdx !== null ? L('patient.maEditMed') : L('patient.maNewMed')}</Text>
+                {editingIdx !== null && (
+                  <TouchableOpacity onPress={resetForm}><Text style={{ fontSize: 11, color: '#9ca3af' }}>{L('common.cancel')}</Text></TouchableOpacity>
+                )}
+              </View>
+
+              <TextInput value={form.name} onChangeText={v => set({ name: v })} placeholder={L('patient.maNamePh')} placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 14, paddingVertical: 9 }]} />
+
+              <View>
+                <Text style={label}>{L('patient.maWhen')}</Text>
+                <View style={wrap}>
+                  {MEDICATION_TIMES.map(t => chip(t, dataLabel(t), form.times.includes(t), () => set({ times: form.times.includes(t) ? form.times.filter(x => x !== t) : [...form.times, t] })))}
+                </View>
+              </View>
+
+              <View>
+                <Text style={label}>{L('patient.maPeriod')}</Text>
+                <View style={wrap}>
+                  <DateStepper value={form.startDate} onChange={v => set({ startDate: v, ...(form.endDate < v ? { endDate: v } : {}) })} />
+                  <Text style={{ fontSize: 12, color: '#9ca3af' }}>~</Text>
+                  {chip('until', `${L('patient.maUntilEnd')}${campEndDate ? ` (${monthDayM(campEndDate)})` : ''}`, form.untilEnd, () => set({ untilEnd: true }), true)}
+                  {chip('dates', L('patient.maPickDates'), !form.untilEnd, () => set({ untilEnd: false, endDate: form.endDate < form.startDate ? form.startDate : form.endDate }), true)}
+                  {!form.untilEnd && <DateStepper value={form.endDate} min={form.startDate} onChange={v => set({ endDate: v })} />}
+                </View>
+              </View>
+
+              <View>
+                <Text style={label}>{L('patient.maMemo')}</Text>
+                <TextInput value={form.memo} onChangeText={v => set({ memo: v })} placeholder={L('patient.maMemoPh')} placeholderTextColor="#9ca3af" style={styles.formInput} />
+                <View style={[wrap, { marginTop: 5 }]}>
+                  {[L('patient.maFridge'), L('patient.maWatch')].map(p =>
+                    chip(p, p, form.memo.split('·').map(x => x.trim()).includes(p), () => set({ memo: toggleMemoPhrase(form.memo, p) }), true))}
+                </View>
+              </View>
+
+              <TouchableOpacity onPress={() => setShowMore(v => !v)}>
+                <Text style={{ fontSize: 11, fontWeight: '600', color: '#6b7280' }}>
+                  {showMore ? `▾ ${L('patient.maLess')}` : `▸ ${L('patient.maMore')}`}{!showMore && hasMore ? ' •' : ''}
+                </Text>
+              </TouchableOpacity>
+
+              {showMore && (
+                <View style={{ gap: 10, borderTopWidth: 1, borderTopColor: '#ffedd5', paddingTop: 10 }}>
+                  <View>
+                    <Text style={label}>{L('patient.type')}</Text>
+                    <View style={wrap}>
+                      {MEDICATION_CATEGORIES.map(c => chip(c, dataLabel(c), form.category === c, () => set({ category: form.category === c ? undefined : c }), true))}
+                    </View>
+                  </View>
+                  <View>
+                    <Text style={label}>{L('patient.maDaysPerWeek')}</Text>
+                    <View style={wrap}>
+                      {[undefined, 6, 5, 4, 3, 2, 1].map(n =>
+                        chip(String(n ?? 7), n ? L('patient.maNDays', { v0: n }) : L('patient.maEveryDay'), form.daysPerWeek === n, () => set({ daysPerWeek: n }), true))}
+                    </View>
+                  </View>
+                  <View>
+                    <Text style={label}>{L('patient.maSkipDates')}</Text>
+                    <View style={wrap}>
+                      {form.skipDates.map(d => (
+                        <TouchableOpacity key={d} onPress={() => set({ skipDates: form.skipDates.filter(x => x !== d) })}
+                          style={{ borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, backgroundColor: '#fff' }}>
+                          <Text style={{ fontSize: 11, color: '#4b5563' }}>{monthDayM(d)} ✕</Text>
+                        </TouchableOpacity>
+                      ))}
+                      <DateStepper value={skipPick < form.startDate ? form.startDate : skipPick} min={form.startDate} onChange={setSkipPick} />
+                      {chip('addSkip', `+ ${L('patient.maAdd')}`, false, () => {
+                        const d = skipPick < form.startDate ? form.startDate : skipPick;
+                        if (!form.skipDates.includes(d)) set({ skipDates: [...form.skipDates, d].sort() });
+                        setSkipPick(shiftYmd(d, 1));
+                      }, true)}
+                    </View>
+                  </View>
+                  <View>
+                    <Text style={label}>{L('patient.maFirstTime')} ({monthDayM(form.startDate)})</Text>
+                    <View style={wrap}>
+                      {chip('fa', L('patient.maAllTimes'), !form.firstTime, () => set({ firstTime: undefined }), true)}
+                      {MEDICATION_TIMES.map(t => chip(`f${t}`, dataLabel(t), form.firstTime === t, () => set({ firstTime: t }), true))}
+                    </View>
+                  </View>
+                  <View>
+                    <Text style={label}>{L('patient.maLastTime')}{lastDay ? ` (${monthDayM(lastDay)})` : ''}</Text>
+                    <View style={wrap}>
+                      {chip('la', L('patient.maAllTimes'), !form.lastTime, () => set({ lastTime: undefined }), true)}
+                      {MEDICATION_TIMES.map(t => chip(`l${t}`, dataLabel(t), form.lastTime === t, () => set({ lastTime: t }), true))}
+                    </View>
+                  </View>
+                  {editingIdx === null && <Text style={{ fontSize: 10, color: '#9ca3af' }}>{L('patient.maPhotoAfterSave')}</Text>}
+                </View>
+              )}
+
+              {!!error && <Text style={{ fontSize: 11, fontWeight: '700', color: '#dc2626' }}>{error}</Text>}
+              <TouchableOpacity onPress={() => void save()} disabled={busy}
+                style={{ backgroundColor: '#f97316', borderRadius: 10, paddingVertical: 11, alignItems: 'center', opacity: busy ? 0.5 : 1 }}>
+                <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>
+                  {busy ? L('common.saving') : editingIdx !== null ? L('patient.maSaveEdit') : `+ ${L('patient.maAdd')}`}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </>
         )}
       </ScrollView>
+
+      <Modal visible={!!lightboxUrl} transparent animationType="fade" onRequestClose={() => setLightboxUrl(null)}>
+        <TouchableOpacity activeOpacity={1} onPress={() => setLightboxUrl(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', alignItems: 'center', justifyContent: 'center' }}>
+          {lightboxUrl && <Image source={{ uri: lightboxUrl }} style={{ width: '92%', height: '80%' }} contentFit="contain" />}
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }

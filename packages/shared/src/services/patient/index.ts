@@ -749,6 +749,35 @@ export const updateMedicationSchedule = async (
 };
 
 /**
+ * 복용약 스케줄 통째로 바꾸기 — 폼에서 지운 값(메모·종류·첫날/마지막 날 시간 등)도 지워진다.
+ * 복용 체크 · 확인자 · 사진은 그대로 둔다.
+ */
+export const replaceMedicationSchedule = async (
+  db: Firestore,
+  recordId: string,
+  allSchedules: MedicationSchedule[],
+  index: number,
+  next: Omit<MedicationSchedule, 'checkedTimes'>
+): Promise<void> => {
+  const clean = Object.fromEntries(
+    Object.entries(next).filter(([, v]) => v !== undefined && v !== '')
+  ) as Omit<MedicationSchedule, 'checkedTimes'>;
+  const newSchedules = allSchedules.map((s, i) => {
+    if (i !== index) return s;
+    return {
+      ...clean,
+      checkedTimes: s.checkedTimes ?? [],
+      ...(s.checkedBy ? { checkedBy: s.checkedBy } : {}),
+      ...(s.photos?.length ? { photos: s.photos } : {}),
+    };
+  });
+  await updateDoc(doc(db, 'patientRecords', recordId), {
+    medicationSchedules: newSchedules,
+    updatedAt: Timestamp.now(),
+  });
+};
+
+/**
  * 복용약 스케줄 삭제 (전체 배열 교체)
  */
 export const removeMedicationSchedule = async (

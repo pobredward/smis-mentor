@@ -2,7 +2,8 @@
  * 환자 탭 공용 도메인 상수·순수 함수 (web PatientContent · mobile PatientScreen)
  * 예전에는 두 화면에 각각 복사돼 있어 증상 가이드가 17개 / 18개로 어긋나 있었다.
  */
-import type { MedicationSchedule, MedicationTime } from '../types/camp';
+import type { MedicationCategory, MedicationSchedule, MedicationTime } from '../types/camp';
+import { MEDICATION_TIMES } from '../types/camp';
 import type { CampLodging } from '../types/lodging';
 
 // ==================== 증상별 기본 처치 가이드 ====================
@@ -89,6 +90,75 @@ export function calcTotalDoses(sched: Pick<MedicationSchedule, 'startDate' | 'en
     ? Math.max(0, Math.ceil((totalDays - skipCount) * (sched.daysPerWeek / 7)))
     : Math.max(0, totalDays - skipCount);
   return effectiveDays * sched.times.length;
+}
+
+// ==================== 약복용 명단 추가 폼 (web · mobile 공용) ====================
+
+/** 약복용 명단에 올리는 상시약 한 개 — 입력 폼 값 */
+export interface MedListForm {
+  name: string;
+  times: MedicationTime[];
+  /** true = 퇴소까지 (endDateAuto) */
+  untilEnd: boolean;
+  startDate: string;
+  endDate: string;
+  memo: string;
+  category?: MedicationCategory;
+  /** 주 N일 (없으면 매일) */
+  daysPerWeek?: number;
+  skipDates: string[];
+  firstTime?: MedicationTime;
+  lastTime?: MedicationTime;
+}
+
+export function emptyMedListForm(today: string): MedListForm {
+  return { name: '', times: [], untilEnd: true, startDate: today, endDate: today, memo: '', skipDates: [] };
+}
+
+export function medListFormFrom(s: MedicationSchedule): MedListForm {
+  return {
+    name: s.name ?? '',
+    times: [...(s.times ?? [])],
+    untilEnd: !!s.endDateAuto,
+    startDate: s.startDate,
+    endDate: s.endDate,
+    memo: s.memo ?? '',
+    category: s.category,
+    daysPerWeek: s.daysPerWeek,
+    skipDates: [...(s.skipDates ?? [])],
+    firstTime: s.firstTime,
+    lastTime: s.lastTime,
+  };
+}
+
+/** 폼 → 저장할 스케줄. 퇴소까지면 종료일은 캠프 종료일(모르면 시작일) — 값이 없는 칸은 넣지 않는다 */
+export function medListScheduleOf(f: MedListForm, campEndDate?: string): Omit<MedicationSchedule, 'checkedTimes'> {
+  const endDate = f.untilEnd
+    ? (campEndDate && campEndDate >= f.startDate ? campEndDate : f.startDate)
+    : (f.endDate && f.endDate >= f.startDate ? f.endDate : f.startDate);
+  const skipDates = [...new Set(f.skipDates)].filter(d => d >= f.startDate && d <= endDate).sort();
+  const memo = f.memo.trim();
+  const base = {
+    name: f.name.trim(),
+    times: MEDICATION_TIMES.filter(t => f.times.includes(t)),
+    startDate: f.startDate,
+    endDate,
+    ...(f.untilEnd ? { endDateAuto: true } : {}),
+    ...(f.category ? { category: f.category } : {}),
+    ...(memo ? { memo } : {}),
+    ...(f.daysPerWeek && f.daysPerWeek < 7 ? { daysPerWeek: f.daysPerWeek } : {}),
+    ...(skipDates.length ? { skipDates } : {}),
+    ...(f.firstTime ? { firstTime: f.firstTime } : {}),
+    ...(f.lastTime ? { lastTime: f.lastTime } : {}),
+  };
+  return { ...base, totalDoses: calcTotalDoses(base) };
+}
+
+/** 메모 빠른 문구 넣기/빼기 (' · ' 로 잇는다) */
+export function toggleMemoPhrase(memo: string, phrase: string): string {
+  const parts = memo.split('·').map(x => x.trim()).filter(Boolean);
+  const next = parts.includes(phrase) ? parts.filter(x => x !== phrase) : [...parts, phrase];
+  return next.join(' · ');
 }
 
 // ==================== 환자 위치 선택지 ====================

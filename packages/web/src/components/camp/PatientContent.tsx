@@ -5,7 +5,7 @@ import { Timestamp } from 'firebase/firestore';
 import ImageCropper from '@/components/common/ImageCropper';
 import MyEscortPanel from '@/components/camp/patient/MyEscortPanel';
 import EscortSsn from '@/components/camp/patient/EscortSsn';
-import { isActiveEscortVisit, L, dataLabel, isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, resolveGroups, getCampClassInfo, getCampTimetableCommon, getCampDayPlan, dialablePhone, type Whereabouts, type WhereaboutsInput, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind } from '@smis-mentor/shared';
+import { isActiveEscortVisit, L, dataLabel, isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, resolveGroups, normalizeGroupKey, getCampClassInfo, getCampTimetableCommon, getCampDayPlan, dialablePhone, type Whereabouts, type WhereaboutsInput, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind, emptyMedListForm, medListFormFrom, medListScheduleOf, toggleMemoPhrase, type MedListForm } from '@smis-mentor/shared';
 import {
   SYMPTOM_GUIDES, getHospitalPresets, isKoreanStaff, ACTION_NOTE_PLACEHOLDER, ACTION_NOTE_EXAMPLE,
   makeMedTimeKey, schedActiveOn, isInDateRange, calcTotalDoses, todayDateKey as todayStr,
@@ -37,6 +37,7 @@ import {
   removeSkipDate,
   addMedicationSchedule,
   updateMedicationSchedule,
+  replaceMedicationSchedule,
   removeMedicationSchedule,
   addMedicationPhoto,
   removeMedicationPhoto,
@@ -217,9 +218,6 @@ const fmtClass = (name: string) =>
   name === STAFF_PATIENT_CLASS ? L('patient.staffPatient')
     : name === '반 미배정' ? dataLabel(name) : isEnglishUI() ? name : name.endsWith('반') ? name : `${name}반`;
 
-/** grade 문자열("3F", "4M" 등)에서 성별 추출: F=0(여, 위), M=1(남, 아래) */
-const genderOrder = (grade?: string) => (grade?.endsWith('F') ? 0 : 1);
-
 /** visitDate 기준 경과일 계산 (0 = 오늘, 1 = 어제 포함 1일차 등) */
 function daysElapsed(visitDate: Timestamp | undefined): number {
   if (!visitDate?.toDate) return 0;
@@ -240,17 +238,14 @@ function urgencyScore(r: PatientRecord): number {
 }
 
 /** 방담당 섹션 환자 정렬: ①여자 먼저 ②classMentor의 반코드 오름차순 ③이름 */
-const sortRoomRecords = (list: PatientRecord[]) =>
-  [...list].sort((a, b) => {
-    const gA = genderOrder(a.grade), gB = genderOrder(b.grade);
-    if (gA !== gB) return gA - gB;
-    // classMentor 반코드: classMentor 자체가 반코드를 표현하지 않으므로
-    // className 기준으로 반코드 오름차순 정렬
-    const cA = a.className ?? '', cB = b.className ?? '';
-    const cmp = cA.localeCompare(cB, 'ko', { numeric: true, sensitivity: 'base' });
-    if (cmp !== 0) return cmp;
-    return a.studentName.localeCompare(b.studentName, 'ko');
-  });
+/** 호수 차례 (301 → 302 → …), 호수 없으면 뒤로, 같은 방은 이름 차례 */
+const roomNo = (r: PatientRecord) => {
+  const n = parseInt((r.roomNumber ?? '').replace(/[^0-9]/g, ''), 10);
+  return Number.isNaN(n) ? Number.MAX_SAFE_INTEGER : n;
+};
+const byRoom = (a: PatientRecord, b: PatientRecord) =>
+  roomNo(a) - roomNo(b) || a.studentName.localeCompare(b.studentName, 'ko');
+
 
 
 /** 날짜가 오늘 휴약일인지 확인 */
@@ -557,7 +552,7 @@ export default function PatientContent() {
   // classMentor 이름으로 campUsers에서 찾아 담임 jobExperience의 group 사용
   const classNameToGroupKey = useMemo((): Map<string, string> => {
     const result = new Map<string, string>();
-    records.forEach(r => {
+    allRecords.forEach(r => {
       if (!r.className || result.has(r.className)) return;
       if (!r.classMentor) return;
       // campUsers(현재 캠프 소속)에서 classMentor 검색
@@ -579,7 +574,7 @@ export default function PatientContent() {
     // 선생님 환자는 그룹과 상관없이 '선생님' 묶음으로
     result.set(STAFF_PATIENT_CLASS, STAFF_GROUP_KEY);
     return result;
-  }, [records, campUsers, activeJobCodeId]);
+  }, [allRecords, campUsers, activeJobCodeId]);
 
   // 그룹 순서 (고정 순서 기준, 알 수 없는 그룹은 뒤로)
   const FIXED_GROUP_ORDER = ['junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter', 'common', 'short1', 'short2', 'short3', 'short4', 'manager'];
@@ -670,6 +665,49 @@ export default function PatientContent() {
     return out;
   }, [activeByClass, classNameToGroupKey, groupOrder]);
 
+  /** 상단 그룹 바로가기 — 캠프 그룹은 늘 보이고(환자 없으면 흐리게), 반 배정 전인 환자는 '미정', 선생님 환자가 있으면 '선생님' */
+  const jumpGroups = useMemo(() => {
+    const present = orderedGroups.map(g => g.key);
+    const keys = [
+      ...(campGroups.length ? groupOrder : present.filter(k => k && k !== STAFF_GROUP_KEY)),
+      ...present.filter(k => k && k !== STAFF_GROUP_KEY),
+      '',
+      ...(present.includes(STAFF_GROUP_KEY) ? [STAFF_GROUP_KEY] : []),
+    ].filter((k, i, arr) => arr.indexOf(k) === i);
+    return keys.map(key => {
+      const rs = (orderedGroups.find(g => g.key === key)?.classes ?? []).flatMap(([, x]) => x);
+      return {
+        key,
+        total: rs.length,
+        first: rs.filter(r => r.progressStatus === '최초보고').length,
+        mid: rs.filter(r => r.progressStatus === '중간보고').length,
+      };
+    });
+  }, [orderedGroups, campGroups.length, groupOrder]);
+
+  /** 유닛 선생님 차례 — 그룹 차례 → 반번호 → 이름 (약복용명단 방 담당 정렬) */
+  const unitRank = useMemo(() => {
+    const rows = campUsers.flatMap(u => {
+      const je = u.jobExperiences?.find(j => j.id === activeJobCodeId) as { group?: string; classCode?: string } | undefined;
+      if (!u.name || !je) return [];
+      const gi = groupOrder.indexOf(normalizeGroupKey(je.group));
+      return [{ name: u.name, gi: gi < 0 ? 98 : gi, cc: je.classCode || '~' }];
+    }).sort((a, b) => a.gi - b.gi || a.cc.localeCompare(b.cc, undefined, { numeric: true }) || a.name.localeCompare(b.name, 'ko'));
+    const map = new Map<string, number>();
+    rows.forEach((r, i) => { if (!map.has(r.name)) map.set(r.name, i); });
+    return map;
+  }, [campUsers, activeJobCodeId, groupOrder]);
+
+  /** 약복용 명단의 식후 섹션을 그룹 → 반으로 묶을 때 */
+  const groupOfClass = useCallback((className: string): [string, number] | null => {
+    const key = classNameToGroupKey.get(className);
+    if (!key || key === STAFF_GROUP_KEY) return null;
+    const idx = groupOrder.indexOf(key);
+    const name = campGroups.find(g => g.name.toLowerCase() === key)?.name ?? GROUP_DISPLAY_NAMES[key] ?? key;
+    return [name, idx < 0 ? 98 : idx];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classNameToGroupKey, groupOrder, campGroups]);
+
   const groupLabel = (groupKey: string) => groupKey === STAFF_GROUP_KEY
     ? L('patient.staffPatient')
     : campGroups.find(g => g.name.toLowerCase() === groupKey)?.name ?? GROUP_DISPLAY_NAMES[groupKey] ?? (groupKey || L('patient.groupUnknown'));
@@ -686,20 +724,7 @@ export default function PatientContent() {
     }));
   }, [allRecords, today, filterByMyUnit]);
 
-  const counts = useMemo(() => ({
-    active: activeRecords.length,
-    최초보고: activeRecords.filter(r => r.progressStatus === '최초보고').length,
-    중간보고: activeRecords.filter(r => r.progressStatus === '중간보고').length,
-    내원예정: activeRecords.filter(r => (r.hospitalVisits ?? []).some(v => v.hospitalStatus === '내원예정')).length,
-    격리: activeRecords.filter(r => r.types.includes('격리')).length,
-    완치: resolvedRecords.length,
-  }), [activeRecords, resolvedRecords]);
 
-  // 내가 담당자인 미처리 수
-  const myPendingCount = useMemo(() =>
-    records.filter(r => r.assigneeId === userData?.id && r.progressStatus !== '완치').length,
-    [records, userData?.id]
-  );
 
   // ==================== 폼 핸들러 ====================
 
@@ -1100,73 +1125,34 @@ export default function PatientContent() {
 
         {/* ── 탭별 서브헤더 ── */}
         {mainTab === '환자 현황' ? (
-          <div className="flex items-start justify-between py-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-lg font-semibold text-gray-900">{L('patient.patientCare')}</h1>
-                {myPendingCount > 0 && (
-                  <span className="flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white text-[10px] font-bold">
-                    {myPendingCount}
-                  </span>
-                )}
-              </div>
-              {/* 현황 뱃지 */}
-              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                {counts.최초보고 > 0 && <StatusPill label={L('data.progFirstReport')} count={counts.최초보고} color="red" />}
-                {counts.중간보고 > 0 && <StatusPill label={L('data.progMidReport')} count={counts.중간보고} color="orange" />}
-                {counts.내원예정 > 0 && <StatusPill label={L('data.hospitalPlanned')} count={counts.내원예정} color="indigo" />}
-                {counts.격리 > 0 && <StatusPill label={L('data.ptIsolation')} count={counts.격리} color="purple" />}
-                {counts.active === 0 && <span className="text-xs text-gray-400">{L('patient.noCurrentPatients')}</span>}
-              </div>
-              {/* 그룹 바로가기 — 마지막 그룹까지 스크롤하지 않도록. 빨강=최초보고, 주황=중간보고 */}
-              {orderedGroups.length > 1 && (
-                <div className="flex items-center gap-1 mt-2 flex-wrap">
-                  {orderedGroups.map(({ key, classes }) => {
-                    const rs = classes.flatMap(([, x]) => x);
-                    const first = rs.filter(r => r.progressStatus === '최초보고').length;
-                    const mid = rs.filter(r => r.progressStatus === '중간보고').length;
-                    return (
-                      <button
-                        key={key || 'none'}
-                        type="button"
-                        onClick={() => document.getElementById(`patient-group-${key || 'none'}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                        className={`flex items-center gap-1 pl-2 pr-1.5 py-1 rounded-lg border text-[11px] font-semibold hover:shadow-sm ${key ? `${GROUP_BG_COLORS[key] ?? 'bg-gray-50'} ${GROUP_BORDER_COLORS[key] ?? 'border-gray-200'} ${GROUP_TEXT_COLORS[key] ?? 'text-gray-600'}` : 'bg-white border-gray-200 text-gray-600'} ${key === STAFF_GROUP_KEY ? '!bg-teal-50 !border-teal-200 !text-teal-700' : ''}`}
-                      >
-                        {groupLabel(key)}
-                        {first > 0 && <span className="min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">{first}</span>}
-                        {mid > 0 && <span className="min-w-[16px] h-4 px-1 rounded-full bg-orange-400 text-white text-[9px] font-bold flex items-center justify-center">{mid}</span>}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+          /* 그룹 바로가기 (빨강=최초보고, 주황=중간보고) + 최초보고 버튼 — 한 줄 */
+          <div className="flex items-center gap-2 py-2">
+            <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+              {jumpGroups.map(({ key, first, mid, total }) => (
+                <button
+                  key={key || 'none'}
+                  type="button"
+                  disabled={total === 0}
+                  onClick={() => document.getElementById(`patient-group-${key || 'none'}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  className={`flex shrink-0 items-center gap-1 pl-2 pr-1.5 py-1 rounded-lg border text-[11px] font-semibold hover:shadow-sm disabled:opacity-40 disabled:hover:shadow-none ${
+                    key === STAFF_GROUP_KEY ? 'bg-teal-50 border-teal-200 text-teal-700'
+                    : key ? `${GROUP_BG_COLORS[key] ?? 'bg-gray-50'} ${GROUP_BORDER_COLORS[key] ?? 'border-gray-200'} ${GROUP_TEXT_COLORS[key] ?? 'text-gray-600'}`
+                    : 'bg-white border-gray-200 text-gray-600'}`}
+                >
+                  {groupLabel(key)}
+                  {first > 0 && <span className="min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">{first}</span>}
+                  {mid > 0 && <span className="min-w-[16px] h-4 px-1 rounded-full bg-orange-400 text-white text-[9px] font-bold flex items-center justify-center">{mid}</span>}
+                </button>
+              ))}
             </div>
             <button
               onClick={() => setShowQuickReport(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm font-bold rounded-lg transition-colors flex-shrink-0"
+              className="flex items-center gap-1 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm font-bold rounded-lg transition-colors flex-shrink-0"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
               {L('data.progFirstReport')}
-            </button>
-          </div>
-        ) : mainTab === '약복용명단' ? (
-          <div className="flex items-center justify-between py-3">
-            <div>
-              <h1 className="text-lg font-semibold text-gray-900">{L('patient.medicationList')}</h1>
-              <p className="text-xs text-gray-400 mt-0.5">
-                {medicationRecords.length > 0 ? L('patient.studentsOnMedication', { v0: medicationRecords.length }) : L('patient.noStudentsOnMedication')}
-              </p>
-            </div>
-            <button
-              onClick={() => setShowMedListAdd(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold rounded-lg flex-shrink-0 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              {L('patient.addToList')}
             </button>
           </div>
         ) : null}
@@ -1218,6 +1204,9 @@ export default function PatientContent() {
             records={medicationRecords}
             today={today}
             currentUserName={userData?.name ?? ''}
+            groupOfClass={groupOfClass}
+            unitRank={unitRank}
+            onAdd={() => setShowMedListAdd(true)}
             onCheck={(record, si, t, checked) => handleMedCheck(record, si, t, checked)}
           />
         ) : (
@@ -1432,15 +1421,12 @@ export default function PatientContent() {
         <MedicationListAddModal
           today={today}
           campCode={campCode}
+          campEndDate={campEndDate}
           students={students}
           staffOptions={staffOptions}
           allRecords={allRecords}
           createdBy={userData?.name ?? ''}
           createdById={userData?.userId ?? ''}
-          onCheck={handleMedCheck}
-          onAddSchedule={handleAddMedicationSchedule}
-          onUpdateSchedule={handleUpdateMedicationSchedule}
-          onRemoveSchedule={handleRemoveMedicationSchedule}
           onUploadPhoto={handleUploadMedicationPhoto}
           onRemovePhoto={handleRemoveMedicationPhoto}
           onClose={() => setShowMedListAdd(false)}
@@ -1466,25 +1452,6 @@ export default function PatientContent() {
   );
 }
 
-// ==================== 상태 뱃지 ====================
-
-function StatusPill({ label, count, color }: { label: string; count: number; color: string }) {
-  const cls: Record<string, string> = {
-    gray:   'bg-gray-100 text-gray-700',
-    blue:   'bg-blue-100 text-blue-700',
-    yellow: 'bg-yellow-100 text-yellow-800',
-    purple: 'bg-purple-100 text-purple-800',
-    red:    'bg-red-100 text-red-800',
-    orange: 'bg-orange-100 text-orange-800',
-    indigo: 'bg-indigo-100 text-indigo-800',
-    green:  'bg-green-100 text-green-800',
-  };
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${cls[color] ?? cls.gray}`}>
-      {label} <span className="font-bold">{count}</span>
-    </span>
-  );
-}
 
 // ==================== 반별 그룹 ====================
 
@@ -4190,13 +4157,33 @@ interface MedicationListViewProps {
   records: PatientRecord[];
   today: string;
   currentUserName: string;
+  /** 반 이름 → [그룹 표시 이름, 그룹 순서] — 식후 약을 그룹·반으로 묶을 때 */
+  groupOfClass?: (className: string) => [string, number] | null;
+  /** 유닛 선생님 이름 → 차례 (그룹별 선생님 순) — 방 담당은 유닛별로 묶어 보인다 */
+  unitRank?: Map<string, number>;
+  /** 명단 추가 */
+  onAdd?: () => void;
   onCheck: (record: PatientRecord, si: number, t: MedicationTime, checked: boolean) => void;
   onSkipDate?: (record: PatientRecord, si: number, isSkip: boolean) => void;
 }
 
-function MedicationListView({ records, today, currentUserName, onCheck, onSkipDate }: MedicationListViewProps) {
-  // 선택된 시간대 필터 (null = 전체)
-  const [selectedTime, setSelectedTime] = useState<MedicationTime | null>(null);
+function MedicationListView({ records: allList, today, currentUserName, groupOfClass, unitRank, onAdd, onCheck, onSkipDate }: MedicationListViewProps) {
+  // 선택된 시간대 (null = 전체). 처음에는 지금 시각의 시간대 — 그 시간대에 약이 없으면 전체
+  const [pickedTime, setSelectedTime] = useState<MedicationTime | null | undefined>(undefined);
+  // 섹션별 거르기 — 방 담당: 전체·여학생·남학생·내 담당 / 반 담당: 전체·그룹·내 담당
+  // (내 담당: 기상·취침은 내가 유닛인 학생, 식후는 내가 담임인 반)
+  // 거르기는 시간대마다 따로 기억한다 (기상 후에서 '내 담당'을 골라도 취침 전은 그대로)
+  const [roomFilterBy, setRoomFilterBy] = useState<Record<string, 'all' | 'F' | 'M' | 'mine'>>({});
+  const [classFilterBy, setClassFilterBy] = useState<Record<string, string>>({});
+  const isMine = (r: PatientRecord, room: boolean) => (room ? r.unitMentor : r.classMentor) === currentUserName;
+  const isGirl = (r: PatientRecord) => !isStaffPatient(r) && !!r.grade?.endsWith('F');
+  const passRoomBy = (r: PatientRecord, f: string) =>
+    f === 'all' || (f === 'mine' ? isMine(r, true) : f === 'F' ? isGirl(r) : !isStaffPatient(r) && !isGirl(r));
+  const passClassBy = (r: PatientRecord, f: string) =>
+    f === 'all' || (f === 'mine' ? isMine(r, false) : groupOfClass?.(r.className ?? '')?.[0] === f);
+  const passRoom = (r: PatientRecord) => passRoomBy(r, roomFilter);
+  const passClass = (r: PatientRecord) => passClassBy(r, classFilter);
+  const records = allList;
 
   // 복용 확인 모달 상태
   const [confirmPending, setConfirmPending] = useState<{
@@ -4206,22 +4193,40 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
   // 약 사진 라이트박스
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
+  const addButton = onAdd && (
+    <button
+      onClick={onAdd}
+      className="flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg bg-orange-500 px-2.5 py-1.5 text-white hover:bg-orange-600"
+      title={L('patient.addToList')}
+    >
+      <span className="text-sm font-bold leading-none">+</span>
+      <span className="text-[9px] font-semibold leading-none">{L('patient.addShort')}</span>
+    </button>
+  );
+
   if (records.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-2 text-center px-4">
         <div className="text-4xl mb-2">💊</div>
         <p className="text-gray-500 text-sm font-medium">{L('patient.noMedicationScheduledForToday')}</p>
         <p className="text-gray-400 text-xs">{L('patient.studentsOnMedicationWillAppear')}</p>
+        {onAdd && (
+          <button onClick={onAdd} className="mt-2 rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-bold text-white hover:bg-orange-600">+ {L('patient.addToList')}</button>
+        )}
       </div>
     );
   }
 
   // 시간대별 진행률 계산 (firstTime/lastTime 비활성 반영)
   const calcTimeProgress = (time: MedicationTime) => {
-    let total = 0, done = 0;
+    // none(회색·선택 불가)은 거르기 전 기준, 숫자는 그 시간대의 거르기를 반영 (내 담당 0명이면 0/0)
+    let all = 0, total = 0, done = 0;
+    const isRoomTime = time === '기상후' || time === '취침전';
+    const f = isRoomTime ? (roomFilterBy[time] ?? 'all') : (classFilterBy[time] ?? 'all');
     const ORDER = MEDICATION_TIMES;
     const timeIdx = ORDER.indexOf(time);
     records.forEach(r => {
+      const pass = isRoomTime ? passRoomBy(r, f) : passClassBy(r, f);
       (r.medicationSchedules ?? []).forEach(sched => {
         if (!schedActiveOn(sched, today)) return;
         if (!sched.times.includes(time)) return;
@@ -4232,12 +4237,27 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
         // lastTime 비활성
         const lastIdx = sched.lastTime ? ORDER.indexOf(sched.lastTime) : -1;
         if (today === sched.endDate && lastIdx >= 0 && timeIdx > lastIdx) return;
+        all++;
+        if (!pass) return;
         total++;
         if (sched.checkedTimes.includes(makeMedTimeKey(time, today))) done++;
       });
     });
-    return { total, done, allDone: total > 0 && done === total, none: total === 0 };
+    return { total, done, allDone: total > 0 && done === total, none: all === 0 };
   };
+
+  // 지금 시각의 시간대 — ~09시 기상 후, ~12시 조식 후, ~16시 중식 후, ~20시 석식 후, 그 뒤 취침 전
+  const nowTime = ((): MedicationTime => {
+    const h = new Date().getHours();
+    return h < 9 ? '기상후' : h < 12 ? '조식후' : h < 16 ? '중식후' : h < 20 ? '석식후' : '취침전';
+  })();
+  const selectedTime: MedicationTime | null =
+    pickedTime !== undefined ? pickedTime : calcTimeProgress(nowTime).none ? null : nowTime;
+  const filterKey = selectedTime ?? '__all';
+  const roomFilter = roomFilterBy[filterKey] ?? 'all';
+  const classFilter = classFilterBy[filterKey] ?? 'all';
+  const setRoomFilter = (f: 'all' | 'F' | 'M' | 'mine') => setRoomFilterBy(m => ({ ...m, [filterKey]: f }));
+  const setClassFilter = (f: string) => setClassFilterBy(m => ({ ...m, [filterKey]: f }));
 
   // 특정 filterTimes에 해당 스케줄이 있는 환자만 필터
   const recordsWithTimes = (filterTimes: MedicationTime[]) =>
@@ -4265,14 +4285,43 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
     ? (CLASS_TIMES.includes(selectedTime) ? [selectedTime] : [])
     : CLASS_TIMES;
 
-  // 방담당: 여자먼저 → className(반코드) 오름차순 → 이름
-  const roomRecords = sortRoomRecords(recordsWithTimes(activeRoomTimes));
-  // 반담당: className(반코드) 오름차순 → 이름
-  const classRecords = [...recordsWithTimes(activeClassTimes)].sort((a, b) => {
-    const cA = a.className ?? '', cB = b.className ?? '';
-    const cmp = cA.localeCompare(cB, 'ko', { numeric: true, sensitivity: 'base' });
-    return cmp !== 0 ? cmp : a.studentName.localeCompare(b.studentName, 'ko');
-  });
+  // 방담당(기상·취침): 여학생 / 남학생 / 선생님으로 나눈다
+  const roomBase = recordsWithTimes(activeRoomTimes);
+  // 방 담당: 유닛 선생님 차례(그룹별 선생님 순)로 묶고, 같은 유닛 안에서는 호수 차례
+  const unitIdx = (r: PatientRecord) => (r.unitMentor ? unitRank?.get(r.unitMentor) ?? 9000 : 9999);
+  const byUnit = (a: PatientRecord, b: PatientRecord) =>
+    unitIdx(a) - unitIdx(b) || (a.unitMentor ?? '').localeCompare(b.unitMentor ?? '', 'ko') || byRoom(a, b);
+  const roomRecords = roomBase.filter(passRoom).sort(byUnit);
+  const roomGroups = [
+    { key: 'F', label: L('patient.girls'), list: roomRecords.filter(r => !isStaffPatient(r) && r.grade?.endsWith('F')) },
+    { key: 'M', label: L('patient.boys'), list: roomRecords.filter(r => !isStaffPatient(r) && !r.grade?.endsWith('F')) },
+    { key: 'S', label: L('patient.staffPatient'), list: roomRecords.filter(r => isStaffPatient(r)) },
+  ].filter(g => g.list.length > 0);
+  // 반담당(식후): 그룹 → 반으로 묶고, 반 안에서는 호수 차례
+  const classBase = recordsWithTimes(activeClassTimes);
+  const classRecords = classBase.filter(passClass);
+  /** 반 담당 거르기 버튼에 나오는 그룹 (그룹 순서대로) */
+  const classGroupNames = [...new Map(
+    classBase.map(r => groupOfClass?.(r.className ?? '')).filter((g): g is [string, number] => !!g).map(g => [g[0], g[1]] as const)
+  ).entries()].sort((a, b) => a[1] - b[1]).map(([name]) => name);
+  const chip = (on: boolean, tone: 'indigo' | 'orange') =>
+    `shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition-colors ${
+      on
+        ? tone === 'indigo' ? 'border-indigo-500 bg-indigo-500 text-white' : 'border-orange-500 bg-orange-500 text-white'
+        : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+    }`;
+  const classGroups = (() => {
+    const map = new Map<string, PatientRecord[]>();
+    classRecords.forEach(r => {
+      const k = r.className || '반 미배정';
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(r);
+    });
+    return [...map.entries()]
+      .map(([className, list]) => ({ className, group: groupOfClass?.(className) ?? null, list: list.sort(byRoom) }))
+      .sort((a, b) => (a.group?.[1] ?? 99) - (b.group?.[1] ?? 99)
+        || a.className.localeCompare(b.className, 'ko', { numeric: true, sensitivity: 'base' }));
+  })();
 
   const roomLabel = selectedTime && ROOM_TIMES.includes(selectedTime)
     ? selectedTime
@@ -4339,22 +4388,9 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
       )}
 
       {/* 시간대별 현황판 */}
-      <div className="bg-white border-b border-gray-100 px-4 pt-3 pb-2">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-xs font-bold text-gray-700">{L('patient.dosesByTime')}</p>
-          <div className="flex items-center gap-2">
-            {selectedTime && (
-              <button
-                onClick={() => setSelectedTime(null)}
-                className="text-[9px] text-gray-500 bg-gray-100 hover:bg-gray-200 rounded px-1.5 py-0.5 transition"
-              >
-                {L('patient.showAll')}
-              </button>
-            )}
-            <p className="text-[10px] text-gray-400">{today.replace(/-/g, '/')} · {records.length}{L('common.people2')}</p>
-          </div>
-        </div>
-        <div className="grid grid-cols-5 gap-1.5">
+      <div className="bg-white border-b border-gray-100 px-3 py-2">
+        <div className="flex items-stretch gap-1.5">
+        <div className="grid flex-1 grid-cols-5 gap-1.5">
           {MEDICATION_TIMES.map(time => {
             const prog = calcTimeProgress(time);
             const meta = TIME_META[time];
@@ -4362,7 +4398,7 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
 
             if (prog.none) {
               return (
-                <div key={time} className="flex flex-col items-center gap-0.5 rounded-lg border border-gray-100 bg-gray-50 px-1 py-2 cursor-not-allowed opacity-50">
+                <div key={time} className="flex flex-col items-center gap-0.5 rounded-lg border border-gray-100 bg-gray-50 px-1 py-1.5 cursor-not-allowed opacity-50">
                   <span className="text-[9px] text-gray-300 font-medium">{meta.label}</span>
                   <span className="text-[9px] text-gray-300">-</span>
                 </div>
@@ -4371,8 +4407,8 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
             return (
               <button
                 key={time}
-                onClick={() => setSelectedTime(prev => prev === time ? null : time)}
-                className={`flex flex-col items-center gap-0.5 rounded-lg border px-1 py-2 transition-all cursor-pointer ${
+                onClick={() => setSelectedTime(selectedTime === time ? null : time)}
+                className={`flex flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 transition-all cursor-pointer ${
                   isSelected
                     ? `${meta.bg} ${meta.border} ${meta.selectedRing} scale-105 shadow-sm`
                     : prog.allDone
@@ -4384,42 +4420,43 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
                   {meta.label}
                 </span>
                 <span className={`text-[11px] font-extrabold ${prog.allDone && !isSelected ? 'text-green-600' : meta.text}`}>
-                  {prog.done}/{prog.total}
+                  {prog.allDone ? '✓ ' : ''}{prog.done}/{prog.total}
                 </span>
-                {prog.allDone
-                  ? <span className="text-[9px] text-green-600">{L('patient.done2')}</span>
-                  : isSelected
-                    ? <span className={`text-[9px] ${meta.text} opacity-70`}>{L('patient.selected')}</span>
-                    : <span className="text-[9px] text-gray-300">{L('patient.tap')}</span>
-                }
               </button>
             );
           })}
         </div>
-        {/* 담당별 범례 */}
-        <div className="flex items-center gap-3 mt-1.5">
-          <span className="flex items-center gap-1 text-[9px] text-indigo-500">
-            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 inline-block" />{L('patient.roomLead')}
-          </span>
-          <span className="flex items-center gap-1 text-[9px] text-orange-500">
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-400 inline-block" />{L('patient.classLead')}
-          </span>
+        {addButton}
         </div>
       </div>
 
       {/* 담당별 환자 목록 */}
       <div className="flex-1 overflow-y-auto">
         {/* 방 담당 섹션 */}
-        {activeRoomTimes.length > 0 && roomRecords.length > 0 && (
+        {activeRoomTimes.length > 0 && roomBase.length > 0 && (
           <div>
-            <div className="sticky top-0 z-10 bg-indigo-50 border-b border-indigo-100 px-4 py-2 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-indigo-400 inline-block" />
-              <span className="text-[11px] font-bold text-indigo-700">{L('patient.roomLead2')}</span>
-              <span className="text-[10px] text-indigo-500">{roomLabel}</span>
-              <span className="ml-auto text-[10px] text-indigo-500">{roomRecords.length}{L('common.people2')}</span>
+            <div className="sticky top-0 z-10 bg-indigo-50 border-b border-indigo-100 px-4 py-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-indigo-400 inline-block" />
+                <span className="text-[11px] font-bold text-indigo-700">{L('patient.roomLead2')}</span>
+                <span className="text-[10px] text-indigo-500">{roomLabel}</span>
+                <span className="ml-auto text-[10px] text-indigo-500">{roomRecords.length}{L('common.people2')}</span>
+              </div>
+              <div className="mt-1.5 flex gap-1 overflow-x-auto">
+                {([['all', L('patient.filterAll')], ['F', L('patient.girls')], ['M', L('patient.boys')], ['mine', L('patient.filterMine')]] as const).map(([k, label]) => (
+                  <button key={k} onClick={() => setRoomFilter(k)} className={chip(roomFilter === k, 'indigo')}>{label}</button>
+                ))}
+              </div>
             </div>
-            <div className="p-3 space-y-2">
-              {roomRecords.map(record => (
+            {roomRecords.length === 0 && <p className="py-8 text-center text-xs text-gray-400">{L('patient.noneInFilter')}</p>}
+            {roomGroups.map(g => (
+            <div key={g.key}>
+            <div className={`px-4 pt-3 pb-1 flex items-center gap-1.5 text-[11px] font-bold ${g.key === 'F' ? 'text-pink-600' : g.key === 'M' ? 'text-sky-700' : 'text-teal-700'}`}>
+              {g.label}
+              <span className="font-normal text-gray-400">{g.list.length}{L('common.people2')}</span>
+            </div>
+            <div className="px-3 pb-2 space-y-2">
+              {g.list.map(record => (
                 <MedicationPatientCard
                   key={record.id}
                   record={record}
@@ -4435,19 +4472,39 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
                 />
               ))}
             </div>
+            </div>
+            ))}
           </div>
         )}
         {/* 반 담당 섹션 */}
-        {activeClassTimes.length > 0 && classRecords.length > 0 && (
+        {activeClassTimes.length > 0 && classBase.length > 0 && (
           <div>
-            <div className="sticky top-0 z-10 bg-orange-50 border-b border-orange-100 px-4 py-2 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />
-              <span className="text-[11px] font-bold text-orange-700">{L('patient.classLead2')}</span>
-              <span className="text-[10px] text-orange-500">{classLabel}</span>
-              <span className="ml-auto text-[10px] text-orange-500">{classRecords.length}{L('common.people2')}</span>
+            <div className="sticky top-0 z-10 bg-orange-50 border-b border-orange-100 px-4 py-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />
+                <span className="text-[11px] font-bold text-orange-700">{L('patient.classLead2')}</span>
+                <span className="text-[10px] text-orange-500">{classLabel}</span>
+                <span className="ml-auto text-[10px] text-orange-500">{classRecords.length}{L('common.people2')}</span>
+              </div>
+              <div className="mt-1.5 flex gap-1 overflow-x-auto">
+                <button onClick={() => setClassFilter('all')} className={chip(classFilter === 'all', 'orange')}>{L('patient.filterAll')}</button>
+                {classGroupNames.map(g => (
+                  <button key={g} onClick={() => setClassFilter(g)} className={chip(classFilter === g, 'orange')}>{g}</button>
+                ))}
+                <button onClick={() => setClassFilter('mine')} className={chip(classFilter === 'mine', 'orange')}>{L('patient.filterMine')}</button>
+              </div>
             </div>
-            <div className="p-3 space-y-2">
-              {classRecords.map(record => (
+            {classRecords.length === 0 && <p className="py-8 text-center text-xs text-gray-400">{L('patient.noneInFilter')}</p>}
+            {classGroups.map(g => (
+            <div key={g.className}>
+            <div className="px-4 pt-3 pb-1 flex items-center gap-1.5 text-[11px] font-bold text-orange-700">
+              {g.group && <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700">{g.group[0]}</span>}
+              {fmtClass(g.className)}
+              {g.list[0]?.classMentor && <span className="font-normal text-gray-500">{L('patient.homeroom')} {g.list[0].classMentor}</span>}
+              <span className="font-normal text-gray-400">{g.list.length}{L('common.people2')}</span>
+            </div>
+            <div className="px-3 pb-2 space-y-2">
+              {g.list.map(record => (
                 <MedicationPatientCard
                   key={record.id}
                   record={record}
@@ -4463,6 +4520,8 @@ function MedicationListView({ records, today, currentUserName, onCheck, onSkipDa
                 />
               ))}
             </div>
+            </div>
+            ))}
           </div>
         )}
       </div>
@@ -7269,21 +7328,22 @@ const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm out
 //  - 없으면 '약복용 명단 전용' 기록을 만든다 — 집에서 가져온 약처럼 환자가 아닌 경우라
 //    환자 현황에는 나오지 않고 약복용 명단에만 나온다.
 
+/**
+ * 약복용 명단 → 추가: 상시약만 (집에서 가져온 약·영양제·렌즈 등).
+ * 처방약은 환자 카드에서 추가한다. 여기서 올린 약은 약복용 명단 전용 기록에만 들어가고 환자 현황에는 나오지 않는다.
+ */
 function MedicationListAddModal({
-  today, campCode, students, staffOptions, allRecords, createdBy, createdById,
-  onCheck, onAddSchedule, onUpdateSchedule, onRemoveSchedule, onUploadPhoto, onRemovePhoto, onClose,
+  today, campCode, campEndDate, students, staffOptions, allRecords, createdBy, createdById,
+  onUploadPhoto, onRemovePhoto, onClose,
 }: {
   today: string;
   campCode: string;
+  campEndDate: string;
   students: STSheetStudent[];
   staffOptions: StaffOption[];
   allRecords: PatientRecord[];
   createdBy: string;
   createdById: string;
-  onCheck: (record: PatientRecord, si: number, t: MedicationTime, checked: boolean) => void;
-  onAddSchedule: (record: PatientRecord, s: Omit<MedicationSchedule, 'checkedTimes'>) => Promise<void>;
-  onUpdateSchedule: (record: PatientRecord, idx: number, s: Omit<MedicationSchedule, 'checkedTimes'>) => Promise<void>;
-  onRemoveSchedule: (record: PatientRecord, idx: number) => Promise<void>;
   onUploadPhoto: (record: PatientRecord, si: number, file: File) => Promise<string>;
   onRemovePhoto: (record: PatientRecord, si: number, url: string) => Promise<void>;
   onClose: () => void;
@@ -7296,56 +7356,79 @@ function MedicationListAddModal({
   >(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [form, setForm] = useState<MedListForm>(() => emptyMedListForm(today));
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [showMore, setShowMore] = useState(false);
+  const [error, setError] = useState('');
+  const [skipInput, setSkipInput] = useState('');
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const photoInputs = useRef<Map<number, HTMLInputElement>>(new Map());
 
   const q = search.trim();
   const studentHits = q ? students.filter(s => s.name.includes(q)).slice(0, 8) : [];
   const staffHits = q ? staffOptions.filter(u => u.name.includes(q)).slice(0, 5) : [];
 
   const personId = person ? (person.kind === 'student' ? person.s.studentId : staffPatientId(person.u.userId)) : '';
-  // 진행 중인 환자 기록 → 없으면 약복용 명단 전용 기록 (방금 만든 것 포함)
+  // 이 사람의 약복용 명단 전용 기록 (방금 만든 것 포함)
   const target = useMemo(() => {
     if (!personId) return undefined;
     if (createdId) return allRecords.find(r => r.id === createdId);
-    return allRecords.find(r => r.studentId === personId && r.progressStatus !== '완치' && !r.medicationOnly)
-      ?? allRecords.find(r => r.studentId === personId && r.medicationOnly);
+    return allRecords.find(r => r.studentId === personId && r.medicationOnly);
   }, [personId, createdId, allRecords]);
+  const schedules = target?.medicationSchedules ?? [];
 
-  const createAndAdd = async (sched: Omit<MedicationSchedule, 'checkedTimes'>) => {
-    if (!person || busy) return;
+  const set = (patch: Partial<MedListForm>) => { setForm(f => ({ ...f, ...patch })); setError(''); };
+  const resetForm = () => { setForm(emptyMedListForm(today)); setEditingIdx(null); setShowMore(false); setError(''); setSkipInput(''); };
+  const hasMore = !!(form.category || form.daysPerWeek || form.skipDates.length || form.firstTime || form.lastTime);
+
+  const createWith = async (sched: Omit<MedicationSchedule, 'checkedTimes'>) => {
+    if (!person) return;
+    const base = person.kind === 'student'
+      ? {
+          studentId: person.s.studentId,
+          studentName: person.s.name,
+          grade: person.s.grade ? `${person.s.grade}${person.s.gender ?? ''}` : undefined,
+          className: person.s.className || undefined,
+          classMentor: person.s.classMentor || undefined,
+          unitMentor: person.s.unitMentor || undefined,
+          roomNumber: person.s.roomNumber || undefined,
+        }
+      : {
+          studentId: staffPatientId(person.u.userId),
+          studentName: person.u.name,
+          patientKind: 'staff' as const,
+          staffUserId: person.u.userId,
+          grade: person.u.role || undefined,
+          className: STAFF_PATIENT_CLASS,
+        };
+    const id = await addPatientRecord(db, {
+      campCode,
+      ...base,
+      medicationOnly: true,
+      types: [],
+      symptom: '',
+      treatment: '',
+      progressStatus: '최초보고',
+      visitDate: Timestamp.now(),
+      medicationSchedules: [{ ...sched, checkedTimes: [] }],
+      recordedBy: createdBy,
+      recordedById: createdById,
+    });
+    setCreatedId(id);
+  };
+
+  const save = async () => {
+    if (busy || !person) return;
+    if (!form.name.trim()) { setError(L('patient.maNeedName')); return; }
+    if (form.times.length === 0) { setError(L('patient.maNeedTime')); return; }
+    const sched = medListScheduleOf(form, campEndDate);
     setBusy(true);
     try {
-      const base = person.kind === 'student'
-        ? {
-            studentId: person.s.studentId,
-            studentName: person.s.name,
-            grade: person.s.grade ? `${person.s.grade}${person.s.gender ?? ''}` : undefined,
-            className: person.s.className || undefined,
-            classMentor: person.s.classMentor || undefined,
-            unitMentor: person.s.unitMentor || undefined,
-            roomNumber: person.s.roomNumber || undefined,
-          }
-        : {
-            studentId: staffPatientId(person.u.userId),
-            studentName: person.u.name,
-            patientKind: 'staff' as const,
-            staffUserId: person.u.userId,
-            grade: person.u.role || undefined,
-            className: STAFF_PATIENT_CLASS,
-          };
-      const id = await addPatientRecord(db, {
-        campCode,
-        ...base,
-        medicationOnly: true,
-        types: [],
-        symptom: '',
-        treatment: '',
-        progressStatus: '최초보고',
-        visitDate: Timestamp.now(),
-        medicationSchedules: [{ ...sched, checkedTimes: [] }],
-        recordedBy: createdBy,
-        recordedById: createdById,
-      });
-      setCreatedId(id);
+      if (editingIdx !== null && target) await replaceMedicationSchedule(db, target.id, schedules, editingIdx, sched);
+      else if (target) await addMedicationSchedule(db, target.id, sched);
+      else await createWith(sched);
+      resetForm();
     } catch (e) {
       alert((e as Error)?.message || L('common.saveFailed'));
     } finally {
@@ -7353,38 +7436,84 @@ function MedicationListAddModal({
     }
   };
 
+  const remove = async (idx: number) => {
+    if (!target || !confirm(L('patient.deleteMedication', { v0: schedules[idx]?.name ?? '' }))) return;
+    try {
+      await removeMedicationSchedule(db, target.id, schedules, idx);
+      if (editingIdx === idx) resetForm();
+    } catch (e) { alert((e as Error)?.message || L('common.saveFailed')); }
+  };
+
+  const startEdit = (idx: number) => {
+    const f = medListFormFrom(schedules[idx]);
+    setForm(f);
+    setEditingIdx(idx);
+    setShowMore(!!(f.category || f.daysPerWeek || f.skipDates.length || f.firstTime || f.lastTime));
+    setError('');
+  };
+
+  const uploadPhoto = async (idx: number, file: File) => {
+    if (!target) return;
+    setUploadingIdx(idx);
+    try { await onUploadPhoto(target, idx, file); }
+    catch (e) { alert((e as Error)?.message || L('common.saveFailed')); }
+    finally { setUploadingIdx(null); }
+  };
+
+  const periodText = (s: MedicationSchedule) =>
+    s.endDateAuto
+      ? (s.startDate <= today ? L('patient.campEnd2') : L('patient.campEnd3', { v0: monthDay(s.startDate) }))
+      : `${monthDay(s.startDate)} ~ ${monthDay(s.endDate)}`;
+  const monthDay = (d: string) => { const [, m, dd] = d.split('-'); return m && dd ? `${+m}/${+dd}` : d; };
+
+  const chip = (on: boolean) =>
+    `px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
+      on ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+    }`;
+  const smallChip = (on: boolean) =>
+    `px-2 py-0.5 rounded-md text-[11px] font-medium border transition-colors ${
+      on ? 'bg-orange-50 text-orange-700 border-orange-300' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+    }`;
+  const label = 'text-[11px] font-bold text-gray-500 mb-1';
+  const dateCls = 'border border-gray-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-orange-400 bg-white';
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50" onClick={onClose}>
       <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
-          <div>
-            <h2 className="text-base font-bold text-gray-900">{L('patient.addToList')}</h2>
-            <p className="text-[11px] text-gray-400 mt-0.5">{L('patient.medListAddHint')}</p>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
+          <div className="min-w-0">
+            <h2 className="text-base font-bold text-gray-900">{L('patient.maTitle')}</h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">{L('patient.maHint')}</p>
           </div>
           <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600" aria-label={L('common.close')}>✕</button>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+          {/* 누구 */}
           {!person ? (
             <div>
-              <p className="text-xs font-bold text-gray-700 mb-1.5">{L('patient.studentOrStaff')}</p>
               <input
                 autoFocus
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder={L('patient.searchByName')}
-                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-orange-400"
               />
               {(studentHits.length > 0 || staffHits.length > 0) && (
                 <div className="mt-1 border border-gray-200 rounded-xl overflow-hidden">
-                  {studentHits.map(s => (
-                    <button key={s.studentId} onClick={() => setPerson({ kind: 'student', s })}
-                      className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 flex items-center gap-2 border-b border-gray-50 last:border-0">
-                      <span className="font-semibold text-gray-900">{s.name}</span>
-                      <span className="text-xs text-gray-400">{s.grade}{s.gender === 'F' ? 'F' : 'M'}</span>
-                      {s.className && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{fmtClass(s.className)}</span>}
-                    </button>
-                  ))}
+                  {studentHits.map(s => {
+                    const n = allRecords.find(r => r.studentId === s.studentId && r.medicationOnly)?.medicationSchedules?.length ?? 0;
+                    return (
+                      <button key={s.studentId} onClick={() => setPerson({ kind: 'student', s })}
+                        className="w-full text-left px-3 py-2.5 text-sm hover:bg-orange-50 flex items-center gap-2 border-b border-gray-50 last:border-0">
+                        <span className="font-semibold text-gray-900">{s.name}</span>
+                        <span className="text-xs text-gray-400">{s.grade}{s.gender === 'F' ? 'F' : 'M'}</span>
+                        {s.className && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{fmtClass(s.className)}</span>}
+                        {s.roomNumber && <span className="text-xs text-gray-400">{s.roomNumber}</span>}
+                        {n > 0 && <span className="ml-auto text-[10px] font-bold text-orange-600">💊 {n}</span>}
+                      </button>
+                    );
+                  })}
                   {staffHits.map(u => (
                     <button key={u.userId} onClick={() => setPerson({ kind: 'staff', u })}
                       className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 flex items-center gap-2 border-b border-gray-50 last:border-0">
@@ -7398,40 +7527,224 @@ function MedicationListAddModal({
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-2 rounded-xl bg-gray-50 border border-gray-200 px-3 py-2.5">
+              <div className="flex items-center gap-2 rounded-xl bg-gray-50 border border-gray-200 px-3 py-2">
                 <span className="text-sm font-bold text-gray-900">{person.kind === 'student' ? person.s.name : person.u.name}</span>
                 {person.kind === 'staff'
                   ? <span className="text-xs bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded font-semibold">{L('patient.staffPatient')}</span>
-                  : person.s.className && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{fmtClass(person.s.className)}</span>}
+                  : <>
+                      {person.s.className && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{fmtClass(person.s.className)}</span>}
+                      {person.s.roomNumber && <span className="text-xs text-gray-400">{person.s.roomNumber}</span>}
+                    </>}
                 {!createdId && (
-                  <button onClick={() => { setPerson(null); setSearch(''); }} className="ml-auto text-[11px] text-gray-400 hover:text-red-500">{L('patient.change')}</button>
+                  <button onClick={() => { setPerson(null); setSearch(''); resetForm(); }} className="ml-auto text-[11px] text-gray-400 hover:text-red-500">{L('patient.change')}</button>
                 )}
               </div>
-              <p className={`text-[11px] rounded-lg px-3 py-2 ${target && !target.medicationOnly ? 'bg-red-50 text-red-700' : 'bg-orange-50 text-orange-700'}`}>
-                {target && !target.medicationOnly ? L('patient.medListAddToPatient') : L('patient.medListOnlyNote')}
-              </p>
-              {busy && <p className="text-xs text-gray-400">{L('common.saving')}</p>}
-              <MedicationSection
-                schedules={target?.medicationSchedules ?? []}
-                today={today}
-                unitMentor={person.kind === 'student' ? person.s.unitMentor : undefined}
-                classMentor={person.kind === 'student' ? person.s.classMentor : undefined}
-                autoOpenForm={!target?.medicationSchedules?.length}
-                onCheck={(si, t, checked) => { if (target) onCheck(target, si, t, checked); }}
-                onAddSchedule={(sched) => { if (target) void onAddSchedule(target, sched); else void createAndAdd(sched); }}
-                onUpdateSchedule={target ? (idx, sched) => { void onUpdateSchedule(target, idx, sched); } : undefined}
-                onRemoveSchedule={target ? (idx) => { void onRemoveSchedule(target, idx); } : undefined}
-                onUploadMedPhoto={target ? (si, file) => onUploadPhoto(target, si, file) : undefined}
-                onRemoveMedPhoto={target ? (si, url) => { void onRemovePhoto(target, si, url); } : undefined}
-              />
+
+              {/* 이미 올라간 상시약 */}
+              {schedules.length > 0 && (
+                <div>
+                  <p className={label}>{L('patient.maCurrent', { v0: schedules.length })}</p>
+                  <div className="space-y-1.5">
+                    {schedules.map((s, idx) => (
+                      <div key={idx} className={`rounded-xl border px-3 py-2 ${editingIdx === idx ? 'border-orange-400 bg-orange-50' : 'border-gray-200 bg-white'}`}>
+                        <div className="flex items-start gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1">
+                              <span className="text-sm font-bold text-gray-900">{s.name || '-'}</span>
+                              {s.category && <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{dataLabel(s.category)}</span>}
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                              {MEDICATION_TIMES.filter(t => s.times.includes(t)).map(t => (
+                                <span key={t} className="text-[10px] font-semibold bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded">{dataLabel(t)}</span>
+                              ))}
+                              <span className="text-[10px] text-gray-500">{periodText(s)}</span>
+                              {s.daysPerWeek && <span className="text-[10px] text-gray-500">· {L('patient.maNDays', { v0: s.daysPerWeek })}</span>}
+                            </div>
+                            {s.memo && <p className="mt-0.5 text-[11px] text-gray-500">{s.memo}</p>}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            <button onClick={() => startEdit(idx)} className="text-[11px] font-semibold text-blue-600 hover:underline">{L('common.edit')}</button>
+                            <button onClick={() => void remove(idx)} className="text-[11px] font-semibold text-red-500 hover:underline">{L('common.delete')}</button>
+                          </div>
+                        </div>
+                        {/* 사진 */}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {(s.photos ?? []).map(url => (
+                            <div key={url} className="relative">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={url} alt="" onClick={() => setLightboxUrl(url)} className="h-10 w-10 cursor-pointer rounded-md border border-gray-200 object-cover" />
+                              <button
+                                onClick={() => { if (target && confirm(L('patient.deleteThisPhoto'))) void onRemovePhoto(target, idx, url); }}
+                                className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-gray-700 text-[9px] text-white"
+                                aria-label={L('common.delete')}
+                              >✕</button>
+                            </div>
+                          ))}
+                          <button
+                            onClick={() => photoInputs.current.get(idx)?.click()}
+                            disabled={uploadingIdx !== null}
+                            className="h-10 rounded-md border border-dashed border-gray-300 px-2 text-[10px] font-semibold text-gray-500 hover:border-orange-400 hover:text-orange-600 disabled:opacity-50"
+                          >
+                            {uploadingIdx === idx ? L('patient.maUploading') : `📷 ${L('patient.maAddPhoto')}`}
+                          </button>
+                          <input
+                            ref={el => { if (el) photoInputs.current.set(idx, el); else photoInputs.current.delete(idx); }}
+                            type="file" accept="image/*" className="hidden"
+                            onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void uploadPhoto(idx, f); }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 새 약 / 수정 */}
+              <div className="rounded-xl border border-orange-200 bg-orange-50/40 p-3 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-orange-700">{editingIdx !== null ? L('patient.maEditMed') : L('patient.maNewMed')}</p>
+                  {editingIdx !== null && (
+                    <button onClick={resetForm} className="text-[11px] text-gray-400 hover:text-gray-600">{L('common.cancel')}</button>
+                  )}
+                </div>
+
+                <input
+                  value={form.name}
+                  onChange={e => set({ name: e.target.value })}
+                  placeholder={L('patient.maNamePh')}
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-orange-400 bg-white"
+                />
+
+                <div>
+                  <p className={label}>{L('patient.maWhen')}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {MEDICATION_TIMES.map(t => (
+                      <button key={t} type="button" className={chip(form.times.includes(t))}
+                        onClick={() => set({ times: form.times.includes(t) ? form.times.filter(x => x !== t) : [...form.times, t] })}>
+                        {dataLabel(t)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <p className={label}>{L('patient.maPeriod')}</p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <input type="date" value={form.startDate} onChange={e => set({ startDate: e.target.value })} className={dateCls} />
+                    <span className="text-xs text-gray-400">~</span>
+                    <button type="button" className={smallChip(form.untilEnd)} onClick={() => set({ untilEnd: true })}>
+                      {L('patient.maUntilEnd')}{campEndDate ? ` (${monthDay(campEndDate)})` : ''}
+                    </button>
+                    <button type="button" className={smallChip(!form.untilEnd)} onClick={() => set({ untilEnd: false, endDate: form.endDate < form.startDate ? form.startDate : form.endDate })}>
+                      {L('patient.maPickDates')}
+                    </button>
+                    {!form.untilEnd && (
+                      <input type="date" value={form.endDate} min={form.startDate} onChange={e => set({ endDate: e.target.value })} className={dateCls} />
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <p className={label}>{L('patient.maMemo')}</p>
+                  <input
+                    value={form.memo}
+                    onChange={e => set({ memo: e.target.value })}
+                    placeholder={L('patient.maMemoPh')}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:border-orange-400 bg-white"
+                  />
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {[L('patient.maFridge'), L('patient.maWatch')].map(p => (
+                      <button key={p} type="button" className={smallChip(form.memo.split('·').map(x => x.trim()).includes(p))}
+                        onClick={() => set({ memo: toggleMemoPhrase(form.memo, p) })}>{p}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <button type="button" onClick={() => setShowMore(v => !v)} className="text-[11px] font-semibold text-gray-500 hover:text-gray-700">
+                  {showMore ? `▾ ${L('patient.maLess')}` : `▸ ${L('patient.maMore')}`}{!showMore && hasMore ? ' •' : ''}
+                </button>
+
+                {showMore && (
+                  <div className="space-y-2.5 border-t border-orange-100 pt-2.5">
+                    <div>
+                      <p className={label}>{L('patient.type')}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {MEDICATION_CATEGORIES.map(c => (
+                          <button key={c} type="button" className={smallChip(form.category === c)}
+                            onClick={() => set({ category: form.category === c ? undefined : c })}>{dataLabel(c)}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className={label}>{L('patient.maDaysPerWeek')}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {[undefined, 6, 5, 4, 3, 2, 1].map(n => (
+                          <button key={n ?? 7} type="button" className={smallChip(form.daysPerWeek === n)}
+                            onClick={() => set({ daysPerWeek: n })}>{n ? L('patient.maNDays', { v0: n }) : L('patient.maEveryDay')}</button>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className={label}>{L('patient.maSkipDates')}</p>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {form.skipDates.map(d => (
+                          <button key={d} type="button" onClick={() => set({ skipDates: form.skipDates.filter(x => x !== d) })}
+                            className="rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-gray-600 hover:border-red-300 hover:text-red-500">
+                            {monthDay(d)} ✕
+                          </button>
+                        ))}
+                        <input type="date" value={skipInput} min={form.startDate}
+                          onChange={e => {
+                            const d = e.target.value;
+                            setSkipInput('');
+                            if (d && !form.skipDates.includes(d)) set({ skipDates: [...form.skipDates, d].sort() });
+                          }}
+                          className={dateCls} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className={label}>{L('patient.maFirstTime')} ({monthDay(form.startDate)})</p>
+                        <select value={form.firstTime ?? ''} onChange={e => set({ firstTime: (e.target.value || undefined) as MedicationTime | undefined })}
+                          className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white outline-none focus:border-orange-400">
+                          <option value="">{L('patient.maAllTimes')}</option>
+                          {MEDICATION_TIMES.map(t => <option key={t} value={t}>{dataLabel(t)}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <p className={label}>{L('patient.maLastTime')}{(form.untilEnd ? campEndDate : form.endDate) ? ` (${monthDay((form.untilEnd ? campEndDate : form.endDate) as string)})` : ''}</p>
+                        <select value={form.lastTime ?? ''} onChange={e => set({ lastTime: (e.target.value || undefined) as MedicationTime | undefined })}
+                          className="w-full border border-gray-200 rounded-lg px-2 py-1 text-xs bg-white outline-none focus:border-orange-400">
+                          <option value="">{L('patient.maAllTimes')}</option>
+                          {MEDICATION_TIMES.map(t => <option key={t} value={t}>{dataLabel(t)}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    {editingIdx === null && <p className="text-[10px] text-gray-400">{L('patient.maPhotoAfterSave')}</p>}
+                  </div>
+                )}
+
+                {error && <p className="text-[11px] font-semibold text-red-600">{error}</p>}
+                <button onClick={() => void save()} disabled={busy}
+                  className="w-full rounded-lg bg-orange-500 py-2 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-50">
+                  {busy ? L('common.saving') : editingIdx !== null ? L('patient.maSaveEdit') : `+ ${L('patient.maAdd')}`}
+                </button>
+              </div>
             </>
           )}
         </div>
 
-        <div className="px-5 py-3 border-t border-gray-100 flex-shrink-0">
-          <button onClick={onClose} className="w-full py-2.5 text-sm font-semibold text-gray-700 border border-gray-200 hover:bg-gray-50 rounded-xl">{L('common.close')}</button>
+        <div className="px-4 py-2.5 border-t border-gray-100 flex-shrink-0">
+          <button onClick={onClose} className="w-full py-2 text-sm font-semibold text-gray-700 border border-gray-200 hover:bg-gray-50 rounded-xl">{L('common.close')}</button>
         </div>
       </div>
+
+      {lightboxUrl && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80" onClick={e => { e.stopPropagation(); setLightboxUrl(null); }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightboxUrl} alt="" className="max-h-[85vh] max-w-[92vw] rounded-lg object-contain" />
+        </div>
+      )}
     </div>
   );
 }

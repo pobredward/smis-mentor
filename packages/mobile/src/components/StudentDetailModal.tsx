@@ -606,8 +606,18 @@ function TabBody(props: TabBodyProps) {
                   <Text style={styles.recordDate}>{d ? `${d.getMonth() + 1}/${d.getDate()}` : '-'}</Text>
                   <View style={{ flex: 1 }}>
                     <View style={styles.recordTop}>
-                      <Text style={styles.recordSymptom}>{r.symptom || '-'}</Text>
-                      <Text style={[styles.smallChip, open ? styles.smallChipAmber : styles.smallChipGreen]}>{dataLabel(r.progressStatus)}</Text>
+                      {r.medicationOnly ? (
+                        <>
+                          {/* 약복용 명단 전용(상시약) — 아픈 기록이 아니므로 진행 상태 대신 약 이름 */}
+                          <Text style={styles.recordSymptom}>{(r.medicationSchedules ?? []).map(m => m.name).filter(Boolean).join(' · ') || '-'}</Text>
+                          <Text style={[styles.smallChip, styles.smallChipAmber]}>💊 {L('patient.maRegular')}</Text>
+                        </>
+                      ) : (
+                        <>
+                          <Text style={styles.recordSymptom}>{r.symptom || '-'}</Text>
+                          <Text style={[styles.smallChip, open ? styles.smallChipAmber : styles.smallChipGreen]}>{dataLabel(r.progressStatus)}</Text>
+                        </>
+                      )}
                       {(r.types ?? []).map(t => <Text key={t} style={[styles.smallChip, styles.smallChipGray]}>{dataLabel(t)}</Text>)}
                     </View>
                     {(!!r.treatment || visits > 0) && (
