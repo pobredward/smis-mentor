@@ -492,9 +492,9 @@ export default function StudentDetailModal({
         </aside>
 
         {/* 오른쪽(데스크탑) / 전체(좁은 화면) */}
-        <div className="flex-1 min-w-0 flex flex-col">
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col">
           {/* 좁은 화면: 상단 바 + 요약 */}
-          <div className="md:hidden border-b border-gray-200">
+          <div className="md:hidden shrink-0 max-h-[45vh] overflow-y-auto border-b border-gray-200">
             <div className="flex items-center justify-between px-2 py-1.5">
               <button type="button" onClick={onClose} className="w-9 h-9 flex items-center justify-center text-gray-600 text-xl" aria-label={L('common.close')}>✕</button>
               <span className="text-sm font-semibold text-gray-900">{L('studentModal.studentDetails')}</span>
@@ -514,7 +514,7 @@ export default function StudentDetailModal({
           </div>
 
           {/* 탭 */}
-          <div className="flex items-center border-b border-gray-200 bg-white">
+          <div className="shrink-0 flex items-center border-b border-gray-200 bg-white">
             <div className="flex-1 flex overflow-x-auto [scrollbar-width:none] px-2 md:px-4">
               {tabs.map(t => (
                 <button key={t} type="button" onClick={() => { setTab(t); setEditingField(null); contentRef.current?.scrollTo({ top: 0 }); }}
@@ -529,7 +529,7 @@ export default function StudentDetailModal({
           </div>
 
           {/* 탭 내용 */}
-          <div ref={contentRef} className="flex-1 overflow-y-auto bg-gray-50 md:bg-white px-4 md:px-6 py-4 space-y-3">
+          <div ref={contentRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain bg-gray-50 md:bg-white px-4 md:px-6 py-4 space-y-3">
             {body}
           </div>
         </div>

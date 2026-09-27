@@ -37,6 +37,17 @@ body {
   }
 }
 
+/*
+ * 모바일 폭에서 하단 탭바(BottomNavigation, h-16)가 떠 있으면 전체 화면 오버레이(모달·시트)가
+ * 탭바에 가려 아래가 잘린다 → 오버레이의 아래쪽 끝을 탭바 위로 올린다.
+ * body.has-bottom-nav 는 BottomNavigation 이 화면에 있을 때만 붙는다.
+ */
+@media (max-width: 767px) {
+  body.has-bottom-nav .fixed.inset-0 {
+    bottom: 64px;
+  }
+}
+
 /* Notion 페이지 스타일 커스터마이징 */
 .notion-page-wrapper {
   padding: 2rem 1rem;

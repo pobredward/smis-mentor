@@ -8,6 +8,11 @@ import { getCampTabUrl } from '@/lib/campUtils';
 import { L } from '@smis-mentor/shared';
 
 const BottomNavigation = () => {
+  // 모바일 폭 전체 화면 오버레이가 탭바 위에서 끝나도록 표시 (globals.css: body.has-bottom-nav)
+  useEffect(() => {
+    document.body.classList.add('has-bottom-nav');
+    return () => document.body.classList.remove('has-bottom-nav');
+  }, []);
   const pathname = usePathname();
   const { userData } = useAuth();
   const isAdmin = userData?.role === 'admin';

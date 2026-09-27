@@ -42,7 +42,7 @@ import LodgingDetail, { type LodgingTarget } from './LodgingDetail';
 type ViewKey = 'all' | 'b1' | 'f1' | 'f2' | 'f3' | 'f4' | '3d';
 const VIEW_KEYS: readonly string[] = ['all', 'b1', 'f1', 'f2', 'f3', 'f4', '3d'];
 const VIEW_KEY = (jobCodeId: string) => `SMIS_LODGING_VIEW_${jobCodeId}`;
-const ROWS_KEY = 'SMIS_LODGING_FILTER_ROWS';
+const ROWS_KEY = 'SMIS_LODGING_FILTER_ROWS_V2'; // v2: 기본 접힘으로 바뀌어 예전 기억값은 무시
 
 /**
  * 숙소 탭 — 건물은 고정, 방 명단은 ST 시트 방호수, 용도·선생님은 캠프 설정.
@@ -113,11 +113,12 @@ export default function LodgingContent() {
   const detailColumns = FILTER_KEYS.filter((k) => filterOptions[k].length > 0);
 
   // 눈 단추로 접어 둔 줄 — 캠프와 상관없이 기억
-  const [rowClosed, setRowClosed] = useState<Record<LodgingFilterKey, boolean>>({ group: false, airport: false });
+  // 기본은 접힘(off) — 눈 단추로 펼치면 그때부터 기억
+  const [rowClosed, setRowClosed] = useState<Record<LodgingFilterKey, boolean>>({ group: true, airport: true });
   useEffect(() => {
     try {
       const v = JSON.parse(window.localStorage.getItem(ROWS_KEY) || 'null');
-      if (v && typeof v === 'object') setRowClosed({ group: !!v.group, airport: !!v.airport });
+      if (v && typeof v === 'object') setRowClosed({ group: v.group !== false, airport: v.airport !== false });
     } catch {
       /* noop */
     }
@@ -277,6 +278,8 @@ export default function LodgingContent() {
 
   return (
     <div className="pt-2 pb-16">
+      {/* 버튼 줄은 시간표 탭과 같은 폭·시작점에 — 도면만 넓게 */}
+      <div className="mx-auto max-w-2xl">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <div role="tablist" aria-label={L('lodging.viewLodging')} className="flex min-w-0 flex-1 flex-wrap gap-1">
           {tabs.map((t) => {
@@ -406,6 +409,8 @@ export default function LodgingContent() {
           })}
         </div>
       )}
+
+      </div>
 
       {unknown.size > 0 && (
         <p className="mb-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">

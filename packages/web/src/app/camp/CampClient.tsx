@@ -184,7 +184,10 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
           ) : activeTab === 'tasks' ? (
             <TaskContent />
           ) : activeTab === 'schedule' ? (
-            <ScheduleContent />
+            // 좁은 화면에서 표가 화면 끝에 붙지 않게 좌우 여백
+            <div className="px-1.5 md:px-0">
+              <ScheduleContent />
+            </div>
           ) : activeTab === 'guide' ? (
             <LodgingContent />
           ) : activeTab === 'roster' ? (
