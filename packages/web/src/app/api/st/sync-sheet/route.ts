@@ -20,6 +20,7 @@ import {
   getDefaultFieldConfig,
   type CampCode,
   type FamilyUnit,
+  isDeviceSheetHeader,
 } from '@smis-mentor/shared';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { getAuthenticatedUser } from '@/lib/authMiddleware';
@@ -173,7 +174,8 @@ export async function POST(request: NextRequest) {
       const dynamicHeaders: string[] = [];
       for (const section of activeSections) {
         for (const field of section.fields ?? []) {
-          if (!field.isLegacy && field.sheetHeader) {
+          // 전자기기 열은 시트와 연동하지 않음 (Firestore studentDevices 전용)
+          if (!field.isLegacy && field.sheetHeader && !isDeviceSheetHeader(field.sheetHeader)) {
             dynamicHeaders.push(field.sheetHeader);
           }
         }

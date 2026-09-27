@@ -74,3 +74,10 @@ export function nextDeviceLocation(loc: DeviceLocation): DeviceLocation | null {
     default: return null;
   }
 }
+
+/**
+ * ST 시트의 전자기기 열(기기1모델·기기1잠금 …)은 시트와 연동하지 않는다 — 기기 정보는 Firestore(studentDevices)에만 저장.
+ * 동기화·시트 쓰기·필드 설정 편집기에서 이 헤더를 제외할 때 쓴다.
+ */
+export const isDeviceSheetHeader = (header: string | undefined | null): boolean =>
+  !!header && /^기기\s*\d+\s*(모델|잠금)$/.test(header.trim());

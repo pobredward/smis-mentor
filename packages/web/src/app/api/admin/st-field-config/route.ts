@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
-import { CAMP_SHEET_CONFIG, getDefaultFieldConfig, type STSheetFieldConfig, type CampType } from '@smis-mentor/shared';
+import { CAMP_SHEET_CONFIG, getDefaultFieldConfig, isDeviceSheetHeader, type STSheetFieldConfig, type CampType } from '@smis-mentor/shared';
 
 const COLLECTION = 'stSheetFieldConfig';
 
@@ -27,6 +27,14 @@ function mergeFixedSections(stored: STSheetFieldConfig, campType: CampType): STS
   });
   const merged = [...allFixed, ...dynamicSections].map((s, i) => ({ ...s, order: i }));
   return { ...stored, sections: merged };
+}
+
+/** 전자기기 열(기기N모델·잠금) 필드 제거 — 비게 된 동적 섹션도 제거 */
+function stripDeviceFields(cfg: STSheetFieldConfig): STSheetFieldConfig {
+  const sections = cfg.sections
+    .map(s => ({ ...s, fields: s.fields.filter(f => !isDeviceSheetHeader(f.sheetHeader)) }))
+    .filter((s, i) => s.isFixed || s.fields.length > 0 || cfg.sections[i].fields.length === 0);
+  return { ...cfg, sections: sections.map((s, i) => ({ ...s, order: i })) };
 }
 
 /**
@@ -67,7 +75,8 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ config, availableHeaders });
+  // 전자기기 열은 시트 연동 대상이 아니므로 설정 편집기에 노출하지 않음
+  return NextResponse.json({ config: config ? stripDeviceFields(config) : config, availableHeaders: availableHeaders.filter(h => !isDeviceSheetHeader(h)) });
 }
 
 /** POST /api/admin/st-field-config */
@@ -82,7 +91,7 @@ export async function POST(req: NextRequest) {
   }
 
   const db = getAdminFirestore();
-  await db.collection(COLLECTION).doc(config.campType).set(config);
+  await db.collection(COLLECTION).doc(config.campType).set(stripDeviceFields(config));
 
   return NextResponse.json({ ok: true });
 }

@@ -2,7 +2,7 @@ import { logger, getDefaultFieldConfig } from '@smis-mentor/shared';
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { FieldValue } from 'firebase-admin/firestore';
-import { CAMP_SHEET_CONFIG } from '@smis-mentor/shared';
+import { CAMP_SHEET_CONFIG, isDeviceSheetHeader } from '@smis-mentor/shared';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { getAuthenticatedUser } from '@/lib/authMiddleware';
 
@@ -213,7 +213,8 @@ export async function POST(request: NextRequest) {
   const allDynamicHeadersInConfig: string[] = [];
   for (const section of activeSections) {
     for (const field of section.fields ?? []) {
-      if (!field.isLegacy) {
+      // 전자기기 열은 시트에 쓰지 않음 (Firestore studentDevices 전용)
+      if (!field.isLegacy && !isDeviceSheetHeader(field.sheetHeader)) {
         dynamicFieldMap[field.fieldKey] = {
           sheetHeader: field.sheetHeader,
           permission: field.permission as EditPermission,

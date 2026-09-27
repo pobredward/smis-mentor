@@ -7,6 +7,7 @@ import type { CampType, STSheetStudent } from '../types/student';
 import type { PatientRecord } from '../types/camp';
 import { getFieldValue } from '../services/fieldConfig';
 import type { MessageKey } from '../i18n';
+import { isDeviceSheetHeader } from '../types/studentDevice';
 
 export const STUDENT_TAB_IDS = ['basic', 'health', 'allowance', 'devices', 'study', 'survey'] as const;
 export type StudentTabId = (typeof STUDENT_TAB_IDS)[number];
@@ -52,7 +53,7 @@ export function sectionsForTab(config: STSheetFieldConfig, tab: StudentTabId): F
 /** 동적 섹션에서 보일 필드 — 읽기 전용이면서 값이 없는 필드(설문 등)는 숨김 */
 export function visibleDynamicFields(student: STSheetStudent, section: FieldSectionConfig) {
   return section.fields
-    .filter(f => f.isVisible)
+    .filter(f => f.isVisible && !isDeviceSheetHeader(f.sheetHeader)) // 전자기기 열은 전자기기 탭(Firestore) 전용
     .sort((a, b) => a.order - b.order)
     .filter(f => {
       if (!f.isEditable && f.permission === 'readonly') {
