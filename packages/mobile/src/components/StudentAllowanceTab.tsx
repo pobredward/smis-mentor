@@ -520,9 +520,11 @@ function TxnSheet({ form, config, defaultCurrency, student, roster, campCode, ac
 
       {category === 'activity' && (
         <Field label={L('allowance.place')}>
-          <View style={[s.chipWrap, { marginBottom: 6 }]}>
-            {config.activityPlaces.map(p => <Chip key={p} on={place === p} onPress={() => setPlace(p)}>{dataLabel(p)}</Chip>)}
-          </View>
+          {config.activityPlaces.length > 0 && (
+            <View style={[s.chipWrap, { marginBottom: 6 }]}>
+              {config.activityPlaces.map(p => <Chip key={p} on={place === p} onPress={() => setPlace(p)}>{dataLabel(p)}</Chip>)}
+            </View>
+          )}
           <TextInput value={config.activityPlaces.includes(place) ? '' : place} onChangeText={setPlace} placeholder={L('allowance.placeCustom')} placeholderTextColor="#9ca3af" style={s.input} />
         </Field>
       )}

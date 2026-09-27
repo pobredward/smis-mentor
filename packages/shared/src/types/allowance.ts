@@ -35,8 +35,9 @@ const MYR: AllowanceCurrencyConfig = { code: 'MYR', denoms: [100, 50, 20, 10, 5,
 export function allowanceConfigFor(campType: CampType): AllowanceCampConfig | null {
   switch (campType) {
     case 'F': return null;
+    case 'DG':   // 국내 캠프 — 원화, 활동 장소는 직접 입력
+      return { currencies: [KRW], activityPlaces: [] };
     case 'S':
-    case 'DG':
       return { currencies: [SGD, MYR], activityPlaces: ['유니버셜 스튜디오', '레고랜드 테마파크', '레고랜드 워터파크'] };
     default:
       return { currencies: [KRW], activityPlaces: ['바운스 슈퍼파크', '항공우주 박물관', '런닝맨 테마파크'] };

@@ -5,7 +5,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, Modal, ScrollView, FlatList, TouchableOpacity, StyleSheet, Dimensions, TextInput,
+  View, Text, Modal, ScrollView, FlatList, TouchableOpacity, StyleSheet, useWindowDimensions, TextInput,
   Alert, ActivityIndicator, Linking, type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -27,7 +27,6 @@ import { StudentAllowanceTab, useStudentAllowance } from './StudentAllowanceTab'
 import { StudentDevicesTab, useStudentDevices, useDeviceContext } from './StudentDevicesTab';
 import { StudentMemoCard } from './StudentMemoCard';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type EditPermission = 'readonly' | 'admin' | 'all' | 'mentor';
 
@@ -199,6 +198,8 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   const tabs = useMemo(() => (student ? studentTabsFor(student, campType, fieldConfig) : []), [student, campType, fieldConfig]);
   const activeTab: StudentTabId = tabs.includes(tab) ? tab : 'basic';
 
+  // iPad 분할 화면·회전에도 페이지 폭이 맞도록 창 폭을 따라감
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
   const goTo = useCallback((idx: number) => {
     if (idx < 0 || idx >= students.length) return;
     setEditingField(null);
@@ -212,7 +213,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
       setCurrentIndex(idx);
       setEditingField(null);
     }
-  }, [currentIndex, students.length]);
+  }, [currentIndex, students.length, SCREEN_WIDTH]);
 
   const findFieldInConfig = useCallback((key: string): FieldItemConfig | null => {
     for (const section of fieldConfig.sections) {
@@ -403,7 +404,8 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
             renderItem={({ item, index }) => (
               <View style={{ width: SCREEN_WIDTH, height: pageHeight || undefined }}>
                 {Math.abs(index - currentIndex) > 1 ? null : (
-                  <ScrollView style={styles.page} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+                  <ScrollView style={styles.page} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled" nestedScrollEnabled
+                    automaticallyAdjustKeyboardInsets keyboardDismissMode="interactive">
                     <TabBody
                       student={merge(item)}
                       tab={activeTab}

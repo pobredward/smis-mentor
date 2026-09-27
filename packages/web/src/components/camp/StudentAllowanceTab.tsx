@@ -496,11 +496,13 @@ function TxnModal({ form, config, defaultCurrency, student, roster, campCode, ac
 
         {category === 'activity' && (
           <Field label={L('allowance.place')}>
-            <div className="flex flex-wrap gap-1.5 mb-1.5">
-              {config.activityPlaces.map(p => (
-                <Chip key={p} on={place === p} onClick={() => setPlace(p)}>{dataLabel(p)}</Chip>
-              ))}
-            </div>
+            {config.activityPlaces.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mb-1.5">
+                {config.activityPlaces.map(p => (
+                  <Chip key={p} on={place === p} onClick={() => setPlace(p)}>{dataLabel(p)}</Chip>
+                ))}
+              </div>
+            )}
             <input value={config.activityPlaces.includes(place) ? '' : place} onChange={e => setPlace(e.target.value)}
               placeholder={L('allowance.placeCustom')} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
           </Field>

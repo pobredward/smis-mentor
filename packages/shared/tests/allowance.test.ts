@@ -13,12 +13,13 @@ const txn = (p: Partial<AllowanceTxn>): AllowanceTxn => ({
 });
 
 describe('allowance', () => {
-  it('캠프 타입별 기본 구성 (DG=S, F=없음)', () => {
+  it('캠프 타입별 기본 구성 (S=SGD·MYR, DG=원화, F=없음)', () => {
     expect(denomTotal(allowanceConfigFor('EJ')!.currencies[0].defaultInitial)).toBe(100000);
-    const s = allowanceConfigFor('DG')!;
+    const s = allowanceConfigFor('S')!;
     expect(s.currencies.map(c => c.code).join(',')).toBe('SGD,MYR');
     expect(denomTotal(s.currencies[0].defaultInitial)).toBe(150);
     expect(denomTotal(s.currencies[1].defaultInitial)).toBe(200);
+    expect(allowanceConfigFor('DG')!.currencies.map(c => c.code).join(',')).toBe('KRW');
     expect(allowanceConfigFor('F')).toBe(null);
     expect(ledgerInitial({ id: 'x', campCode: 'J29', studentId: 'J.001', initial: { KRW: { 10000: 5 } } }, allowanceConfigFor('EJ')!.currencies[0])[10000]).toBe(5);
   });
