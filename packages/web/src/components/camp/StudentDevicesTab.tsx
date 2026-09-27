@@ -183,7 +183,7 @@ export default function StudentDevicesTab({ devices, student, campCode, roster, 
             </div>
           ) : (
             <div className="flex items-center gap-4 rounded-lg bg-gray-50 px-3 py-2">
-              <span className="text-xs text-gray-500 w-16 shrink-0">🔓 {L('studentDevice.lock')}</span>
+              <span className="text-xs text-gray-500 shrink-0 whitespace-nowrap">🔓 {L('studentDevice.lock')}</span>
               <LockDisplay d={d} />
             </div>
           )}
