@@ -111,6 +111,14 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     name: 'SMIS Mentor',
     slug: 'smis-mentor',
     version: '1.7.2',
+    // 코드푸시(EAS Update) — 같은 앱 버전의 스토어 빌드에만 JS 업데이트를 보낸다.
+    // 네이티브 변경(라이브러리·권한·app.config 네이티브 설정)이 있으면 버전을 올려 새로 빌드할 것.
+    runtimeVersion: { policy: 'appVersion' },
+    updates: {
+      url: 'https://u.expo.dev/684d0445-c299-4e77-a362-42efa9c671ac',
+      checkAutomatically: 'ON_LOAD',
+      fallbackToCacheTimeout: 0,
+    },
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',

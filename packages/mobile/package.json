@@ -31,8 +31,8 @@
     "deploy:submit-only:ios": "bash scripts/deploy.sh submit-only-ios",
     "deploy:submit-only:android": "bash scripts/deploy.sh submit-only-android",
     "update": "eas update",
-    "update:preview": "eas update --branch preview",
-    "update:production": "eas update --branch production",
+    "update:preview": "eas update --channel preview --environment preview",
+    "update:production": "eas update --channel production --environment production",
     "lint": "eslint src App.tsx",
     "type-check": "tsc --noEmit"
   },
