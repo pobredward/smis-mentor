@@ -234,6 +234,18 @@ service firebase.storage {
       allow delete: if isCampStaff();
     }
 
+    // 학생 용돈 증빙 사진 (영수증·약봉투 등) — 캠프 스태프
+    match /allowance/{campCode}/{allPaths=**} {
+      allow read: if isCampStaff();
+      allow write: if (
+        isCampStaff() &&
+        request.resource != null &&
+        isImage() &&
+        isUnder10MB()
+      );
+      allow delete: if isCampStaff();
+    }
+
     // ──────────────────────────────────────────────────────────────
     // 기본 거부 (명시되지 않은 모든 경로)
     // ──────────────────────────────────────────────────────────────

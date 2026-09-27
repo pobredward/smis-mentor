@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
-  L, dataLabel, logger, resolveActiveJobCodeId, toDriveImageUrl, getFieldValue, getFixedFieldValue, getDefaultFieldConfig,
+  L, dataLabel, logger, resolveActiveJobCodeId, formatAllowance, toDriveImageUrl, getFieldValue, getFixedFieldValue, getDefaultFieldConfig,
   getStudentPatientRecords, studentTabsFor, sectionsForTab, visibleDynamicFields, hasMedicationInfo,
   isOpenPatientRecord, placementSummary, guardianContacts, dialablePhone, STUDENT_TAB_LABEL_KEYS,
   type STSheetFieldConfig, type FieldSectionConfig, type PatientRecord, type StudentTabId, type MessageKey,
@@ -16,6 +16,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { placementOverrideService, type STSheetStudent, type CampCode, type CampType } from '@/lib/stSheetService';
 import { authenticatedPost } from '@/lib/apiClient';
 import { db } from '@/lib/firebase';
+import StudentAllowanceTab, { useStudentAllowance } from './StudentAllowanceTab';
 
 type EditPermission = 'readonly' | 'all' | 'mentor';
 
@@ -100,6 +101,9 @@ export default function StudentDetailModal({
       .catch(e => { logger.warn('[StudentDetailModal] 보건 기록 조회 실패', e); setRecordsById(prev => ({ ...prev, [id]: [] })); });
   }, [campCode, base]);
 
+  const allowance = useStudentAllowance(campCode, campType, student, base ? recordsById[base.studentId] ?? null : null);
+  const actor = useMemo(() => ({ uid: userData?.userId ?? '', name: userData?.name ?? '' }), [userData?.userId, userData?.name]);
+
   const tabs = useMemo(() => (student ? studentTabsFor(student, campType, config) : []), [student, campType, config]);
   const activeTab: StudentTabId = tabs.includes(tab) ? tab : 'basic';
 
@@ -113,6 +117,7 @@ export default function StudentDetailModal({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
+      if (document.querySelector('[data-modal-overlay]')) return; // 위에 뜬 입력 창이 있으면 무시
       const typing = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
       if (e.key === 'Escape' && !typing) onClose();
       if (typing) return;
@@ -161,6 +166,8 @@ export default function StudentDetailModal({
   const unitLine = getFixedFieldValue(student, 'unitInfo', campType, fixedOpts);
   const medAlert = hasMedicationInfo(student) ? student.medication!.trim() : null;
   const openCount = (records ?? []).filter(isOpenPatientRecord).length;
+  const allowancePending = allowance.pending.length;
+  const negative = allowance.balances.filter(b => b.balance < 0);
   const genderLabel = student.gender === 'M' ? L('students.m') : L('students.f');
 
   const avatar = (cls: string, iconCls: string) => (
@@ -194,6 +201,15 @@ export default function StudentDetailModal({
           className={`w-full text-left rounded-xl border border-red-200 bg-red-50 ${compact ? 'px-2.5 py-1.5' : 'p-3'}`}>
           <p className="text-xs font-semibold text-red-700">⚠️ {L('studentModal.medicationAlert')}</p>
           <p className={`text-xs text-red-800 mt-0.5 whitespace-pre-wrap break-words ${compact ? 'line-clamp-2' : 'line-clamp-4'}`}>{medAlert}</p>
+        </button>
+      )}
+      {(allowancePending > 0 || negative.length > 0) && (
+        <button type="button" onClick={() => setTab('allowance')}
+          className={`w-full text-left rounded-xl border border-orange-200 bg-orange-50 text-xs font-semibold text-orange-800 ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}>
+          💰 {[
+            allowancePending > 0 ? L('allowance.pendingBadge', { v0: allowancePending }) : '',
+            ...negative.map(b => `${L('allowance.lowBalance')} ${formatAllowance(b.balance, b.currency)}`),
+          ].filter(Boolean).join(' · ')}
         </button>
       )}
       {openCount > 0 && (
@@ -424,7 +440,9 @@ export default function StudentDetailModal({
   let body: ReactNode;
   switch (activeTab) {
     case 'health': body = <>{healthExtras}{sectionBlocks('health')}{patientTimeline}</>; break;
-    case 'allowance': body = comingSoon('💰', 'studentModal.allowanceSoon'); break;
+    case 'allowance': body = campCode
+      ? <StudentAllowanceTab data={allowance} student={student} campCode={campCode} roster={students} actor={actor} />
+      : comingSoon('💰', 'studentModal.allowanceSoon'); break;
     case 'devices': body = comingSoon('📱', 'studentModal.devicesSoon'); break;
     case 'study': body = <>{levelProgress}{sectionBlocks('study')}</>; break;
     case 'survey': body = <>{sectionBlocks('survey')}</>; break;
@@ -475,7 +493,7 @@ export default function StudentDetailModal({
                 {unitLine && <p className="text-[11px] text-gray-600 truncate">{unitLine}</p>}
               </div>
             </div>
-            {(medAlert || openCount > 0) && <div className="px-4 pb-3 space-y-1.5">{alerts(true)}</div>}
+            {(medAlert || openCount > 0 || allowancePending > 0 || negative.length > 0) && <div className="px-4 pb-3 space-y-1.5">{alerts(true)}</div>}
             {renderExtra && <div className="px-4 pb-3">{renderExtra(student)}</div>}
           </div>
 

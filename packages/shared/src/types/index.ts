@@ -14,6 +14,7 @@ export * from './auth';
 export * from './appConfig';
 export * from './inventory';
 export * from './notification';
+export * from './allowance';
 
 // 기존 타입들도 re-export (추후 이동 예정)
 export type {

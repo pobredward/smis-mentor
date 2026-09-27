@@ -867,6 +867,39 @@ service cloud.firestore {
       allow delete: if isAdmin() || (isCampStaff() && resource.data.recordedById == request.auth.uid);
     }
 
+    // ──────────────────────────────────────────────────────────────
+    // 학생 용돈 장부 (학생 상세 모달 "용돈 관리")
+    // 관리자·멘토·원어민 모두 기록·수정 가능, 삭제는 소프트 삭제(deleted)로만
+    // ──────────────────────────────────────────────────────────────
+    match /allowanceLedgers/{ledgerId} {
+      allow read: if isCampStaff();
+      allow create: if isCampStaff() &&
+        request.resource.data.campCode is string &&
+        request.resource.data.studentId is string &&
+        ledgerId == request.resource.data.campCode + '_' + request.resource.data.studentId;
+      allow update: if isCampStaff() &&
+        fieldUnchanged('campCode') && fieldUnchanged('studentId');
+      allow delete: if isAdmin();
+    }
+
+    match /allowanceTxns/{txnId} {
+      allow read: if isCampStaff();
+      allow create: if isCampStaff() &&
+        request.resource.data.createdById == request.auth.uid &&
+        request.resource.data.keys().hasAll(['campCode', 'studentId', 'currency', 'type', 'amount', 'category', 'date', 'createdBy', 'createdById', 'createdAt']) &&
+        request.resource.data.type in ['spend', 'deposit'] &&
+        request.resource.data.currency in ['KRW', 'SGD', 'MYR'] &&
+        request.resource.data.amount is number && request.resource.data.amount > 0 &&
+        !('deleted' in request.resource.data);
+      allow update: if isCampStaff() &&
+        fieldUnchanged('campCode') && fieldUnchanged('studentId') &&
+        fieldUnchanged('createdById') && fieldUnchanged('createdBy') && fieldUnchanged('createdAt') &&
+        fieldUnchanged('sourceKey') && fieldUnchanged('batchId') &&
+        request.resource.data.type in ['spend', 'deposit'] &&
+        request.resource.data.amount is number && request.resource.data.amount > 0;
+      allow delete: if isAdmin();
+    }
+
     // 약 복용 재고 원장 (서버 전용)
     match /inventoryDoseLedger/{recordId} {
       allow read: if isAdmin();
