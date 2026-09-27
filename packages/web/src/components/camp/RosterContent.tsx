@@ -14,9 +14,11 @@ type RosterSubTab = 'class' | 'room' | 'departure' | 'arrival';
 interface RosterContentProps {
   isFamilyCamp: boolean;
   isEJCamp: boolean;
+  /** 캠프 타입을 아직 모르면 세부탭 줄을 비워 둔다 (반·방만 보였다가 입소·퇴소가 늦게 붙는 깜빡임 방지) */
+  campTypeReady?: boolean;
 }
 
-export default function RosterContent({ isFamilyCamp, isEJCamp }: RosterContentProps) {
+export default function RosterContent({ isFamilyCamp, isEJCamp, campTypeReady = true }: RosterContentProps) {
   const { userData } = useAuth();
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
@@ -44,7 +46,8 @@ export default function RosterContent({ isFamilyCamp, isEJCamp }: RosterContentP
       {/* 세부탭 바 */}
       <div className="bg-white border-b border-gray-200">
         <div className="flex">
-          {subTabs.map((tab) => (
+          {!campTypeReady && <div className="h-[42px] flex-1" aria-hidden />}
+          {campTypeReady && subTabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveSubTab(tab.id)}

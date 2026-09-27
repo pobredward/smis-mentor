@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Layout from '@/components/common/Layout';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,7 +31,6 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
   const router = useRouter();
   const pathname = usePathname();
   const { userData } = useAuth();
-  const [isFamilyCamp, setIsFamilyCamp] = useState(false);
   
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
@@ -43,20 +42,33 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
         userData?.activeJobExperienceId
       : undefined;
 
-  const [isEJCamp, setIsEJCamp] = useState(false);
-
-  // 활성 캠프 타입 로드 (F 캠프, E/J 캠프 여부 판별용)
+  // 활성 캠프 타입 (F 캠프, E/J 캠프 여부 판별용)
+  // 캠프 코드 조회(Firestore)가 끝나기 전에는 모르는 상태(null) — 그 사이 명단 세부탭을 잘못 그리지 않도록.
+  // 한 번 알아낸 타입은 캠프별로 기억해 다음 접속 때 첫 화면부터 바로 쓴다.
+  const activeCampId = resolveActiveJobCodeId(userData);
+  const [campType, setCampType] = useState<string | null>(null);
+  useLayoutEffect(() => {
+    if (!activeCampId) return;
+    try {
+      const cached = window.localStorage.getItem(`SMIS_CAMP_TYPE_${activeCampId}`);
+      setCampType(cached || null);
+    } catch {
+      setCampType(null);
+    }
+  }, [activeCampId]);
   useEffect(() => {
-    const activeJobCodeId = resolveActiveJobCodeId(userData);
-    if (!activeJobCodeId) return;
-    jobCodesService.getJobCodesByIds([activeJobCodeId]).then(codes => {
-      if (codes.length > 0 && codes[0].code) {
-        const type = stSheetService.getCampType(codes[0].code as CampCode);
-        setIsFamilyCamp(type === 'F');
-        setIsEJCamp(type === 'EJ');
-      }
+    if (!activeCampId) return;
+    let alive = true;
+    jobCodesService.getJobCodesByIds([activeCampId]).then(codes => {
+      if (!alive || !codes.length || !codes[0].code) return;
+      const type = stSheetService.getCampType(codes[0].code as CampCode);
+      setCampType(type);
+      try { window.localStorage.setItem(`SMIS_CAMP_TYPE_${activeCampId}`, type); } catch { /* noop */ }
     }).catch(() => {});
-  }, [adminActiveCampId, userData?.activeJobExperienceId, userData?.jobExperiences]);
+    return () => { alive = false; };
+  }, [activeCampId, adminActiveCampId, userData?.activeJobExperienceId, userData?.jobExperiences]);
+  const isFamilyCamp = campType === 'F';
+  const isEJCamp = campType === 'EJ';
 
   // 관리자가 캠프를 아직 배정하지 않은 경우
   // admin은 임시 활성화(adminTempActiveCamp) 또는 activeJobExperienceId가 있으면 진입 허용
@@ -192,7 +204,7 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
             <LodgingContent />
           ) : activeTab === 'roster' ? (
             <div className="h-[calc(100vh-120px)]">
-              <RosterContent isFamilyCamp={isFamilyCamp} isEJCamp={isEJCamp} />
+              <RosterContent isFamilyCamp={isFamilyCamp} isEJCamp={isEJCamp} campTypeReady={campType !== null} />
             </div>
           ) : activeTab === 'patient' ? (
             <div className="h-[calc(100vh-120px)]">
