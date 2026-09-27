@@ -18,8 +18,9 @@ import { authenticatedPost } from '@/lib/apiClient';
 import { db } from '@/lib/firebase';
 import StudentAllowanceTab, { useStudentAllowance } from './StudentAllowanceTab';
 import StudentDevicesTab, { useStudentDevices, useDeviceContext } from './StudentDevicesTab';
+import StudentMemoCard from './StudentMemoCard';
 
-type EditPermission = 'readonly' | 'all' | 'mentor';
+type EditPermission = 'readonly' | 'admin' | 'all' | 'mentor';
 
 function canEditField(permission: EditPermission, role: string): boolean {
   if (permission === 'readonly') return false;
@@ -167,7 +168,6 @@ export default function StudentDetailModal({
   const fixedOpts = { isForeign, isAdmin, groupRole };
   const classLine = getFixedFieldValue(student, 'classInfo', campType, fixedOpts);
   const unitLine = getFixedFieldValue(student, 'unitInfo', campType, fixedOpts);
-  const medAlert = hasMedicationInfo(student) ? student.medication!.trim() : null;
   const openCount = (records ?? []).filter(isOpenPatientRecord).length;
   const allowancePending = allowance.pending.length;
   const negative = allowance.balances.filter(b => b.balance < 0);
@@ -191,23 +191,11 @@ export default function StudentDetailModal({
     </div>
   );
 
-  const chips = (
-    <div className="flex flex-wrap gap-1.5">
-      {student.grade && <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">{student.grade}</span>}
-      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${student.gender === 'M' ? 'bg-sky-50 text-sky-700' : 'bg-pink-50 text-pink-700'}`}>{genderLabel}</span>
-      {student.studentId && <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">{student.studentId}</span>}
-    </div>
-  );
+  // 영어 닉네임 | 학년 | 성별 — 한 줄 (고유번호는 캠프·기본 탭에만)
+  const subline = [student.englishName, student.grade, genderLabel].filter(Boolean).join(' | ');
 
   const alerts = (compact: boolean) => (
     <>
-      {medAlert && (
-        <button type="button" onClick={() => setTab('health')}
-          className={`w-full text-left rounded-xl border border-red-200 bg-red-50 ${compact ? 'px-2.5 py-1.5' : 'p-3'}`}>
-          <p className="text-xs font-semibold text-red-700">⚠️ {L('studentModal.medicationAlert')}</p>
-          <p className={`text-xs text-red-800 mt-0.5 whitespace-pre-wrap break-words ${compact ? 'line-clamp-2' : 'line-clamp-4'}`}>{medAlert}</p>
-        </button>
-      )}
       {(uncollected > 0 || needCharge > 0) && (
         <button type="button" onClick={() => setTab('devices')}
           className={`w-full text-left rounded-xl border border-sky-200 bg-sky-50 text-xs font-semibold text-sky-800 ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}>
@@ -453,7 +441,7 @@ export default function StudentDetailModal({
 
   let body: ReactNode;
   switch (activeTab) {
-    case 'health': body = <>{healthExtras}{sectionBlocks('health')}{patientTimeline}</>; break;
+    case 'health': body = <>{healthExtras}{sectionBlocks('health')}{campCode && <StudentMemoCard campCode={campCode} student={student} actor={actor} />}{patientTimeline}</>; break;
     case 'allowance': body = campCode
       ? <StudentAllowanceTab data={allowance} student={student} campCode={campCode} roster={students} actor={actor} />
       : comingSoon('💰', 'studentModal.allowanceSoon'); break;
@@ -476,9 +464,8 @@ export default function StudentDetailModal({
             {avatar('w-full aspect-square rounded-2xl', 'w-1/2 h-1/2')}
             <div className="text-center pt-1">
               <h3 className="text-xl font-bold text-gray-900">{student.name}</h3>
-              {student.englishName && <p className="text-sm text-gray-500 mt-0.5">{student.englishName}</p>}
+              {subline && <p className="text-sm text-gray-500 mt-0.5">{subline}</p>}
             </div>
-            <div className="flex justify-center">{chips}</div>
             {(classLine || unitLine) && (
               <div className="rounded-xl bg-white border border-gray-200 px-3 py-2 space-y-1">
                 {classLine && <p className="text-xs text-gray-700 break-words">🏫 {classLine}</p>}
@@ -503,13 +490,13 @@ export default function StudentDetailModal({
             <div className="flex gap-3 px-4 pb-3">
               {avatar('w-20 h-20 rounded-xl shrink-0', 'w-10 h-10')}
               <div className="flex-1 min-w-0">
-                <p className="text-lg font-bold text-gray-900 leading-tight">{student.name} <span className="text-sm font-normal text-gray-500">{student.englishName}</span></p>
-                <div className="mt-1">{chips}</div>
+                <p className="text-lg font-bold text-gray-900 leading-tight">{student.name}</p>
+                {subline && <p className="text-xs text-gray-500 mt-0.5">{subline}</p>}
                 {classLine && <p className="text-[11px] text-gray-600 mt-1 truncate">{classLine}</p>}
                 {unitLine && <p className="text-[11px] text-gray-600 truncate">{unitLine}</p>}
               </div>
             </div>
-            {(medAlert || openCount > 0 || allowancePending > 0 || negative.length > 0 || uncollected > 0 || needCharge > 0) && <div className="px-4 pb-3 space-y-1.5">{alerts(true)}</div>}
+            {(openCount > 0 || allowancePending > 0 || negative.length > 0 || uncollected > 0 || needCharge > 0) && <div className="px-4 pb-3 space-y-1.5">{alerts(true)}</div>}
             {renderExtra && <div className="px-4 pb-3">{renderExtra(student)}</div>}
           </div>
 

@@ -41,11 +41,12 @@ const CAMP_TYPES: { type: CampType; label: string }[] = [
 
 const PERMISSION_LABELS: Record<FieldPermission, string> = {
   readonly: '읽기 전용',
+  admin:    '관리자만',
   mentor:   '멘토·관리자',
   all:      '전체',
 };
 
-const PERMISSION_OPTIONS: FieldPermission[] = ['readonly', 'mentor', 'all'];
+const PERMISSION_OPTIONS: FieldPermission[] = ['readonly', 'admin', 'mentor', 'all'];
 
 function generateSectionId(): string {
   return `section_${Date.now()}`;

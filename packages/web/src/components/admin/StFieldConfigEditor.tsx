@@ -19,6 +19,7 @@ interface Props {
 
 const PERMISSION_LABELS: Record<FieldPermission, string> = {
   readonly: '읽기 전용',
+  admin:    '관리자만',
   mentor:   '멘토·관리자',
   all:      '전체',
 };

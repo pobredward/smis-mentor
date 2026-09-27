@@ -2007,14 +2007,21 @@ function ProgressTab({
   type LogEntry = { log: ProgressLog; isSynthetic: boolean; rawIndex: number };
   const allEntries: LogEntry[] = rawLogs.map((log, i) => ({ log, isSynthetic: false, rawIndex: i }));
   if (syntheticInitial) allEntries.push({ log: syntheticInitial, isSynthetic: true, rawIndex: -1 });
-  // 보고 시각 기준 최신이 위로 (같은 시각이면 최초보고가 아래). 가상 최초보고도 시각대로 자리 잡음
+  // 보고 시각 기준 오래된 것이 위로 (같은 시각이면 최초보고가 먼저). 가상 최초보고도 시각대로 자리 잡음
   const tsOf = (l: ProgressLog) => (l.loggedAt && typeof (l.loggedAt as { toMillis?: () => number }).toMillis === 'function' ? l.loggedAt.toMillis() : 0);
   const logs = allEntries
     .map((e, order) => ({ e, order }))
-    .sort((a, b) => tsOf(b.e.log) - tsOf(a.e.log)
-      || (a.e.log.status === '최초보고' ? 1 : 0) - (b.e.log.status === '최초보고' ? 1 : 0)
-      || b.order - a.order)
+    .sort((a, b) => tsOf(a.e.log) - tsOf(b.e.log)
+      || (b.e.log.status === '최초보고' ? 1 : 0) - (a.e.log.status === '최초보고' ? 1 : 0)
+      || a.order - b.order)
     .map(x => x.e);
+  // 중간보고 번호 (최초보고 → 중간보고1 → 중간보고2 → 완치) — 저장하지 않고 순서로 매김
+  const midReportNo: number[] = [];
+  { let n = 0; logs.forEach((e, idx) => { if (e.log.status === '중간보고') midReportNo[idx] = ++n; }); }
+  const normName = (v: string) => v.replace(/\s+/g, '');
+  const statusLabel = (log: ProgressLog, idx: number) =>
+    log.status === '중간보고' && midReportNo[idx] ? L('patient.midReportN', { v0: midReportNo[idx] }) : dataLabel(log.status);
+  const hhmm = (t?: Timestamp) => { const d = t?.toDate?.(); return d ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : ''; };
 
   return (
     <div className="space-y-4">
@@ -2203,9 +2210,11 @@ function ProgressTab({
                 // 다음 체크 시간 계산
                 const nextCheckDate = log.nextCheckAt?.toDate();
                 const nowMs = Date.now();
+                // 다음 체크는 이 보고 뒤에 올라온 보고(누가 했든)로 끝난 것으로 본다
+                const checkedBy = logs[i + 1]?.log;
                 let nextCheckLabel = '';
                 let nextCheckOverdue = false;
-                if (nextCheckDate) {
+                if (nextCheckDate && !checkedBy) {
                   const diffMs = nextCheckDate.getTime() - nowMs;
                   const diffMin = Math.round(diffMs / 60000);
                   if (diffMs < 0) {
@@ -2221,6 +2230,8 @@ function ProgressTab({
                     const m = String(nextCheckDate.getMinutes()).padStart(2, '0');
                     nextCheckLabel = `${h}:${m}`;
                   }
+                } else if (nextCheckDate) {
+                  nextCheckLabel = hhmm(log.nextCheckAt);
                 }
 
                 return (
@@ -2229,7 +2240,7 @@ function ProgressTab({
                     <div className={`absolute -left-2.5 top-1.5 w-2 h-2 rounded-full ${style.dot} ring-2 ring-white`} />
                     <div className={`rounded-lg border ${style.line} bg-white p-2.5 space-y-1`}>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${style.badge}`}>{dataLabel(log.status)}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${style.badge}`}>{statusLabel(log, i)}</span>
                         <span className="text-[10px] text-gray-500">{log.loggedBy}</span>
                         <span className="text-[10px] text-gray-400">{formatDate(log.loggedAt)}</span>
                         {/* 가상 최초보고(isSynthetic)는 삭제 불가, 실제 로그는 모두 삭제 가능 */}
@@ -2282,7 +2293,21 @@ function ProgressTab({
                       })()}
 
                       {/* 다음 체크 정보 */}
-                      {(log.nextCheckAt || log.nextCheckAssigneeName) && (
+                      {(log.nextCheckAt || log.nextCheckAssigneeName) && checkedBy && (
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 rounded-md px-2 py-1 bg-emerald-50 border border-emerald-200">
+                          <span className="text-[10px]">✅</span>
+                          <span className="text-[10px] font-bold text-emerald-700">{L('patient.nextCheck2')}</span>
+                          {nextCheckLabel && <span className="text-[10px] text-emerald-600">{nextCheckLabel}</span>}
+                          {log.nextCheckAssigneeName && <span className="text-[10px] text-emerald-600">→ {log.nextCheckAssigneeName}</span>}
+                          <span className="text-[10px] font-semibold text-emerald-700 ml-auto">
+                            {L('patient.checkDoneBy', { v0: checkedBy.loggedBy, v1: hhmm(checkedBy.loggedAt) })}
+                            {log.nextCheckAssigneeName && checkedBy.loggedBy && normName(checkedBy.loggedBy) !== normName(log.nextCheckAssigneeName) && (
+                              <span className="ml-1 text-[9px] font-bold text-violet-700 bg-violet-100 px-1 py-0.5 rounded">{L('patient.checkedInstead')}</span>
+                            )}
+                          </span>
+                        </div>
+                      )}
+                      {(log.nextCheckAt || log.nextCheckAssigneeName) && !checkedBy && (
                         <div className={`mt-1.5 flex items-center gap-1.5 rounded-md px-2 py-1 ${
                           nextCheckOverdue ? 'bg-red-50 border border-red-200' : 'bg-amber-50 border border-amber-200'
                         }`}>
@@ -7181,8 +7206,25 @@ function PatientPlacePicker({ value, onChange, placeholder, compact }: { value: 
   const roomNo = kind === 'room' ? value.replace(/호$/, '') : '';
   const chip = (on: boolean) => `px-2 py-1 rounded-lg ${compact ? 'text-[11px]' : 'text-xs'} font-semibold border transition-colors ${on ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`;
   const inputCls = `w-full ${compact ? 'text-[11px] px-2 py-1 rounded' : 'text-sm px-3 py-2.5 rounded-xl'} border border-gray-200 outline-none focus:border-blue-400 bg-white`;
+  // compact(경과 보고 추가 창): 버튼이 많아 드롭다운으로
+  const selectValue = kind === 'option' ? value : kind === 'room' ? '__room' : kind === 'etc' ? '__etc' : '';
   return (
     <div className="space-y-1.5">
+      {compact ? (
+        <select value={selectValue}
+          onChange={e => {
+            const v = e.target.value;
+            if (v === '__room') { setKind('room'); onChange(''); }
+            else if (v === '__etc') { setKind('etc'); onChange(''); }
+            else { setKind(v ? 'option' : 'none'); onChange(v); }
+          }}
+          className="w-full text-[11px] px-2 py-1.5 rounded border border-gray-200 bg-white outline-none focus:border-blue-400">
+          <option value="">{L('patient.placeSelect')}</option>
+          {placeOptions.map(o => <option key={o} value={o}>{o}</option>)}
+          <option value="__room">{L('patient.roomEnterNo')}</option>
+          <option value="__etc">{L('patient.otherType')}</option>
+        </select>
+      ) : (
       <div className="flex flex-wrap gap-1">
         {placeOptions.map(o => (
           <button key={o} type="button" onClick={() => { setKind('option'); onChange(value === o ? '' : o); }} className={chip(value === o)}>{o}</button>
@@ -7190,6 +7232,7 @@ function PatientPlacePicker({ value, onChange, placeholder, compact }: { value: 
         <button type="button" onClick={() => { setKind('room'); onChange(''); }} className={chip(kind === 'room')}>{L('patient.roomEnterNo')}</button>
         <button type="button" onClick={() => { setKind('etc'); onChange(''); }} className={chip(kind === 'etc')}>{L('patient.otherType')}</button>
       </div>
+      )}
       {kind === 'room' && (
         <input type="text" inputMode="numeric" value={roomNo} autoFocus onChange={e => { const n = e.target.value.replace(/[^0-9]/g, ''); onChange(n ? `${n}호` : ''); }}
           placeholder={L('patient.roomNoEG330')} className={inputCls} />

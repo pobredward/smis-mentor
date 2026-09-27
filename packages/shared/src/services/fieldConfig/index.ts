@@ -15,6 +15,9 @@ export function getDefaultFieldConfig(campType: CampType): STSheetFieldConfig {
     { sheetHeader: '고유번호',  fieldKey: 'studentId',   label: '고유번호',  isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 0, isVisible: true },
     { sheetHeader: '반 정보',   fieldKey: 'classInfo',   label: '반 정보',   isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 1, isVisible: true },
     { sheetHeader: '유닛 정보', fieldKey: 'unitInfo',    label: '유닛 정보', isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 2, isVisible: true },
+    // E/J 캠프: "김해공항 4조 | 박현정" (여정 + 공항조 + 인솔)
+    { sheetHeader: '입소공항정보', fieldKey: 'departureAirportInfo', label: '입소공항정보', isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 3, isVisible: campType === 'EJ' },
+    { sheetHeader: '퇴소공항정보', fieldKey: 'arrivalAirportInfo',   label: '퇴소공항정보', isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 4, isVisible: campType === 'EJ' },
   ];
 
   // ── 고정 섹션: 기본 정보 ─────────────────────────────────
@@ -23,7 +26,8 @@ export function getDefaultFieldConfig(campType: CampType): STSheetFieldConfig {
     { sheetHeader: '주민등록번호',   fieldKey: 'ssn',            label: '주민등록번호',   isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 1, isVisible: true },
     { sheetHeader: '도로명 주소',    fieldKey: 'address',        label: '도로명 주소',    isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 2, isVisible: true },
     { sheetHeader: '세부 주소',      fieldKey: 'addressDetail',  label: '세부 주소',      isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 3, isVisible: true },
-    { sheetHeader: '입퇴소공항',     fieldKey: 'airport',        label: '입퇴소공항',     isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 4, isVisible: campType === 'EJ' },
+    // 입퇴소공항은 캠프 정보의 입소·퇴소공항정보로 대체 (기본 숨김)
+    { sheetHeader: '입퇴소공항',     fieldKey: 'airport',        label: '입퇴소공항',     isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 4, isVisible: false },
     { sheetHeader: '여권정보',       fieldKey: 'passport',       label: '여권정보',       isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 5, isVisible: campType === 'S' },
     { sheetHeader: '단체티 사이즈',  fieldKey: 'shirtSize',      label: '단체티 사이즈',  isLegacy: true, permission: 'readonly', isEditable: false, fieldType: 'text', order: 6, isVisible: campType === 'S' },
   ];
@@ -36,8 +40,8 @@ export function getDefaultFieldConfig(campType: CampType): STSheetFieldConfig {
   ];
 
   const detailFields: FieldItemConfig[] = [
-    { sheetHeader: '복용약 & 알레르기', fieldKey: 'medication',  label: '복용약 & 알레르기', isLegacy: true, permission: 'mentor', isEditable: true,  fieldType: 'text', order: 0, isVisible: true },
-    { sheetHeader: '특이사항',           fieldKey: 'notes',       label: '특이사항',           isLegacy: true, permission: 'mentor', isEditable: true,  fieldType: 'text', order: 1, isVisible: true },
+    { sheetHeader: '복용약 & 알레르기', fieldKey: 'medication',  label: '복용약 & 알레르기', isLegacy: true, permission: 'admin', isEditable: true,  fieldType: 'text', order: 0, isVisible: true },
+    { sheetHeader: '특이사항',           fieldKey: 'notes',       label: '특이사항',           isLegacy: true, permission: 'admin', isEditable: true,  fieldType: 'text', order: 1, isVisible: true },
     { sheetHeader: '기타',               fieldKey: 'etc',         label: '기타',               isLegacy: true, permission: 'mentor', isEditable: true,  fieldType: 'text', order: 2, isVisible: true },
   ];
 
@@ -253,9 +257,9 @@ export function getFixedFieldValue(
     case 'unitInfo': {
       if (!student.unit && !student.unitMentor && !student.roomNumber) return null;
       const unitSuffix = tr(isForeign, 'students.unit');
-      const roomSuffix = tr(isForeign, 'students.text');
-      const roomPrefix = tr(isForeign, 'students.room2');
-      return `${student.unit || student.unitMentor || '-'}${unitSuffix} | ${roomPrefix}${student.roomNumber || '-'}${roomSuffix}`;
+      // 호수만 표시 (예: "윤수빈유닛 | 111호" / "Yun unit | Room 111")
+      const room = student.roomNumber ? (isForeign ? `Room ${student.roomNumber}` : `${student.roomNumber}호`) : '-';
+      return `${student.unit || student.unitMentor || '-'}${unitSuffix} | ${room}`;
     }
     case 'profile': {
       const genderLabel = student.gender === 'M' ? (tr(isForeign, 'students.m')) : (tr(isForeign, 'students.f'));
@@ -271,6 +275,21 @@ export function getFixedFieldValue(
       if (campType !== 'EJ') return null;
       if (!student.departureRoute && !student.arrivalRoute) return null;
       return tr(isForeign, 'students.arrivalV0DepartureV1', { v0: student.departureRoute || '-', v1: student.arrivalRoute || '-' });
+    }
+    case 'departureAirportInfo':
+    case 'arrivalAirportInfo': {
+      if (campType !== 'EJ') return null;
+      // 이 코드베이스에서 departure* = 입소, arrival* = 퇴소 (시트 헤더 기준)
+      const dep = fieldKey === 'departureAirportInfo';
+      const route = (dep ? student.departureRoute : student.arrivalRoute)?.trim() ?? '';
+      let group = (dep ? student.departureGroup : student.arrivalGroup)?.trim() ?? '';
+      const instructor = (dep ? student.departureInstructor : student.arrivalInstructor)?.trim() ?? '';
+      if (!route && !group && !instructor) return null;
+      // "김해공항" + "김해 4조" → "김해공항 4조" (조 이름 앞의 공항 이름 중복 제거)
+      const place = route.replace(/(국제)?공항$/, '').trim();
+      if (place && group.startsWith(place)) group = group.slice(place.length).trim();
+      const head = [route, group].filter(Boolean).join(' ');
+      return instructor ? `${head || '-'} | ${instructor}` : head;
     }
     case 'passport': {
       if (campType !== 'S') return null;

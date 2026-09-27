@@ -146,9 +146,9 @@ export function StudentAllowanceTab({ data, student, campCode, roster, actor }: 
 
       {/* 버튼 */}
       <View style={s.btnRow}>
-        <TouchableOpacity style={[s.btn, s.btnPrimary]} onPress={() => setForm({ mode: 'spend' })}>
-          <Ionicons name="remove-circle-outline" size={16} color="#fff" />
-          <Text style={s.btnPrimaryText}>{L('allowance.addSpend')}</Text>
+        <TouchableOpacity style={[s.btn, s.btnOutline, { flexGrow: 1, justifyContent: 'center' }]} onPress={() => setForm({ mode: 'spend' })}>
+          <Ionicons name="remove-circle-outline" size={16} color="#1d4ed8" />
+          <Text style={s.btnOutlineText}>{L('allowance.addSpend')}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[s.btn, s.btnOutline]} onPress={() => setForm({ mode: 'deposit' })}>
           <Text style={[s.btnOutlineText, { color: '#0f766e' }]}>+ {L('allowance.addDeposit')}</Text>
@@ -227,8 +227,9 @@ export function StudentAllowanceTab({ data, student, campCode, roster, actor }: 
         ))}
       </View>
 
-      <CashCheckCard key={`${student.studentId}-${cur.code}-${check?.at?.toMillis?.() ?? 0}`}
+      <CashCheckCard key={`${student.studentId}-${cur.code}-${check?.at?.toMillis?.() ?? 0}-${txns === null ? 'l' : rows.length}`}
         denoms={cur.denoms} currency={cur.code} balance={balance} check={check}
+        prefill={txns !== null && rows.length === 0 ? initialCounts : undefined}
         onSave={counts => saveAllowanceCashCheck(db, campCode, student.studentId, student.name, cur.code, { counts, total: denomTotal(counts), ledgerBalance: balance }, actor)}
         onFlag={flag => flagAllowanceCashCheck(db, campCode, student.studentId, cur.code, flag, actor)}
         onResolve={note => resolveAllowanceCashCheck(db, campCode, student.studentId, cur.code, note, actor)} />
@@ -246,11 +247,13 @@ export function StudentAllowanceTab({ data, student, campCode, roster, actor }: 
 }
 
 // ── 권종별 현금 확인 ─────────────────────────────────────────────
-function CashCheckCard({ denoms, currency, balance, check, onSave, onFlag, onResolve }: {
+function CashCheckCard({ denoms, currency, balance, check, prefill, onSave, onFlag, onResolve }: {
   denoms: number[]; currency: AllowanceCurrency; balance: number; check?: AllowanceCashCheck;
+  /** 실사 기록·사용 내역이 없으면 캠프 기본 봉투 구성으로 채워 둠 */
+  prefill?: Record<string, number>;
   onSave: (c: Record<string, number>) => Promise<void>; onFlag: (f: boolean) => Promise<void>; onResolve: (n: string) => Promise<void>;
 }) {
-  const [counts, setCounts] = useState<Record<string, number>>(() => ({ ...(check?.counts ?? {}) }));
+  const [counts, setCounts] = useState<Record<string, number>>(() => ({ ...(check?.counts ?? prefill ?? {}) }));
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const total = denomTotal(counts);
@@ -526,6 +529,9 @@ function TxnSheet({ form, config, defaultCurrency, student, roster, campCode, ac
 
       <Field label={isBulk ? L('allowance.perStudent') : L('allowance.amount')}>
         <TextInput value={amount} onChangeText={setAmount} keyboardType="decimal-pad" placeholder="0" placeholderTextColor="#cbd5e1" style={[s.input, { fontSize: 18, fontWeight: '700' }]} />
+        {!isDeposit && (
+          <Text style={{ fontSize: 11, color: '#b45309', marginTop: 4 }}>💡 {currency === 'KRW' ? L('allowance.roundHint') : L('allowance.roundHintOther')}</Text>
+        )}
       </Field>
 
       <Field label={L('allowance.date')}>

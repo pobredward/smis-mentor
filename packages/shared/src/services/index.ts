@@ -21,6 +21,7 @@ export * from './patient';
 export * from './inventory';
 export * from './allowance';
 export * from './studentDevice';
+export * from './studentMemo';
 export * from './esl';
 export * from './taskCategory';
 export * from './interviewLinks';

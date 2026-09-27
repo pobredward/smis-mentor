@@ -2099,13 +2099,41 @@ function PatientPlacePickerMobile({ value, onChange, placeholder, compact }: { v
     </TouchableOpacity>
   );
   const inputStyle = [styles.formInput, compact ? { fontSize: 12, paddingVertical: 7 } : null];
+  // compact(경과 보고 추가 창): 버튼이 많아 드롭다운으로
+  const [open, setOpen] = useState(false);
+  const current = kind === 'option' ? value : kind === 'room' ? L('patient.roomEnterNo') : kind === 'etc' ? L('patient.otherType') : L('patient.placeSelect');
+  const pick = (k: 'option' | 'room' | 'etc', v: string) => { setKind(k); onChange(v); setOpen(false); };
   return (
     <View style={{ gap: 6 }}>
+      {compact ? (
+        <View>
+          <TouchableOpacity onPress={() => setOpen(o => !o)} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#fff' }}>
+            <Text style={{ fontSize: 12, color: kind === 'none' ? '#9ca3af' : '#111827', fontWeight: '600' }}>{current}</Text>
+            <Text style={{ fontSize: 10, color: '#6b7280' }}>{open ? '▲' : '▼'}</Text>
+          </TouchableOpacity>
+          {open && (
+            <View style={{ marginTop: 4, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 7, backgroundColor: '#fff', overflow: 'hidden' }}>
+              {placeOptions.map(o => (
+                <TouchableOpacity key={o} onPress={() => pick('option', o)} style={{ paddingHorizontal: 10, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#f3f4f6', backgroundColor: value === o ? '#eff6ff' : '#fff' }}>
+                  <Text style={{ fontSize: 12, color: value === o ? '#1d4ed8' : '#374151', fontWeight: value === o ? '700' : '400' }}>{o}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity onPress={() => pick('room', '')} style={{ paddingHorizontal: 10, paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: '#f3f4f6' }}>
+                <Text style={{ fontSize: 12, color: '#374151' }}>{L('patient.roomEnterNo')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => pick('etc', '')} style={{ paddingHorizontal: 10, paddingVertical: 9 }}>
+                <Text style={{ fontSize: 12, color: '#374151' }}>{L('patient.otherType')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      ) : (
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
         {placeOptions.map(o => chip(o, value === o, () => { setKind('option'); onChange(value === o ? '' : o); }))}
         {chip(L('patient.roomEnterNo'), kind === 'room', () => { setKind('room'); onChange(''); })}
         {chip(L('patient.otherType'), kind === 'etc', () => { setKind('etc'); onChange(''); })}
       </View>
+      )}
       {kind === 'room' ? (
         <TextInput value={roomNo} keyboardType="number-pad" autoFocus onChangeText={t => { const n = t.replace(/[^0-9]/g, ''); onChange(n ? `${n}호` : ''); }}
           placeholder={L('patient.roomNoEG330')} placeholderTextColor="#9ca3af" style={inputStyle} />
@@ -2221,14 +2249,21 @@ function ProgressTabMobile({
   type LogEntry = { log: ProgressLog; isSynthetic: boolean; rawIndex: number };
   const allEntries: LogEntry[] = rawLogs.map((log, i) => ({ log, isSynthetic: false, rawIndex: i }));
   if (syntheticInitial) allEntries.push({ log: syntheticInitial, isSynthetic: true, rawIndex: -1 });
-  // 보고 시각 기준 최신이 위로 (같은 시각이면 최초보고가 아래). 가상 최초보고도 시각대로 자리 잡음
+  // 보고 시각 기준 오래된 것이 위로 (같은 시각이면 최초보고가 먼저). 가상 최초보고도 시각대로 자리 잡음
   const tsOf = (l: ProgressLog) => (l.loggedAt && typeof (l.loggedAt as { toMillis?: () => number }).toMillis === 'function' ? l.loggedAt.toMillis() : 0);
   const logs = allEntries
     .map((e, order) => ({ e, order }))
-    .sort((a, b) => tsOf(b.e.log) - tsOf(a.e.log)
-      || (a.e.log.status === '최초보고' ? 1 : 0) - (b.e.log.status === '최초보고' ? 1 : 0)
-      || b.order - a.order)
+    .sort((a, b) => tsOf(a.e.log) - tsOf(b.e.log)
+      || (b.e.log.status === '최초보고' ? 1 : 0) - (a.e.log.status === '최초보고' ? 1 : 0)
+      || a.order - b.order)
     .map(x => x.e);
+  // 중간보고 번호 (최초보고 → 중간보고1 → 중간보고2 → 완치) — 저장하지 않고 순서로 매김
+  const midReportNo: number[] = [];
+  { let n = 0; logs.forEach((e, idx) => { if (e.log.status === '중간보고') midReportNo[idx] = ++n; }); }
+  const normName = (v: string) => v.replace(/\s+/g, '');
+  const statusLabel = (log: ProgressLog, idx: number) =>
+    log.status === '중간보고' && midReportNo[idx] ? L('patient.midReportN', { v0: midReportNo[idx] }) : dataLabel(log.status);
+  const hhmm = (t?: Timestamp) => { const d = t?.toDate?.(); return d ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : ''; };
 
   // 다음 체크 담당자 후보: 외국인 선생님 제외 (환자 관리·병원 인솔은 한국인 선생님 담당)
   const assigneeCandidates = [
@@ -2407,8 +2442,11 @@ function ProgressTabMobile({
             {logs.map(({ log, isSynthetic, rawIndex }, i) => {
               const col = PROGRESS_COLOR[log.status] ?? PROGRESS_COLOR['중간보고'];
               const nextCheckDate = log.nextCheckAt?.toDate();
+              // 다음 체크는 이 보고 뒤에 올라온 보고(누가 했든)로 끝난 것으로 본다
+              const checkedBy = logs[i + 1]?.log;
               let nextCheckLabel = '';
-              if (nextCheckDate) {
+              if (nextCheckDate && checkedBy) nextCheckLabel = hhmm(log.nextCheckAt);
+              else if (nextCheckDate) {
                 const diffMin = Math.round((nextCheckDate.getTime() - Date.now()) / 60000);
                 if (diffMin < 0) nextCheckLabel = L('patient.minOverdue', { v0: Math.abs(diffMin) });
                 else if (diffMin < 60) nextCheckLabel = L('patient.inMin', { v0: diffMin });
@@ -2418,7 +2456,7 @@ function ProgressTabMobile({
                 <View key={i} style={{ marginBottom: 10, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: col.line }}>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
                     <View style={{ backgroundColor: col.bg, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 }}>
-                      <Text style={{ fontSize: 10, fontWeight: '700', color: col.text }}>{dataLabel(log.status)}</Text>
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: col.text }}>{statusLabel(log, i)}</Text>
                     </View>
                     <Text style={{ fontSize: 10, color: '#6b7280' }}>{log.loggedBy}</Text>
                     <Text style={{ fontSize: 10, color: '#9ca3af' }}>{formatDate(log.loggedAt)}</Text>
@@ -2464,13 +2502,22 @@ function ProgressTabMobile({
                       </View>
                     );
                   })()}
-                  {(log.nextCheckAt || log.nextCheckAssigneeName) && (
+                  {(log.nextCheckAt || log.nextCheckAssigneeName) && (checkedBy ? (
+                    <View style={{ marginTop: 4, backgroundColor: '#ecfdf5', borderRadius: 6, padding: 6, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                      <Text style={{ fontSize: 10, color: '#047857' }}>
+                        ✅ {nextCheckLabel}{log.nextCheckAssigneeName ? ` · ${log.nextCheckAssigneeName}` : ''} — {L('patient.checkDoneBy', { v0: checkedBy.loggedBy, v1: hhmm(checkedBy.loggedAt) })}
+                      </Text>
+                      {!!log.nextCheckAssigneeName && !!checkedBy.loggedBy && normName(checkedBy.loggedBy) !== normName(log.nextCheckAssigneeName) && (
+                        <Text style={{ fontSize: 9, fontWeight: '700', color: '#6d28d9', backgroundColor: '#ede9fe', paddingHorizontal: 4, borderRadius: 3, overflow: 'hidden' }}>{L('patient.checkedInstead')}</Text>
+                      )}
+                    </View>
+                  ) : (
                     <View style={{ marginTop: 4, backgroundColor: '#fffbeb', borderRadius: 6, padding: 6 }}>
                       <Text style={{ fontSize: 10, color: '#b45309' }}>
                         ⏰ {nextCheckLabel}{log.nextCheckAssigneeName ? ` · ${log.nextCheckAssigneeName}` : ''}
                       </Text>
                     </View>
-                  )}
+                  ))}
                 </View>
               );
             })}

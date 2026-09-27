@@ -149,7 +149,7 @@ export default function StudentAllowanceTab({ data, student, campCode, roster, a
           {roster.length > 1 && (
             <button type="button" onClick={() => setForm({ mode: 'bulk' })} className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50">{L('allowance.bulkSpend')}</button>
           )}
-          <button type="button" onClick={() => setForm({ mode: 'spend' })} className="text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700">+ {L('allowance.addSpend')}</button>
+          <button type="button" onClick={() => setForm({ mode: 'spend' })} className="text-xs px-2.5 py-1.5 rounded-lg border border-blue-200 text-blue-700 font-semibold hover:bg-blue-50">+ {L('allowance.addSpend')}</button>
         </div>
         {txns === null ? (
           <div className="py-6 flex justify-center"><div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /></div>
@@ -211,8 +211,9 @@ export default function StudentAllowanceTab({ data, student, campCode, roster, a
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <CashCheckCard key={`${student.studentId}-${cur.code}-${check?.at?.toMillis?.() ?? 0}`}
+        <CashCheckCard key={`${student.studentId}-${cur.code}-${check?.at?.toMillis?.() ?? 0}-${txns === null ? 'l' : rows.length}`}
           denoms={cur.denoms} currency={cur.code} balance={balance} check={check}
+          prefill={txns !== null && rows.length === 0 ? initialCounts : undefined}
           onSave={async counts => {
             await saveAllowanceCashCheck(db, campCode, student.studentId, student.name, cur.code,
               { counts, total: denomTotal(counts), ledgerBalance: balance }, actor);
@@ -266,14 +267,16 @@ export default function StudentAllowanceTab({ data, student, campCode, roster, a
 }
 
 // ── 권종별 현금 확인 ─────────────────────────────────────────────
-function CashCheckCard({ denoms, currency, balance, check, onSave, onFlag, onResolve }: {
+function CashCheckCard({ denoms, currency, balance, check, prefill, onSave, onFlag, onResolve }: {
   denoms: number[]; currency: AllowanceCurrency; balance: number;
+  /** 실사 기록·사용 내역이 없으면 캠프 기본 봉투 구성으로 채워 둠 */
+  prefill?: Record<string, number>;
   check?: AllowanceCashCheck;
   onSave: (counts: Record<string, number>) => Promise<void>;
   onFlag: (flag: boolean) => Promise<void>;
   onResolve: (note: string) => Promise<void>;
 }) {
-  const [counts, setCounts] = useState<Record<string, number>>(() => ({ ...(check?.counts ?? {}) }));
+  const [counts, setCounts] = useState<Record<string, number>>(() => ({ ...(check?.counts ?? prefill ?? {}) }));
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState('');
   const total = denomTotal(counts);
@@ -512,6 +515,9 @@ function TxnModal({ form, config, defaultCurrency, student, roster, campCode, ac
             <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />
           </Field>
         </div>
+        {!isDeposit && (
+          <p className="-mt-1 text-[11px] text-amber-700">💡 {currency === 'KRW' ? L('allowance.roundHint') : L('allowance.roundHintOther')}</p>
+        )}
 
         <Field label={L('allowance.memo')}>
           <input value={memo} onChange={e => setMemo(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm" />

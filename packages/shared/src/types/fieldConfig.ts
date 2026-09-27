@@ -1,6 +1,7 @@
 import type { CampType } from './student';
 
-export type FieldPermission = 'readonly' | 'mentor' | 'all';
+/** readonly: 아무도 / admin: 관리자만 / mentor: 멘토·관리자 / all: 스태프 전체 */
+export type FieldPermission = 'readonly' | 'admin' | 'mentor' | 'all';
 export type FieldType = 'text' | 'score';
 
 /**

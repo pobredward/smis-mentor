@@ -900,6 +900,17 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // 학생 자유 메모 (반담당·방담당·그룹매니저) — ST 시트와 무관, 캠프 스태프 누구나 기록
+    match /studentMemos/{memoId} {
+      allow read: if isCampStaff();
+      allow create: if isCampStaff() &&
+        request.resource.data.campCode is string &&
+        request.resource.data.studentId is string &&
+        memoId == request.resource.data.campCode + '_' + request.resource.data.studentId;
+      allow update: if isCampStaff() && fieldUnchanged('campCode') && fieldUnchanged('studentId');
+      allow delete: if isAdmin();
+    }
+
     // 학생 전자기기 (학생 상세 모달 "전자기기") — 잠금 해제 정보 포함, 캠프 스태프 전원 열람·기록
     match /studentDevices/{deviceId} {
       allow read: if isCampStaff();

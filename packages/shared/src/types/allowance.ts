@@ -27,7 +27,7 @@ export interface AllowanceCampConfig {
   activityPlaces: string[];
 }
 
-const KRW: AllowanceCurrencyConfig = { code: 'KRW', denoms: [50000, 10000, 5000, 1000], defaultInitial: { 10000: 9, 1000: 10 } };
+const KRW: AllowanceCurrencyConfig = { code: 'KRW', denoms: [50000, 10000, 5000, 1000, 500, 100], defaultInitial: { 10000: 9, 1000: 10 } };
 const SGD: AllowanceCurrencyConfig = { code: 'SGD', denoms: [100, 50, 10, 5, 2], defaultInitial: { 50: 1, 10: 10 } };
 const MYR: AllowanceCurrencyConfig = { code: 'MYR', denoms: [100, 50, 20, 10, 5, 1], defaultInitial: { 50: 4 } };
 
@@ -60,7 +60,7 @@ export function formatAllowance(amount: number, currency: AllowanceCurrency, opt
 
 /** 권종 라벨 — 10000 → "10,000원권", 50 → "S$50" */
 export function formatDenom(denom: number, currency: AllowanceCurrency): string {
-  if (currency === 'KRW') return `${denom.toLocaleString('en-US')}원권`;
+  if (currency === 'KRW') return denom >= 1000 ? `${denom.toLocaleString('en-US')}원권` : `${denom}원`;   // 500·100원은 동전
   return formatAllowance(denom, currency);
 }
 

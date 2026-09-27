@@ -42,3 +42,13 @@ describe('studentModal', () => {
     expect(dialablePhone('010-1234-5678')).toBe('01012345678');
   });
 });
+
+describe('fixed field: 입소·퇴소공항정보', () => {
+  it('여정 + 공항조 + 인솔 한 줄, 공항 이름 중복 제거', async () => {
+    const { getFixedFieldValue } = await import('../src/services/fieldConfig');
+    const st = { studentId: 'J.1', name: 'a', gender: 'M', departureRoute: '김해공항', departureGroup: '김해 4조', departureInstructor: '박현정', arrivalRoute: '인천국제공항', arrivalGroup: '2조' } as unknown as import('../src/types/student').STSheetStudent;
+    expect(getFixedFieldValue(st, 'departureAirportInfo', 'EJ')).toBe('김해공항 4조 | 박현정');
+    expect(getFixedFieldValue(st, 'arrivalAirportInfo', 'EJ')).toBe('인천국제공항 2조');
+    expect(getFixedFieldValue(st, 'arrivalAirportInfo', 'S')).toBe(null);
+  });
+});

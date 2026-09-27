@@ -16,7 +16,7 @@ import { getAuthenticatedUser } from '@/lib/authMiddleware';
  *   mentor    — admin + mentor만 수정 가능
  */
 
-type EditPermission = 'readonly' | 'all' | 'mentor';
+type EditPermission = 'readonly' | 'admin' | 'all' | 'mentor';
 type UserRole = 'admin' | 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp';
 
 interface FieldConfig {
@@ -27,9 +27,9 @@ interface FieldConfig {
 }
 
 export const STUDENT_EDITABLE_FIELDS: Record<string, FieldConfig> = {
-  // 상세 정보 (admin + mentor 수정 가능)
-  medication:        { sheetHeader: '복용약 & 알레르기', label: '복용약 & 알레르기', max: 0, permission: 'mentor' },
-  notes:             { sheetHeader: '특이사항',          label: '특이사항',          max: 0, permission: 'mentor' },
+  // 상세 정보 — 복용약·특이사항은 관리자만 (멘토는 아래 자유 메모 사용)
+  medication:        { sheetHeader: '복용약 & 알레르기', label: '복용약 & 알레르기', max: 0, permission: 'admin' },
+  notes:             { sheetHeader: '특이사항',          label: '특이사항',          max: 0, permission: 'admin' },
   etc:               { sheetHeader: '기타',              label: '기타',              max: 0, permission: 'mentor' },
   // 레벨 테스트
   placementSpeaking: { sheetHeader: 'P-Speaking', label: '입소 스피킹',   max: 30, permission: 'readonly' },

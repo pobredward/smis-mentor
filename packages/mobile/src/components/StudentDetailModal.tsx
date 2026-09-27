@@ -25,10 +25,11 @@ import { authenticatedFetch } from '../utils/apiClient';
 import { db } from '../config/firebase';
 import { StudentAllowanceTab, useStudentAllowance } from './StudentAllowanceTab';
 import { StudentDevicesTab, useStudentDevices, useDeviceContext } from './StudentDevicesTab';
+import { StudentMemoCard } from './StudentMemoCard';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-type EditPermission = 'readonly' | 'all' | 'mentor';
+type EditPermission = 'readonly' | 'admin' | 'all' | 'mentor';
 
 function canEditField(permission: EditPermission, role: string): boolean {
   if (permission === 'readonly') return false;
@@ -289,7 +290,6 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   const photoUrl = toDriveImageUrl(student.profilePhoto);
   const classLine = getFixedFieldValue(student, 'classInfo', campType, fixedOpts);
   const unitLine = getFixedFieldValue(student, 'unitInfo', campType, fixedOpts);
-  const medAlert = hasMedicationInfo(student) ? student.medication!.trim() : null;
   const records = recordsById[student.studentId] ?? null;
   const openCount = (records ?? []).filter(isOpenPatientRecord).length;
   const allowancePending = allowance.pending.length;
@@ -335,29 +335,18 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
               )}
             </View>
             <View style={styles.headerInfo}>
-              <Text style={styles.name} numberOfLines={1}>
-                {student.name}{student.englishName ? <Text style={styles.englishName}>  {student.englishName}</Text> : null}
+              <Text style={styles.name} numberOfLines={1}>{student.name}</Text>
+              {/* 영어 닉네임 | 학년 | 성별 — 한 줄 (고유번호는 캠프·기본 탭에만) */}
+              <Text style={styles.subline} numberOfLines={1}>
+                {[student.englishName, student.grade, student.gender === 'M' ? L('students.m') : L('students.f')].filter(Boolean).join(' | ')}
               </Text>
-              <View style={styles.chips}>
-                {!!student.grade && <Text style={[styles.chip, styles.chipBlue]}>{student.grade}</Text>}
-                <Text style={[styles.chip, student.gender === 'M' ? styles.chipSky : styles.chipPink]}>
-                  {student.gender === 'M' ? L('students.m') : L('students.f')}
-                </Text>
-                {!!student.studentId && <Text style={[styles.chip, styles.chipGray]}>{student.studentId}</Text>}
-              </View>
               {!!classLine && <Text style={styles.metaLine} numberOfLines={1}>{classLine}</Text>}
               {!!unitLine && <Text style={styles.metaLine} numberOfLines={1}>{unitLine}</Text>}
             </View>
           </View>
 
-          {(medAlert || openCount > 0 || allowancePending > 0 || negative.length > 0 || uncollected > 0 || needCharge > 0) && (
+          {(openCount > 0 || allowancePending > 0 || negative.length > 0 || uncollected > 0 || needCharge > 0) && (
             <View style={styles.alerts}>
-              {!!medAlert && (
-                <TouchableOpacity style={styles.alertRed} onPress={() => selectTab('health')} activeOpacity={0.8}>
-                  <Text style={styles.alertRedTitle}>⚠️ {L('studentModal.medicationAlert')}</Text>
-                  <Text style={styles.alertRedBody} numberOfLines={2}>{medAlert}</Text>
-                </TouchableOpacity>
-              )}
               {(uncollected > 0 || needCharge > 0) && (
                 <TouchableOpacity style={styles.alertSky} onPress={() => selectTab('devices')} activeOpacity={0.8}>
                   <Text style={styles.alertSkyText}>📱 {[
@@ -433,6 +422,9 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                       allowanceNode={index === currentIndex && campCode
                         ? <StudentAllowanceTab data={allowance} student={merge(item)} campCode={campCode} roster={students} actor={actor} />
                         : null}
+                      memoNode={index === currentIndex && campCode
+                        ? <StudentMemoCard campCode={campCode} student={merge(item)} actor={actor} />
+                        : null}
                       devicesNode={index === currentIndex && campCode
                         ? <StudentDevicesTab devices={devices} student={merge(item)} campCode={campCode} roster={students} actor={actor} ctx={deviceCtx.ctx} staff={deviceCtx.staff} />
                         : null}
@@ -466,6 +458,7 @@ interface TabBodyProps {
   onSaveContact: (s: STSheetStudent) => void;
   allowanceNode: React.ReactNode;
   devicesNode: React.ReactNode;
+  memoNode: React.ReactNode;
 }
 
 function TabBody(props: TabBodyProps) {
@@ -589,6 +582,7 @@ function TabBody(props: TabBodyProps) {
           </View>
         )}
         {sections('health')}
+        {props.memoNode}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="medkit-outline" size={16} color="#4f46e5" />
@@ -679,7 +673,7 @@ const styles = StyleSheet.create({
   photo: { width: 84, height: 84, borderRadius: 16, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e5e7eb' },
   headerInfo: { flex: 1, minWidth: 0, justifyContent: 'center' },
   name: { fontSize: 20, fontWeight: '800', color: '#111827' },
-  englishName: { fontSize: 14, fontWeight: '400', color: '#6b7280' },
+  subline: { fontSize: 13, color: '#6b7280', marginTop: 2 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   chip: { fontSize: 11, fontWeight: '600', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: 'hidden' },
   chipBlue: { backgroundColor: '#eff6ff', color: '#1d4ed8' },
