@@ -155,6 +155,8 @@ export interface CampSettings {
   classInfo?: Record<string, CampClassInfo>;
   /** 그룹명 → 그 그룹의 모든 Day 가 함께 쓰는 값 */
   timetableCommon?: Record<string, CampTimetableCommon>;
+  /** 일정표 — 날짜별 Day 배치와 익사이팅 활동표 (campDayPlan.ts) */
+  dayPlan?: import('./campDayPlan').CampDayPlan;
   /**
    * 칸 이름(소문자 정규화) → 그 칸을 눌렀을 때 뜨는 설명.
    * Day 가 아니라 캠프 단위라, Breakfast 처럼 여러 Day 에 걸치는 것도 한 번만 쓴다.
@@ -577,8 +579,22 @@ export const RETURN_CRITERIA_LABELS = [
 export interface PatientRecord {
   id: string;
   campCode: string;
+  /** 학생 고유번호. 선생님 환자는 'staff_{userId}' */
   studentId: string;
+  /** 학생 이름 (선생님 환자면 선생님 이름) */
   studentName: string;
+  /**
+   * 'staff' = 선생님이 환자 (부모 연락 없음, 반 자리에 '선생님', 학년 자리에 역할).
+   * 없으면 학생.
+   */
+  patientKind?: 'staff';
+  /** 선생님 환자의 users 문서 id */
+  staffUserId?: string;
+  /**
+   * 약복용 명단에만 올린 기록 (집에서 가져온 약 등 — 환자가 아님).
+   * 환자 현황·통계에는 나오지 않고 약복용 명단에만 나온다.
+   */
+  medicationOnly?: boolean;
   grade?: string;
   className?: string;
   classMentor?: string;

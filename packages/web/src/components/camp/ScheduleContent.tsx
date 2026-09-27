@@ -22,18 +22,28 @@ import {
   teacherMapOf,
   timetableCategories,
   timetableGroupNames,
+  getCampDayPlan,
+  daySetForGroup,
+  dayCategory,
+  excitingDates,
+  localYmd,
+  EXCITING_CATEGORY,
   type CampTimetable,
   type DerivedGroup,
 } from '@smis-mentor/shared';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { campTimetableService } from '@/lib/campTimetableService';
+import { DayPlanCalendar, DayPlanEditor, ExcitingDayList } from './DayPlan';
 import GuideDetail from './GuideDetail';
 import { getJobCodeById, getUsersByJobCodeId } from '@/lib/firebaseService';
 import TimetableView from './TimetableView';
 import TimetableEditor from './TimetableEditor';
 import BookTable from './BookTable';
 import { L } from '@smis-mentor/shared';
+
+/** 시간표 탭 줄의 '전체' (일정표) */
+const ALL_TAB = '__all';
 
 /** 고른 그룹은 캠프별로 기억한다 — 다른 탭 다녀와도 그대로 */
 const GROUP_KEY = (jobCodeId: string) => `SMIS_TIMETABLE_GROUP_${jobCodeId}`;
@@ -76,7 +86,10 @@ export default function ScheduleContent() {
   const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
 
   const [editing, setEditing] = useState(false);
+  const [dayPlanEditing, setDayPlanEditing] = useState(false);
   const [category, setCategory] = useState<string | null>(null);
+  /** 일정표에서 누른 익사이팅 날짜 — 그 카드로 스크롤 */
+  const [focusDate, setFocusDate] = useState<string | null>(null);
   const [groupName, setGroupName] = useState<string | null>(null);
 
   // 지난번에 고른 그룹 복원 (캠프가 바뀌면 그 캠프 것으로)
@@ -131,6 +144,14 @@ export default function ScheduleContent() {
     staleTime: 10 * 60 * 1000,
   });
 
+  /** 일정표 — 날짜별 Day · 익사이팅 활동 (캠프당 한 벌) */
+  const { data: dayPlan = null, refetch: refetchDayPlan } = useQuery({
+    queryKey: ['campDayPlan', campCode],
+    queryFn: () => getCampDayPlan(db, campCode),
+    enabled: !!campCode,
+    staleTime: 5 * 60 * 1000,
+  });
+
   /** 칸 설명 — 캠프당 한 벌 */
   const { data: timetableGuides = {} } = useQuery({
     queryKey: ['campTimetableGuides', campCode],
@@ -175,8 +196,6 @@ export default function ScheduleContent() {
 
   const categories = useMemo(() => timetableCategories(campCode, timetables), [campCode, timetables]);
 
-  const activeCategory = category ?? categories[0]?.key ?? null;
-
   const groups = useMemo(() => timetableGroupNames(derived, timetables), [derived, timetables]);
 
   const defaultGroup = useMemo(() => {
@@ -186,18 +205,41 @@ export default function ScheduleContent() {
 
   const activeGroup = groupName && groups.includes(groupName) ? groupName : defaultGroup;
 
+  /** 이 그룹이 쓰는 일정 세트 */
+  const daySet = useMemo(() => daySetForGroup(dayPlan, activeGroup), [dayPlan, activeGroup]);
+  const hasExciting = excitingDates(daySet).length > 0;
+  /** 처음 열면 오늘 Day 탭, 오늘이 일정에 없으면 '전체' */
+  const todayCategory = dayCategory(daySet, localYmd(new Date()), campCode);
+  const activeCategory = category ?? todayCategory ?? (daySet ? ALL_TAB : categories[0]?.key ?? null);
+  const isPlanTab = activeCategory === ALL_TAB || activeCategory === EXCITING_CATEGORY;
+  const tableCategory = isPlanTab ? null : activeCategory;
+
+  const openDate = (date: string) => {
+    const cat = dayCategory(daySet, date, campCode);
+    if (!cat) return;
+    setCategory(cat);
+    if (cat === EXCITING_CATEGORY) {
+      setFocusDate(date);
+      setTimeout(() => document.getElementById(`exciting-${date}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
+    }
+  };
+  /** 같은 일정을 쓰는 그룹 이름 (Spring · Summer) */
+  const sharedGroupNames = (daySet?.groups ?? [])
+    .map((k) => groups.find((g) => normalizeGroupKey(g) === k) ?? k)
+    .join(' · ');
+
   const current: CampTimetable | undefined = useMemo(
     () =>
       resolveTimetable({
         timetables,
         groups: derived,
-        category: activeCategory,
+        category: tableCategory,
         groupName: activeGroup,
         campCode,
         jobCodeId: activeJobCodeId ?? '',
         common: timetableCommon,
       }),
-    [timetables, derived, groups, activeCategory, activeGroup, campCode, activeJobCodeId, timetableCommon]
+    [timetables, derived, groups, tableCategory, activeGroup, campCode, activeJobCodeId, timetableCommon]
   );
 
   /**
@@ -252,6 +294,25 @@ export default function ScheduleContent() {
     );
   }
 
+  if (dayPlanEditing && isAdmin) {
+    return (
+      <DayPlanEditor
+        campCode={campCode}
+        plan={dayPlan}
+        groups={groups}
+        start={campStart}
+        end={jobCode?.endDate?.toDate?.() ?? null}
+        initialGroup={activeGroup}
+        actorName={userData?.name ?? ''}
+        onClose={() => setDayPlanEditing(false)}
+        onSaved={() => {
+          setDayPlanEditing(false);
+          refetchDayPlan();
+        }}
+      />
+    );
+  }
+
   if (editing && isAdmin) {
     return (
       <TimetableEditor
@@ -282,9 +343,13 @@ export default function ScheduleContent() {
           aria-label={L('schedule.timetableType')}
           className="flex min-w-0 flex-1 flex-wrap gap-1 overflow-x-auto"
         >
-          {categories.map((c) => {
+          {[
+            { key: ALL_TAB, label: L('schedule.all') },
+            ...categories,
+            ...(hasExciting || (isAdmin && daySet) ? [{ key: EXCITING_CATEGORY, label: L('schedule.excitingTab') }] : []),
+          ].map((c) => {
             const on = c.key === activeCategory;
-            const filled = timetables.some((t) => t.dayType === c.key);
+            const filled = c.key === ALL_TAB || c.key === EXCITING_CATEGORY || timetables.some((t) => t.dayType === c.key);
             return (
               <button
                 key={c.key}
@@ -306,7 +371,7 @@ export default function ScheduleContent() {
         </div>
         {isAdmin && (
           <button
-            onClick={() => setEditing(true)}
+            onClick={() => (isPlanTab ? setDayPlanEditing(true) : setEditing(true))}
             className="shrink-0 rounded-md border border-gray-300 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
           >
             {L('common.edit')}
@@ -341,7 +406,30 @@ export default function ScheduleContent() {
         </div>
       )}
 
-      {current && guideLabel ? (
+      {activeCategory === ALL_TAB ? (
+        daySet ? (
+          <section>
+            <div className="mb-2 flex flex-wrap items-baseline gap-x-2">
+              <h3 className="text-sm font-semibold text-gray-900">{L('schedule.dayPlanTitle', { v0: activeGroup ?? '' })}</h3>
+              {daySet.groups.length > 1 && <span className="text-xs text-gray-500">{L('schedule.dayPlanShared', { v0: sharedGroupNames })}</span>}
+            </div>
+            <DayPlanCalendar
+              set={daySet}
+              campCode={campCode}
+              start={campStart}
+              end={jobCode?.endDate?.toDate?.() ?? null}
+              onPickDate={openDate}
+            />
+          </section>
+        ) : (
+          <EmptyState
+            title={dayPlan ? L('schedule.dayPlanNoGroup') : L('schedule.dayPlanEmpty')}
+            body={isAdmin ? L('schedule.dayPlanEmptyAdmin') : ''}
+          />
+        )
+      ) : activeCategory === EXCITING_CATEGORY ? (
+        <ExcitingDayList set={daySet} focusDate={focusDate} />
+      ) : current && guideLabel ? (
         <GuideDetail
           label={guideLabel}
           guide={findGuide(guideLabel, timetableGuides)}

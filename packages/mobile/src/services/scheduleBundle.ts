@@ -4,6 +4,7 @@ import {
   getCampTimetableGuides,
   getCampGroups,
   getEslBooks,
+  getCampDayPlan,
   resolveGroups,
   type CampClassInfo,
   type CampTimetable,
@@ -11,6 +12,7 @@ import {
   type TimetableGuide,
   type DerivedGroup,
   type EslBookList,
+  type CampDayPlan,
 } from '@smis-mentor/shared';
 import { db } from '../config/firebase';
 import { campTimetableService } from './campTimetableService';
@@ -38,6 +40,8 @@ export interface ScheduleBundle {
   timetableGuides: Record<string, TimetableGuide>;
   /** L-Code → 교재 3권 (전사 공용) */
   books: EslBookList;
+  /** 일정표 — 날짜별 Day · 익사이팅 활동 (캠프당 한 벌) */
+  dayPlan: CampDayPlan | null;
 }
 
 /** 'schedule' 로 시작해야 AsyncStorage 에 저장된다 (QueryClientProvider 의 persistKeys) */
@@ -49,7 +53,7 @@ export async function loadScheduleBundle(jobCodeId: string): Promise<ScheduleBun
     | null;
   const campCode = jobCode?.code ?? '';
 
-  const [timetables, members, settingGroups, classInfo, books, timetableCommon, timetableGuides] =
+  const [timetables, members, settingGroups, classInfo, books, timetableCommon, timetableGuides, dayPlan] =
     await Promise.all([
     campTimetableService.listByJobCodeId(jobCodeId),
     getUsersByJobCodeId(jobCodeId),
@@ -58,6 +62,7 @@ export async function loadScheduleBundle(jobCodeId: string): Promise<ScheduleBun
     getEslBooks(db),
     campCode ? getCampTimetableCommon(db, campCode) : Promise.resolve({}),
     campCode ? getCampTimetableGuides(db, campCode) : Promise.resolve({}),
+    campCode ? getCampDayPlan(db, campCode) : Promise.resolve(null),
     ]);
 
   return {
@@ -70,5 +75,6 @@ export async function loadScheduleBundle(jobCodeId: string): Promise<ScheduleBun
     timetableCommon,
     timetableGuides,
     books,
+    dayPlan,
   };
 }

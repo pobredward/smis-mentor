@@ -36,8 +36,6 @@ export const SYMPTOM_GUIDES: SymptomGuide[] = [
   { label: '쥐 (경련)', emoji: '⚡', category: '외과', treatment: '발바닥을 세게 당겨 스트레칭, 따뜻하게 찜질', medication: '(약 불필요)', notes: '반복 발생 시 전해질 음료 섭취 권장.' },
   { label: '다래끼', emoji: '👁️‍🗨️', category: '외과', treatment: '따뜻한 찜질(하루 3~4회, 10분씩), 눈 비비지 않기', medication: '점안 항생제 (처방 필요)' },
   // ── 응급 ──
-  { label: '심정지 의심', emoji: '❤️', category: '응급', treatment: '즉시 119 신고 → CPR 시작 (30:2 압박:인공호흡). AED 사용 가능 시 사용.', medication: '(약 불필요)', notes: '절대 혼자 판단하지 말고 즉시 119 신고.' },
-  { label: '기도폐쇄 (목막힘)', emoji: '🫁', category: '응급', treatment: '등 두드리기 5회 → 하임리히법 5회 반복. 의식 없으면 119 신고 + CPR.', medication: '(약 불필요)', notes: '즉시 119 신고.' },
 ];
 
 // ==================== 병원 ====================
@@ -114,4 +112,23 @@ export function patientPlaceKind(value: string, options: string[]): 'option' | '
   if (options.includes(v)) return 'option';
   if (/^\d{1,5}호$/.test(v)) return 'room';
   return 'etc';
+}
+
+
+// ==================== 선생님 환자 · 중간보고 번호 ====================
+
+/** 선생님 환자의 반 자리에 들어가는 이름 — 환자 현황에서 '선생님' 묶음으로 모인다 */
+export const STAFF_PATIENT_CLASS = '선생님';
+
+export function isStaffPatient(r: { patientKind?: string; studentId?: string }): boolean {
+  return r.patientKind === 'staff' || (r.studentId ?? '').startsWith('staff_');
+}
+
+export function staffPatientId(userId: string): string {
+  return `staff_${userId}`;
+}
+
+/** 지금까지 올린 중간보고 수 — 카드 뱃지 "중간보고3" */
+export function midReportCount(r: { progressLogs?: Array<{ status?: string }> }): number {
+  return (r.progressLogs ?? []).filter((l) => l.status === '중간보고').length;
 }

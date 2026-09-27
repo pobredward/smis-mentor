@@ -10,6 +10,7 @@ import {
 import { CampClassInfo, CampGroup, CampSettings, CampTimetableCommon } from '../../types/camp';
 import { cleanGuide, guideMediaPath, type TimetableGuide } from '../../types/timetableGuide';
 import { cleanLodging, type CampLodging } from '../../types/lodging';
+import { cleanDayPlan, type CampDayPlan } from '../../types/campDayPlan';
 import { ref, uploadBytes, getDownloadURL, type FirebaseStorage } from 'firebase/storage';
 
 /**
@@ -265,5 +266,31 @@ export const updateCampLodging = async (
   const ref = doc(db, 'campSettings', campCode);
   await setDoc(ref, { campCode, updatedAt: now }, { merge: true });
   await updateDoc(ref, { lodging: cleaned });
+  return cleaned;
+};
+
+
+/** campSettings/{campCode}.dayPlan — 일정표 (날짜별 Day · 익사이팅 활동표) */
+export const getCampDayPlan = async (db: Firestore, campCode: string): Promise<CampDayPlan | null> => {
+  if (!campCode) return null;
+  const snap = await getDoc(doc(db, 'campSettings', campCode));
+  if (!snap.exists()) return null;
+  const plan = (snap.data() as CampSettings).dayPlan;
+  return plan?.sets ? plan : null;
+};
+
+/** 일정표 통째로 저장 (관리자). 빈 값·중복 그룹은 정리해서 넣는다 */
+export const saveCampDayPlan = async (
+  db: Firestore,
+  campCode: string,
+  plan: CampDayPlan,
+  updatedBy: string
+): Promise<CampDayPlan> => {
+  const cleaned = { ...cleanDayPlan(plan), updatedAt: new Date().toISOString(), updatedBy };
+  // merge 로 넣되 dayPlan 필드는 통째로 바뀌어야 한다 (지운 날짜가 남지 않게) → updateDoc 이 필드를 교체
+  const ref = doc(db, 'campSettings', campCode);
+  const snap = await getDoc(ref);
+  if (snap.exists()) await updateDoc(ref, { dayPlan: cleaned });
+  else await setDoc(ref, { campCode, dayPlan: cleaned });
   return cleaned;
 };

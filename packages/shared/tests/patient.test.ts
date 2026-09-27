@@ -2,10 +2,11 @@ import { describe, expect, it } from './_expect';
 import { SYMPTOM_GUIDES, calcTotalDoses, getHospitalPresets, isKoreanStaff, makeMedTimeKey, schedActiveOn } from '../src/utils/patient';
 
 describe('환자 탭 공용', () => {
-  it('증상 가이드 — 라벨 중복 없음, 18개', () => {
+  it('증상 가이드 — 라벨 중복 없음, 16개 (심정지·기도폐쇄는 앱 대신 바로 전화)', () => {
     const labels = SYMPTOM_GUIDES.map((g) => g.label);
     expect(new Set(labels).size).toBe(labels.length);
-    expect(labels.length).toBe(18);
+    expect(labels.length).toBe(16);
+    expect(labels.some((l) => l.includes('심정지') || l.includes('기도폐쇄'))).toBe(false);
   });
   it('병원 프리셋은 캠프 코드 첫 글자로', () => {
     expect(getHospitalPresets('j29').length > 0).toBe(true);

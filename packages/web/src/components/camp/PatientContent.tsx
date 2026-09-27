@@ -5,12 +5,12 @@ import { Timestamp } from 'firebase/firestore';
 import ImageCropper from '@/components/common/ImageCropper';
 import MyEscortPanel from '@/components/camp/patient/MyEscortPanel';
 import EscortSsn from '@/components/camp/patient/EscortSsn';
-import { isActiveEscortVisit, L, dataLabel, isEnglishUI, localizeLabels, isMultiUse, subscribeStaffMedicationUses, addStaffMedicationUse, updateStaffMedicationUse, deleteStaffMedicationUse, getCampLodging, patientPlaceOptions, patientPlaceKind } from '@smis-mentor/shared';
+import { isActiveEscortVisit, L, dataLabel, isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, resolveGroups, getCampClassInfo, getCampTimetableCommon, getCampDayPlan, dialablePhone, type Whereabouts, type WhereaboutsInput, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind } from '@smis-mentor/shared';
 import {
   SYMPTOM_GUIDES, getHospitalPresets, isKoreanStaff, ACTION_NOTE_PLACEHOLDER, ACTION_NOTE_EXAMPLE,
   makeMedTimeKey, schedActiveOn, isInDateRange, calcTotalDoses, todayDateKey as todayStr,
 } from '@smis-mentor/shared';
-import type { SymptomGuide, StaffMedicationUse } from '@smis-mentor/shared';
+import type { SymptomGuide } from '@smis-mentor/shared';
 import { useAuth } from '@/contexts/AuthContext';
 import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -118,6 +118,7 @@ import type { LocationMode } from '@smis-mentor/shared';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { jobCodesService, stSheetService, CampCode } from '@/lib/stSheetService';
 import { authenticatedPost } from '@/lib/apiClient';
+import { campTimetableService } from '@/lib/campTimetableService';
 
 /**
  * 약 복용 기록 → 재고 정산 요청 (서버가 원장과 비교해 차이만 반영, 여러 번 호출해도 안전).
@@ -134,7 +135,9 @@ import { currentIntlLocale } from '@smis-mentor/shared';
 // ==================== 매뉴얼 데이터 (하드코딩, 딜레이 없음) ====================
 
 
-const SYMPTOM_CATEGORIES = ['내과', '외과', '응급'] as const;
+const SYMPTOM_CATEGORIES = ['내과', '외과'] as const;
+/** 환자 현황에서 선생님 환자 묶음 키 */
+const STAFF_GROUP_KEY = '__staff';
 type SymptomCategory = (typeof SYMPTOM_CATEGORIES)[number];
 
 // ==================== 재고(약품) 컨텍스트 ====================
@@ -165,8 +168,9 @@ const BILLING_METHODS: BillingMethod[] = ['용돈봉투', '부모님청구', '�
 const ISOLATION_RETURN_LABELS = [`열 없음 (${FEVER_THRESHOLDS.slight}°C 미만)`, '주요 증상 호전', '담당 매니저 확인'];
 
 const PROGRESS_STYLE: Record<ProgressStatus, { dot: string; badge: string; step: string; line: string; label: string }> = {
-  최초보고: { dot: 'bg-gray-400',   badge: 'bg-gray-100 text-gray-700',     step: 'bg-gray-400',   line: 'border-gray-300',  label: 'text-gray-700' },
-  중간보고: { dot: 'bg-blue-400',   badge: 'bg-blue-100 text-blue-700',     step: 'bg-blue-400',   line: 'border-blue-200',  label: 'text-blue-700' },
+  // 최초보고 빨강 · 중간보고 주황 · 완치 초록 — 환자 탭 전체에서 같은 색
+  최초보고: { dot: 'bg-red-500',    badge: 'bg-red-100 text-red-700',       step: 'bg-red-500',    line: 'border-red-200',   label: 'text-red-700' },
+  중간보고: { dot: 'bg-orange-400', badge: 'bg-orange-100 text-orange-700', step: 'bg-orange-400', line: 'border-orange-200', label: 'text-orange-700' },
   완치:     { dot: 'bg-green-400',  badge: 'bg-green-100 text-green-800',   step: 'bg-green-500',  line: 'border-green-200', label: 'text-green-800' },
 };
 
@@ -210,7 +214,8 @@ const CLASS_TIMES: MedicationTime[] = ['조식후', '중식후', '석식후'];
 
 /** 반 이름 표시용: "OnePiece" → "OnePiece반" (이미 '반'으로 끝나거나 미배정이면 그대로) */
 const fmtClass = (name: string) =>
-  name === '반 미배정' ? dataLabel(name) : isEnglishUI() ? name : name.endsWith('반') ? name : `${name}반`;
+  name === STAFF_PATIENT_CLASS ? L('patient.staffPatient')
+    : name === '반 미배정' ? dataLabel(name) : isEnglishUI() ? name : name.endsWith('반') ? name : `${name}반`;
 
 /** grade 문자열("3F", "4M" 등)에서 성별 추출: F=0(여, 위), M=1(남, 아래) */
 const genderOrder = (grade?: string) => (grade?.endsWith('F') ? 0 : 1);
@@ -361,7 +366,9 @@ function ImageCropperWrapper({ file, onCropComplete, onCancel }: {
 
 export default function PatientContent() {
   const { userData } = useAuth();
-  const [records, setRecords] = useState<PatientRecord[]>([]);
+  const [allRecords, setRecords] = useState<PatientRecord[]>([]);
+  /** 환자 현황용 — 약복용 명단에만 올린 기록(집에서 가져온 약 등)은 뺀다 */
+  const records = useMemo(() => allRecords.filter(r => !r.medicationOnly), [allRecords]);
   const [campCode, setCampCode] = useState<CampCode | null>(null);
   const [campUsers, setCampUsers] = useState<User[]>([]);
   const [students, setStudents] = useState<STSheetStudent[]>([]);
@@ -383,7 +390,8 @@ export default function PatientContent() {
   const [campEndDate, setCampEndDate] = useState<string>('');  // "2026-08-14"
   const [campGroups, setCampGroups] = useState<CampGroup[]>([]); // 그룹-반 매핑
   // 주 탭: 환자 현황 / 약복용명단
-  const [mainTab, setMainTab] = useState<'환자 현황' | '약복용명단' | '선생님 약'>('환자 현황');
+  const [mainTab, setMainTab] = useState<'환자 현황' | '약복용명단'>('환자 현황');
+  const [showMedListAdd, setShowMedListAdd] = useState(false);
   // 내 유닛/반 필터
   const [myFilter, setMyFilter] = useState<'전체' | '내유닛' | '내반'>('전체');
   const activeJobCodeId = useMemo(() => {
@@ -462,6 +470,36 @@ export default function PatientContent() {
     if (!campCode) return;
     getCampLodging(db, campCode).then(l => setPlaceOptions(patientPlaceOptions(l))).catch(() => setPlaceOptions([]));
   }, [campCode]);
+  // 최초보고 '일과중' 위치 자동 채우기 — 일정표(무슨 Day) + 시간표(교시·강의실) / 익사이팅 활동표
+  const [whereaboutsBase, setWhereaboutsBase] = useState<Omit<WhereaboutsInput, 'groups'> | null>(null);
+  useEffect(() => {
+    if (!campCode || !activeJobCodeId) return;
+    let alive = true;
+    Promise.all([
+      campTimetableService.listByJobCodeId(activeJobCodeId),
+      getCampClassInfo(db, campCode),
+      getCampTimetableCommon(db, campCode),
+      getCampDayPlan(db, campCode),
+    ]).then(([timetables, classInfo, timetableCommon, dayPlan]) => {
+      if (alive) setWhereaboutsBase({ campCode, jobCodeId: activeJobCodeId, timetables, classInfo, timetableCommon, dayPlan });
+    }).catch(() => { /* 시간표가 없어도 최초보고는 된다 (위치 직접 입력) */ });
+    return () => { alive = false; };
+  }, [campCode, activeJobCodeId]);
+  const derivedGroups = useMemo(
+    () => resolveGroups(campUsers as never[], activeJobCodeId ?? '', campGroups),
+    [campUsers, activeJobCodeId, campGroups]
+  );
+  const whereaboutsOf = useCallback(
+    (st: { classNumber?: string }) => (whereaboutsBase ? studentWhereabouts({ ...whereaboutsBase, groups: derivedGroups }, st) : null),
+    [whereaboutsBase, derivedGroups]
+  );
+  /** 최초보고 대상 검색에 함께 나오는 선생님 (이 캠프에 배정된 사람) */
+  const staffOptions = useMemo(() => campUsers.map(u => {
+    const je = u.jobExperiences?.find(j => j.id === activeJobCodeId) as { group?: string; groupRole?: string } | undefined;
+    const role = je?.group === 'manager' ? L('patient.managerRole') : [je?.groupRole, je?.group && je.group !== 'common' ? je.group : ''].filter(Boolean).join(' · ');
+    return { userId: u.userId || u.id, name: u.name, role, isManager: je?.group === 'manager', phone: (u as { phoneNumber?: string }).phoneNumber };
+  }).filter(x => x.userId && x.name), [campUsers, activeJobCodeId]);
+
   const patientInventory = useMemo<PatientInventory>(() => {
     const byCampGroup = new Map(
       inventoryGroups.filter(g => g.campGroupName).map(g => [g.campGroupName!.toLowerCase(), g.id] as const)
@@ -479,7 +517,7 @@ export default function PatientContent() {
         return cg ? byCampGroup.get(cg.name.toLowerCase()) ?? '' : '';
       },
       dosesForStudent: (studentId) =>
-        studentId ? records.filter(r => r.studentId === studentId).flatMap(r => r.medicationDoses ?? []) : [],
+        studentId ? allRecords.filter(r => r.studentId === studentId).flatMap(r => r.medicationDoses ?? []) : [],
       // ST 시트 '복용약 & 알레르기' 칸만 — '특이사항' 칸은 캠프마다 행정 메모(통화·용돈 체크 등)로 써서 제외
       studentNote: (studentId) => {
         const st = students.find(x => x.studentId === studentId) as (STSheetStudent & { medication?: string }) | undefined;
@@ -487,7 +525,7 @@ export default function PatientContent() {
       },
       placeOptions,
     };
-  }, [inventoryItems, inventoryStocks, inventoryGroups, campGroups, records, students, placeOptions]);
+  }, [inventoryItems, inventoryStocks, inventoryGroups, campGroups, allRecords, students, placeOptions]);
 
   // 현재 환자 (완치 제외) / 완치 환자 분리
   const activeRecords = useMemo(() =>
@@ -538,6 +576,8 @@ export default function PatientContent() {
       );
       if (je?.group) result.set(r.className, je.group.toLowerCase());
     });
+    // 선생님 환자는 그룹과 상관없이 '선생님' 묶음으로
+    result.set(STAFF_PATIENT_CLASS, STAFF_GROUP_KEY);
     return result;
   }, [records, campUsers, activeJobCodeId]);
 
@@ -608,17 +648,43 @@ export default function PatientContent() {
     });
   }, [activeRecords, filterBySearch, filterByMyUnit]);
 
+  /** 그룹 → 반 묶음 (그룹 순서대로, 그룹 모르는 반·선생님은 뒤로) — 목록과 상단 그룹 이동 버튼이 같이 쓴다 */
+  const orderedGroups = useMemo(() => {
+    const groupMap = new Map<string, [string, PatientRecord[]][]>();
+    activeByClass.forEach(([className, classRecords]) => {
+      const groupKey = classNameToGroupKey.get(className) ?? '';
+      if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
+      groupMap.get(groupKey)!.push([className, classRecords]);
+    });
+    const out: { key: string; classes: [string, PatientRecord[]][] }[] = [];
+    groupOrder.forEach(gk => {
+      if (groupMap.has(gk)) {
+        out.push({ key: gk, classes: groupMap.get(gk)! });
+        groupMap.delete(gk);
+      }
+    });
+    const staffClasses = groupMap.get(STAFF_GROUP_KEY);
+    groupMap.delete(STAFF_GROUP_KEY);
+    groupMap.forEach((classes, key) => out.push({ key, classes }));
+    if (staffClasses) out.push({ key: STAFF_GROUP_KEY, classes: staffClasses });
+    return out;
+  }, [activeByClass, classNameToGroupKey, groupOrder]);
+
+  const groupLabel = (groupKey: string) => groupKey === STAFF_GROUP_KEY
+    ? L('patient.staffPatient')
+    : campGroups.find(g => g.name.toLowerCase() === groupKey)?.name ?? GROUP_DISPLAY_NAMES[groupKey] ?? (groupKey || L('patient.groupUnknown'));
+
   const filteredResolved = useMemo(() =>
     filterByMyUnit(filterBySearch(resolvedRecords)), [resolvedRecords, filterBySearch, filterByMyUnit]);
 
   // 약 복용 명단: 오늘 복용 스케줄이 있는 환자만
   const medicationRecords = useMemo(() => {
-    return filterByMyUnit(records.filter(r => {
-      if (r.progressStatus === '완치') return false;
+    return filterByMyUnit(allRecords.filter(r => {
+      if (r.progressStatus === '완치' && !r.medicationOnly) return false;
       const schedules = Array.isArray(r.medicationSchedules) ? r.medicationSchedules : [];
       return schedules.some(s => schedActiveOn(s, today));
     }));
-  }, [records, today, filterByMyUnit]);
+  }, [allRecords, today, filterByMyUnit]);
 
   const counts = useMemo(() => ({
     active: activeRecords.length,
@@ -1012,7 +1078,7 @@ export default function PatientContent() {
 
         {/* ── 대탭: 환자 현황 / 약복용명단 ── 제목보다 위에 위치 */}
         <div className="flex border-b border-gray-100 -mx-4 px-4">
-          {(['환자 현황', '약복용명단', '선생님 약'] as const).map(tab => (
+          {(['환자 현황', '약복용명단'] as const).map(tab => (
             <button
               key={dataLabel(tab)}
               onClick={() => setMainTab(tab)}
@@ -1046,12 +1112,34 @@ export default function PatientContent() {
               </div>
               {/* 현황 뱃지 */}
               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                {counts.최초보고 > 0 && <StatusPill label={L('data.progFirstReport')} count={counts.최초보고} color="gray" />}
-                {counts.중간보고 > 0 && <StatusPill label={L('data.progMidReport')} count={counts.중간보고} color="blue" />}
-                {counts.내원예정 > 0 && <StatusPill label={L('data.hospitalPlanned')} count={counts.내원예정} color="red" />}
+                {counts.최초보고 > 0 && <StatusPill label={L('data.progFirstReport')} count={counts.최초보고} color="red" />}
+                {counts.중간보고 > 0 && <StatusPill label={L('data.progMidReport')} count={counts.중간보고} color="orange" />}
+                {counts.내원예정 > 0 && <StatusPill label={L('data.hospitalPlanned')} count={counts.내원예정} color="indigo" />}
                 {counts.격리 > 0 && <StatusPill label={L('data.ptIsolation')} count={counts.격리} color="purple" />}
                 {counts.active === 0 && <span className="text-xs text-gray-400">{L('patient.noCurrentPatients')}</span>}
               </div>
+              {/* 그룹 바로가기 — 마지막 그룹까지 스크롤하지 않도록. 빨강=최초보고, 주황=중간보고 */}
+              {orderedGroups.length > 1 && (
+                <div className="flex items-center gap-1 mt-2 flex-wrap">
+                  {orderedGroups.map(({ key, classes }) => {
+                    const rs = classes.flatMap(([, x]) => x);
+                    const first = rs.filter(r => r.progressStatus === '최초보고').length;
+                    const mid = rs.filter(r => r.progressStatus === '중간보고').length;
+                    return (
+                      <button
+                        key={key || 'none'}
+                        type="button"
+                        onClick={() => document.getElementById(`patient-group-${key || 'none'}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                        className={`flex items-center gap-1 pl-2 pr-1.5 py-1 rounded-lg border text-[11px] font-semibold hover:shadow-sm ${key ? `${GROUP_BG_COLORS[key] ?? 'bg-gray-50'} ${GROUP_BORDER_COLORS[key] ?? 'border-gray-200'} ${GROUP_TEXT_COLORS[key] ?? 'text-gray-600'}` : 'bg-white border-gray-200 text-gray-600'} ${key === STAFF_GROUP_KEY ? '!bg-teal-50 !border-teal-200 !text-teal-700' : ''}`}
+                      >
+                        {groupLabel(key)}
+                        {first > 0 && <span className="min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">{first}</span>}
+                        {mid > 0 && <span className="min-w-[16px] h-4 px-1 rounded-full bg-orange-400 text-white text-[9px] font-bold flex items-center justify-center">{mid}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <button
               onClick={() => setShowQuickReport(true)}
@@ -1072,9 +1160,8 @@ export default function PatientContent() {
               </p>
             </div>
             <button
-              disabled
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-400 text-sm font-bold rounded-lg flex-shrink-0 cursor-not-allowed"
-              title={L('patient.comingSoon')}
+              onClick={() => setShowMedListAdd(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold rounded-lg flex-shrink-0 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1125,8 +1212,6 @@ export default function PatientContent() {
           <div className="flex items-center justify-center py-20">
             <div className="w-6 h-6 border-4 border-red-400 border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : mainTab === '선생님 약' ? (
-          <StaffMedicationSection campCode={campCode} jobCodeId={activeJobCodeId} campUsers={campUsers} />
         ) : mainTab === '약복용명단' ? (
           /* ── 약복용명단 탭 ── */
           <MedicationListView
@@ -1157,31 +1242,8 @@ export default function PatientContent() {
               </div>
             ) : (
               (() => {
-                // 1) 그룹 키 → 반 목록 Map으로 먼저 수집 (중복 그룹 키 방지)
-                const groupMap = new Map<string, [string, PatientRecord[]][]>();
-                activeByClass.forEach(([className, classRecords]) => {
-                  const groupKey = classNameToGroupKey.get(className) ?? '';
-                  if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
-                  groupMap.get(groupKey)!.push([className, classRecords]);
-                });
-
-                // 2) groupOrder 순서대로 정렬 → 미포함 그룹은 뒤로, 그룹 없는 반은 맨 뒤
-                const orderedGroups: { key: string; classes: [string, PatientRecord[]][] }[] = [];
-                groupOrder.forEach(gk => {
-                  if (groupMap.has(gk)) {
-                    orderedGroups.push({ key: gk, classes: groupMap.get(gk)! });
-                    groupMap.delete(gk);
-                  }
-                });
-                // 남은 그룹 (groupOrder에 없는 것)
-                groupMap.forEach((classes, key) => {
-                  orderedGroups.push({ key, classes });
-                });
-
                 return orderedGroups.map(({ key: groupKey, classes }) => {
-                  // 표시명: campGroups 원본명 우선 (예: "Spring"), 없으면 한글 매핑, 없으면 키 그대로
-                  const campGroupName = campGroups.find(g => g.name.toLowerCase() === groupKey)?.name;
-                  const groupDisplayName = campGroupName ?? GROUP_DISPLAY_NAMES[groupKey] ?? (groupKey || '기타');
+                  const groupDisplayName = groupLabel(groupKey);
                   const bgColor = GROUP_BG_COLORS[groupKey] ?? 'bg-gray-50';
                   const textColor = GROUP_TEXT_COLORS[groupKey] ?? 'text-gray-500';
                   const borderColor = GROUP_BORDER_COLORS[groupKey] ?? 'border-gray-200';
@@ -1189,7 +1251,7 @@ export default function PatientContent() {
                   const hasUrgent = classes.some(([, rs]) => rs.some(r => urgencyScore(r) <= 1));
 
                   return (
-                    <div key={groupKey || 'nogroup'} className={`rounded-xl border overflow-hidden mb-3 ${groupKey ? `${bgColor} ${borderColor}` : 'bg-white border-gray-200'}`}>
+                    <div key={groupKey || 'nogroup'} id={`patient-group-${groupKey || 'none'}`} className={`scroll-mt-2 rounded-xl border overflow-hidden mb-3 ${groupKey ? `${bgColor} ${borderColor}` : 'bg-white border-gray-200'}`}>
                       {/* 그룹 헤더 */}
                       {groupKey && (
                         <div className={`flex items-center gap-2 px-3 py-1.5 border-b ${borderColor}`}>
@@ -1321,6 +1383,8 @@ export default function PatientContent() {
         <QuickReportModal
           today={today}
           students={students}
+          staffOptions={staffOptions}
+          whereaboutsOf={whereaboutsOf}
           reporterName={userData?.name ?? ''}
           reporterId={userData?.id ?? ''}
           onClose={() => setShowQuickReport(false)}
@@ -1331,6 +1395,7 @@ export default function PatientContent() {
                 campCode,
                 studentId: quickForm.studentId,
                 studentName: quickForm.studentName,
+                ...(quickForm.staffUserId ? { patientKind: 'staff' as const, staffUserId: quickForm.staffUserId } : {}),
                 grade: quickForm.grade || undefined,
                 className: quickForm.className || undefined,
                 classMentor: quickForm.classMentor || undefined,
@@ -1363,6 +1428,25 @@ export default function PatientContent() {
         />
       )}
 
+      {showMedListAdd && campCode && (
+        <MedicationListAddModal
+          today={today}
+          campCode={campCode}
+          students={students}
+          staffOptions={staffOptions}
+          allRecords={allRecords}
+          createdBy={userData?.name ?? ''}
+          createdById={userData?.userId ?? ''}
+          onCheck={handleMedCheck}
+          onAddSchedule={handleAddMedicationSchedule}
+          onUpdateSchedule={handleUpdateMedicationSchedule}
+          onRemoveSchedule={handleRemoveMedicationSchedule}
+          onUploadPhoto={handleUploadMedicationPhoto}
+          onRemovePhoto={handleRemoveMedicationPhoto}
+          onClose={() => setShowMedListAdd(false)}
+        />
+      )}
+
       {/* 추가/수정 폼 모달 (상세 수정용) */}
       {showForm && (
         <PatientFormModal
@@ -1391,6 +1475,9 @@ function StatusPill({ label, count, color }: { label: string; count: number; col
     yellow: 'bg-yellow-100 text-yellow-800',
     purple: 'bg-purple-100 text-purple-800',
     red:    'bg-red-100 text-red-800',
+    orange: 'bg-orange-100 text-orange-800',
+    indigo: 'bg-indigo-100 text-indigo-800',
+    green:  'bg-green-100 text-green-800',
   };
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${cls[color] ?? cls.gray}`}>
@@ -1636,7 +1723,10 @@ function PatientCard({
   const parentContactPending = record.progressStatus !== '완치' && record.parentContactAssigneeName &&
     !(record.parentContactLogs?.some(l => l.isResolved));
 
-  const tabs: DetailTab[] = ['경과', '내원', '복용약', '부모연락'];
+  // 선생님 환자는 부모 연락이 없다
+  const staff = isStaffPatient(record);
+  const tabs: DetailTab[] = staff ? ['경과', '내원', '복용약'] : ['경과', '내원', '복용약', '부모연락'];
+  const midN = midReportCount(record);
 
   const elapsed = daysElapsed(record.visitDate);
   const elapsedLabel = elapsed === 0 ? L('common.today') : elapsed === 1 ? L('common.yesterday') : L('patient.day', { v0: elapsed });
@@ -1681,7 +1771,7 @@ function PatientCard({
             <span className="text-sm font-bold text-gray-900">{record.studentName}</span>
             {record.grade && <span className="text-xs text-gray-400">{record.grade}</span>}
             {record.className && (
-              <span className="text-xs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">{fmtClass(record.className)}</span>
+              <span className={`text-xs px-1.5 py-0.5 rounded ${staff ? 'bg-teal-50 text-teal-700 font-semibold' : 'bg-blue-50 text-blue-700'}`}>{staff ? L('patient.staffPatient') : fmtClass(record.className)}</span>
             )}
             {record.classMentor && (
               <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">{L('patient.homeroom')} {record.classMentor}</span>
@@ -1712,7 +1802,9 @@ function PatientCard({
                 );
               })}
             <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${progressStyle.badge}`}>
-              {record.progressStatus ?? L('data.progFirstReport')}
+              {record.progressStatus === '중간보고' && midN > 0
+                ? L('patient.midReportBadge', { v0: midN })
+                : dataLabel(record.progressStatus ?? '최초보고')}
             </span>
             {record.temperature != null && (
               <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
@@ -1781,7 +1873,7 @@ function PatientCard({
                   : 'text-gray-400 hover:text-gray-600'
               }`}
             >
-              {dataLabel(tab)}
+              {tab === '복용약' ? L('patient.prescriptionTab') : dataLabel(tab)}
               {hasAlert && (
                 <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-red-400 rounded-full" />
               )}
@@ -4672,7 +4764,7 @@ function dateLabel(date: string, today: string): string {
   return `${mm}/${dd}`;
 }
 
-function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck, onAddSchedule, onUpdateSchedule, onRemoveSchedule, onUploadMedPhoto, onRemoveMedPhoto, compact }: {
+function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck, onAddSchedule, onUpdateSchedule, onRemoveSchedule, onUploadMedPhoto, onRemoveMedPhoto, compact, autoOpenForm }: {
   schedules: MedicationSchedule[];
   today: string;
   unitMentor?: string;
@@ -4687,6 +4779,8 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
   onRemoveMedPhoto?: (schedIdx: number, url: string) => void;
   /** true = 현황 탭 내 카드 뷰 (담당 섹션·섹션 레이블 숨김) */
   compact?: boolean;
+  /** 열자마자 약 추가 폼을 띄운다 (약복용 명단 → 명단 추가) */
+  autoOpenForm?: boolean;
 }) {
   const roomTimeSet = new Set<string>(ROOM_TIMES);
 
@@ -4704,7 +4798,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
     totalDoses: 0,
   });
 
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(!!autoOpenForm);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [formData, setFormData] = useState<Omit<MedicationSchedule, 'checkedTimes'>>(EMPTY_SCHED());
   // "며칠동안" 편의 입력 (dayCount → endDate 자동 계산)
@@ -5291,7 +5385,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
 
 // 보고 유형 정의
 const REPORT_TYPE_OPTIONS: { id: ContactReportType; label: string; color: string }[] = [
-  { id: '최초보고',  get label() { return L('data.progFirstReport'); },  color: 'bg-blue-500' },
+  { id: '최초보고',  get label() { return L('data.progFirstReport'); },  color: 'bg-red-500' },
   { id: '경과보고',  get label() { return L('patient.progressReport2'); },  color: 'bg-orange-400' },
   { id: '내원예정',  get label() { return L('data.hospitalPlanned'); },  color: 'bg-purple-500' },
   { id: '내원결과',  get label() { return L('patient.hospitalResult'); },  color: 'bg-indigo-500' },
@@ -5804,6 +5898,8 @@ function ParentContactSection({ record, campUsers, campGroups, currentUserId, cu
 
 interface QuickReportForm {
   studentId: string;
+  /** 선생님 환자일 때 그 선생님 users id */
+  staffUserId?: string;
   studentName: string;
   grade: string;
   className: string;
@@ -5834,11 +5930,16 @@ const QUICK_ACTION_OPTIONS = [
 
 type QuickActionId = typeof QUICK_ACTION_OPTIONS[number]['id'];
 
+interface StaffOption { userId: string; name: string; role: string; isManager: boolean; phone?: string }
+
 function QuickReportModal({
-  today, students, reporterName, reporterId, onClose, onSubmit,
+  today, students, staffOptions, whereaboutsOf, reporterName, reporterId, onClose, onSubmit,
 }: {
   today: string;
   students: STSheetStudent[];
+  staffOptions: StaffOption[];
+  /** 오늘 일정·시간표로 찾은 학생 위치 */
+  whereaboutsOf: (s: { classNumber?: string }) => Whereabouts | null;
   reporterName: string;
   reporterId: string;
   onClose: () => void;
@@ -5876,9 +5977,45 @@ function QuickReportModal({
     return students.filter(s => s.name.includes(q)).slice(0, 8);
   }, [studentSearch, students]);
 
-  const selectStudent = (s: STSheetStudent) => {
+  /** 선생님도 같이 검색 — 선생님이 아파도 환자 현황에 함께 올린다 */
+  const staffResults = useMemo(() => {
+    const q = studentSearch.trim();
+    if (!q) return [];
+    return staffOptions.filter(u => u.name.includes(q)).slice(0, 5);
+  }, [studentSearch, staffOptions]);
+  const managers = useMemo(() => staffOptions.filter(u => u.isManager && u.phone), [staffOptions]);
+
+  // 일과중 위치 — 오늘 일정표·시간표에서 자동으로
+  const [whereabouts, setWhereabouts] = useState<Whereabouts | null>(null);
+  const [manualPlace, setManualPlace] = useState(false);
+  const isStaff = !!form.staffUserId;
+
+  const selectStaff = (u: StaffOption) => {
     setForm(f => ({
       ...f,
+      studentId: staffPatientId(u.userId),
+      staffUserId: u.userId,
+      studentName: u.name,
+      grade: u.role,
+      className: STAFF_PATIENT_CLASS,
+      classMentor: '', unitMentor: '', roomNumber: '',
+      location: f.locationMode === '일과중' ? '' : f.location,
+    }));
+    setWhereabouts(null);
+    setManualPlace(false);
+    setStudentSearch(u.name);
+    setStudentLocked(true);
+    setShowDropdown(false);
+  };
+
+  const selectStudent = (s: STSheetStudent) => {
+    const w = whereaboutsOf(s);
+    setWhereabouts(w);
+    setManualPlace(false);
+    setForm(f => ({
+      ...f,
+      staffUserId: undefined,
+      location: f.locationMode === '일과중' ? (w?.text ?? '') : f.location,
       studentId: s.studentId,
       studentName: s.name,
       grade: s.grade ? `${s.grade}${s.gender ?? ''}` : '',
@@ -5987,9 +6124,24 @@ function QuickReportModal({
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
 
+          {/* 급한 건은 앱보다 전화가 먼저 */}
+          <div className="rounded-xl bg-red-600 text-white px-3 py-2.5">
+            <p className="text-sm font-bold">🚨 {L('patient.urgentCallManager')}</p>
+            {managers.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {managers.map(m => (
+                  <a key={m.userId} href={`tel:${dialablePhone(m.phone!)}`}
+                    className="inline-flex items-center gap-1 rounded-lg bg-white/15 hover:bg-white/25 px-2.5 py-1 text-xs font-semibold">
+                    📞 {m.name}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* ① 대상 */}
           <div>
-            <p className="text-xs font-bold text-gray-700 mb-1.5">{L('patient.student')}</p>
+            <p className="text-xs font-bold text-gray-700 mb-1.5">{L('patient.studentOrStaff')}</p>
             <div className="relative">
               <input
                 type="text"
@@ -6009,12 +6161,13 @@ function QuickReportModal({
                 <button onClick={() => {
                   setStudentLocked(false);
                   setStudentSearch('');
-                  setForm(f => ({ ...f, studentId: '', studentName: '', grade: '', className: '', classMentor: '', unitMentor: '', roomNumber: '' }));
+                  setWhereabouts(null);
+                  setForm(f => ({ ...f, studentId: '', staffUserId: undefined, studentName: '', grade: '', className: '', classMentor: '', unitMentor: '', roomNumber: '', location: f.locationMode === '일과중' ? '' : f.location }));
                 }} className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 hover:text-red-500">
                   {L('patient.change')}
                 </button>
               )}
-              {!studentLocked && showDropdown && studentResults.length > 0 && (
+              {!studentLocked && showDropdown && (studentResults.length > 0 || staffResults.length > 0) && (
                 <div className="absolute z-10 top-full left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-44 overflow-y-auto">
                   {studentResults.map(s => (
                     <button key={s.studentId} onClick={() => selectStudent(s)}
@@ -6025,14 +6178,23 @@ function QuickReportModal({
                       {s.roomNumber && <span className="text-xs text-gray-400">{s.roomNumber}{L('students.text')}</span>}
                     </button>
                   ))}
+                  {staffResults.map(u => (
+                    <button key={u.userId} onClick={() => selectStaff(u)}
+                      className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 flex items-center gap-2 border-b border-gray-50 last:border-0">
+                      <span className="font-semibold text-gray-900">{u.name}</span>
+                      <span className="text-xs bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded font-semibold">{L('patient.staffPatient')}</span>
+                      {u.role && <span className="text-xs text-gray-400 truncate">{u.role}</span>}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
             {/* 선택된 학생 정보 칩 */}
             {studentLocked && (
               <div className="flex flex-wrap gap-2 mt-2">
+                {isStaff && <span className="text-[11px] bg-teal-50 text-teal-700 font-semibold px-2 py-1 rounded-full">{L('patient.staffPatient')}</span>}
                 {form.grade && <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{form.grade}</span>}
-                {form.className && <span className="text-[11px] bg-blue-50 text-blue-700 px-2 py-1 rounded-full">{fmtClass(form.className)}</span>}
+                {form.className && !isStaff && <span className="text-[11px] bg-blue-50 text-blue-700 px-2 py-1 rounded-full">{fmtClass(form.className)}</span>}
                 {form.roomNumber && <span className="text-[11px] bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{form.roomNumber}{L('students.text')}</span>}
                 {form.classMentor && <span className="text-[11px] bg-green-50 text-green-700 px-2 py-1 rounded-full">{L('patient.homeroom')} {form.classMentor}</span>}
               </div>
@@ -6054,7 +6216,12 @@ function QuickReportModal({
                   <button
                     key={opt.id}
                     type="button"
-                    onClick={() => setField('locationMode', opt.id)}
+                    onClick={() => setForm(f => {
+                      // 일과중으로 돌아오면 일정의 위치, 휴식·격리로 가면 그 자동 위치는 비운다
+                      const auto = whereabouts?.text ?? '';
+                      if (opt.id === '일과중') return { ...f, locationMode: opt.id, location: !manualPlace && auto ? auto : f.location };
+                      return { ...f, locationMode: opt.id, location: auto && f.location === auto ? '' : f.location };
+                    })}
                     className={`flex flex-col items-center gap-0.5 py-2.5 rounded-xl border text-xs font-bold transition-all ${
                       selected
                         ? `${opt.color} ${opt.border} text-white shadow-sm`
@@ -6062,21 +6229,46 @@ function QuickReportModal({
                     }`}
                   >
                     <span className="text-base">{opt.emoji}</span>
-                    <span>{opt.id}</span>
+                    <span>{dataLabel(opt.id)}</span>
                   </button>
                 );
               })}
             </div>
-            <PatientPlacePicker
-              value={form.location}
-              onChange={v => setField('location', v)}
-              placeholder={
-                form.locationMode === '휴식' ? L('patient.eGRoom110Lounge') :
-                form.locationMode === '격리' ? L('patient.eGIsolationRoom214') :
-                L('patient.eGAuditoriumGymClassroom')
-              }
-            />
-            <p className="text-[10px] text-gray-400 mt-1">{L('patient.itMayNotBeTheir')}</p>
+            {form.locationMode === '일과중' && whereabouts && !manualPlace ? (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5">
+                <p className="text-[11px] font-semibold text-blue-600">📅 {L('patient.autoWhereabouts')}</p>
+                <p className="text-sm font-bold text-gray-900 mt-0.5">{whereabouts.text}</p>
+                {whereabouts.time && <p className="text-[11px] text-gray-500 tabular-nums">{whereabouts.time}</p>}
+                <button type="button" onClick={() => { setManualPlace(true); setField('location', ''); }}
+                  className="mt-1 text-[11px] text-gray-500 underline">{L('patient.enterPlaceManually')}</button>
+              </div>
+            ) : (
+              <>
+                <PatientPlacePicker
+                  compact
+                  value={form.location}
+                  onChange={v => setField('location', v)}
+                  placeholder={
+                    form.locationMode === '휴식' ? L('patient.eGRoom110Lounge') :
+                    form.locationMode === '격리' ? L('patient.eGIsolationRoom214') :
+                    L('patient.eGAuditoriumGymClassroom')
+                  }
+                />
+                {form.locationMode === '일과중' && whereabouts && manualPlace && (
+                  <button type="button" onClick={() => { setManualPlace(false); setField('location', whereabouts.text); }}
+                    className="mt-1 text-[11px] text-blue-600 underline">{L('patient.useAutoWhereabouts')}</button>
+                )}
+                {form.locationMode === '일과중' && studentLocked && !isStaff && !whereabouts && (
+                  <p className="text-[10px] text-gray-400 mt-1">{L('patient.noScheduleForNow')}</p>
+                )}
+              </>
+            )}
+            {(form.locationMode === '휴식' || form.locationMode === '격리') && (
+              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-800 space-y-0.5">
+                <p>• {L('patient.restPlaceAskManager')}</p>
+                {!isStaff && <p>• {L('patient.restReportParents')}</p>}
+              </div>
+            )}
           </div>
 
           {/* ③ 열감 */}
@@ -6619,13 +6811,11 @@ function PatientFormModal({
                   onClick={() => { setGuideCategory(cat); setSelectedGuide(null); }}
                   className={`flex-1 py-1.5 text-[11px] font-bold transition-colors ${
                     guideCategory === cat
-                      ? cat === '응급'
-                        ? 'text-red-600 border-b-2 border-red-500 -mb-px'
-                        : 'text-blue-700 border-b-2 border-blue-500 -mb-px'
+                      ? 'text-blue-700 border-b-2 border-blue-500 -mb-px'
                       : 'text-gray-400 hover:text-gray-600'
                   }`}
                 >
-                  {cat === '내과' ? L('patient.internal') : cat === '외과' ? L('patient.external') : L('patient.emergency')}
+                  {cat === '내과' ? L('patient.internal') : L('patient.external')}
                 </button>
               ))}
             </div>
@@ -7072,134 +7262,180 @@ function PatientFormModal({
 const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-red-400 focus:ring-1 focus:ring-red-100 bg-white';
 
 
-// ==================== 👩‍🏫 선생님 약 사용 ====================
-// 학생 환자 기록과 별도 컬렉션(staffMedicationUses). 재고 차감은 학생과 같은 원장 방식(source=staff).
+// ==================== 약복용 명단 → 명단 추가 ====================
+//
+// 사람(학생·선생님)을 고르고 복용 스케줄을 넣는다.
+//  - 그 사람의 진행 중인 환자 기록이 있으면 거기에 약을 붙인다 (처방약 탭과 같은 곳)
+//  - 없으면 '약복용 명단 전용' 기록을 만든다 — 집에서 가져온 약처럼 환자가 아닌 경우라
+//    환자 현황에는 나오지 않고 약복용 명단에만 나온다.
 
-function syncStaffDoseStock(id: string, campCode?: string | null) {
-  authenticatedPost('/api/inventory/sync-dose', { recordId: id, campCode: campCode ?? undefined, source: 'staff' })
-    .catch(e => console.warn('재고 정산 요청 실패 (다음 저장 때 다시 맞춰짐):', e));
-}
-
-function StaffMedicationSection({ campCode, jobCodeId, campUsers }: { campCode: string | null; jobCodeId?: string; campUsers: User[] }) {
-  const { userData } = useAuth();
-  const [list, setList] = useState<StaffMedicationUse[]>([]);
-  const [editing, setEditing] = useState<StaffMedicationUse | 'new' | null>(null);
-  useEffect(() => (campCode ? subscribeStaffMedicationUses(db, campCode, setList) : undefined), [campCode]);
-  const isAdmin = userData?.role === 'admin';
-  const canEdit = (u: StaffMedicationUse) => isAdmin || u.recordedById === userData?.userId;
-  const remove = async (u: StaffMedicationUse) => {
-    if (!confirm(L('patient.deleteThisRecordTheQuantity'))) return;
-    try { await deleteStaffMedicationUse(db, u.id); syncStaffDoseStock(u.id, u.campCode); }
-    catch (e) { console.error(e); alert(L('inventory.couldNotDelete')); }
-  };
-  return (
-    <div className="p-3 space-y-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <h2 className="text-base font-bold text-gray-900">{L('patient.staffMedicationUse')}</h2>
-          <p className="text-[11px] text-gray-500 mt-0.5">{L('patient.logMedicineGivenToStaff')}</p>
-        </div>
-        <button onClick={() => setEditing('new')} disabled={!campCode} className="shrink-0 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm font-bold rounded-lg disabled:opacity-40">{L('patient.log')}</button>
-      </div>
-      {list.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-10">{L('patient.noRecordsYet')}</p>
-      ) : list.map(u => (
-        <div key={u.id} className="bg-white rounded-xl border border-gray-200 px-3 py-2.5 space-y-1">
-          <div className="flex items-center gap-2">
-            <p className="flex-1 min-w-0 text-sm font-bold text-gray-900 truncate">{u.staffName} <span className="text-[11px] font-normal text-gray-400">{u.staffGroup ?? ''} · {formatDate(u.createdAt)}</span></p>
-            {canEdit(u) && (
-              <>
-                <button onClick={() => setEditing(u)} className="text-[11px] text-gray-500 hover:underline">{L('task.edit')}</button>
-                <button onClick={() => remove(u)} className="text-[11px] text-red-400 hover:underline">{L('common.delete')}</button>
-              </>
-            )}
-          </div>
-          <p className="text-[12px] text-gray-700">🤒 {u.symptom}</p>
-          {u.doses.map(d => (
-            <p key={d.id} className="text-[11px] text-emerald-800">💊 {doseLabel(d)} {d.quantity}{dataLabel(d.unit ?? '개')} · {d.groupName}{d.memo ? ` · ${d.memo}` : ''}</p>
-          ))}
-          {u.note && <p className="text-[11px] text-gray-500">📝 {u.note}</p>}
-          <p className="text-[10px] text-gray-400">{L('patient.loggedBy', { v0: u.recordedBy })}</p>
-        </div>
-      ))}
-      {editing && campCode && (
-        <StaffMedicationFormModal campCode={campCode} jobCodeId={jobCodeId} campUsers={campUsers} existing={editing === 'new' ? undefined : editing} onClose={() => setEditing(null)} />
-      )}
-    </div>
-  );
-}
-
-function StaffMedicationFormModal({ campCode, jobCodeId, campUsers, existing, onClose }: {
-  campCode: string; jobCodeId?: string; campUsers: User[]; existing?: StaffMedicationUse; onClose: () => void;
+function MedicationListAddModal({
+  today, campCode, students, staffOptions, allRecords, createdBy, createdById,
+  onCheck, onAddSchedule, onUpdateSchedule, onRemoveSchedule, onUploadPhoto, onRemovePhoto, onClose,
+}: {
+  today: string;
+  campCode: string;
+  students: STSheetStudent[];
+  staffOptions: StaffOption[];
+  allRecords: PatientRecord[];
+  createdBy: string;
+  createdById: string;
+  onCheck: (record: PatientRecord, si: number, t: MedicationTime, checked: boolean) => void;
+  onAddSchedule: (record: PatientRecord, s: Omit<MedicationSchedule, 'checkedTimes'>) => Promise<void>;
+  onUpdateSchedule: (record: PatientRecord, idx: number, s: Omit<MedicationSchedule, 'checkedTimes'>) => Promise<void>;
+  onRemoveSchedule: (record: PatientRecord, idx: number) => Promise<void>;
+  onUploadPhoto: (record: PatientRecord, si: number, file: File) => Promise<string>;
+  onRemovePhoto: (record: PatientRecord, si: number, url: string) => Promise<void>;
+  onClose: () => void;
 }) {
-  const { userData } = useAuth();
-  const { medicines, groups } = usePatientInventory();
-  const me = userData?.userId ?? '';
-  const staff = useMemo(() => [...campUsers].filter(u => u.name).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [campUsers]);
-  const [who, setWho] = useState(existing?.staffUserId ?? me);
-  const [symptom, setSymptom] = useState(existing?.symptom ?? '');
-  const [note, setNote] = useState(existing?.note ?? '');
-  const [doses, setDoses] = useState<MedicationDose[]>(existing?.doses ?? []);
+  const [search, setSearch] = useState('');
+  const [person, setPerson] = useState<
+    | { kind: 'student'; s: STSheetStudent }
+    | { kind: 'staff'; u: StaffOption }
+    | null
+  >(null);
+  const [createdId, setCreatedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const groupOf = (u?: User) => u?.jobExperiences?.find(e => e.id === jobCodeId)?.group;
-  const myGroupId = useMemo(() => {
-    const g = groupOf(campUsers.find(u => u.userId === who) ?? (userData as unknown as User | undefined));
-    return g ? groups.find(x => x.campGroupName?.toLowerCase() === String(g).toLowerCase())?.id : undefined;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [who, groups, campUsers]);
-  const save = async () => {
-    if (!symptom.trim()) { alert(L('patient.pleaseEnterTheSymptoms')); return; }
-    if (doses.length === 0) { alert(L('patient.addAtLeastOneMedicine')); return; }
-    if (doses.some(d => !d.itemId || !d.groupId)) { alert(L('patient.selectBothAMedicineAnd')); return; }
-    const target = campUsers.find(u => u.userId === who);
+
+  const q = search.trim();
+  const studentHits = q ? students.filter(s => s.name.includes(q)).slice(0, 8) : [];
+  const staffHits = q ? staffOptions.filter(u => u.name.includes(q)).slice(0, 5) : [];
+
+  const personId = person ? (person.kind === 'student' ? person.s.studentId : staffPatientId(person.u.userId)) : '';
+  // 진행 중인 환자 기록 → 없으면 약복용 명단 전용 기록 (방금 만든 것 포함)
+  const target = useMemo(() => {
+    if (!personId) return undefined;
+    if (createdId) return allRecords.find(r => r.id === createdId);
+    return allRecords.find(r => r.studentId === personId && r.progressStatus !== '완치' && !r.medicationOnly)
+      ?? allRecords.find(r => r.studentId === personId && r.medicationOnly);
+  }, [personId, createdId, allRecords]);
+
+  const createAndAdd = async (sched: Omit<MedicationSchedule, 'checkedTimes'>) => {
+    if (!person || busy) return;
     setBusy(true);
     try {
-      let id = existing?.id;
-      if (existing) await updateStaffMedicationUse(db, existing.id, { symptom, note, doses });
-      else id = await addStaffMedicationUse(db, {
-        campCode, staffUserId: who, staffName: target?.name ?? userData?.name ?? '', staffGroup: groupOf(target) || undefined,
-        symptom, note, doses, recordedBy: userData?.name ?? '', recordedById: me,
+      const base = person.kind === 'student'
+        ? {
+            studentId: person.s.studentId,
+            studentName: person.s.name,
+            grade: person.s.grade ? `${person.s.grade}${person.s.gender ?? ''}` : undefined,
+            className: person.s.className || undefined,
+            classMentor: person.s.classMentor || undefined,
+            unitMentor: person.s.unitMentor || undefined,
+            roomNumber: person.s.roomNumber || undefined,
+          }
+        : {
+            studentId: staffPatientId(person.u.userId),
+            studentName: person.u.name,
+            patientKind: 'staff' as const,
+            staffUserId: person.u.userId,
+            grade: person.u.role || undefined,
+            className: STAFF_PATIENT_CLASS,
+          };
+      const id = await addPatientRecord(db, {
+        campCode,
+        ...base,
+        medicationOnly: true,
+        types: [],
+        symptom: '',
+        treatment: '',
+        progressStatus: '최초보고',
+        visitDate: Timestamp.now(),
+        medicationSchedules: [{ ...sched, checkedTimes: [] }],
+        recordedBy: createdBy,
+        recordedById: createdById,
       });
-      if (id) syncStaffDoseStock(id, campCode);
-      onClose();
-    } catch (e) { console.error('선생님 약 사용 저장 오류:', e); alert(L('profile.couldNotSave')); }
-    finally { setBusy(false); }
+      setCreatedId(id);
+    } catch (e) {
+      alert((e as Error)?.message || L('common.saveFailed'));
+    } finally {
+      setBusy(false);
+    }
   };
+
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4" onClick={onClose}>
-      <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-          <h2 className="text-base font-bold text-gray-900">{existing ? L('patient.editStaffMedicationUse') : L('patient.logStaffMedicationUse')}</h2>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600">✕</button>
+    <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">{L('patient.addToList')}</h2>
+            <p className="text-[11px] text-gray-400 mt-0.5">{L('patient.medListAddHint')}</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-600" aria-label={L('common.close')}>✕</button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
-          <div>
-            <p className="text-xs font-bold text-gray-700 mb-1">{L('patient.staffMember')}</p>
-            <select value={who} onChange={e => setWho(e.target.value)} disabled={!!existing} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white disabled:bg-gray-50">
-              {!staff.some(u => u.userId === me) && <option value={me}>{userData?.name}</option>}
-              {staff.map(u => <option key={u.userId} value={u.userId}>{u.name}{groupOf(u) ? ` · ${groupOf(u)}` : ''}</option>)}
-            </select>
-          </div>
-          <div>
-            <p className="text-xs font-bold text-gray-700 mb-1">{L('patient.symptomsReason')}</p>
-            <input value={symptom} onChange={e => setSymptom(e.target.value)} placeholder={L('patient.eGHeadacheMosquitoBite')} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-red-300" />
-          </div>
-          <MedicationDoseEditor doses={doses} onChange={setDoses} medicines={medicines} groups={groups} givenBy={userData?.name ?? ''} defaultGroupId={myGroupId} />
-          <div>
-            <p className="text-xs font-bold text-gray-700 mb-1">{L('task.note')} <span className="font-normal text-gray-400">{L('patient.optional')}</span></p>
-            <textarea value={note} onChange={e => setNote(e.target.value)} rows={2} className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 outline-none resize-none" />
-          </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {!person ? (
+            <div>
+              <p className="text-xs font-bold text-gray-700 mb-1.5">{L('patient.studentOrStaff')}</p>
+              <input
+                autoFocus
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={L('patient.searchByName')}
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400"
+              />
+              {(studentHits.length > 0 || staffHits.length > 0) && (
+                <div className="mt-1 border border-gray-200 rounded-xl overflow-hidden">
+                  {studentHits.map(s => (
+                    <button key={s.studentId} onClick={() => setPerson({ kind: 'student', s })}
+                      className="w-full text-left px-3 py-2.5 text-sm hover:bg-blue-50 flex items-center gap-2 border-b border-gray-50 last:border-0">
+                      <span className="font-semibold text-gray-900">{s.name}</span>
+                      <span className="text-xs text-gray-400">{s.grade}{s.gender === 'F' ? 'F' : 'M'}</span>
+                      {s.className && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{fmtClass(s.className)}</span>}
+                    </button>
+                  ))}
+                  {staffHits.map(u => (
+                    <button key={u.userId} onClick={() => setPerson({ kind: 'staff', u })}
+                      className="w-full text-left px-3 py-2.5 text-sm hover:bg-teal-50 flex items-center gap-2 border-b border-gray-50 last:border-0">
+                      <span className="font-semibold text-gray-900">{u.name}</span>
+                      <span className="text-xs bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded font-semibold">{L('patient.staffPatient')}</span>
+                      {u.role && <span className="text-xs text-gray-400 truncate">{u.role}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2 rounded-xl bg-gray-50 border border-gray-200 px-3 py-2.5">
+                <span className="text-sm font-bold text-gray-900">{person.kind === 'student' ? person.s.name : person.u.name}</span>
+                {person.kind === 'staff'
+                  ? <span className="text-xs bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded font-semibold">{L('patient.staffPatient')}</span>
+                  : person.s.className && <span className="text-xs bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{fmtClass(person.s.className)}</span>}
+                {!createdId && (
+                  <button onClick={() => { setPerson(null); setSearch(''); }} className="ml-auto text-[11px] text-gray-400 hover:text-red-500">{L('patient.change')}</button>
+                )}
+              </div>
+              <p className={`text-[11px] rounded-lg px-3 py-2 ${target && !target.medicationOnly ? 'bg-red-50 text-red-700' : 'bg-orange-50 text-orange-700'}`}>
+                {target && !target.medicationOnly ? L('patient.medListAddToPatient') : L('patient.medListOnlyNote')}
+              </p>
+              {busy && <p className="text-xs text-gray-400">{L('common.saving')}</p>}
+              <MedicationSection
+                schedules={target?.medicationSchedules ?? []}
+                today={today}
+                unitMentor={person.kind === 'student' ? person.s.unitMentor : undefined}
+                classMentor={person.kind === 'student' ? person.s.classMentor : undefined}
+                autoOpenForm={!target?.medicationSchedules?.length}
+                onCheck={(si, t, checked) => { if (target) onCheck(target, si, t, checked); }}
+                onAddSchedule={(sched) => { if (target) void onAddSchedule(target, sched); else void createAndAdd(sched); }}
+                onUpdateSchedule={target ? (idx, sched) => { void onUpdateSchedule(target, idx, sched); } : undefined}
+                onRemoveSchedule={target ? (idx) => { void onRemoveSchedule(target, idx); } : undefined}
+                onUploadMedPhoto={target ? (si, file) => onUploadPhoto(target, si, file) : undefined}
+                onRemoveMedPhoto={target ? (si, url) => { void onRemovePhoto(target, si, url); } : undefined}
+              />
+            </>
+          )}
         </div>
-        <div className="px-5 py-4 border-t border-gray-100">
-          <button onClick={save} disabled={busy} className="w-full py-2.5 text-sm font-bold text-white bg-red-500 hover:bg-red-600 rounded-xl disabled:opacity-40">{busy ? L('task.saving') : L('common.save')}</button>
+
+        <div className="px-5 py-3 border-t border-gray-100 flex-shrink-0">
+          <button onClick={onClose} className="w-full py-2.5 text-sm font-semibold text-gray-700 border border-gray-200 hover:bg-gray-50 rounded-xl">{L('common.close')}</button>
         </div>
       </div>
     </div>
   );
 }
 
-
-/** 환자 위치 — 숙소 탭의 환자방·교무실 버튼 / 방(호수) / 기타(직접 입력) */
 function PatientPlacePicker({ value, onChange, placeholder, compact }: { value: string; onChange: (v: string) => void; placeholder?: string; compact?: boolean }) {
   const { placeOptions } = usePatientInventory();
   const [kind, setKind] = useState(() => patientPlaceKind(value, placeOptions));

@@ -6,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, TouchableOpacity, TextInput, StyleSheet, Modal, ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -326,9 +326,14 @@ function CashCheckCard({ denoms, currency, balance, check, prefill, onSave, onFl
 
 // ── 시트(하단 모달) 공통 ─────────────────────────────────────────
 function Sheet({ title, onClose, children, footer }: { title: string; onClose: () => void; children: React.ReactNode; footer: React.ReactNode }) {
+  const insets = useSafeAreaInsets();
   return (
     <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top', 'bottom']}>
+      {/* iOS 페이지 시트는 SafeAreaView 로, Android 는 모달이 상단바 밑까지 그려지므로 안전 영역만큼 직접 띄운다 */}
+      <SafeAreaView
+        style={{ flex: 1, backgroundColor: '#fff', ...(Platform.OS === 'android' ? { paddingTop: insets.top, paddingBottom: insets.bottom } : null) }}
+        edges={Platform.OS === 'ios' ? ['top', 'bottom'] : []}
+      >
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={s.sheetHeader}>
             <Text style={s.sheetTitle}>{title}</Text>

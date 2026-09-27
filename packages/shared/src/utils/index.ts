@@ -19,3 +19,4 @@ export * from './rrn';
 export * from './text';
 export * from './id';
 export * from './studentModal';
+export * from './whereabouts';

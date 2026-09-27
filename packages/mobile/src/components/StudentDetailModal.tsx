@@ -8,7 +8,7 @@ import {
   View, Text, Modal, ScrollView, FlatList, TouchableOpacity, StyleSheet, useWindowDimensions, TextInput,
   Alert, ActivityIndicator, Linking, type NativeSyntheticEvent, type NativeScrollEvent,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -200,6 +200,8 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
 
   // iPad 분할 화면·회전에도 페이지 폭이 맞도록 창 폭을 따라감
   const { width: SCREEN_WIDTH } = useWindowDimensions();
+  // Android 는 모달이 상단바 밑까지 그려져 SafeAreaView 가 안 먹는다 → 앱 전체 안전 영역 값으로 직접 띄운다 (주소 검색 모달과 같은 방식)
+  const insets = useSafeAreaInsets();
   const goTo = useCallback((idx: number) => {
     if (idx < 0 || idx >= students.length) return;
     setEditingField(null);
@@ -308,7 +310,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
         onDeny={handleContactsDisclosureDeny}
       />
       <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-        <SafeAreaView style={styles.screen} edges={['top', 'bottom']}>
+        <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
           {/* 상단 바 */}
           <View style={styles.topBar}>
             <TouchableOpacity onPress={onClose} style={styles.iconBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel={L('common.close')}>
@@ -436,7 +438,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
               </View>
             )}
           />
-        </SafeAreaView>
+        </View>
       </Modal>
     </>
   );

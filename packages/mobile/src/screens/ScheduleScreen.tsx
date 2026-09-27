@@ -1,5 +1,5 @@
 import { resolveActiveJobCodeId } from '@smis-mentor/shared';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -17,6 +17,11 @@ import {
   teacherMapOf,
   timetableCategories,
   timetableGroupNames,
+  daySetForGroup,
+  dayCategory,
+  excitingDates,
+  localYmd,
+  EXCITING_CATEGORY,
   type CampTimetable,
 } from '@smis-mentor/shared';
 import { useAuth } from '../context/AuthContext';
@@ -25,7 +30,11 @@ import { TimetableView } from '../components/TimetableView';
 import { GuideDetail } from '../components/GuideDetail';
 import { TimetableEditor } from '../components/TimetableEditor';
 import { BookTable } from '../components/BookTable';
+import { DayPlanCalendar, DayPlanEditor, ExcitingDayList } from '../components/DayPlan';
 import { L } from '@smis-mentor/shared';
+
+/** 시간표 탭 줄의 '전체' (일정표) */
+const ALL_TAB = '__all';
 
 /** 고른 그룹은 캠프별로 기억한다 — 다른 탭 다녀와도 그대로 */
 const GROUP_KEY = (jobCodeId: string) => `SMIS_TIMETABLE_GROUP_${jobCodeId}`;
@@ -59,6 +68,10 @@ export function ScheduleScreen() {
   const [category, setCategory] = useState<string | null>(null);
   const [groupName, setGroupName] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [dayPlanEditing, setDayPlanEditing] = useState(false);
+  const [focusDate, setFocusDate] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const excitingTop = useRef(0);
   const isAdmin = userData?.role === 'admin';
 
   // 지난번에 고른 그룹 복원
@@ -113,7 +126,6 @@ export function ScheduleScreen() {
   );
 
   const categories = useMemo(() => timetableCategories(campCode, timetables), [campCode, timetables]);
-  const activeCategory = category ?? categories[0]?.key ?? null;
 
   const groups = useMemo(() => timetableGroupNames(derived, timetables), [derived, timetables]);
 
@@ -124,18 +136,37 @@ export function ScheduleScreen() {
 
   const activeGroup = groupName && groups.includes(groupName) ? groupName : defaultGroup;
 
+  /** 이 그룹이 쓰는 일정 세트 — 처음 열면 오늘 Day 탭, 오늘이 일정에 없으면 '전체' (web 과 같은 규칙) */
+  const dayPlan = data?.dayPlan ?? null;
+  const daySet = useMemo(() => daySetForGroup(dayPlan, activeGroup), [dayPlan, activeGroup]);
+  const hasExciting = excitingDates(daySet).length > 0;
+  const todayCategory = dayCategory(daySet, localYmd(new Date()), campCode);
+  const activeCategory = category ?? todayCategory ?? (daySet ? ALL_TAB : categories[0]?.key ?? null);
+  const isPlanTab = activeCategory === ALL_TAB || activeCategory === EXCITING_CATEGORY;
+  const tableCategory = isPlanTab ? null : activeCategory;
+  const sharedGroupNames = (daySet?.groups ?? [])
+    .map((k) => groups.find((g) => normalizeGroupKey(g) === k) ?? k)
+    .join(' · ');
+  const openDate = (date: string) => {
+    const cat = dayCategory(daySet, date, campCode);
+    if (!cat) return;
+    setCategory(cat);
+    if (cat === EXCITING_CATEGORY) setFocusDate(date);
+    else scrollRef.current?.scrollTo({ y: 0, animated: false });
+  };
+
   const current: CampTimetable | undefined = useMemo(
     () =>
       resolveTimetable({
         timetables,
         groups: derived,
-        category: activeCategory,
+        category: tableCategory,
         groupName: activeGroup,
         campCode,
         jobCodeId: activeJobCodeId ?? '',
         common: data?.timetableCommon,
       }),
-    [timetables, derived, groups, activeCategory, activeGroup, campCode, activeJobCodeId, data?.timetableCommon]
+    [timetables, derived, groups, tableCategory, activeGroup, campCode, activeJobCodeId, data?.timetableCommon]
   );
 
   /**
@@ -177,6 +208,25 @@ export function ScheduleScreen() {
     );
   }
 
+  if (dayPlanEditing && isAdmin) {
+    return (
+      <DayPlanEditor
+        campCode={campCode}
+        plan={dayPlan}
+        groups={groups}
+        startMs={data?.startMs ?? null}
+        endMs={data?.endMs ?? null}
+        initialGroup={activeGroup}
+        actorName={userData?.name ?? ''}
+        onClose={() => setDayPlanEditing(false)}
+        onSaved={() => {
+          setDayPlanEditing(false);
+          refetch();
+        }}
+      />
+    );
+  }
+
   if (editing && isAdmin) {
     return (
       <TimetableEditor
@@ -201,6 +251,7 @@ export function ScheduleScreen() {
 
   return (
     <ScrollView
+      ref={scrollRef}
       style={s.screen}
       contentContainerStyle={s.content}
       refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />}
@@ -208,9 +259,13 @@ export function ScheduleScreen() {
       {/* 1단계: 표 종류 */}
       <View style={s.tabLine}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.tabRow}>
-        {categories.map((c) => {
+        {[
+          { key: ALL_TAB, label: L('schedule.all') },
+          ...categories,
+          ...(hasExciting || (isAdmin && daySet) ? [{ key: EXCITING_CATEGORY, label: L('schedule.excitingTab') }] : []),
+        ].map((c) => {
           const on = c.key === activeCategory;
-          const filled = timetables.some((t) => t.dayType === c.key);
+          const filled = c.key === ALL_TAB || c.key === EXCITING_CATEGORY || timetables.some((t) => t.dayType === c.key);
           return (
             <TouchableOpacity
               key={c.key}
@@ -225,7 +280,7 @@ export function ScheduleScreen() {
         })}
         </ScrollView>
         {isAdmin && (
-          <TouchableOpacity style={s.editBtn} onPress={() => setEditing(true)}>
+          <TouchableOpacity style={s.editBtn} onPress={() => (isPlanTab ? setDayPlanEditing(true) : setEditing(true))}>
             <Text style={s.editBtnText}>편집</Text>
           </TouchableOpacity>
         )}
@@ -251,7 +306,36 @@ export function ScheduleScreen() {
         </View>
       )}
 
-      {current && guideLabel ? (
+      {activeCategory === ALL_TAB ? (
+        daySet ? (
+          <View>
+            <View style={s.inlineHead}>
+              <Text style={s.inlineTitle}>{L('schedule.dayPlanTitle', { v0: activeGroup ?? '' })}</Text>
+              {daySet.groups.length > 1 && <Text style={s.inlineTime}>{L('schedule.dayPlanShared', { v0: sharedGroupNames })}</Text>}
+            </View>
+            <DayPlanCalendar
+              set={daySet}
+              campCode={campCode}
+              startMs={data?.startMs ?? null}
+              endMs={data?.endMs ?? null}
+              onPickDate={openDate}
+            />
+          </View>
+        ) : (
+          <Empty
+            title={dayPlan ? L('schedule.dayPlanNoGroup') : L('schedule.dayPlanEmpty')}
+            body={isAdmin ? L('schedule.dayPlanEmptyAdmin') : ''}
+          />
+        )
+      ) : activeCategory === EXCITING_CATEGORY ? (
+        <View onLayout={(e) => { excitingTop.current = e.nativeEvent.layout.y; }}>
+          <ExcitingDayList
+            set={daySet}
+            focusDate={focusDate}
+            onFocusLayout={(y) => scrollRef.current?.scrollTo({ y: Math.max(0, excitingTop.current + y - 12), animated: true })}
+          />
+        </View>
+      ) : current && guideLabel ? (
         <GuideDetail
           label={guideLabel}
           guide={findGuide(guideLabel, data?.timetableGuides)}
