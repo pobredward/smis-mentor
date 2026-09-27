@@ -192,6 +192,8 @@ export function SignInScreen({
         Alert.alert('오류', '유효하지 않은 이메일 주소입니다.');
       } else if (error.code === 'auth/too-many-requests') {
         Alert.alert('오류', '너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.');
+      } else if (typeof error?.message === 'string' && error.message.startsWith('등록되지 않은 이메일')) {
+        Alert.alert('오류', error.message);
       } else {
         Alert.alert('오류', '비밀번호 재설정 이메일 발송 중 오류가 발생했습니다. 나중에 다시 시도해주세요.');
       }
@@ -975,7 +977,7 @@ export function SignInScreen({
     } catch (error: any) {
       logger.error('계정 연결 실패:', error);
       
-      if (error.code === 'auth/wrong-password') {
+      if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
         Alert.alert(
           '비밀번호 오류',
           '비밀번호가 일치하지 않습니다.',

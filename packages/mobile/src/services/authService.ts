@@ -248,9 +248,10 @@ export const signIn = async (email: string, password: string) => {
         throw new Error('ACCOUNT_DELETED');
       }
 
+      // 마지막 로그인 시간 기록 실패(규칙·네트워크)는 로그인 자체를 막지 않는다
       await updateUser(userRecord.userId, {
         lastLoginAt: Timestamp.now(),
-      });
+      }).catch((e) => logger.warn('⚠️ 마지막 로그인 시간 기록 실패 (로그인은 계속):', e?.code ?? e));
 
       // 사용자 정보 업데이트 후 상태 반영을 위한 짧은 지연
       await new Promise((resolve) => setTimeout(resolve, 500));

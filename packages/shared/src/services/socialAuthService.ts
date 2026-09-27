@@ -809,8 +809,13 @@ export function handleSocialAuthError(error: FirebaseAuthError): string {
     return '탈퇴한 계정입니다. 계정 복구를 원하시면 관리자에게 문의하세요.\n\n관리자: 010-7656-7933 (신선웅)';
   } else if (error.message === 'ACCOUNT_DELETED') {
     return '삭제된 계정입니다. 계정 복구를 원하시면 관리자에게 문의하세요.\n\n관리자: 010-7656-7933 (신선웅)';
-  } else if (error.code === 'auth/wrong-password') {
+  } else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+    // 이메일 열거 보호가 켜진 프로젝트는 wrong-password 대신 invalid-credential 을 준다
     return '비밀번호가 일치하지 않습니다.';
+  } else if (error.code === 'auth/too-many-requests') {
+    return '시도가 너무 많습니다. 잠시 후 다시 시도해주세요.';
+  } else if (error.code === 'auth/network-request-failed') {
+    return '네트워크 연결을 확인한 뒤 다시 시도해주세요.';
   } else if (error.code === 'auth/user-not-found') {
     return '사용자를 찾을 수 없습니다.';
   }
