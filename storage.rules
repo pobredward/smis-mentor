@@ -196,12 +196,15 @@ service firebase.storage {
     // 경로: patientRecords/{recordId}/prescriptions/...
     // 역할: 인증 사용자(읽기/업로드/삭제) — 캠프 운영진 전체 공유
     // ──────────────────────────────────────────────────────────────
+    // 처방약·상시약 사진(10MB 이하) 또는 영상(100MB 이하)
     match /patientRecords/{recordId}/prescriptions/{allPaths=**} {
       allow read: if isAuthenticated();
       allow write: if (
         isAuthenticated() &&
-        isImage() &&
-        isUnder10MB()
+        (
+          (isImage() && isUnder10MB()) ||
+          (request.resource.contentType.matches('video/.*') && request.resource.size < 100 * 1024 * 1024)
+        )
       );
       allow delete: if isAuthenticated();
     }

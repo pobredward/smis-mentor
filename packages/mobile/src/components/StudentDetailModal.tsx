@@ -13,7 +13,7 @@ import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import {
   L, dataLabel, logger, resolveActiveJobCodeId, toDriveImageUrl, getFieldConfig, getFieldValue, getFixedFieldValue,
-  getDefaultFieldConfig, getStudentPatientRecords, studentTabsFor, sectionsForTab, visibleDynamicFields,
+  getDefaultFieldConfig, getStudentPatientRecords, getStudentRegularMedications, medPeriodLabel, schedActiveOn, todayDateKey, MEDICATION_TIMES, type MedicationSchedule, studentTabsFor, sectionsForTab, visibleDynamicFields,
   hasMedicationInfo, isOpenPatientRecord, formatAllowance, placementSummary, guardianContacts, dialablePhone, STUDENT_TAB_LABEL_KEYS,
   type STSheetFieldConfig, type FieldSectionConfig, type FieldItemConfig, type PatientRecord, type StudentTabId,
   type STSheetStudent, type CampType,
@@ -152,6 +152,8 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
   const [overrides, setOverrides] = useState<Record<string, Record<string, unknown>>>({});
   const [fieldConfig, setFieldConfig] = useState<STSheetFieldConfig>(() => getDefaultFieldConfig(campType));
   const [recordsById, setRecordsById] = useState<Record<string, PatientRecord[]>>({});
+  // 상시약 (약복용 명단 전용 — 보건 기록이 아님)
+  const [regularById, setRegularById] = useState<Record<string, MedicationSchedule[]>>({});
 
   const [showContactsDisclosure, setShowContactsDisclosure] = useState(false);
   const pendingStudentRef = useRef<STSheetStudent | null>(null);
@@ -186,6 +188,9 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     getStudentPatientRecords(db, campCode, id)
       .then(r => setRecordsById(prev => ({ ...prev, [id]: r })))
       .catch(e => { logger.warn('[StudentDetailModal] 보건 기록 조회 실패', e); setRecordsById(prev => ({ ...prev, [id]: [] })); });
+    getStudentRegularMedications(db, campCode, id)
+      .then(m => setRegularById(prev => ({ ...prev, [id]: m })))
+      .catch(() => setRegularById(prev => ({ ...prev, [id]: [] })));
   }, [visible, campCode, base]);
 
   const allowance = useStudentAllowance(campCode, campType, student, base ? recordsById[base.studentId] ?? null : null, visible);
@@ -416,6 +421,7 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
                       role={role}
                       fixedOpts={fixedOpts}
                       records={index === currentIndex ? records : null}
+                      regularMeds={index === currentIndex ? (regularById[item.studentId] ?? []) : []}
                       editingField={index === currentIndex ? editingField : null}
                       fieldSaving={fieldSaving}
                       onStartEdit={(key, value) => setEditingField({ key, value })}
@@ -453,6 +459,8 @@ interface TabBodyProps {
   role: string;
   fixedOpts: { isAdmin: boolean; isForeign: boolean; groupRole?: string };
   records: PatientRecord[] | null;
+  /** 상시약 — 보호자·건강 탭에 보건 기록과 따로 */
+  regularMeds: MedicationSchedule[];
   editingField: EditingField;
   fieldSaving: boolean;
   onStartEdit: (key: string, value: string) => void;
@@ -587,6 +595,43 @@ function TabBody(props: TabBodyProps) {
         )}
         {sections('health')}
         {props.memoNode}
+        {(() => {
+          // 복용 약 — 처방약(보건 기록) + 상시약(약복용 명단 전용). 끝난 약은 흐리게 아래로 (web 과 같음)
+          const today = todayDateKey();
+          const rows = [
+            ...(records ?? []).flatMap(r => (r.medicationSchedules ?? []).map(m => ({ m, rx: true }))),
+            ...props.regularMeds.map(m => ({ m, rx: false })),
+          ].map(x => ({ ...x, ended: !x.m.endDateAuto && x.m.endDate < today }))
+            .sort((p, q) => Number(p.ended) - Number(q.ended) || Number(!p.rx) - Number(!q.rx));
+          if (rows.length === 0) return null;
+          return (
+            <View style={[styles.card, { borderColor: '#fed7aa' }]}>
+              <View style={styles.cardHeader}>
+                <Ionicons name="medical-outline" size={16} color="#ea580c" />
+                <Text style={styles.cardTitle}>{L('studentModal.medsTitle')}</Text>
+              </View>
+              {rows.map(({ m, rx, ended }, i) => (
+                <View key={i} style={[{ paddingVertical: 9, borderBottomWidth: i < rows.length - 1 ? 1 : 0, borderBottomColor: '#f3f4f6', gap: 4 }, ended && { opacity: 0.5 }]}>
+                  <View style={styles.recordTop}>
+                    <Text style={[styles.smallChip, rx ? { backgroundColor: '#eff6ff', color: '#1d4ed8' } : { backgroundColor: '#fff7ed', color: '#c2410c' }]}>
+                      {rx ? L('patient.prescribedMedication') : L('patient.maRegular')}
+                    </Text>
+                    <Text style={styles.recordSymptom}>{m.name || (m.category ? dataLabel(m.category) : '-')}</Text>
+                    {!!m.name && !!m.category && <Text style={[styles.smallChip, styles.smallChipGray]}>{dataLabel(m.category)}</Text>}
+                    {!ended && !schedActiveOn(m, today) && <Text style={{ fontSize: 11, color: '#9ca3af' }}>{L('patient.noDoseToday')}</Text>}
+                  </View>
+                  <View style={styles.recordTop}>
+                    {MEDICATION_TIMES.filter(t => m.times.includes(t)).map(t => (
+                      <Text key={t} style={[styles.smallChip, { backgroundColor: '#ffedd5', color: '#c2410c' }]}>{dataLabel(t)}</Text>
+                    ))}
+                    <Text style={{ fontSize: 11, color: '#6b7280' }}>{medPeriodLabel(m, today)}{m.daysPerWeek ? ` · ${L('patient.maNDays', { v0: m.daysPerWeek })}` : ''}</Text>
+                  </View>
+                  {!!m.memo && <Text style={styles.recordSub}>{m.memo}</Text>}
+                </View>
+              ))}
+            </View>
+          );
+        })()}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Ionicons name="medkit-outline" size={16} color="#4f46e5" />

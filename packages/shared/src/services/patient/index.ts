@@ -4,6 +4,7 @@ import {
   query,
   where,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   arrayUnion,
@@ -92,6 +93,81 @@ function normalizeMedicationSchedules(value: unknown): MedicationSchedule[] {
 }
 
 // ── 실시간 구독 ────────────────────────────────────────────────
+
+// ── 상시약 (약복용 명단 전용) ────────────────────────────────
+// 집에서 가져온 약·영양제·렌즈처럼 늘 먹는 약은 '환자'가 아니므로 patientRecords 가 아니라
+// regularMedications 에 따로 둔다. 화면에서는 약복용 명단에만 합쳐 보여 주고(medicationOnly: true),
+// 문서 id 가 'rm_' 로 시작해서 약 체크·휴약일·스케줄·사진 함수가 같은 id 로 알맞은 컬렉션을 찾는다.
+
+export const REGULAR_MED_COLLECTION = 'regularMedications';
+export const REGULAR_MED_ID_PREFIX = 'rm_';
+
+/** 상시약 문서 id 인가 */
+export const isRegularMedId = (id: string): boolean => id.startsWith(REGULAR_MED_ID_PREFIX);
+
+/** 환자 기록 / 상시약 문서 — id 로 컬렉션을 고른다 */
+const recordDoc = (db: Firestore, recordId: string) =>
+  doc(db, isRegularMedId(recordId) ? REGULAR_MED_COLLECTION : 'patientRecords', recordId);
+
+/** 상시약 한 사람분 (환자 기록 모양으로 맞춰 약복용 명단에 합친다) */
+export type RegularMedicationInput = Pick<
+  PatientRecord,
+  'campCode' | 'studentId' | 'studentName' | 'grade' | 'className' | 'classMentor' | 'unitMentor' | 'roomNumber'
+  | 'patientKind' | 'staffUserId' | 'medicationSchedules' | 'recordedBy' | 'recordedById'
+>;
+
+export const addRegularMedication = async (db: Firestore, data: RegularMedicationInput): Promise<string> => {
+  const now = Timestamp.now();
+  const id = REGULAR_MED_ID_PREFIX + doc(collection(db, REGULAR_MED_COLLECTION)).id;
+  const clean = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined));
+  await setDoc(doc(db, REGULAR_MED_COLLECTION, id), { ...clean, createdAt: now, updatedAt: now });
+  return id;
+};
+
+/** 한 학생의 상시약 (학생 상세 카드용) — 여러 문서여도 약 목록 하나로 합친다 */
+export const getStudentRegularMedications = async (
+  db: Firestore,
+  campCode: string,
+  studentId: string,
+): Promise<MedicationSchedule[]> => {
+  if (!campCode || !studentId) return [];
+  const snap = await getDocs(query(
+    collection(db, REGULAR_MED_COLLECTION),
+    where('campCode', '==', campCode),
+    where('studentId', '==', studentId),
+  ));
+  return snap.docs.flatMap(d => normalizeMedicationSchedules(d.data().medicationSchedules));
+};
+
+export const subscribeRegularMedications = (
+  db: Firestore,
+  campCode: string,
+  onData: (records: PatientRecord[]) => void,
+  onError?: (error: Error) => void
+): Unsubscribe =>
+  onSnapshot(
+    query(collection(db, REGULAR_MED_COLLECTION), where('campCode', '==', campCode)),
+    (snapshot) => {
+      onData(snapshot.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          ...data,
+          medicationOnly: true,
+          types: [],
+          symptom: '',
+          treatment: '',
+          progressStatus: '최초보고',
+          visitDate: data.createdAt,
+          medicationSchedules: normalizeMedicationSchedules(data.medicationSchedules),
+        } as unknown as PatientRecord;
+      }));
+    },
+    (error) => {
+      logger.error('상시약 구독 오류:', error);
+      onError?.(error);
+    }
+  );
 
 export const subscribePatientRecords = (
   db: Firestore,
@@ -204,7 +280,7 @@ export const updateMedicationDoses = async (
   ctx: DoseStockContext,
   nextDoses: MedicationDose[]
 ): Promise<void> => {
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     medicationDoses: cleanDoses(nextDoses),
     updatedAt: Timestamp.now(),
   });
@@ -227,7 +303,7 @@ export const updatePatientRecord = async (
   recordId: string,
   updates: Partial<Omit<PatientRecord, 'id' | 'createdAt'>>
 ): Promise<void> => {
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     ...updates,
     updatedAt: Timestamp.now(),
   });
@@ -239,7 +315,7 @@ export const deletePatientRecord = async (
   /** 전달 시 기록에 남은 약 복용 수량을 재고에 복구 */
   ctx?: DoseStockContext
 ): Promise<void> => {
-  await deleteDoc(doc(db, 'patientRecords', recordId));
+  await deleteDoc(recordDoc(db, recordId));
   logger.info('환자 기록 삭제:', recordId);
 };
 
@@ -258,7 +334,7 @@ export const updateProgressStatus = async (
     status,
     ...(note ? { note } : {}),
   };
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     progressStatus: status,
     progressLogs: arrayUnion(log),
     updatedAt: Timestamp.now(),
@@ -287,7 +363,7 @@ export const addProgressLog = async (
     source: 'progress',
     progressLogAt: loggedAt.toMillis(),
   }));
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     progressStatus: log.status,
     progressLogs: arrayUnion(fullLog),
     ...(newDoses.length ? { medicationDoses: arrayUnion(...newDoses) } : {}),
@@ -321,7 +397,7 @@ export const removeProgressLog = async (
     ? currentDoses.filter(d => !(d.source === 'progress' && d.progressLogAt === removedKey))
     : currentDoses;
   const dosesChanged = doseCtx && nextDoses.length !== currentDoses.length;
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     progressLogs: newLogs,
     progressStatus: prevStatus,
     ...(dosesChanged ? { medicationDoses: nextDoses } : {}),
@@ -337,7 +413,7 @@ export const addHospitalVisit = async (
   recordId: string,
   visit: HospitalVisitEntry
 ): Promise<void> => {
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     hospitalVisits: arrayUnion(visit),
     updatedAt: Timestamp.now(),
   });
@@ -349,7 +425,7 @@ export const updateHospitalVisitEntry = async (
   recordId: string,
   allVisits: HospitalVisitEntry[]
 ): Promise<void> => {
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     hospitalVisits: allVisits,
     updatedAt: Timestamp.now(),
   });
@@ -385,7 +461,7 @@ export const addMedicationCheck = async (
     if (checkerName) checkedBy[timeKey] = checkerName;
     return { ...s, checkedTimes: newTimes, checkedBy };
   });
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     medicationSchedules: updated,
     updatedAt: Timestamp.now(),
   });
@@ -406,7 +482,7 @@ export const removeMedicationCheck = async (
     delete checkedBy[timeKey];
     return { ...s, checkedTimes: checkedTimes.filter(t => t !== timeKey), checkedBy };
   });
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     medicationSchedules: updated,
     updatedAt: Timestamp.now(),
   });
@@ -419,7 +495,7 @@ export const updateIsolationReturnChecks = async (
   recordId: string,
   checks: boolean[]
 ): Promise<void> => {
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     isolationReturnChecks: checks,
     updatedAt: Timestamp.now(),
   });
@@ -432,7 +508,7 @@ export const updateManagerCheck = async (
   recordId: string,
   check: ManagerCheck | null
 ): Promise<void> => {
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     managerCheck: check ?? null,
     updatedAt: Timestamp.now(),
   });
@@ -451,7 +527,7 @@ export const addParentContactLog = async (
     reportType: log.reportType ?? ('최초보고' as ContactReportType),
     contactedAt: Timestamp.now(),
   };
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     parentContactLogs: arrayUnion(newLog),
     updatedAt: Timestamp.now(),
   });
@@ -462,7 +538,7 @@ export const removeParentContactLog = async (
   recordId: string,
   log: ParentContactLog
 ): Promise<void> => {
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     parentContactLogs: arrayRemove(log),
     updatedAt: Timestamp.now(),
   });
@@ -475,7 +551,7 @@ export const updateParentContactAssignee = async (
   assigneeName: string,
   nextContactAt?: Timestamp
 ): Promise<void> => {
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     parentContactAssigneeId: assigneeId,
     parentContactAssigneeName: assigneeName,
     ...(nextContactAt ? { nextContactScheduledAt: nextContactAt } : {}),
@@ -491,7 +567,7 @@ export const updateAssignee = async (
   assigneeId: string,
   assigneeName: string
 ): Promise<void> => {
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     assigneeId, assigneeName, updatedAt: Timestamp.now(),
   });
 };
@@ -503,7 +579,7 @@ export const updateBillingInfo = async (
   recordId: string,
   billing: HospitalBilling
 ): Promise<void> => {
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     billing,
     updatedAt: Timestamp.now(),
   });
@@ -520,7 +596,7 @@ export const togglePatientType = async (
   const next = currentTypes.includes(type)
     ? currentTypes.filter(t => t !== type)
     : [...currentTypes, type];
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     types: next, updatedAt: Timestamp.now(),
   });
 };
@@ -532,7 +608,7 @@ export const addIsolationCheckSchedule = async (
   recordId: string,
   schedule: IsolationCheckSchedule
 ): Promise<void> => {
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     isolationCheckSchedules: arrayUnion(schedule),
     updatedAt: Timestamp.now(),
   });
@@ -544,7 +620,7 @@ export const completeIsolationCheckSchedule = async (
   recordId: string,
   allSchedules: IsolationCheckSchedule[]
 ): Promise<void> => {
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     isolationCheckSchedules: allSchedules,
     updatedAt: Timestamp.now(),
   });
@@ -564,7 +640,7 @@ export const addSkipDate = async (
     const skipDates = Array.isArray(s.skipDates) ? s.skipDates : [];
     return { ...s, skipDates: skipDates.includes(date) ? skipDates : [...skipDates, date] };
   });
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     medicationSchedules: updated,
     updatedAt: Timestamp.now(),
   });
@@ -582,7 +658,7 @@ export const removeSkipDate = async (
     const skipDates = Array.isArray(s.skipDates) ? s.skipDates : [];
     return { ...s, skipDates: skipDates.filter(d => d !== date) };
   });
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     medicationSchedules: updated,
     updatedAt: Timestamp.now(),
   });
@@ -605,7 +681,7 @@ export const addManagerAction = async (
     id: `action_${Date.now()}`,
     isDone: false,
   };
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     managerActions: [...existing, newAction],
     updatedAt: Timestamp.now(),
   });
@@ -628,7 +704,7 @@ export const respondManagerAction = async (
       isDone: true,
     };
   });
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     managerActions: updated,
     updatedAt: Timestamp.now(),
   });
@@ -644,7 +720,7 @@ export const completeManagerAction = async (
   const updated = allActions.map(a =>
     a.id === actionId ? { ...a, isDone: true } : a
   );
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     managerActions: updated,
     updatedAt: Timestamp.now(),
   });
@@ -661,7 +737,7 @@ export const updateManagerActionFollowUp = async (
   const updated = allActions.map(a =>
     a.id === actionId ? { ...a, followUp, isDone: true } : a
   );
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     managerActions: updated,
     updatedAt: Timestamp.now(),
   });
@@ -684,7 +760,7 @@ export const addMedicationPhoto = async (
     const photos = Array.isArray(s.photos) ? s.photos : [];
     return { ...s, photos: photos.includes(photoUrl) ? photos : [...photos, photoUrl] };
   });
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     medicationSchedules: updated,
     updatedAt: Timestamp.now(),
   });
@@ -705,7 +781,7 @@ export const removeMedicationPhoto = async (
     const photos = Array.isArray(s.photos) ? s.photos : [];
     return { ...s, photos: photos.filter(p => p !== photoUrl) };
   });
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     medicationSchedules: updated,
     updatedAt: Timestamp.now(),
   });
@@ -722,7 +798,7 @@ export const addMedicationSchedule = async (
   schedule: Omit<MedicationSchedule, 'checkedTimes'>
 ): Promise<void> => {
   const newSchedule: MedicationSchedule = { ...schedule, checkedTimes: [] };
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     medicationSchedules: arrayUnion(newSchedule),
     updatedAt: Timestamp.now(),
   });
@@ -742,7 +818,7 @@ export const updateMedicationSchedule = async (
   const newSchedules = allSchedules.map((s, i) =>
     i === index ? { ...s, ...updated, checkedTimes: s.checkedTimes } : s
   );
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     medicationSchedules: newSchedules,
     updatedAt: Timestamp.now(),
   });
@@ -771,7 +847,7 @@ export const replaceMedicationSchedule = async (
       ...(s.photos?.length ? { photos: s.photos } : {}),
     };
   });
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     medicationSchedules: newSchedules,
     updatedAt: Timestamp.now(),
   });
@@ -787,7 +863,7 @@ export const removeMedicationSchedule = async (
   index: number
 ): Promise<void> => {
   const newSchedules = allSchedules.filter((_, i) => i !== index);
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     medicationSchedules: newSchedules,
     updatedAt: Timestamp.now(),
   });
@@ -800,7 +876,7 @@ export const updateReturnCriteriaChecks = async (
   recordId: string,
   checks: boolean[]
 ): Promise<void> => {
-  await updateDoc(doc(db, 'patientRecords', recordId), {
+  await updateDoc(recordDoc(db, recordId), {
     returnCriteriaChecks: checks,
     updatedAt: Timestamp.now(),
   });

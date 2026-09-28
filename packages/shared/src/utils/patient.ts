@@ -4,6 +4,8 @@
  */
 import type { MedicationCategory, MedicationSchedule, MedicationTime } from '../types/camp';
 import { MEDICATION_TIMES } from '../types/camp';
+import { Timestamp } from 'firebase/firestore';
+import { L } from '../i18n';
 import type { CampLodging } from '../types/lodging';
 
 // ==================== 증상별 기본 처치 가이드 ====================
@@ -201,4 +203,60 @@ export function staffPatientId(userId: string): string {
 /** 지금까지 올린 중간보고 수 — 카드 뱃지 "중간보고3" */
 export function midReportCount(r: { progressLogs?: Array<{ status?: string }> }): number {
   return (r.progressLogs ?? []).filter((l) => l.status === '중간보고').length;
+}
+
+/** 내원 날짜('YYYY-MM-DD') + 출발 시간('HH:mm', 없으면 0시) → 기기 시간대 기준 Timestamp */
+export function visitScheduledAt(ymd: string, hhmm?: string): Timestamp {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const [h, mi] = /^\d{1,2}:\d{2}$/.test(hhmm ?? '') ? (hhmm as string).split(':').map(Number) : [0, 0];
+  return Timestamp.fromDate(new Date(y, (m || 1) - 1, d || 1, h, mi));
+}
+
+/** 내원 날짜 표시 — "9/29 (오늘)", "9/30 (내일)", "10/2" */
+export function visitDayLabel(at: { toDate?: () => Date } | undefined, now = new Date()): string {
+  const d = at?.toDate?.();
+  if (!d) return '';
+  const base = `${d.getMonth() + 1}/${d.getDate()}`;
+  const same = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (same(d, now)) return `${base} (${L('patient.vdToday')})`;
+  if (same(d, new Date(now.getTime() + 86400000))) return `${base} (${L('patient.vdTomorrow')})`;
+  return base;
+}
+
+/**
+ * 캠프 종료일('YYYY-MM-DD') — 약 '퇴소까지' 의 마지막 날.
+ * jobCodes.endDate 는 날짜의 00:00(UTC 또는 KST)로 저장돼 있어, 12시간 더한 뒤 UTC 날짜를 읽으면 어느 쪽이든 그 날짜가 된다.
+ */
+export function campEndYmd(endDate: { toDate?: () => Date } | Date | string | null | undefined): string {
+  if (!endDate) return '';
+  const d = typeof endDate === 'string' ? new Date(endDate)
+    : endDate instanceof Date ? endDate
+    : endDate.toDate?.();
+  if (!d || Number.isNaN(d.getTime())) return '';
+  return new Date(d.getTime() + 12 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
+/** 약 사진·영상 주소가 영상인가 (Storage 주소의 파일 확장자로 판단) */
+export function isVideoUrl(url: string): boolean {
+  let path = url;
+  try { path = decodeURIComponent(url.split('?')[0]); } catch { /* 그대로 */ }
+  return /\.(mp4|mov|m4v|webm|3gp|avi|mkv)$/i.test(path);
+}
+
+/** 약 기간 표시 — "퇴소까지 매일" / "8/1 ~ 퇴소까지" / "8/1 ~ 8/5" */
+export function medPeriodLabel(s: Pick<MedicationSchedule, 'startDate' | 'endDate' | 'endDateAuto'>, today: string): string {
+  const md = (d: string) => { const [, m, dd] = d.split('-'); return m && dd ? `${+m}/${+dd}` : d; };
+  if (s.endDateAuto) return s.startDate <= today ? L('patient.campEnd2') : L('patient.campEnd3', { v0: md(s.startDate) });
+  return `${md(s.startDate)} ~ ${md(s.endDate)}`;
+}
+
+/** 처방약 기본 복용 기간 (일) */
+export const DEFAULT_MED_DAYS = 3;
+
+/** 'YYYY-MM-DD' 에 n일 더하기 */
+export function addDaysYmd(ymd: string, n: number): string {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
 }

@@ -5,7 +5,7 @@ import { Timestamp } from 'firebase/firestore';
 import ImageCropper from '@/components/common/ImageCropper';
 import MyEscortPanel from '@/components/camp/patient/MyEscortPanel';
 import EscortSsn from '@/components/camp/patient/EscortSsn';
-import { isActiveEscortVisit, L, dataLabel, isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, resolveGroups, normalizeGroupKey, getCampClassInfo, getCampTimetableCommon, getCampDayPlan, dialablePhone, type Whereabouts, type WhereaboutsInput, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind, emptyMedListForm, medListFormFrom, medListScheduleOf, toggleMemoPhrase, type MedListForm } from '@smis-mentor/shared';
+import { isActiveEscortVisit, L, dataLabel, isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, resolveGroups, normalizeGroupKey, getCampClassInfo, getCampTimetableCommon, getCampDayPlan, dialablePhone, type Whereabouts, type WhereaboutsInput, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind, addDaysYmd, DEFAULT_MED_DAYS, isVideoUrl, campEndYmd, localYmd, visitScheduledAt, visitDayLabel, emptyMedListForm, medListFormFrom, medListScheduleOf, toggleMemoPhrase, type MedListForm } from '@smis-mentor/shared';
 import {
   SYMPTOM_GUIDES, getHospitalPresets, isKoreanStaff, ACTION_NOTE_PLACEHOLDER, ACTION_NOTE_EXAMPLE,
   makeMedTimeKey, schedActiveOn, isInDateRange, calcTotalDoses, todayDateKey as todayStr,
@@ -16,6 +16,8 @@ import { db, storage } from '@/lib/firebase';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import {
   subscribePatientRecords,
+  subscribeRegularMedications,
+  addRegularMedication,
   addPatientRecord,
   updatePatientRecord,
   deletePatientRecord,
@@ -105,7 +107,6 @@ import type {
   ContactReportType,
   CampGroup,
   User,
-  Camp,
   MedicationDose,
   InventoryItem,
   InventoryItemView,
@@ -116,7 +117,6 @@ import type {
 } from '@smis-mentor/shared';
 import { TRANSPORT_SLOTS, PARENT_REPORT_METHODS, isCarSlot, LOCATION_MODES } from '@smis-mentor/shared';
 import type { LocationMode } from '@smis-mentor/shared';
-import { collection, query, where, getDocs } from 'firebase/firestore';
 import { jobCodesService, stSheetService, CampCode } from '@/lib/stSheetService';
 import { authenticatedPost } from '@/lib/apiClient';
 import { campTimetableService } from '@/lib/campTimetableService';
@@ -361,7 +361,10 @@ function ImageCropperWrapper({ file, onCropComplete, onCancel }: {
 
 export default function PatientContent() {
   const { userData } = useAuth();
-  const [allRecords, setRecords] = useState<PatientRecord[]>([]);
+  const [patientRecs, setRecords] = useState<PatientRecord[]>([]);
+  // 상시약(약복용 명단 전용)은 환자가 아니라 regularMedications 에 따로 — 약복용 명단에만 합친다
+  const [regularRecs, setRegularRecs] = useState<PatientRecord[]>([]);
+  const allRecords = useMemo(() => [...patientRecs, ...regularRecs], [patientRecs, regularRecs]);
   /** 환자 현황용 — 약복용 명단에만 올린 기록(집에서 가져온 약 등)은 뺀다 */
   const records = useMemo(() => allRecords.filter(r => !r.medicationOnly), [allRecords]);
   const [campCode, setCampCode] = useState<CampCode | null>(null);
@@ -409,17 +412,8 @@ export default function PatientContent() {
           const users = await getUsersByJobCodeId(db, activeJobCodeId);
           setCampUsers(users);
         } catch { /* 유저 목록 없어도 무방 */ }
-        // 캠프 종료일 로드 (약 "캠프 끝까지" 기능용)
-        try {
-          const campSnap = await getDocs(query(collection(db, 'camps'), where('code', '==', cc)));
-          if (!campSnap.empty) {
-            const campData = campSnap.docs[0].data() as Camp;
-            if (campData.endDate) {
-              const d = campData.endDate.toDate();
-              setCampEndDate(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`);
-            }
-          }
-        } catch { /* 없어도 무방 */ }
+        // 캠프 종료일 (약 '퇴소까지') — 채용 코드(jobCodes)의 종료일. camps 컬렉션은 쓰지 않는다
+        setCampEndDate(campEndYmd((codes[0] as { endDate?: { toDate?: () => Date } }).endDate));
         // 그룹-반 매핑 로드 (campSettings.groups)
         try {
           const groups = await getCampGroups(db, cc);
@@ -445,7 +439,8 @@ export default function PatientContent() {
       (data) => { setRecords(data); setLoading(false); },
       () => setLoading(false)
     );
-    return () => unsub();
+    const unsubRegular = subscribeRegularMedications(db, campCode, setRegularRecs, () => setRegularRecs([]));
+    return () => { unsub(); unsubRegular(); };
   }, [campCode]);
 
   // 재고(약품·그룹) 구독 — 약 복용 섹션에서 사용
@@ -1910,6 +1905,7 @@ function PatientCard({
                 onRemoveSchedule={onRemoveMedicationSchedule}
                 onUploadMedPhoto={onUploadMedicationPhoto}
                 onRemoveMedPhoto={onRemoveMedicationPhoto}
+                uploadMedFile={(file) => uploadPrescriptionFile(record.id, file)}
                 compact
               />
             )}
@@ -3849,6 +3845,13 @@ function HospitalScheduleForm({ onSubmit, onCancel, campUsers, allRecords, initi
   // 기본값: 기존 값 > 반 담당 선생님 > 빈 문자열
   const [parentReporter, setParentReporter] = useState(initialValues?.parentReporter ?? classMentor ?? '');
   const [parentReportMethod, setParentReportMethod] = useState<ParentReportMethod>(initialValues?.parentReportMethod ?? '문자');
+  // 내원 날짜 — 보통 오늘이지만 내일 등으로 바꿀 수 있다 (scheduledAt 에 날짜 + 출발 시간으로 저장)
+  const todayYmd = localYmd(new Date());
+  const tomorrowYmd = localYmd(new Date(Date.now() + 86400000));
+  const [visitDay, setVisitDay] = useState(() => {
+    const d = initialValues?.scheduledAt?.toDate?.();
+    return d ? localYmd(d) : todayYmd;
+  });
 
   /** 슬롯에 해당하는 기존 내원예정 정보를 allRecords에서 찾아 반환 */
   const findSlotInfo = useCallback((slot: TransportSlot) => {
@@ -3890,14 +3893,28 @@ function HospitalScheduleForm({ onSubmit, onCancel, campUsers, allRecords, initi
 
   // 외부(TabFormModal)에서 저장 버튼 클릭 시 호출될 submit 함수 등록
   const handleSubmitInternal = () => {
-    onSubmit({ transportSlot, departureTime, driver: isCar ? driver : undefined, escort, hospitalName, parentReporter, parentReportMethod });
+    onSubmit({ transportSlot, departureTime, driver: isCar ? driver : undefined, escort, hospitalName, parentReporter, parentReportMethod, scheduledAt: visitScheduledAt(visitDay, departureTime) });
   };
   useEffect(() => {
     if (submitRef) submitRef.current = handleSubmitInternal;
   });
 
+  const dayChip = (on: boolean) => `px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+    on ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:border-orange-300'
+  }`;
+
   return (
     <div className="space-y-2">
+      {/* 내원 날짜 */}
+      <FormRow label={L('patient.visitDay')}>
+        <div className="flex flex-wrap items-center gap-1">
+          <button type="button" onClick={() => setVisitDay(todayYmd)} className={dayChip(visitDay === todayYmd)}>{L('patient.vdToday')}</button>
+          <button type="button" onClick={() => setVisitDay(tomorrowYmd)} className={dayChip(visitDay === tomorrowYmd)}>{L('patient.vdTomorrow')}</button>
+          <input type="date" value={visitDay} onChange={e => { if (e.target.value) setVisitDay(e.target.value); }}
+            className="text-[11px] border border-gray-200 rounded px-1.5 py-0.5 outline-none focus:border-orange-300 bg-white" />
+        </div>
+      </FormRow>
+
       {/* 내원 방식 */}
       <FormRow label={L('patient.transport')}>
         <div className="flex flex-wrap gap-1">
@@ -4054,6 +4071,7 @@ function HospitalTab({ record, campUsers, allRecords, onAddVisit, onUpdateVisits
 
           {/* 정보 요약 */}
           <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+            {visit.scheduledAt && <span className="text-gray-500 col-span-2">{L('patient.visitDay')} <b className="text-gray-700">{visitDayLabel(visit.scheduledAt)}</b></span>}
             {visit.transportSlot && <span className="text-gray-500">{L('patient.method')} <b className="text-gray-700">{dataLabel(visit.transportSlot)}</b></span>}
             {visit.departureTime && <span className="text-gray-500">{L('patient.departure')} <b className="text-gray-700">{visit.departureTime}</b></span>}
             {visit.driver && <span className="text-gray-500">{L('patient.driver')} <b className="text-gray-700">{visit.driver}</b></span>}
@@ -4338,11 +4356,7 @@ function MedicationListView({ records: allList, today, currentUserName, groupOfC
           className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
           onClick={() => setLightboxUrl(null)}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightboxUrl} alt={L('patient.enlargeMedicationPhoto')}
-            className="max-w-full max-h-full rounded-xl object-contain"
-            onClick={e => e.stopPropagation()}
-          />
+          <MedMediaLarge url={lightboxUrl} alt={L('patient.enlargeMedicationPhoto')} onClick={e => e.stopPropagation()} />
           <button
             className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 text-white text-lg flex items-center justify-center hover:bg-white/30 transition"
             onClick={() => setLightboxUrl(null)}
@@ -4781,8 +4795,7 @@ function MedicationPatientCard({
                         {photos.map((url, pi) => (
                           <div key={pi} className="aspect-[3/4] rounded-lg overflow-hidden border border-gray-200 bg-gray-50 cursor-pointer"
                             onClick={() => onViewPhoto?.(url)}>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={url} alt={L('patient.medicationPhoto', { v0: pi + 1 })} className="w-full h-full object-cover" />
+                            <MedMediaThumb url={url} alt={L('patient.medicationPhoto', { v0: pi + 1 })} className="w-full h-full" />
                           </div>
                         ))}
                       </div>
@@ -4823,7 +4836,37 @@ function dateLabel(date: string, today: string): string {
   return `${mm}/${dd}`;
 }
 
-function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck, onAddSchedule, onUpdateSchedule, onRemoveSchedule, onUploadMedPhoto, onRemoveMedPhoto, compact, autoOpenForm }: {
+/** 처방약 사진·영상을 Storage 에만 올리고 주소를 돌려준다 (약 추가/수정 폼에서 저장할 때 함께 넣는다) */
+async function uploadPrescriptionFile(recordId: string, file: File): Promise<string> {
+  const r = ref(storage, `patientRecords/${recordId}/prescriptions/form_${Date.now()}_${file.name}`);
+  await uploadBytes(r, file, { contentType: file.type || undefined });
+  return getDownloadURL(r);
+}
+
+/** 처방약·상시약 사진 또는 영상 썸네일 (영상은 첫 장면 + ▶) */
+function MedMediaThumb({ url, alt, className, onClick }: { url: string; alt: string; className?: string; onClick?: () => void }) {
+  if (isVideoUrl(url)) {
+    return (
+      <div className={`relative bg-gray-900 ${className ?? ''}`} onClick={onClick}>
+        <video src={`${url}#t=0.1`} muted playsInline preload="metadata" className="h-full w-full object-cover pointer-events-none" />
+        <span className="absolute inset-0 flex items-center justify-center text-white text-lg drop-shadow">▶</span>
+      </div>
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt={alt} className={`object-cover ${className ?? ''}`} onClick={onClick} />;
+}
+
+/** 크게 보기 — 영상이면 재생 */
+function MedMediaLarge({ url, alt, onClick }: { url: string; alt: string; onClick?: (e: React.MouseEvent) => void }) {
+  if (isVideoUrl(url)) {
+    return <video src={url} controls autoPlay playsInline className="max-w-full max-h-full rounded-xl" onClick={onClick} />;
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt={alt} className="max-w-full max-h-full rounded-xl object-contain" onClick={onClick} />;
+}
+
+function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck, onAddSchedule, onUpdateSchedule, onRemoveSchedule, onUploadMedPhoto, onRemoveMedPhoto, uploadMedFile, compact, autoOpenForm }: {
   schedules: MedicationSchedule[];
   today: string;
   unitMentor?: string;
@@ -4836,6 +4879,8 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
   onUploadMedPhoto?: (schedIdx: number, file: File) => Promise<string>;
   /** 약별 처방전 사진 삭제 */
   onRemoveMedPhoto?: (schedIdx: number, url: string) => void;
+  /** 추가/수정 폼에서 사진·영상 올리기 (Storage 에만 올리고 주소를 돌려준다) */
+  uploadMedFile?: (file: File) => Promise<string>;
   /** true = 현황 탭 내 카드 뷰 (담당 섹션·섹션 레이블 숨김) */
   compact?: boolean;
   /** 열자마자 약 추가 폼을 띄운다 (약복용 명단 → 명단 추가) */
@@ -4850,7 +4895,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
     memo: '',
     times: [],
     startDate: today,
-    endDate: today,
+    endDate: addDaysYmd(today, DEFAULT_MED_DAYS - 1), // 기본 3일
     endDateAuto: false,
     firstTime: undefined,
     lastTime: undefined,
@@ -4861,7 +4906,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [formData, setFormData] = useState<Omit<MedicationSchedule, 'checkedTimes'>>(EMPTY_SCHED());
   // "며칠동안" 편의 입력 (dayCount → endDate 자동 계산)
-  const [dayCount, setDayCount] = useState('1');
+  const [dayCount, setDayCount] = useState(String(DEFAULT_MED_DAYS));
 
   // 약 사진 (약별)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -4876,12 +4921,14 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
   // crop 모달: 어느 약(schedIdx)에 대해 어떤 파일을 crop 중인지
   const [cropState, setCropState] = useState<{ schedIdx: number; file: File } | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [formUploading, setFormUploading] = useState(false);
+  const formFileRef = useRef<HTMLInputElement>(null);
   // 각 약별 파일 input ref (동적으로 생성)
   const photoInputRefs = useRef<Map<number, HTMLInputElement>>(new Map());
 
   const openAdd = () => {
     setFormData(EMPTY_SCHED());
-    setDayCount('1');
+    setDayCount(String(DEFAULT_MED_DAYS));
     setEditingIdx(null);
     setShowForm(true);
   };
@@ -4894,6 +4941,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
       firstTime: s.firstTime, lastTime: s.lastTime,
       daysPerWeek: s.daysPerWeek, skipDates: s.skipDates,
       totalDoses: s.totalDoses,
+      photos: Array.isArray(s.photos) ? [...s.photos] : [],
     });
     // dayCount 역산
     const diff = Math.round((new Date(s.endDate).getTime() - new Date(s.startDate).getTime()) / 86400000) + 1;
@@ -4925,7 +4973,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
     f.endDateAuto ? 0 : days * f.times.length;
 
   const handleSubmit = () => {
-    if (formData.times.length === 0) return;
+    if (formData.times.length === 0 || formUploading) return;
     const days = parseInt(dayCount) || 1;
     const final: Omit<MedicationSchedule, 'checkedTimes'> = {
       ...formData,
@@ -5011,11 +5059,7 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
           className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
           onClick={() => setLightboxUrl(null)}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightboxUrl} alt={L('patient.enlargeMedicationPhoto')}
-            className="max-w-full max-h-full rounded-xl object-contain"
-            onClick={e => e.stopPropagation()}
-          />
+          <MedMediaLarge url={lightboxUrl} alt={L('patient.enlargeMedicationPhoto')} onClick={e => e.stopPropagation()} />
           <button
             className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/20 text-white text-lg flex items-center justify-center hover:bg-white/30 transition"
             onClick={() => setLightboxUrl(null)}
@@ -5038,14 +5082,6 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
           submitLabel={editingIdx !== null ? '수정 완료' : '추가'}
           submitColor="orange"
         >
-          {/* 약 이름 */}
-          <div>
-            <p className="text-[10px] text-gray-500 mb-1">{L('patient.medicationName')} <span className="text-gray-400">{L('patient.optional')}</span></p>
-            <input type="text" value={formData.name} onChange={e => setFormData(f => ({ ...f, name: e.target.value }))}
-              placeholder={L('patient.medicationNameOptional')}
-              className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-400 bg-white" />
-          </div>
-
           {/* 종류 */}
           <div>
             <p className="text-[10px] text-gray-500 mb-1">{L('patient.type')}</p>
@@ -5058,6 +5094,14 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
                   }`}>{dataLabel(cat)}</button>
               ))}
             </div>
+          </div>
+
+          {/* 약 이름 */}
+          <div>
+            <p className="text-[10px] text-gray-500 mb-1">{L('patient.medicationName')} <span className="text-gray-400">{L('patient.optional')}</span></p>
+            <input type="text" value={formData.name} onChange={e => setFormData(f => ({ ...f, name: e.target.value }))}
+              placeholder={L('patient.medicationNameOptional')}
+              className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-400 bg-white" />
           </div>
 
           {/* 복용 시간 */}
@@ -5131,6 +5175,48 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
               placeholder={L('patient.eG30MinAfter')}
               className="w-full text-[11px] border border-gray-200 rounded px-2 py-1 outline-none focus:border-orange-400 bg-white" />
           </div>
+
+          {/* 사진·영상 — 처방전·약 봉투 등 (고르면 바로 올라가고, 저장할 때 함께 들어간다) */}
+          {uploadMedFile && (
+            <div>
+              <p className="text-[10px] text-gray-500 mb-1">{L('patient.medicationPhotos')}</p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(formData.photos ?? []).map(url => (
+                  <div key={url} className="relative">
+                    <MedMediaThumb url={url} alt="" className="h-12 w-12 rounded-md border border-gray-200 overflow-hidden" />
+                    <button type="button" onClick={() => setFormData(f => ({ ...f, photos: (f.photos ?? []).filter(u => u !== url) }))}
+                      className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-gray-700 text-[9px] text-white"
+                      aria-label={L('common.delete')}>✕</button>
+                  </div>
+                ))}
+                <button type="button" disabled={formUploading} onClick={() => formFileRef.current?.click()}
+                  className="h-12 rounded-md border border-dashed border-gray-300 px-2 text-[10px] font-semibold text-gray-500 hover:border-orange-400 hover:text-orange-600 disabled:opacity-50">
+                  {formUploading ? L('patient.uploading') : L('patient.addPhoto')}
+                </button>
+                <input ref={formFileRef} type="file" accept="image/*,video/*" multiple className="hidden"
+                  onChange={async e => {
+                    const files = Array.from(e.target.files ?? []);
+                    e.target.value = '';
+                    if (!files.length) return;
+                    setFormUploading(true);
+                    try {
+                      for (const file of files) {
+                        if (file.type.startsWith('video/') ? file.size > 100 * 1024 * 1024 : file.size > 10 * 1024 * 1024) {
+                          alert(file.type.startsWith('video/') ? L('patient.videoTooLarge') : L('patient.photoTooLarge'));
+                          continue;
+                        }
+                        const url = await uploadMedFile(file);
+                        setFormData(f => ({ ...f, photos: [...(f.photos ?? []), url] }));
+                      }
+                    } catch (err) {
+                      alert((err as Error)?.message || L('common.saveFailed'));
+                    } finally {
+                      setFormUploading(false);
+                    }
+                  }} />
+              </div>
+            </div>
+          )}
         </TabFormModal>
       )}
 
@@ -5379,22 +5465,30 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
                 </button>
                 {onUploadMedPhoto && isOpen && (
                   <label className="flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-medium cursor-pointer bg-white text-gray-500 border border-dashed border-gray-300 hover:border-orange-400 hover:text-orange-600 transition-colors">
-                    {L('patient.addPhoto')}
+                    {photoUploading ? L('patient.uploading') : L('patient.addPhoto')}
                     <input
                       type="file"
-                      accept="image/*"
-                      capture="environment"
+                      accept="image/*,video/*"
                       className="hidden"
                       ref={(el) => {
                         if (el) photoInputRefs.current.set(idx, el);
                         else photoInputRefs.current.delete(idx);
                       }}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
-                        if (!file) return;
-                        setCropState({ schedIdx: idx, file });
                         const inputEl = photoInputRefs.current.get(idx);
                         if (inputEl) inputEl.value = '';
+                        if (!file) return;
+                        // 사진은 자르기 후 올리고, 영상은 바로 올린다 (100MB 이하)
+                        if (file.type.startsWith('video/')) {
+                          if (file.size > 100 * 1024 * 1024) { alert(L('patient.videoTooLarge')); return; }
+                          setPhotoUploading(true);
+                          try { await onUploadMedPhoto(idx, file); }
+                          catch (err) { alert((err as Error)?.message || L('common.saveFailed')); }
+                          finally { setPhotoUploading(false); }
+                          return;
+                        }
+                        setCropState({ schedIdx: idx, file });
                       }}
                     />
                   </label>
@@ -5410,13 +5504,8 @@ function MedicationSection({ schedules, today, unitMentor, classMentor, onCheck,
                     <div className="grid grid-cols-3 gap-1.5">
                       {photos.map((url, pi) => (
                         <div key={pi} className="relative group aspect-[3/4] rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={url}
-                            alt={L('patient.medicationPhoto', { v0: pi + 1 })}
-                            className="w-full h-full object-cover cursor-pointer"
-                            onClick={() => setLightboxUrl(url)}
-                          />
+                          <MedMediaThumb url={url} alt={L('patient.medicationPhoto', { v0: pi + 1 })}
+                            className="w-full h-full cursor-pointer" onClick={() => setLightboxUrl(url)} />
                           {onRemoveMedPhoto && (
                             <button
                               type="button"
@@ -6701,7 +6790,7 @@ function PatientFormModal({
   const addMedSchedule = () => {
     setForm(f => ({
       ...f,
-      medSchedules: [...f.medSchedules, { name: '', times: [], startDate: today, endDate: today, endDateAuto: false, daysPerWeek: '' }],
+      medSchedules: [...f.medSchedules, { name: '', times: [], startDate: today, endDate: addDaysYmd(today, DEFAULT_MED_DAYS - 1), endDateAuto: false, daysPerWeek: '' }],
     }));
   };
 
@@ -7402,15 +7491,9 @@ function MedicationListAddModal({
           grade: person.u.role || undefined,
           className: STAFF_PATIENT_CLASS,
         };
-    const id = await addPatientRecord(db, {
+    const id = await addRegularMedication(db, {
       campCode,
       ...base,
-      medicationOnly: true,
-      types: [],
-      symptom: '',
-      treatment: '',
-      progressStatus: '최초보고',
-      visitDate: Timestamp.now(),
       medicationSchedules: [{ ...sched, checkedTimes: [] }],
       recordedBy: createdBy,
       recordedById: createdById,
@@ -7454,6 +7537,7 @@ function MedicationListAddModal({
 
   const uploadPhoto = async (idx: number, file: File) => {
     if (!target) return;
+    if (file.type.startsWith('video/') && file.size > 100 * 1024 * 1024) { alert(L('patient.videoTooLarge')); return; }
     setUploadingIdx(idx);
     try { await onUploadPhoto(target, idx, file); }
     catch (e) { alert((e as Error)?.message || L('common.saveFailed')); }
@@ -7571,8 +7655,7 @@ function MedicationListAddModal({
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           {(s.photos ?? []).map(url => (
                             <div key={url} className="relative">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={url} alt="" onClick={() => setLightboxUrl(url)} className="h-10 w-10 cursor-pointer rounded-md border border-gray-200 object-cover" />
+                              <MedMediaThumb url={url} alt="" onClick={() => setLightboxUrl(url)} className="h-10 w-10 cursor-pointer rounded-md border border-gray-200 overflow-hidden" />
                               <button
                                 onClick={() => { if (target && confirm(L('patient.deleteThisPhoto'))) void onRemovePhoto(target, idx, url); }}
                                 className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-gray-700 text-[9px] text-white"
@@ -7589,7 +7672,7 @@ function MedicationListAddModal({
                           </button>
                           <input
                             ref={el => { if (el) photoInputs.current.set(idx, el); else photoInputs.current.delete(idx); }}
-                            type="file" accept="image/*" className="hidden"
+                            type="file" accept="image/*,video/*" className="hidden"
                             onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void uploadPhoto(idx, f); }}
                           />
                         </div>
@@ -7741,8 +7824,9 @@ function MedicationListAddModal({
 
       {lightboxUrl && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80" onClick={e => { e.stopPropagation(); setLightboxUrl(null); }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={lightboxUrl} alt="" className="max-h-[85vh] max-w-[92vw] rounded-lg object-contain" />
+          <div className="max-h-[85vh] max-w-[92vw] flex items-center justify-center" onClick={e => e.stopPropagation()}>
+            <MedMediaLarge url={lightboxUrl} alt="" />
+          </div>
         </div>
       )}
     </div>

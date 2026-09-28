@@ -549,6 +549,7 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
 /** 접근 자체가 차단된 컬렉션과 이유 (describe_schema 안내용) */
 export const EXCLUDED_COLLECTIONS: Record<string, string> = {
   patientRecords: '학생 건강 정보(민감 정보)',
+  regularMedications: '학생 상시 복용약(민감 정보)',
   stSheetCache: '학생 명단 원본 — 연락처·주민번호·여권 포함. 대신 read_page("/camp/roster/{code}") 로 개인정보 제거 명단 사용',
   familySTSheetCache: '가족 캠프 명단 원본 (위와 동일)',
   stSheetOverrides: '학생 시트 수정 내역',

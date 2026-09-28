@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import Link from 'next/link';
 import {
   L, dataLabel, logger, resolveActiveJobCodeId, formatAllowance, toDriveImageUrl, getFieldValue, getFixedFieldValue, getDefaultFieldConfig,
-  getStudentPatientRecords, studentTabsFor, sectionsForTab, visibleDynamicFields, hasMedicationInfo,
+  getStudentPatientRecords, getStudentRegularMedications, medPeriodLabel, schedActiveOn, todayDateKey, MEDICATION_TIMES, type MedicationSchedule, studentTabsFor, sectionsForTab, visibleDynamicFields, hasMedicationInfo,
   isOpenPatientRecord, placementSummary, guardianContacts, dialablePhone, STUDENT_TAB_LABEL_KEYS,
   type STSheetFieldConfig, type FieldSectionConfig, type PatientRecord, type StudentTabId, type MessageKey,
 } from '@smis-mentor/shared';
@@ -72,6 +72,8 @@ export default function StudentDetailModal({
   const [editingField, setEditingField] = useState<{ key: string; value: string; sheetHeader: string; isLegacy: boolean } | null>(null);
   const [fieldSaving, setFieldSaving] = useState(false);
   const [recordsById, setRecordsById] = useState<Record<string, PatientRecord[]>>({});
+  // 상시약 (약복용 명단 전용 — 보건 기록이 아님)
+  const [regularById, setRegularById] = useState<Record<string, MedicationSchedule[]>>({});
   const contentRef = useRef<HTMLDivElement>(null);
 
   const base = students[index] ?? students[0];
@@ -101,6 +103,9 @@ export default function StudentDetailModal({
     getStudentPatientRecords(db, campCode, id)
       .then(r => setRecordsById(prev => ({ ...prev, [id]: r })))
       .catch(e => { logger.warn('[StudentDetailModal] 보건 기록 조회 실패', e); setRecordsById(prev => ({ ...prev, [id]: [] })); });
+    getStudentRegularMedications(db, campCode, id)
+      .then(m => setRegularById(prev => ({ ...prev, [id]: m })))
+      .catch(() => setRegularById(prev => ({ ...prev, [id]: [] })));
   }, [campCode, base]);
 
   const allowance = useStudentAllowance(campCode, campType, student, base ? recordsById[base.studentId] ?? null : null);
@@ -365,6 +370,44 @@ export default function StudentDetailModal({
     </>
   );
 
+  // 복용 약 — 처방약(보건 기록) + 상시약(약복용 명단 전용). 언제 먹는지 · 기간 · 메모, 끝난 약은 흐리게 아래로
+  const today = todayDateKey();
+  const medRows = [
+    ...(records ?? []).flatMap(r => (r.medicationSchedules ?? []).map(m => ({ m, rx: true }))),
+    ...(regularById[student.studentId] ?? []).map(m => ({ m, rx: false })),
+  ].map(x => ({ ...x, ended: !x.m.endDateAuto && x.m.endDate < today }))
+    .sort((p, q) => Number(p.ended) - Number(q.ended) || Number(!p.rx) - Number(!q.rx));
+  const regularMedsCard = medRows.length > 0 && (
+    <div className="rounded-xl border border-orange-200 bg-white overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-orange-100 bg-orange-50/60">
+        <span className="text-base leading-none">💊</span>
+        <h4 className="text-sm font-semibold text-gray-900 flex-1">{L('studentModal.medsTitle')}</h4>
+        <Link href="/camp/patient" className="text-xs text-blue-600 hover:underline">{L('patient.medicationList')} ›</Link>
+      </div>
+      <ul className="divide-y divide-gray-100">
+        {medRows.map(({ m, rx, ended }, i) => (
+          <li key={i} className={`px-4 py-2.5 ${ended ? 'opacity-50' : ''}`}>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${rx ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}`}>
+                {rx ? L('patient.prescribedMedication') : L('patient.maRegular')}
+              </span>
+              <span className="text-sm font-medium text-gray-900">{m.name || (m.category ? dataLabel(m.category) : '-')}</span>
+              {m.name && m.category && <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">{dataLabel(m.category)}</span>}
+              {!ended && !schedActiveOn(m, today) && <span className="text-[11px] text-gray-400">{L('patient.noDoseToday')}</span>}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-1">
+              {MEDICATION_TIMES.filter(t => m.times.includes(t)).map(t => (
+                <span key={t} className="text-[11px] font-semibold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">{dataLabel(t)}</span>
+              ))}
+              <span className="text-[11px] text-gray-500">{medPeriodLabel(m, today)}{m.daysPerWeek ? ` · ${L('patient.maNDays', { v0: m.daysPerWeek })}` : ''}</span>
+            </div>
+            {m.memo && <p className="text-xs text-gray-500 mt-0.5 break-words">{m.memo}</p>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+
   const patientTimeline = (
     <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
@@ -451,7 +494,7 @@ export default function StudentDetailModal({
 
   let body: ReactNode;
   switch (activeTab) {
-    case 'health': body = <>{healthExtras}{sectionBlocks('health')}{campCode && <StudentMemoCard campCode={campCode} student={student} actor={actor} />}{patientTimeline}</>; break;
+    case 'health': body = <>{healthExtras}{sectionBlocks('health')}{campCode && <StudentMemoCard campCode={campCode} student={student} actor={actor} />}{regularMedsCard}{patientTimeline}</>; break;
     case 'allowance': body = campCode
       ? <StudentAllowanceTab data={allowance} student={student} campCode={campCode} roster={students} actor={actor} />
       : comingSoon('💰', 'studentModal.allowanceSoon'); break;

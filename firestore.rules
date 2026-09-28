@@ -813,6 +813,35 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────────────────────
+    // regularMedications 컬렉션 (상시약 — 약복용 명단 전용, 환자 기록 아님)
+    // 문서 id 는 'rm_' 로 시작. 권한은 patientRecords 와 같게 캠프 스태프로 제한
+    // ──────────────────────────────────────────────────────────────
+    match /regularMedications/{docId} {
+      allow read: if isCampStaff();
+      allow create: if (
+        isCampStaff() &&
+        docId.matches('rm_.*') &&
+        request.resource.data.keys().hasAll(['campCode', 'studentId', 'studentName', 'medicationSchedules', 'createdAt', 'updatedAt']) &&
+        request.resource.data.studentName is string &&
+        request.resource.data.studentName.size() <= 50
+      );
+      allow update: if (
+        isAdmin() ||
+        (
+          isCampStaff() &&
+          fieldUnchanged('campCode') &&
+          fieldUnchanged('studentId') &&
+          fieldUnchanged('createdAt') &&
+          fieldUnchanged('recordedById')
+        )
+      );
+      allow delete: if (
+        isAdmin() ||
+        (isCampStaff() && resource.data.recordedById == request.auth.uid)
+      );
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // 캠프 재고 (inventoryGroups / inventoryItems / inventoryMovements)
     // 역할: 관리자가 물품·그룹 등록/수정/삭제, 캠프 스태프는 조회 +
     //       환자 탭 약 복용 기록으로 인한 수량(stocks) 증감·이력 기록만 허용

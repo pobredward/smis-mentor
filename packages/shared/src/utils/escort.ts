@@ -24,3 +24,4 @@ export function isActiveEscortVisit(visit: VisitLike, myName: string | null | un
 export function myActiveEscortVisit<V extends VisitLike>(visits: V[] | undefined, myName: string | null | undefined): V | undefined {
   return (visits ?? []).find((v) => isActiveEscortVisit(v, myName));
 }
+

@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { Timestamp, collection, getDocs, query, where } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
 import { useQuery } from '@tanstack/react-query';
@@ -28,6 +28,8 @@ import { useAuth } from '../context/AuthContext';
 import { db, storage } from '../config/firebase';
 import {
   subscribePatientRecords,
+  subscribeRegularMedications,
+  addRegularMedication,
   addPatientRecord,
   updatePatientRecord,
   deletePatientRecord,
@@ -90,7 +92,7 @@ import {
   FEVER_THRESHOLDS,
   classifyFever,
   isFeverLevel,
-  dosesForProgressLog, L, dataLabel, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind, emptyMedListForm, medListFormFrom, medListScheduleOf, toggleMemoPhrase, type MedListForm,
+  dosesForProgressLog, L, dataLabel, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind, addDaysYmd, DEFAULT_MED_DAYS, isVideoUrl, campEndYmd, localYmd, visitScheduledAt, visitDayLabel, emptyMedListForm, medListFormFrom, medListScheduleOf, toggleMemoPhrase, type MedListForm,
   isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, normalizeGroupKey, dialablePhone, type Whereabouts } from '@smis-mentor/shared';
 import type {
   PatientRecord,
@@ -260,7 +262,7 @@ function isMedTimeOff(
   const first = s.firstTime ? MEDICATION_TIMES.indexOf(s.firstTime) : -1;
   const last = s.lastTime ? MEDICATION_TIMES.indexOf(s.lastTime) : -1;
   if (date === s.startDate && first >= 0 && i < first) return true;
-  if (!s.endDateAuto && date === s.endDate && last >= 0 && i > last) return true;
+  if (date === s.endDate && last >= 0 && i > last) return true; // 퇴소까지 약은 endDate = 캠프 종료일 (web 과 같음)
   return false;
 }
 
@@ -342,7 +344,10 @@ const EMPTY_FORM: FormState = {
 
 export function PatientScreen() {
   const { userData } = useAuth();
-  const [allRecords, setRecords] = useState<PatientRecord[]>([]);
+  const [patientRecs, setRecords] = useState<PatientRecord[]>([]);
+  // 상시약(약복용 명단 전용)은 환자가 아니라 regularMedications 에 따로 — 약복용 명단에만 합친다
+  const [regularRecs, setRegularRecs] = useState<PatientRecord[]>([]);
+  const allRecords = useMemo(() => [...patientRecs, ...regularRecs], [patientRecs, regularRecs]);
   /** 환자 현황용 — 약복용 명단에만 올린 기록(집에서 가져온 약 등)은 뺀다 */
   const records = useMemo(() => allRecords.filter(r => !r.medicationOnly), [allRecords]);
   const listRef = useRef<FlatList<{ key: string; classes: [string, PatientRecord[]][] }>>(null);
@@ -389,12 +394,8 @@ export function PatientScreen() {
           const users = await getUsersByJobCodeId(db, activeJobCodeId);
           setCampUsers(users);
         } catch { /* 없어도 무방 */ }
-        try {
-          const campSnap = await getDocs(query(collection(db, 'camps'), where('code', '==', cc)));
-          const end = campSnap.docs[0]?.data()?.endDate as { toDate?: () => Date } | undefined;
-          const d = end?.toDate?.();
-          if (d) setCampEndDate(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`);
-        } catch { /* 없으면 '퇴소까지'는 시작일로 저장 (표시엔 영향 없음) */ }
+        // 캠프 종료일 (약 '퇴소까지') — 채용 코드(jobCodes)의 종료일 (web 과 같음)
+        setCampEndDate(campEndYmd((codes[0] as { endDate?: { toDate?: () => Date } }).endDate));
         try {
           const groups = await getCampGroups(db, cc);
           setCampGroups(groups);
@@ -418,7 +419,8 @@ export function PatientScreen() {
       (data) => { setRecords(data); setLoading(false); },
       () => setLoading(false)
     );
-    return () => unsub();
+    const unsubRegular = subscribeRegularMedications(db, campCode, setRegularRecs, () => setRegularRecs([]));
+    return () => { unsub(); unsubRegular(); };
   }, [campCode]);
 
   // 재고(약품·그룹) 구독 — 약 복용 섹션에서 사용
@@ -1144,7 +1146,11 @@ export function PatientScreen() {
       )}
 
       {/* 약복용 명단 → 명단 추가 */}
-      <Modal visible={showMedListAdd} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowMedListAdd(false)}>
+      {/* 가운데 카드로 — pageSheet 는 android 에서 전체 화면이 되어 상단바와 겹친다 */}
+      <Modal visible={showMedListAdd} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowMedListAdd(false)}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 40 }}>
+        <View style={{ height: '100%', maxHeight: 680, backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' }}>
         {campCode && (
           <MedicationListAddModalMobile
             today={today}
@@ -1158,6 +1164,9 @@ export function PatientScreen() {
             onClose={() => setShowMedListAdd(false)}
           />
         )}
+        </View>
+        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* 최초보고 모달 */}
@@ -2128,6 +2137,7 @@ function PatientCard({
               onAddSchedule={(s) => onAddMedSchedule(s)}
               onUpdateSchedule={(idx, s) => onUpdateMedSchedule(idx, s)}
               onRemoveSchedule={(idx) => onRemoveMedSchedule(idx)}
+              mediaRecord={record}
             />
           )}
           {activeTab === '부모연락' && (
@@ -2243,15 +2253,9 @@ function MedicationListAddModalMobile({
           grade: person.u.role || undefined,
           className: STAFF_PATIENT_CLASS,
         };
-    const id = await addPatientRecord(db, {
+    const id = await addRegularMedication(db, {
       campCode,
       ...base,
-      medicationOnly: true,
-      types: [],
-      symptom: '',
-      treatment: '',
-      progressStatus: '최초보고',
-      visitDate: Timestamp.now(),
       medicationSchedules: [{ ...sched, checkedTimes: [] }],
       recordedBy: createdBy,
       recordedById: createdById,
@@ -2300,37 +2304,11 @@ function MedicationListAddModalMobile({
 
   const addPhoto = async (idx: number) => {
     if (!target) return;
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) return;
-    const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.7 });
-    if (picked.canceled || !picked.assets?.length) return;
-    const asset = picked.assets[0];
     setUploadingIdx(idx);
-    try {
-      const blob = await (await fetch(asset.uri)).blob();
-      const name = asset.fileName ?? asset.uri.split('/').pop() ?? 'photo.jpg';
-      const sRef = storageRef(storage, `patientRecords/${target.id}/prescriptions/${idx}_${Date.now()}_${name}`);
-      await uploadBytes(sRef, blob, { contentType: asset.mimeType ?? 'image/jpeg' });
-      const url = await getDownloadURL(sRef);
-      await addMedicationPhoto(db, target.id, schedules, idx, url);
-    } catch (e) {
-      Alert.alert(L('common.error'), (e as Error)?.message ?? '');
-    } finally {
-      setUploadingIdx(null);
-    }
+    try { await pickAndUploadMedMedia(target, schedules, idx); } finally { setUploadingIdx(null); }
   };
 
-  const removePhoto = (idx: number, url: string) => {
-    if (!target) return;
-    Alert.alert(L('patient.deleteThisPhoto'), undefined, [
-      { text: L('common.cancel'), style: 'cancel' },
-      { text: L('common.delete'), style: 'destructive', onPress: async () => {
-        try { await deleteObject(storageRef(storage, url)); } catch { /* 이미 없어도 무시 */ }
-        try { await removeMedicationPhoto(db, target.id, schedules, idx, url); }
-        catch (e) { Alert.alert(L('common.error'), (e as Error)?.message ?? ''); }
-      } },
-    ]);
-  };
+  const removePhoto = (idx: number, url: string) => { if (target) confirmRemoveMedMedia(target, schedules, idx, url); };
 
   const periodText = (s: MedicationSchedule) =>
     s.endDateAuto
@@ -2353,7 +2331,7 @@ function MedicationListAddModalMobile({
   const lastDay = form.untilEnd ? campEndDate : form.endDate;
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: '#fff' }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <View style={{ flex: 1, backgroundColor: '#fff' }}>
       <View style={styles.modalHeader}>
         <View style={{ flex: 1 }}>
           <Text style={styles.modalTitle}>{L('patient.maTitle')}</Text>
@@ -2434,9 +2412,7 @@ function MedicationListAddModalMobile({
                       {/* 사진 */}
                       <View style={[wrap, { marginTop: 6, gap: 6 }]}>
                         {(s.photos ?? []).map(url => (
-                          <TouchableOpacity key={url} onPress={() => setLightboxUrl(url)} onLongPress={() => removePhoto(idx, url)}>
-                            <Image source={{ uri: url }} style={{ width: 40, height: 40, borderRadius: 6, borderWidth: 1, borderColor: '#e5e7eb' }} contentFit="cover" />
-                          </TouchableOpacity>
+                          <MedMediaThumbMobile key={url} url={url} onPress={() => openMedMedia(url, setLightboxUrl)} onLongPress={() => removePhoto(idx, url)} />
                         ))}
                         <TouchableOpacity onPress={() => void addPhoto(idx)} disabled={uploadingIdx !== null}
                           style={{ height: 40, paddingHorizontal: 8, borderRadius: 6, borderWidth: 1, borderStyle: 'dashed', borderColor: '#d1d5db', justifyContent: 'center', opacity: uploadingIdx !== null ? 0.5 : 1 }}>
@@ -2555,12 +2531,8 @@ function MedicationListAddModalMobile({
         )}
       </ScrollView>
 
-      <Modal visible={!!lightboxUrl} transparent animationType="fade" onRequestClose={() => setLightboxUrl(null)}>
-        <TouchableOpacity activeOpacity={1} onPress={() => setLightboxUrl(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', alignItems: 'center', justifyContent: 'center' }}>
-          {lightboxUrl && <Image source={{ uri: lightboxUrl }} style={{ width: '92%', height: '80%' }} contentFit="contain" />}
-        </TouchableOpacity>
-      </Modal>
-    </KeyboardAvoidingView>
+      <MedMediaViewerMobile url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
+    </View>
   );
 }
 
@@ -3554,6 +3526,7 @@ function HospitalTabMobile({ record, campUsers, allRecords, onUpdateVisits }: {
                 </TouchableOpacity>
               </View>
             </View>
+            {visit.scheduledAt && <Text style={{ fontSize: 11, color: '#374151' }}>{L('patient.visitDay')} {visitDayLabel(visit.scheduledAt)}</Text>}
             {visit.transportSlot && <Text style={{ fontSize: 11, color: '#374151' }}>{L('patient.method')} {dataLabel(visit.transportSlot)}</Text>}
             {visit.departureTime && <Text style={{ fontSize: 11, color: '#374151' }}>{L('patient.departure')} {visit.departureTime}</Text>}
             {visit.driver && <Text style={{ fontSize: 11, color: '#374151' }}>{L('patient.driver')} {visit.driver}</Text>}
@@ -3631,6 +3604,13 @@ function HospitalScheduleFormMobile({
   const [hospitalName, setHospitalName] = useState(initialValues?.hospitalName ?? '');
   const [parentReporter, setParentReporter] = useState(initialValues?.parentReporter ?? classMentor ?? '');
   const [parentReportMethod, setParentReportMethod] = useState<ParentReportMethod>(initialValues?.parentReportMethod ?? '문자');
+  // 내원 날짜 — 보통 오늘이지만 내일 등으로 바꿀 수 있다 (scheduledAt 에 날짜 + 출발 시간으로 저장, web 과 같음)
+  const todayYmd = localYmd(new Date());
+  const tomorrowYmd = localYmd(new Date(Date.now() + 86400000));
+  const [visitDay, setVisitDay] = useState(() => {
+    const d = initialValues?.scheduledAt?.toDate?.();
+    return d ? localYmd(d) : todayYmd;
+  });
 
   const findSlotInfo = useCallback((slot: TransportSlot) => {
     for (const r of allRecords) {
@@ -3673,14 +3653,27 @@ function HospitalScheduleFormMobile({
   // 외부(TabFormModalMobile)에서 저장 버튼 클릭 시 호출될 submit 함수 등록
   const handleSubmitInternal = () => {
     // 상태는 넘기지 않는다 — 새로 추가할 때만 '내원예정'으로 시작하고, 수정 때는 기존 상태(내원완료 등)를 유지
-    onSubmit({ transportSlot, departureTime, driver: isCar ? driver : undefined, escort, hospitalName, parentReporter, parentReportMethod });
+    onSubmit({ transportSlot, departureTime, driver: isCar ? driver : undefined, escort, hospitalName, parentReporter, parentReportMethod, scheduledAt: visitScheduledAt(visitDay, departureTime) });
   };
   useEffect(() => {
     if (submitRef) submitRef.current = handleSubmitInternal;
   });
 
+  const dayChip = (label: string, on: boolean, onPress: () => void) => (
+    <TouchableOpacity onPress={onPress}
+      style={{ paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8, backgroundColor: on ? '#f97316' : '#fff', borderWidth: 1, borderColor: '#fed7aa' }}>
+      <Text style={{ fontSize: 11, fontWeight: '600', color: on ? '#fff' : '#6b7280' }}>{label}</Text>
+    </TouchableOpacity>
+  );
+
   return (
     <View style={{ gap: 8 }}>
+      <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 2 }}>{L('patient.visitDay')}</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+        {dayChip(L('patient.vdToday'), visitDay === todayYmd, () => setVisitDay(todayYmd))}
+        {dayChip(L('patient.vdTomorrow'), visitDay === tomorrowYmd, () => setVisitDay(tomorrowYmd))}
+        <DateStepper value={visitDay} onChange={setVisitDay} />
+      </View>
       <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 2 }}>{L('patient.transport')}</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
         {TRANSPORT_SLOTS.map(s => (
@@ -3715,7 +3708,7 @@ function HospitalScheduleFormMobile({
       )}
       <TextInput value={hospitalName} onChangeText={setHospitalName} placeholder={L('patient.enterHospitalName')} placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
       <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('patient.parentReporter2')}</Text>
-      <TextInput value={parentReporter} onChangeText={setParentReporter} placeholder={L('patient.reporter2')} placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
+      <UserSearchInputMobile value={parentReporter} onChange={setParentReporter} campUsers={campUsers} placeholder={L('patient.searchName')} />
       <Text style={{ fontSize: 10, color: '#6b7280' }}>{L('patient.parentReportMethod')}</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>
         {PARENT_REPORT_METHODS.map(m => (
@@ -3823,10 +3816,79 @@ function TransportBoardMobile({ allRecords }: { allRecords: PatientRecord[] }) {
 
 // ==================== 복용약 탭 (모바일) ====================
 
+/** 처방약·상시약 사진·영상 — 갤러리에서 골라 Storage 에만 올리고 주소를 돌려준다 (사진 10MB · 영상 100MB 이하, web 과 같은 경로) */
+async function pickAndUploadMedFile(recordId: string): Promise<string | null> {
+  const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (!perm.granted) { Alert.alert(L('common.permissionRequired'), L('inventory.pleaseAllowPhotoAccess')); return null; }
+  const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images', 'videos'], quality: 0.7 });
+  if (picked.canceled || !picked.assets?.length) return null;
+  const asset = picked.assets[0];
+  const isVideo = asset.type === 'video';
+  if (isVideo && (asset.fileSize ?? 0) > 100 * 1024 * 1024) { Alert.alert(L('patient.videoTooLarge')); return null; }
+  try {
+    const blob = await (await fetch(asset.uri)).blob();
+    let name = asset.fileName ?? asset.uri.split('/').pop() ?? '';
+    if (!/\.[a-z0-9]{2,4}$/i.test(name)) name = `${name || 'media'}.${isVideo ? 'mp4' : 'jpg'}`;
+    const sRef = storageRef(storage, `patientRecords/${recordId}/prescriptions/${Date.now()}_${name}`);
+    await uploadBytes(sRef, blob, { contentType: asset.mimeType ?? (isVideo ? 'video/mp4' : 'image/jpeg') });
+    return await getDownloadURL(sRef);
+  } catch (e) {
+    Alert.alert(L('common.error'), (e as Error)?.message ?? '');
+    return null;
+  }
+}
+
+/** 이미 저장된 약에 사진·영상 붙이기 */
+async function pickAndUploadMedMedia(record: PatientRecord, schedules: MedicationSchedule[], idx: number): Promise<void> {
+  const url = await pickAndUploadMedFile(record.id);
+  if (!url) return;
+  try { await addMedicationPhoto(db, record.id, schedules, idx, url); }
+  catch (e) { Alert.alert(L('common.error'), (e as Error)?.message ?? ''); }
+}
+
+function confirmRemoveMedMedia(record: PatientRecord, schedules: MedicationSchedule[], idx: number, url: string) {
+  Alert.alert(L('patient.deleteThisPhoto'), undefined, [
+    { text: L('common.cancel'), style: 'cancel' },
+    { text: L('common.delete'), style: 'destructive', onPress: async () => {
+      try { await deleteObject(storageRef(storage, url)); } catch { /* 이미 없어도 무시 */ }
+      try { await removeMedicationPhoto(db, record.id, schedules, idx, url); }
+      catch (e) { Alert.alert(L('common.error'), (e as Error)?.message ?? ''); }
+    } },
+  ]);
+}
+
+/** 영상은 기기 플레이어로, 사진은 크게 보기 */
+function openMedMedia(url: string, showPhoto: (u: string) => void) {
+  if (isVideoUrl(url)) void Linking.openURL(url);
+  else showPhoto(url);
+}
+
+function MedMediaThumbMobile({ url, onPress, onLongPress }: { url: string; onPress: () => void; onLongPress?: () => void }) {
+  const video = isVideoUrl(url);
+  return (
+    <TouchableOpacity onPress={onPress} onLongPress={onLongPress}
+      style={{ width: 40, height: 40, borderRadius: 6, overflow: 'hidden', borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: video ? '#111827' : '#f9fafb', alignItems: 'center', justifyContent: 'center' }}>
+      {video ? <Ionicons name="play" size={16} color="#fff" /> : <Image source={{ uri: url }} style={{ width: 40, height: 40 }} contentFit="cover" />}
+    </TouchableOpacity>
+  );
+}
+
+function MedMediaViewerMobile({ url, onClose }: { url: string | null; onClose: () => void }) {
+  return (
+    <Modal visible={!!url} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity activeOpacity={1} onPress={onClose} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', alignItems: 'center', justifyContent: 'center' }}>
+        {url && <Image source={{ uri: url }} style={{ width: '92%', height: '80%' }} contentFit="contain" />}
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
 function MedicationTabMobile({
-  schedules, today, onCheck, onAddSchedule, onUpdateSchedule, onRemoveSchedule, autoOpenForm,
+  schedules, today, onCheck, onAddSchedule, onUpdateSchedule, onRemoveSchedule, autoOpenForm, mediaRecord,
 }: {
   schedules: MedicationSchedule[];
+  /** 사진·영상을 올릴 기록 (없으면 사진·영상 칸을 숨긴다) */
+  mediaRecord?: PatientRecord;
   today: string;
   onCheck: (si: number, t: MedicationTime, checked: boolean) => void;
   onAddSchedule?: (s: Omit<MedicationSchedule, 'checkedTimes'>) => void;
@@ -3837,23 +3899,26 @@ function MedicationTabMobile({
 }) {
   const EMPTY_SCHED = (): Omit<MedicationSchedule, 'checkedTimes'> => ({
     name: '', category: undefined, memo: '', times: [],
-    startDate: today, endDate: today, endDateAuto: false,
+    startDate: today, endDate: addDaysYmd(today, DEFAULT_MED_DAYS - 1), endDateAuto: false, // 기본 3일
     firstTime: undefined, lastTime: undefined, totalDoses: 0,
   });
 
   const [showForm, setShowForm] = useState(!!autoOpenForm);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [formData, setFormData] = useState<Omit<MedicationSchedule, 'checkedTimes'>>(EMPTY_SCHED());
-  const [dayCount, setDayCount] = useState('1');
+  const [dayCount, setDayCount] = useState(String(DEFAULT_MED_DAYS));
   const [confirmDeleteIdx, setConfirmDeleteIdx] = useState<number | null>(null);
+  const [uploadingIdx, setUploadingIdx] = useState<number | null>(null);
+  const [viewUrl, setViewUrl] = useState<string | null>(null);
+  const [formUploading, setFormUploading] = useState(false);
 
-  const openAdd = () => { setFormData(EMPTY_SCHED()); setDayCount('1'); setEditingIdx(null); setShowForm(true); };
+  const openAdd = () => { setFormData(EMPTY_SCHED()); setDayCount(String(DEFAULT_MED_DAYS)); setEditingIdx(null); setShowForm(true); };
   const openEdit = (idx: number) => {
     const s = schedules[idx];
     setFormData({ name: s.name, category: s.category, memo: s.memo ?? '', times: [...s.times],
       startDate: s.startDate, endDate: s.endDate, endDateAuto: s.endDateAuto ?? false,
       firstTime: s.firstTime, lastTime: s.lastTime, daysPerWeek: s.daysPerWeek,
-      skipDates: s.skipDates, totalDoses: s.totalDoses });
+      skipDates: s.skipDates, totalDoses: s.totalDoses, photos: Array.isArray(s.photos) ? [...s.photos] : [] });
     const diff = Math.round((new Date(s.endDate).getTime() - new Date(s.startDate).getTime()) / 86400000) + 1;
     setDayCount(String(diff));
     setEditingIdx(idx); setShowForm(true);
@@ -3873,7 +3938,8 @@ function MedicationTabMobile({
     setFormData(f => ({ ...f, times: f.times.includes(t) ? f.times.filter(x => x !== t) : [...f.times, t] }));
 
   const handleSubmit = () => {
-    if (!formData.name.trim() || formData.times.length === 0) return;
+    // 약 이름은 선택 — 복용 시간만 있으면 된다
+    if (formData.times.length === 0 || formUploading) return;
     const days = parseInt(dayCount) || 1;
     const final: Omit<MedicationSchedule, 'checkedTimes'> = {
       ...formData,
@@ -3935,6 +4001,20 @@ function MedicationTabMobile({
             })}
           </View>
         )}
+        {/* 사진·영상 */}
+        {mediaRecord && (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8, alignItems: 'center' }}>
+            {(sched.photos ?? []).map(url => (
+              <MedMediaThumbMobile key={url} url={url} onPress={() => openMedMedia(url, setViewUrl)}
+                onLongPress={() => confirmRemoveMedMedia(mediaRecord, schedules, idx, url)} />
+            ))}
+            <TouchableOpacity disabled={uploadingIdx !== null}
+              onPress={async () => { setUploadingIdx(idx); try { await pickAndUploadMedMedia(mediaRecord, schedules, idx); } finally { setUploadingIdx(null); } }}
+              style={{ height: 40, paddingHorizontal: 8, borderRadius: 6, borderWidth: 1, borderStyle: 'dashed', borderColor: '#fdba74', justifyContent: 'center', opacity: uploadingIdx !== null ? 0.5 : 1 }}>
+              <Text style={{ fontSize: 10, fontWeight: '600', color: '#c2410c' }}>{uploadingIdx === idx ? L('patient.maUploading') : `📷 ${L('patient.maAddPhoto')}`}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         {/* 삭제 확인 */}
         {confirmDeleteIdx === idx && (
           <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, borderTopWidth: 1, borderTopColor: '#fed7aa', paddingTop: 8 }}>
@@ -3954,6 +4034,7 @@ function MedicationTabMobile({
 
   return (
     <View style={{ gap: 6 }}>
+      <MedMediaViewerMobile url={viewUrl} onClose={() => setViewUrl(null)} />
       <TouchableOpacity onPress={openAdd}
         style={{ borderWidth: 1, borderStyle: 'dashed', borderColor: '#fed7aa', borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}>
         <Text style={{ color: '#f97316', fontSize: 12, fontWeight: '600' }}>{L('patient.addMedication3')}</Text>
@@ -3968,13 +4049,6 @@ function MedicationTabMobile({
           submitLabel={editingIdx !== null ? L('common.saveChanges') : L('task.add')}
           submitColor="#f97316"
         >
-          {/* 약 이름 */}
-          <View>
-            <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.medicationName2')}</Text>
-            <TextInput value={formData.name} onChangeText={v => setFormData(f => ({ ...f, name: v }))}
-              placeholder={L('patient.enterMedicationName')} placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
-          </View>
-
           {/* 종류 */}
           <View>
             <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.type')}</Text>
@@ -3986,6 +4060,13 @@ function MedicationTabMobile({
                 </TouchableOpacity>
               ))}
             </View>
+          </View>
+
+          {/* 약 이름 */}
+          <View>
+            <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.medicationName')} <Text style={{ color: '#9ca3af' }}>{L('patient.optional')}</Text></Text>
+            <TextInput value={formData.name} onChangeText={v => setFormData(f => ({ ...f, name: v }))}
+              placeholder={L('patient.medicationNameOptional')} placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
           </View>
 
           {/* 복용 시간 */}
@@ -4054,6 +4135,35 @@ function MedicationTabMobile({
             <TextInput value={formData.memo ?? ''} onChangeText={v => setFormData(f => ({ ...f, memo: v }))}
               placeholder={L('patient.eG30MinAfter')} placeholderTextColor="#9ca3af" style={[styles.formInput, { fontSize: 12, paddingVertical: 7 }]} />
           </View>
+
+          {/* 사진·영상 — 처방전·약 봉투 등 (고르면 바로 올라가고, 저장할 때 함께 들어간다) */}
+          {mediaRecord && (
+            <View>
+              <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 4 }}>{L('patient.medicationPhotos')}</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+                {(formData.photos ?? []).map(url => (
+                  <View key={url}>
+                    <MedMediaThumbMobile url={url} onPress={() => { if (isVideoUrl(url)) void Linking.openURL(url); }} />
+                    <TouchableOpacity onPress={() => setFormData(f => ({ ...f, photos: (f.photos ?? []).filter(u => u !== url) }))}
+                      style={{ position: 'absolute', right: -5, top: -5, width: 16, height: 16, borderRadius: 8, backgroundColor: '#374151', alignItems: 'center', justifyContent: 'center' }}>
+                      <Text style={{ color: '#fff', fontSize: 9 }}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                ))}
+                <TouchableOpacity disabled={formUploading}
+                  onPress={async () => {
+                    setFormUploading(true);
+                    try {
+                      const url = await pickAndUploadMedFile(mediaRecord.id);
+                      if (url) setFormData(f => ({ ...f, photos: [...(f.photos ?? []), url] }));
+                    } finally { setFormUploading(false); }
+                  }}
+                  style={{ height: 40, paddingHorizontal: 8, borderRadius: 6, borderWidth: 1, borderStyle: 'dashed', borderColor: '#fdba74', justifyContent: 'center', opacity: formUploading ? 0.5 : 1 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '600', color: '#c2410c' }}>{formUploading ? L('patient.maUploading') : `📷 ${L('patient.maAddPhoto')}`}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
         </TabFormModalMobile>
       )}
 
@@ -4123,7 +4233,7 @@ function PatientFormModal({
   const addMedSchedule = () => {
     setForm(f => ({
       ...f,
-      medSchedules: [...f.medSchedules, { name: '', times: [], startDate: today, endDate: today }],
+      medSchedules: [...f.medSchedules, { name: '', times: [], startDate: today, endDate: addDaysYmd(today, DEFAULT_MED_DAYS - 1) }],
     }));
   };
 
