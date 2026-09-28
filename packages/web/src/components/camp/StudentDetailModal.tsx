@@ -373,9 +373,10 @@ export default function StudentDetailModal({
   // 복용 약 — 처방약(보건 기록) + 상시약(약복용 명단 전용). 언제 먹는지 · 기간 · 메모, 끝난 약은 흐리게 아래로
   const today = todayDateKey();
   const medRows = [
-    ...(records ?? []).flatMap(r => (r.medicationSchedules ?? []).map(m => ({ m, rx: true }))),
-    ...(regularById[student.studentId] ?? []).map(m => ({ m, rx: false })),
-  ].map(x => ({ ...x, ended: !x.m.endDateAuto && x.m.endDate < today }))
+    // 완치된 환자의 처방약은 더 먹지 않으므로 끝난 약으로
+    ...(records ?? []).flatMap(r => (r.medicationSchedules ?? []).map(m => ({ m, rx: true, cured: r.progressStatus === '완치' }))),
+    ...(regularById[student.studentId] ?? []).map(m => ({ m, rx: false, cured: false })),
+  ].map(x => ({ ...x, ended: x.cured || (!x.m.endDateAuto && x.m.endDate < today) }))
     .sort((p, q) => Number(p.ended) - Number(q.ended) || Number(!p.rx) - Number(!q.rx));
   const regularMedsCard = medRows.length > 0 && (
     <div className="rounded-xl border border-orange-200 bg-white overflow-hidden">

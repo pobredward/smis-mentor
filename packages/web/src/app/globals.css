@@ -46,6 +46,12 @@ body {
   body.has-bottom-nav .fixed.inset-0 {
     bottom: 64px;
   }
+  /* 창 높이를 화면 비율(max-h-[92vh] 등)로 잡은 시트는 탭바를 뺀 공간보다 커져 위쪽 헤더까지 덮는다
+     → 오버레이 안에 들어가도록 다시 줄인다 */
+  body.has-bottom-nav .fixed.inset-0 > [class*="max-h-[8"],
+  body.has-bottom-nav .fixed.inset-0 > [class*="max-h-[9"] {
+    max-height: calc(100% - 1.5rem) !important;
+  }
 }
 
 /* Notion 페이지 스타일 커스터마이징 */

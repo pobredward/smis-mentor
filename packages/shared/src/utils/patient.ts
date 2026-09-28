@@ -224,10 +224,10 @@ export function visitDayLabel(at: { toDate?: () => Date } | undefined, now = new
 }
 
 /**
- * 캠프 종료일('YYYY-MM-DD') — 약 '퇴소까지' 의 마지막 날.
- * jobCodes.endDate 는 날짜의 00:00(UTC 또는 KST)로 저장돼 있어, 12시간 더한 뒤 UTC 날짜를 읽으면 어느 쪽이든 그 날짜가 된다.
+ * 캠프 시작일·종료일('YYYY-MM-DD') — jobCodes.startDate / endDate.
+ * 날짜의 00:00(UTC 또는 KST)로 저장돼 있어, 12시간 더한 뒤 UTC 날짜를 읽으면 어느 쪽이든 그 날짜가 된다.
  */
-export function campEndYmd(endDate: { toDate?: () => Date } | Date | string | null | undefined): string {
+export function campDateYmd(endDate: { toDate?: () => Date } | Date | string | null | undefined): string {
   if (!endDate) return '';
   const d = typeof endDate === 'string' ? new Date(endDate)
     : endDate instanceof Date ? endDate
@@ -260,3 +260,6 @@ export function addDaysYmd(ymd: string, n: number): string {
   dt.setUTCDate(dt.getUTCDate() + n);
   return dt.toISOString().slice(0, 10);
 }
+
+/** 캠프 종료일 — 약 '퇴소까지' 의 마지막 날 */
+export const campEndYmd = campDateYmd;

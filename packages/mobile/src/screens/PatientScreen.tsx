@@ -21,6 +21,8 @@ import { Image } from 'expo-image';
 import { Timestamp } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import DateTimePicker, { DateTimePickerAndroid } from '@react-native-community/datetimepicker';
 import { useQuery } from '@tanstack/react-query';
 import { loadScheduleBundle, scheduleQueryKey } from '../services/scheduleBundle';
 import * as Clipboard from 'expo-clipboard';
@@ -92,7 +94,7 @@ import {
   FEVER_THRESHOLDS,
   classifyFever,
   isFeverLevel,
-  dosesForProgressLog, L, dataLabel, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind, addDaysYmd, DEFAULT_MED_DAYS, isVideoUrl, campEndYmd, localYmd, visitScheduledAt, visitDayLabel, emptyMedListForm, medListFormFrom, medListScheduleOf, toggleMemoPhrase, type MedListForm,
+  dosesForProgressLog, L, dataLabel, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind, campDateYmd, addDaysYmd, DEFAULT_MED_DAYS, isVideoUrl, campEndYmd, localYmd, visitScheduledAt, visitDayLabel, emptyMedListForm, medListFormFrom, medListScheduleOf, toggleMemoPhrase, type MedListForm,
   isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, normalizeGroupKey, dialablePhone, type Whereabouts } from '@smis-mentor/shared';
 import type {
   PatientRecord,
@@ -343,6 +345,7 @@ const EMPTY_FORM: FormState = {
 // ==================== 메인 컴포넌트 ====================
 
 export function PatientScreen() {
+  const insets = useSafeAreaInsets();
   const { userData } = useAuth();
   const [patientRecs, setRecords] = useState<PatientRecord[]>([]);
   // 상시약(약복용 명단 전용)은 환자가 아니라 regularMedications 에 따로 — 약복용 명단에만 합친다
@@ -365,7 +368,8 @@ export function PatientScreen() {
   const [showQuickReport, setShowQuickReport] = useState(false);
   const [campGroups, setCampGroups] = useState<CampGroup[]>([]);
   const [campUsers, setCampUsers] = useState<User[]>([]);
-  const [campEndDate, setCampEndDate] = useState(''); // 약 '퇴소까지' 종료일 (web 과 같이 camps 문서에서)
+  const [campEndDate, setCampEndDate] = useState('');
+  const [campStartDate, setCampStartDate] = useState(''); // 상시약 시작일 기본값 // 약 '퇴소까지' 종료일 (web 과 같이 camps 문서에서)
   // 날짜가 바뀌면(자정 넘김) 오늘도 바뀐다 — 켜 둔 채 밤을 넘겨도 복용 체크가 전날로 기록되지 않게
   const [today, setToday] = useState(todayStr());
   useEffect(() => {
@@ -396,6 +400,7 @@ export function PatientScreen() {
         } catch { /* 없어도 무방 */ }
         // 캠프 종료일 (약 '퇴소까지') — 채용 코드(jobCodes)의 종료일 (web 과 같음)
         setCampEndDate(campEndYmd((codes[0] as { endDate?: { toDate?: () => Date } }).endDate));
+        setCampStartDate(campDateYmd((codes[0] as { startDate?: { toDate?: () => Date } }).startDate));
         try {
           const groups = await getCampGroups(db, cc);
           setCampGroups(groups);
@@ -1149,13 +1154,15 @@ export function PatientScreen() {
       {/* 가운데 카드로 — pageSheet 는 android 에서 전체 화면이 되어 상단바와 겹친다 */}
       <Modal visible={showMedListAdd} transparent animationType="fade" statusBarTranslucent onRequestClose={() => setShowMedListAdd(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', paddingHorizontal: 14, paddingVertical: 40 }}>
+        {/* 상태바·홈 표시줄을 피해서 (statusBarTranslucent 라 android 도 상태바 밑까지 그려진다) */}
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', paddingHorizontal: 14, paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }}>
         <View style={{ height: '100%', maxHeight: 680, backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden' }}>
         {campCode && (
           <MedicationListAddModalMobile
             today={today}
             campCode={campCode}
             campEndDate={campEndDate}
+            campStartDate={campStartDate}
             students={students}
             staffOptions={staffOptions}
             allRecords={allRecords}
@@ -2171,20 +2178,46 @@ const shiftYmd = (ymd: string, n: number) => {
 };
 const monthDayM = (ymd: string) => { const [, m, d] = ymd.split('-'); return m && d ? `${+m}/${+d}` : ymd; };
 
-/** ‹ 9/28 › — 날짜를 하루씩 옮긴다 (별도 날짜 선택기 없이) */
-function DateStepper({ value, min, onChange }: { value: string; min?: string; onChange: (v: string) => void }) {
-  const canPrev = !min || shiftYmd(value, -1) >= min;
-  const btn = { paddingHorizontal: 8, paddingVertical: 5 };
+/** 날짜 칸 — 누르면 달력 (android 는 시스템 달력 창, iOS 는 달력 카드) */
+function DateField({ value, min, onChange }: { value: string; min?: string; onChange: (v: string) => void }) {
+  const toDate = (ymd: string) => { const [y, m, d] = ymd.split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); };
+  const [iosOpen, setIosOpen] = useState(false);
+  const [draft, setDraft] = useState(() => toDate(value));
+  const open = () => {
+    if (Platform.OS === 'android') {
+      DateTimePickerAndroid.open({
+        value: toDate(value),
+        mode: 'date',
+        minimumDate: min ? toDate(min) : undefined,
+        onChange: (e, d) => { if (e.type === 'set' && d) onChange(localYmd(d)); },
+      });
+    } else {
+      setDraft(toDate(value));
+      setIosOpen(true);
+    }
+  };
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, backgroundColor: '#fff' }}>
-      <TouchableOpacity style={btn} disabled={!canPrev} onPress={() => onChange(shiftYmd(value, -1))}>
-        <Ionicons name="chevron-back" size={14} color={canPrev ? '#4b5563' : '#d1d5db'} />
+    <>
+      <TouchableOpacity onPress={open}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, backgroundColor: '#fff', paddingHorizontal: 9, paddingVertical: 5 }}>
+        <Ionicons name="calendar-outline" size={13} color="#4b5563" />
+        <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827' }}>{monthDayM(value)}</Text>
       </TouchableOpacity>
-      <Text style={{ fontSize: 12, fontWeight: '700', color: '#111827', minWidth: 34, textAlign: 'center' }}>{monthDayM(value)}</Text>
-      <TouchableOpacity style={btn} onPress={() => onChange(shiftYmd(value, 1))}>
-        <Ionicons name="chevron-forward" size={14} color="#4b5563" />
-      </TouchableOpacity>
-    </View>
+      {Platform.OS === 'ios' && (
+        <Modal visible={iosOpen} transparent animationType="fade" onRequestClose={() => setIosOpen(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: 20 }}>
+            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 12 }}>
+              <DateTimePicker value={draft} mode="date" display="inline" minimumDate={min ? toDate(min) : undefined}
+                onChange={(_, d) => { if (d) setDraft(d); }} />
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 16, paddingTop: 6 }}>
+                <TouchableOpacity onPress={() => setIosOpen(false)}><Text style={{ fontSize: 15, color: '#6b7280' }}>{L('common.cancel')}</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => { onChange(localYmd(draft)); setIosOpen(false); }}><Text style={{ fontSize: 15, fontWeight: '700', color: '#f97316' }}>{L('common.ok')}</Text></TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+    </>
   );
 }
 
@@ -2193,11 +2226,13 @@ function DateStepper({ value, min, onChange }: { value: string; min?: string; on
  * 처방약은 환자 카드에서 추가한다. 여기서 올린 약은 약복용 명단 전용 기록에만 들어가고 환자 현황에는 나오지 않는다.
  */
 function MedicationListAddModalMobile({
-  today, campCode, campEndDate, students, staffOptions, allRecords, createdBy, createdById, onClose,
+  today, campCode, campEndDate, campStartDate, students, staffOptions, allRecords, createdBy, createdById, onClose,
 }: {
   today: string;
   campCode: string;
   campEndDate: string;
+  /** 시작일 기본값 — 캠프 시작일 (모르면 오늘) */
+  campStartDate: string;
   students: STSheetStudent[];
   staffOptions: StaffOptionM[];
   allRecords: PatientRecord[];
@@ -2209,7 +2244,7 @@ function MedicationListAddModalMobile({
   const [person, setPerson] = useState<{ kind: 'student'; s: STSheetStudent } | { kind: 'staff'; u: StaffOptionM } | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState<MedListForm>(() => emptyMedListForm(today));
+  const [form, setForm] = useState<MedListForm>(() => emptyMedListForm(campStartDate || today));
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [showMore, setShowMore] = useState(false);
   const [error, setError] = useState('');
@@ -2230,7 +2265,7 @@ function MedicationListAddModalMobile({
   const schedules = target?.medicationSchedules ?? [];
 
   const set = (patch: Partial<MedListForm>) => { setForm(f => ({ ...f, ...patch })); setError(''); };
-  const resetForm = () => { setForm(emptyMedListForm(today)); setEditingIdx(null); setShowMore(false); setError(''); };
+  const resetForm = () => { setForm(emptyMedListForm(campStartDate || today)); setEditingIdx(null); setShowMore(false); setError(''); };
   const hasMore = !!(form.category || form.daysPerWeek || form.skipDates.length || form.firstTime || form.lastTime);
 
   const createWith = async (sched: Omit<MedicationSchedule, 'checkedTimes'>) => {
@@ -2446,11 +2481,11 @@ function MedicationListAddModalMobile({
               <View>
                 <Text style={label}>{L('patient.maPeriod')}</Text>
                 <View style={wrap}>
-                  <DateStepper value={form.startDate} onChange={v => set({ startDate: v, ...(form.endDate < v ? { endDate: v } : {}) })} />
+                  <DateField value={form.startDate} onChange={v => set({ startDate: v, ...(form.endDate < v ? { endDate: v } : {}) })} />
                   <Text style={{ fontSize: 12, color: '#9ca3af' }}>~</Text>
                   {chip('until', `${L('patient.maUntilEnd')}${campEndDate ? ` (${monthDayM(campEndDate)})` : ''}`, form.untilEnd, () => set({ untilEnd: true }), true)}
                   {chip('dates', L('patient.maPickDates'), !form.untilEnd, () => set({ untilEnd: false, endDate: form.endDate < form.startDate ? form.startDate : form.endDate }), true)}
-                  {!form.untilEnd && <DateStepper value={form.endDate} min={form.startDate} onChange={v => set({ endDate: v })} />}
+                  {!form.untilEnd && <DateField value={form.endDate} min={form.startDate} onChange={v => set({ endDate: v })} />}
                 </View>
               </View>
 
@@ -2493,7 +2528,7 @@ function MedicationListAddModalMobile({
                           <Text style={{ fontSize: 11, color: '#4b5563' }}>{monthDayM(d)} ✕</Text>
                         </TouchableOpacity>
                       ))}
-                      <DateStepper value={skipPick < form.startDate ? form.startDate : skipPick} min={form.startDate} onChange={setSkipPick} />
+                      <DateField value={skipPick < form.startDate ? form.startDate : skipPick} min={form.startDate} onChange={setSkipPick} />
                       {chip('addSkip', `+ ${L('patient.maAdd')}`, false, () => {
                         const d = skipPick < form.startDate ? form.startDate : skipPick;
                         if (!form.skipDates.includes(d)) set({ skipDates: [...form.skipDates, d].sort() });
@@ -3672,7 +3707,7 @@ function HospitalScheduleFormMobile({
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
         {dayChip(L('patient.vdToday'), visitDay === todayYmd, () => setVisitDay(todayYmd))}
         {dayChip(L('patient.vdTomorrow'), visitDay === tomorrowYmd, () => setVisitDay(tomorrowYmd))}
-        <DateStepper value={visitDay} onChange={setVisitDay} />
+        <DateField value={visitDay} onChange={setVisitDay} />
       </View>
       <Text style={{ fontSize: 10, color: '#6b7280', marginBottom: 2 }}>{L('patient.transport')}</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}>

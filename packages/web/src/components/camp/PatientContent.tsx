@@ -5,7 +5,7 @@ import { Timestamp } from 'firebase/firestore';
 import ImageCropper from '@/components/common/ImageCropper';
 import MyEscortPanel from '@/components/camp/patient/MyEscortPanel';
 import EscortSsn from '@/components/camp/patient/EscortSsn';
-import { isActiveEscortVisit, L, dataLabel, isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, resolveGroups, normalizeGroupKey, getCampClassInfo, getCampTimetableCommon, getCampDayPlan, dialablePhone, type Whereabouts, type WhereaboutsInput, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind, addDaysYmd, DEFAULT_MED_DAYS, isVideoUrl, campEndYmd, localYmd, visitScheduledAt, visitDayLabel, emptyMedListForm, medListFormFrom, medListScheduleOf, toggleMemoPhrase, type MedListForm } from '@smis-mentor/shared';
+import { isActiveEscortVisit, L, dataLabel, isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, resolveGroups, normalizeGroupKey, getCampClassInfo, getCampTimetableCommon, getCampDayPlan, dialablePhone, type Whereabouts, type WhereaboutsInput, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind, campDateYmd, addDaysYmd, DEFAULT_MED_DAYS, isVideoUrl, campEndYmd, localYmd, visitScheduledAt, visitDayLabel, emptyMedListForm, medListFormFrom, medListScheduleOf, toggleMemoPhrase, type MedListForm } from '@smis-mentor/shared';
 import {
   SYMPTOM_GUIDES, getHospitalPresets, isKoreanStaff, ACTION_NOTE_PLACEHOLDER, ACTION_NOTE_EXAMPLE,
   makeMedTimeKey, schedActiveOn, isInDateRange, calcTotalDoses, todayDateKey as todayStr,
@@ -385,7 +385,8 @@ export default function PatientContent() {
     const t = setInterval(() => setToday(prev => (prev === todayStr() ? prev : todayStr())), 30_000);
     return () => clearInterval(t);
   }, []);
-  const [campEndDate, setCampEndDate] = useState<string>('');  // "2026-08-14"
+  const [campEndDate, setCampEndDate] = useState<string>('');
+  const [campStartDate, setCampStartDate] = useState<string>(''); // 상시약 시작일 기본값  // "2026-08-14"
   const [campGroups, setCampGroups] = useState<CampGroup[]>([]); // 그룹-반 매핑
   // 주 탭: 환자 현황 / 약복용명단
   const [mainTab, setMainTab] = useState<'환자 현황' | '약복용명단'>('환자 현황');
@@ -414,6 +415,7 @@ export default function PatientContent() {
         } catch { /* 유저 목록 없어도 무방 */ }
         // 캠프 종료일 (약 '퇴소까지') — 채용 코드(jobCodes)의 종료일. camps 컬렉션은 쓰지 않는다
         setCampEndDate(campEndYmd((codes[0] as { endDate?: { toDate?: () => Date } }).endDate));
+        setCampStartDate(campDateYmd((codes[0] as { startDate?: { toDate?: () => Date } }).startDate));
         // 그룹-반 매핑 로드 (campSettings.groups)
         try {
           const groups = await getCampGroups(db, cc);
@@ -1417,6 +1419,7 @@ export default function PatientContent() {
           today={today}
           campCode={campCode}
           campEndDate={campEndDate}
+          campStartDate={campStartDate}
           students={students}
           staffOptions={staffOptions}
           allRecords={allRecords}
@@ -7422,12 +7425,14 @@ const inputCls = 'w-full border border-gray-200 rounded-lg px-3 py-2 text-sm out
  * 처방약은 환자 카드에서 추가한다. 여기서 올린 약은 약복용 명단 전용 기록에만 들어가고 환자 현황에는 나오지 않는다.
  */
 function MedicationListAddModal({
-  today, campCode, campEndDate, students, staffOptions, allRecords, createdBy, createdById,
+  today, campCode, campEndDate, campStartDate, students, staffOptions, allRecords, createdBy, createdById,
   onUploadPhoto, onRemovePhoto, onClose,
 }: {
   today: string;
   campCode: string;
   campEndDate: string;
+  /** 시작일 기본값 — 캠프 시작일 (모르면 오늘) */
+  campStartDate: string;
   students: STSheetStudent[];
   staffOptions: StaffOption[];
   allRecords: PatientRecord[];
@@ -7445,7 +7450,7 @@ function MedicationListAddModal({
   >(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState<MedListForm>(() => emptyMedListForm(today));
+  const [form, setForm] = useState<MedListForm>(() => emptyMedListForm(campStartDate || today));
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [showMore, setShowMore] = useState(false);
   const [error, setError] = useState('');
@@ -7468,7 +7473,7 @@ function MedicationListAddModal({
   const schedules = target?.medicationSchedules ?? [];
 
   const set = (patch: Partial<MedListForm>) => { setForm(f => ({ ...f, ...patch })); setError(''); };
-  const resetForm = () => { setForm(emptyMedListForm(today)); setEditingIdx(null); setShowMore(false); setError(''); setSkipInput(''); };
+  const resetForm = () => { setForm(emptyMedListForm(campStartDate || today)); setEditingIdx(null); setShowMore(false); setError(''); setSkipInput(''); };
   const hasMore = !!(form.category || form.daysPerWeek || form.skipDates.length || form.firstTime || form.lastTime);
 
   const createWith = async (sched: Omit<MedicationSchedule, 'checkedTimes'>) => {
@@ -7562,8 +7567,9 @@ function MedicationListAddModal({
   const dateCls = 'border border-gray-200 rounded-lg px-2 py-1 text-xs outline-none focus:border-orange-400 bg-white';
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col max-h-[92vh]" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-3" onClick={onClose}>
+      {/* 가운데 카드 — 좁은 화면에서도 위 헤더·아래 탭바와 겹치지 않게 */}
+      <div className="bg-white w-full sm:max-w-md rounded-2xl shadow-xl flex flex-col max-h-[88vh]" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 flex-shrink-0">
           <div className="min-w-0">
             <h2 className="text-base font-bold text-gray-900">{L('patient.maTitle')}</h2>
