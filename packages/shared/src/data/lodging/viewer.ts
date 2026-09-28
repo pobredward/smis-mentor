@@ -60,10 +60,10 @@ export function lodgingViewerRooms(rooms: Map<string, LodgingRoomView> | Lodging
  * 숙소 3D 뷰어 한 장짜리 HTML.
  * web 은 <iframe srcDoc>, mobile 은 WebView source.html 로 그대로 띄운다.
  *
- * 뷰어 → 호스트: postMessage { source:'lodging-viewer', type:'room'|'place'|'floor'|'ready', num|id|floor }
- *   (mobile 은 window.ReactNativeWebView.postMessage 로 JSON 문자열)
- * 호스트 → 뷰어: window.lodgingCmd({ type:'goTo', num }) / { type:'setFloor', floor } / { type:'setMode', mode }
- *   / { type:'setRooms', rooms } (lodgingViewerRooms 결과)
+ * 뷰어 → 호스트: postMessage { source:'lodging-viewer', type:'room'|'place'|'floor'|'ready'|'inside', num|id|floor }
+ *   (mobile 은 window.ReactNativeWebView.postMessage 로 JSON 문자열; 'inside' 는 방 안에 들어가거나(num|id) 나올 때(null))
+ * 호스트 → 뷰어: window.lodgingCmd({ type:'goTo', num }) / { type:'enter', num|id } (안으로 들어가 둘러보기) / { type:'exit' }
+ *   / { type:'setFloor', floor } / { type:'setMode', mode } / { type:'setRooms', rooms } (lodgingViewerRooms 결과)
  *   web 은 iframe.contentWindow.postMessage({ source:'lodging-host', ...cmd }, '*'), mobile 은 injectJavaScript
  */
 export function lodgingViewerHtml(payload: LodgingViewerPayload): string {
@@ -110,6 +110,9 @@ html,body{margin:0;height:100%;background:#F6F6F3;color:#1B1F24;font:13px/1.4 "A
 .gl .where{position:absolute;right:10px;top:8px;font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:600;background:rgba(255,255,255,.9);padding:4px 8px;border-radius:6px;color:#4B5563;z-index:3}
 .gl .where:empty{display:none}
 .gl canvas.mini{position:absolute;right:10px;bottom:10px;width:auto;height:auto;display:none;background:rgba(255,255,255,.94);border:1px solid #DDE0E4;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.12);z-index:3;cursor:pointer}
+.gl .fade{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .18s;z-index:4}
+.seg.in button{color:#2B5FD9;font-weight:600}
+.lbl.in{color:#1B1F24;font-size:12px;letter-spacing:0}
 `;
 
 const VIEWER_BODY = String.raw`
@@ -117,8 +120,9 @@ const VIEWER_BODY = String.raw`
   <div class="bar">
     <span class="lbl">모드</span><div class="seg" id="gl-mode"><button aria-pressed="true" data-m="orbit">돌려보기</button><button data-m="walk">걷기</button></div>
     <span class="lbl" style="margin-left:6px">층</span><div class="seg" id="gl-floor"><button data-f="0">전체</button><button data-f="-1">B1</button><button data-f="1">1층</button><button data-f="2">2층</button><button data-f="3">3층</button><button data-f="4">4층</button></div>
+    <div class="seg in" id="gl-in" style="display:none;margin-left:6px"><button data-act="exit">← 나가기</button></div><span class="lbl in" id="gl-in-name"></span>
   </div>
-  <div class="fill"><div class="gl" id="gl"><div class="tip" id="gl-tip"></div><div class="where" id="gl-where"></div><canvas class="mini" id="gl-mini"></canvas><div class="hint" id="gl-hint"></div></div></div>
+  <div class="fill"><div class="gl" id="gl"><div class="tip" id="gl-tip"></div><div class="where" id="gl-where"></div><canvas class="mini" id="gl-mini"></canvas><div class="hint" id="gl-hint"></div><div class="fade" id="gl-fade"></div></div></div>
 </section>
 `;
 
@@ -163,6 +167,7 @@ const VIEWER_JS = String.raw`
   function renderGL() {
     if (gl || !window.THREE) return;
     var host = document.getElementById('gl'), tip = document.getElementById('gl-tip'), where = document.getElementById('gl-where'), hint = document.getElementById('gl-hint'), mini = document.getElementById('gl-mini');
+    var fade = document.getElementById('gl-fade'), inBar = document.getElementById('gl-in'), inName = document.getElementById('gl-in-name');
     var W = host.clientWidth, H = host.clientHeight;
     var scene = new THREE.Scene();
     var camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 3000);
@@ -313,6 +318,8 @@ const VIEWER_JS = String.raw`
     function sign(text, bg, ink, x, y, z, rotY, f, ud) { var m = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.6), new THREE.MeshBasicMaterial({ map: signTex(text, bg, ink), side: THREE.DoubleSide })); m.position.set(x, y, z); m.rotation.y = rotY; m.userData = Object.assign({ f: f }, ud || {}); group.add(m); meshes.push(m); if (ud) pick.push(m); return m; }
     var floorY = function (f) { return f === -1 ? -FH : (f - 1) * FH; };
     var roomBox = {}, roomSign = {}, roomDoor = {};
+    // 방·장소의 안쪽 자리 — 들어가서 둘러볼 때 쓴다. c: 가운데, ang: rotation.y (안쪽 +z 가 문에서 창 쪽), w: 복도 방향 폭, d: 깊이
+    var roomGeom = {}, placeGeom = {};
     var mapPolys = {}, floorPicks = [], floorBounds = {}, areas = {}, obst = {};
     function grow(bx, pts) { pts.forEach(function (p) { bx.x0 = Math.min(bx.x0, p[0]); bx.x1 = Math.max(bx.x1, p[0]); bx.z0 = Math.min(bx.z0, p[1]); bx.z1 = Math.max(bx.z1, p[1]); }); return bx; }
     function newBox() { return { x0: 1e9, x1: -1e9, z0: 1e9, z1: -1e9 }; }
@@ -349,6 +356,7 @@ const VIEWER_JS = String.raw`
         roomDoor[n] = { x: pp[0], z: pp[1], nx: s * (east ? NX : 0), nz: s * (east ? NZ : 1), f: f };
         var lu0 = Math.max(u0(va), u0(vb)), lu1 = Math.min(u1(va), u1(vb)), c = T((lu0 + lu1) / 2, (va + vb) / 2);
         planLabel(n, c[0], y + TOP + 0.02, c[1], lu1 - lu0, vb - va, f, rot);
+        roomGeom[n] = { f: f, c: c, ang: rot + (upper ? Math.PI : 0), w: lu1 - lu0, d: vb - va };   // 위쪽 줄은 창이 -v 쪽
         polys.push({ pts: pts, num: n }); grow(fb, pts);
       }
       m.upper.forEach(function (n, i) { mainRoom(n, i + offU, true); });
@@ -403,6 +411,7 @@ const VIEWER_JS = String.raw`
             roomSign[n] = plate(n, face, y + 1.65, z, s < 0 ? Math.PI / 2 : -Math.PI / 2, f);
             roomDoor[n] = { x: face, z: z, nx: -s, nz: 0, f: f };
             planLabel(n, x, y + TOP + 0.02, z, RD - WALL, RW - WALL, f, 0);
+            roomGeom[n] = { f: f, c: [x, z], ang: s * Math.PI / 2, w: RW - WALL, d: RD - WALL };   // 창은 복도 반대쪽(바깥)
             polys.push({ pts: pts, num: n });
           });
         });
@@ -442,6 +451,7 @@ const VIEWER_JS = String.raw`
         var q = at((p.box[0] + p.box[2]) / 2, (p.box[1] + p.box[3]) / 2), w = Math.max((p.box[2] - p.box[0]) * sx - 0.3, 0.6), d = Math.max((p.box[3] - p.box[1]) * sz - 0.3, 0.6), pc = placeColor(p.kind), c = q.c, rot = q.rot;
         box(w, TOP - 0.1, d, hex(pc.bg), c[0], y + 0.1 + (TOP - 0.1) / 2, c[1], { pid: p.id, f: -1 }, rot);
         var pts = boxPts(c[0], c[1], w, d, rot); addObst(-1, pts); polys.push({ pts: pts, place: p }); b1Centers.push({ name: p.name, x: c[0], z: c[1], r: Math.max(w, d) / 2 });
+        if (MAJOR.indexOf(p.kind) >= 0) placeGeom[p.id] = { f: -1, c: [c[0], c[1]], ang: rot, w: w, d: d, name: p.name, kind: p.kind };   // 홀·식당·상점·오락실은 들어가 볼 수 있다
         if (MAJOR.indexOf(p.kind) >= 0) { var s = sign(p.name, pc.bg, pc.ink, c[0], y + TOP + 0.05, c[1], 0, -1, { pid: p.id }); s.scale.set(Math.max(2, w / 3), Math.max(2, w / 3) * 0.5, 1); s.rotation.order = 'YXZ'; s.rotation.set(-Math.PI / 2, rot, 0); s.userData.orbitOnly = true; }
         // 걷기용 이름판 — 네 벽마다
         [[w / 2, 0, Math.PI / 2, d], [-w / 2, 0, -Math.PI / 2, d], [0, d / 2, 0, w], [0, -d / 2, Math.PI, w]].forEach(function (sd) {
@@ -632,9 +642,12 @@ const VIEWER_JS = String.raw`
         else { b.style.display = ''; b.setAttribute('aria-pressed', String(f === 0 ? FLOORS.every(function (g) { return sel[g]; }) : !!sel[f])); }
       });
       modeBar.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.m === mode)); });
+      inBar.style.display = inRoom ? '' : 'none'; inName.textContent = inRoom ? inRoom.title : '';
     }
     function isVis(ud) {
       var f = ud.f;
+      if (ud.room) return mode === 'walk' && !!inRoom && inRoom.key === ud.room;                        // 방 안 살림은 그 방에 들어갔을 때만
+      if (inRoom && ((ud.num && ud.num === inRoom.num) || (ud.pid && ud.pid === inRoom.pid))) return false;   // 들어간 방의 상자·팻말은 치운다
       if (ud.walkOnly && mode !== 'walk') return false;
       if (ud.orbitOnly && mode === 'walk') return false;
       if (mode === 'walk') {
@@ -678,27 +691,29 @@ const VIEWER_JS = String.raw`
     }
 
     // ── 걷기: 칸 격자로 길 찾기 — 복도를 누르면 그 복도 가운데로, 로비·주차장·지하는 누른 자리로 ──
+    // 격자 키: 층 번호(복도·로비·지하) 또는 방 안('r:215', 'p:b1-halla'). 방 안은 좁아서 칸을 잘게 쓴다
     var grids = {}, CS = 0.5;
     function navGrid(f) {
       if (grids[f]) return grids[f];
+      var cs = typeof f === 'string' ? 0.2 : CS;
       var A = (areas[f] || []).map(function (a) { return { pts: a.pts, b: grow(newBox(), a.pts) }; }), O = (obst[f] || []).map(function (p) { return { pts: p, b: grow(newBox(), p) }; });
       var bx = newBox(); A.forEach(function (a) { grow(bx, [[a.b.x0, a.b.z0], [a.b.x1, a.b.z1]]); });
-      var x0 = bx.x0 - CS * 2, z0 = bx.z0 - CS * 2, nx = Math.ceil((bx.x1 - x0) / CS) + 4, nz = Math.ceil((bx.z1 - z0) / CS) + 4;
+      var x0 = bx.x0 - cs * 2, z0 = bx.z0 - cs * 2, nx = Math.ceil((bx.x1 - x0) / cs) + 4, nz = Math.ceil((bx.z1 - z0) / cs) + 4;
       var raw = new Uint8Array(nx * nz), free = new Uint8Array(nx * nz);
       function inside(list, x, z) { for (var k = 0; k < list.length; k++) { var q = list[k], b = q.b; if (x < b.x0 || x > b.x1 || z < b.z0 || z > b.z1) continue; if (pip(q.pts, x, z)) return true; } return false; }
-      for (var j = 0; j < nz; j++) for (var i = 0; i < nx; i++) { var x = x0 + (i + 0.5) * CS, z = z0 + (j + 0.5) * CS; if (inside(A, x, z) && !inside(O, x, z)) raw[j * nx + i] = 1; }
+      for (var j = 0; j < nz; j++) for (var i = 0; i < nx; i++) { var x = x0 + (i + 0.5) * cs, z = z0 + (j + 0.5) * cs; if (inside(A, x, z) && !inside(O, x, z)) raw[j * nx + i] = 1; }
       for (j = 1; j < nz - 1; j++) for (i = 1; i < nx - 1; i++) {   // 벽에서 한 칸 띄운다
         var k = j * nx + i; if (!raw[k]) continue;
         free[k] = raw[k - 1] & raw[k + 1] & raw[k - nx] & raw[k + nx] & raw[k - nx - 1] & raw[k - nx + 1] & raw[k + nx - 1] & raw[k + nx + 1];
       }
-      return (grids[f] = { x0: x0, z0: z0, nx: nx, nz: nz, free: free });
+      return (grids[f] = { x0: x0, z0: z0, nx: nx, nz: nz, free: free, cs: cs });
     }
-    function cellAt(g, x, z) { var i = Math.floor((x - g.x0) / CS), j = Math.floor((z - g.z0) / CS); return i < 0 || j < 0 || i >= g.nx || j >= g.nz ? -1 : j * g.nx + i; }
+    function cellAt(g, x, z) { var i = Math.floor((x - g.x0) / g.cs), j = Math.floor((z - g.z0) / g.cs); return i < 0 || j < 0 || i >= g.nx || j >= g.nz ? -1 : j * g.nx + i; }
     function isFree(g, x, z) { var k = cellAt(g, x, z); return k >= 0 && g.free[k] === 1; }
-    function cellXZ(g, k) { return { x: g.x0 + ((k % g.nx) + 0.5) * CS, z: g.z0 + (Math.floor(k / g.nx) + 0.5) * CS }; }
+    function cellXZ(g, k) { return { x: g.x0 + ((k % g.nx) + 0.5) * g.cs, z: g.z0 + (Math.floor(k / g.nx) + 0.5) * g.cs }; }
     function nearestFree(g, x, z) {
-      var ci = Math.floor((x - g.x0) / CS), cj = Math.floor((z - g.z0) / CS), best = -1, bd = 1e18;
-      for (var r = 0; r < 80 && best < 0; r++) for (var j = cj - r; j <= cj + r; j++) for (var i = ci - r; i <= ci + r; i++) {
+      var ci = Math.floor((x - g.x0) / g.cs), cj = Math.floor((z - g.z0) / g.cs), best = -1, bd = 1e18;
+      for (var r = 0; r < 120 && best < 0; r++) for (var j = cj - r; j <= cj + r; j++) for (var i = ci - r; i <= ci + r; i++) {
         if (Math.max(Math.abs(i - ci), Math.abs(j - cj)) !== r || i < 0 || j < 0 || i >= g.nx || j >= g.nz) continue;
         var k = j * g.nx + i; if (!g.free[k]) continue;
         var p = cellXZ(g, k), d = (p.x - x) * (p.x - x) + (p.z - z) * (p.z - z); if (d < bd) { bd = d; best = k; }
@@ -706,7 +721,7 @@ const VIEWER_JS = String.raw`
       return best;
     }
     function snapFree(f, p) { var g = navGrid(f); if (isFree(g, p.x, p.z)) return { x: p.x, z: p.z }; var k = nearestFree(g, p.x, p.z); return k < 0 ? null : cellXZ(g, k); }
-    function los(g, a, b) { var d = Math.hypot(b.x - a.x, b.z - a.z), n = Math.ceil(d / (CS * 0.5)); for (var i = 1; i < n; i++) { var t = i / n; if (!isFree(g, a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t)) return false; } return true; }
+    function los(g, a, b) { var d = Math.hypot(b.x - a.x, b.z - a.z), n = Math.ceil(d / (g.cs * 0.5)); for (var i = 1; i < n; i++) { var t = i / n; if (!isFree(g, a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t)) return false; } return true; }
     function findPath(f, from, to) {
       var g = navGrid(f), nx = g.nx, nz = g.nz, free = g.free;
       var s = isFree(g, from.x, from.z) ? cellAt(g, from.x, from.z) : nearestFree(g, from.x, from.z), t = cellAt(g, to.x, to.z);
@@ -749,9 +764,13 @@ const VIEWER_JS = String.raw`
       if (k === 'west') return { x: clamp(x, jx, BEND ? PX : XW + mainLen - END), z: 0 };
       return { x: x, z: z };
     }
-    function destFor(key, x, z) { return snapFree(walkFloor, onLine(key, x, z)); }
-    function areaAt(x, z) { var A = areas[walkFloor] || []; for (var i = 0; i < A.length; i++) if (pip(A[i].pts, x, z)) return A[i]; return null; }
+    /** 지금 걷는 격자 — 방 안이면 그 방, 아니면 층 */
+    var inRoom = null;
+    function navKey() { return inRoom ? inRoom.key : walkFloor; }
+    function destFor(key, x, z) { return snapFree(navKey(), onLine(key, x, z)); }
+    function areaAt(x, z) { var A = areas[navKey()] || []; for (var i = 0; i < A.length; i++) if (pip(A[i].pts, x, z)) return A[i]; return null; }
     function placeName(x, z) {
+      if (inRoom) return inRoom.title + ' 안';
       var A = areaAt(x, z); if (!A) return '';
       if (A.key === 'annex') return Math.abs(z) <= HW ? '갈림목' : '별관 복도';
       if (A.key === 'west' && x < XW) return x <= jx + HW ? '갈림목' : '본관↔별관 통로';
@@ -777,7 +796,7 @@ const VIEWER_JS = String.raw`
     function angTo(from, to) { var d = to - from; return from + Math.atan2(Math.sin(d), Math.cos(d)); }
     function glideTo(d) {
       if (!d) return;
-      var pts = findPath(walkFloor, { x: eye.x, z: eye.z }, d); if (!pts) return;
+      var pts = findPath(navKey(), { x: eye.x, z: eye.z }, d); if (!pts) return;
       var lens = [0], total = 0;
       for (var i = 1; i < pts.length; i++) { total += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z); lens.push(total); }
       if (total < 0.05) return;
@@ -840,6 +859,7 @@ const VIEWER_JS = String.raw`
     }
     mini.addEventListener('pointerdown', function (e) {
       e.stopPropagation(); e.preventDefault(); if (mode !== 'walk') return;
+      if (inRoom) leaveRoom(false);   // 방 안에서 지도를 누르면 문 앞으로 나온 뒤 간다
       var b = mini.getBoundingClientRect(), x = mb.x0 + (e.clientX - b.left - MPAD) / MS, z = mb.z0 + (e.clientY - b.top - MPAD) / MS;
       // 로비·주차장·지하 안을 누르면 그 자리, 아니면 가장 가까운 복도 가운데
       var A = areaAt(x, z), d;
@@ -901,9 +921,21 @@ const VIEWER_JS = String.raw`
       var objs = meshes.concat(labels, roofMeshes); if (mode !== 'walk') objs = objs.filter(function (m) { return !m.userData.walk; });
       var h = ray.intersectObjects(objs.filter(function (m) { return m.visible; }))[0];
       if (!h) return null; var ud = h.object.userData || {};
-      return ud.num || ud.pid || ud.walk ? h : null;
+      if (ud.room && inRoom && !ud.walk && !ud.exit && !ud.info) {   // 방 안 가구·벽을 눌러도 그 아래 바닥으로 — 좁은 방에서 바닥만 골라 누르기 어렵다
+        var fp = new THREE.Vector3(); if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), -(floorY(inRoom.f) + 0.22)), fp)) return null;
+        return { point: fp, object: { userData: { walk: 'room' } } };
+      }
+      return ud.num || ud.pid || ud.walk || ud.exit || ud.info ? h : null;
     }
-    function labelOf(ud) { if (ud.num) { var r = roomOf(ud.num); return ud.num + ' ' + r.purpose + (r.people.length ? ' · ' + r.people.length + '명' + (r.caption && r.caption !== r.purpose ? ' · ' + r.caption : '') : ''); } var p = placeMap[ud.pid]; return p ? p.name : ''; }
+    function enterable(ud) { return mode === 'walk' && !inRoom && !!((ud.num && roomGeom[ud.num]) || (ud.pid && placeGeom[ud.pid])); }
+    function labelOf(ud) {
+      if (ud.exit) return '문 · 나가기';
+      if (ud.info) return '명단·상세 보기';
+      var s;
+      if (ud.num) { var r = roomOf(ud.num); s = ud.num + ' ' + r.purpose + (r.people.length ? ' · ' + r.people.length + '명' + (r.caption && r.caption !== r.purpose ? ' · ' + r.caption : '') : ''); }
+      else { var p = placeMap[ud.pid]; s = p ? p.name : ''; }
+      return enterable(ud) ? s + ' · 들어가기' : s;
+    }
     function hover(e) {
       if (e.pointerType === 'touch') return;
       var hit = hitAt(e), ud = hit && hit.object.userData;
@@ -914,9 +946,328 @@ const VIEWER_JS = String.raw`
     }
     function tap(e) {
       var hit = hitAt(e); if (!hit) return; var ud = hit.object.userData;
+      if (ud.exit) { leaveRoom(true); return; }
+      if (ud.info && inRoom) { if (inRoom.num) send({ type: 'room', num: inRoom.num }); else send({ type: 'place', id: inRoom.pid }); return; }
       if (ud.walk) { glideTo(destFor(ud.walk, hit.point.x, hit.point.z)); return; }
+      if (enterable(ud)) { enterRoom(ud.num ? { num: ud.num } : { pid: ud.pid }); return; }   // 걷기에서 팻말·장소를 누르면 안으로
       if (ud.num) send({ type: 'room', num: ud.num }); else if (ud.pid) send({ type: 'place', id: ud.pid });
     }
+
+    // ── 방 안 — 걷기에서 방 팻말·장소를 누르면 들어가서 둘러본다 ──────────────────
+    // 안쪽 살림은 들어갈 때 그 방 상자 자리에 만들고(한 번 만들면 둔다), 나가면 숨긴다.
+    // 강의실은 사진을 보고 꾸몄다. 다른 종류(학생방·식당·홀…)는 사진이 오면 채우고, 그때까지는 빈 껍데기.
+    var interiors = {}, roomLight = new THREE.PointLight(0xfff1dc, 0, 18); scene.add(roomLight);
+    var IH = TOP - 0.1 - 0.02, WT = 0.08;   // 안쪽 천장 높이, 벽 두께
+    var texCache = {};
+    function texCanvas(name, w, h, draw) {
+      if (texCache[name]) return texCache[name];
+      var cv = document.createElement('canvas'); cv.width = w; cv.height = h; draw(cv.getContext('2d'), w, h);
+      var tx = new THREE.CanvasTexture(cv); tx.anisotropy = 4; return (texCache[name] = tx);
+    }
+    /** 마루 — 널빤지 8줄, 한 장이 1.2m × 1.2m */
+    function woodTex() {
+      return texCanvas('wood', 256, 256, function (g, W, H) {
+        var seed = 5; function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+        var n = 8, pw = W / n;
+        for (var i = 0; i < n; i++) {
+          var t = 0.9 + rnd() * 0.2; g.fillStyle = 'rgb(' + Math.round(196 * t) + ',' + Math.round(160 * t) + ',' + Math.round(118 * t) + ')'; g.fillRect(i * pw, 0, pw, H);
+          g.strokeStyle = 'rgba(80,50,25,.35)'; g.lineWidth = 1; g.beginPath(); g.moveTo(i * pw + 0.5, 0); g.lineTo(i * pw + 0.5, H); g.stroke();
+          var jy = (i * 97 + 40) % H; g.beginPath(); g.moveTo(i * pw, jy + 0.5); g.lineTo((i + 1) * pw, jy + 0.5); g.stroke();
+          g.strokeStyle = 'rgba(255,255,255,.12)'; for (var k = 0; k < 3; k++) { var gx = i * pw + 4 + rnd() * (pw - 8); g.beginPath(); g.moveTo(gx, 0); g.lineTo(gx + (rnd() - 0.5) * 6, H); g.stroke(); }
+        }
+        g.strokeStyle = 'rgba(0,0,0,0)';
+      });
+    }
+    /** 커튼 — 세로 주름 */
+    function curtainTex() {
+      return texCanvas('curtain', 64, 8, function (g, W, H) {
+        for (var x = 0; x < W; x++) { var t = 0.82 + 0.18 * Math.abs(Math.sin((x / W) * Math.PI * 6)); g.fillStyle = 'rgb(' + Math.round(216 * t) + ',' + Math.round(201 * t) + ',' + Math.round(174 * t) + ')'; g.fillRect(x, 0, 1, H); }
+      });
+    }
+    /** 화이트보드 — 파란 마커로 몇 자 */
+    function boardTex() {
+      return texCanvas('board', 512, 352, function (g, W, H) {
+        g.fillStyle = '#fbfbfa'; g.fillRect(0, 0, W, H);
+        g.fillStyle = '#2650b8'; g.font = 'italic 600 34px sans-serif';
+        g.fillText('Time :', 26, 60); g.fillText('Reading', 300, 60); g.fillText('Goal', 26, 150); g.fillText('Wonder', 220, 150);
+        g.strokeStyle = '#2650b8'; g.lineWidth = 3; g.beginPath(); g.moveTo(24, 76); g.lineTo(150, 78); g.stroke();
+        g.fillStyle = '#c33'; g.font = '600 30px sans-serif'; g.fillText('✓', 430, 150);
+      });
+    }
+    function titleOf(t) { if (t.num) { var r = roomOf(t.num); return t.num + '호 · ' + r.purpose; } var p = placeMap[t.pid]; return p ? p.name : t.pid; }
+    /** 방 종류 → 꾸미기. 강의실만 살림이 있고, 나머지는 사진이 오면 */
+    function styleOf(t) {
+      if (t.num) return roomOf(t.num).purpose === '강의실' ? 'classroom' : 'shell';
+      return 'shell';
+    }
+    function buildInterior(key, g, t) {
+      var y0 = floorY(g.f) + 0.1, ig = new THREE.Group(); ig.position.set(g.c[0], y0, g.c[1]); ig.rotation.y = g.ang; group.add(ig);
+      var cs = Math.cos(g.ang), sn = Math.sin(g.ang), style = styleOf(t), basement = g.f === -1;
+      function lw(lx, lz) { return [g.c[0] + lx * cs + lz * sn, g.c[1] - lx * sn + lz * cs]; }   // 안쪽 좌표 → 세계 좌표 (rotation.y 와 같은 방향)
+      var W2 = g.w / 2, D2 = g.d / 2, wIn = g.w - 2 * WT, dIn = g.d - 2 * WT, obs = [], ud = { room: key, f: g.f };
+      function im(mesh, extra) { mesh.userData = extra ? Object.assign({}, ud, extra) : ud; ig.add(mesh); meshes.push(mesh); return mesh; }
+      function bx(w, h, d, color, lx, ly, lz, ry, extra) { var m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), typeof color === 'string' ? lam(color) : color); m.position.set(lx, ly, lz); if (ry) m.rotation.y = ry; return im(m, extra); }
+      function block(lx, lz, w, d) { var c = lw(lx, lz); obs.push(boxPts(c[0], c[1], w, d, g.ang)); }   // 못 지나가는 자리 (세계 좌표)
+      /** 같은 모양 여럿 — 한 번에 그린다. list: [lx, ly, lz] */
+      function inst(geo, color, list) { var m = new THREE.InstancedMesh(geo, lam(color), list.length), o = new THREE.Object3D(); list.forEach(function (p, i) { o.position.set(p[0], p[1], p[2]); o.updateMatrix(); m.setMatrixAt(i, o.matrix); }); return im(m); }
+      var wallC = '#efe9dc', trimC = '#6b4a2e', frameC = '#f4f4f2';
+      if (style === 'classroom') return buildClassroom();
+      /** 강의실 — 사용자가 그려 준 평면도(1389×675 그림)를 그대로 옮긴다. 걸어 다니기 편하게 실제보다 넉넉히 약 0.73cm/px (폭 약 4.9m, 문→창 약 10m).
+          그림 가로 → 문(복도)에서 창(바깥) 쪽 z, 그림 세로 → x (그림 위쪽 벽이 교실 앞 — 화이트보드·TV) */
+      function buildClassroom() {
+        var S = 10.1 / 1389, wallC2 = '#efe9dc';
+        var SX = -1;   // 문에서 창을 볼 때 그림 위쪽(앞)이 왼쪽에 오게 x 를 뒤집는다
+        function PX(v) { return SX * ((v - 115) * S - (675 * S) / 2); }
+        function PZ(u) { return -D2 + WT * 1.5 + (u - 28) * S; }   // 문 쪽 벽이 복도 벽보다 안쪽에 오게
+        var X0 = PX(115), X1 = PX(790), Z0 = PZ(28), Z1 = PZ(1417), W = Math.abs(X1 - X0), L = Z1 - Z0, CX = 0, CZ = (Z0 + Z1) / 2;
+        var TH = 0.72, obs2 = [];
+        function blk(xa, xb, z0, z1) { var x0 = Math.min(xa, xb), x1 = Math.max(xa, xb), c = lw((x0 + x1) / 2, (z0 + z1) / 2); obs2.push(boxPts(c[0], c[1], x1 - x0, z1 - z0, g.ang)); }
+        function wallX(x, za, zb, h, y) { h = h || IH; bx(WT, h, zb - za, wallC2, x, (y || 0) + h / 2, (za + zb) / 2); }
+        function wallZ(z, xa, xb, h, y) { h = h || IH; bx(Math.abs(xb - xa), h, WT, wallC2, (xa + xb) / 2, (y || 0) + h / 2, z); }
+        // 바닥·천장
+        var ft = woodTex().clone(); ft.needsUpdate = true; ft.wrapS = ft.wrapT = THREE.RepeatWrapping; ft.repeat.set(W / 1.2, L / 1.2);
+        var fl = new THREE.Mesh(new THREE.PlaneGeometry(W, L), new THREE.MeshLambertMaterial({ map: ft })); fl.rotation.x = -Math.PI / 2; fl.position.set(CX, 0.012, CZ); im(fl);
+        var ce = new THREE.Mesh(new THREE.PlaneGeometry(W, L), new THREE.MeshBasicMaterial({ color: 0xf4f2ee })); ce.rotation.x = Math.PI / 2; ce.position.set(CX, IH - 0.01, CZ); im(ce);
+        // 바깥 벽 — 양옆은 막힌 벽, 문 쪽 벽은 문 자리만 비운다
+        var dX0 = PX(580), dX1 = X1, doorX = (dX0 + dX1) / 2, DW = Math.min(0.9, dX1 - dX0 - 0.04);
+        wallX(X0 - SX * WT / 2, Z0 - WT, Z1 + WT); wallX(X1 + SX * WT / 2, Z0 - WT, Z1 + WT);
+        wallZ(Z0 - WT / 2, X0, doorX - DW / 2); wallZ(Z0 - WT / 2, doorX + DW / 2, X1); wallZ(Z0 - WT / 2, doorX - DW / 2, doorX + DW / 2, IH - 2.12, 2.12);
+        // 창 — 끝 벽 전체
+        var fz = Z1 + WT / 2, WY0 = 0.45, WY1 = 2.3, pier = 0.25, WW = W - 2 * pier;
+        wallZ(fz, X0, X0 + SX * pier); wallZ(fz, X1 - SX * pier, X1); wallZ(fz, X0 + SX * pier, X1 - SX * pier, WY0); wallZ(fz, X0 + SX * pier, X1 - SX * pier, IH - WY1, WY1);
+        bx(WW, 0.06, 0.1, frameC, CX, WY0 + 0.03, fz); bx(WW, 0.06, 0.1, frameC, CX, WY1 - 0.03, fz);
+        [-0.5, 0, 0.5].forEach(function (k) { bx(0.06, WY1 - WY0, 0.1, frameC, CX + k * (WW - 0.06), (WY0 + WY1) / 2, fz); });
+        bx(WW - 0.1, WY1 - WY0 - 0.1, 0.02, new THREE.MeshLambertMaterial({ color: 0xcfe6f3, transparent: true, opacity: 0.28, depthWrite: false }), CX, (WY0 + WY1) / 2, fz);
+        var ct = curtainTex(), cw = 0.55, cz = Z1 - 0.12;
+        [-1, 1].forEach(function (k) { var cx = CX + k * (WW / 2 - cw / 2 + 0.15), m = new THREE.Mesh(new THREE.BoxGeometry(cw, IH - 0.18, 0.14), new THREE.MeshLambertMaterial({ map: ct })); m.position.set(cx, (IH - 0.18) / 2 + 0.02, cz); im(m); blk(cx - cw / 2, cx + cw / 2, cz - 0.1, cz + 0.1); });
+        bx(W - 0.1, 0.04, 0.04, '#d9d5cc', CX, IH - 0.09, cz);
+        // 걸레받이·천장 몰딩
+        [[CX, Z0, W, 0.024], [CX, Z1, W, 0.024], [X0, CZ, 0.024, L], [X1, CZ, 0.024, L]].forEach(function (q) { bx(q[2], 0.1, q[3], trimC, q[0], 0.05, q[1]); bx(q[2], 0.06, q[3], trimC, q[0], IH - 0.04, q[1]); });
+        // 화장실 — 왼쪽 위 칸. 벽으로 막고 통로 쪽에 문
+        var tX1 = PX(580), tZ1 = PZ(305);
+        wallX(tX1 + SX * WT / 2, Z0, tZ1 + WT); wallZ(tZ1 + WT / 2, X0, tX1);
+        var tdz = PZ(200); bx(0.8, 2.05, 0.05, trimC, tX1 + SX * (WT + 0.02), 1.025, tdz, Math.PI / 2); bx(0.72, 1.98, 0.05, '#f1ece2', tX1 + SX * (WT + 0.045), 0.99, tdz, Math.PI / 2);
+        bx(0.03, 0.12, 0.03, '#c9c9c4', tX1 + SX * (WT + 0.09), 1.0, tdz - 0.28);
+        var wcp = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.18), new THREE.MeshBasicMaterial({ map: nameTex('화장실', '#e5e7eb', '#374151', 320, 112), transparent: true })); wcp.position.set(tX1 + SX * (WT + 0.08), 2.25, tdz); wcp.rotation.y = SX * Math.PI / 2; im(wcp);
+        blk(X0, tX1 + SX * WT, Z0, tZ1 + WT);
+        // 현관 — 문 앞 한 단 낮은 타일, 신발
+        var sZ1 = PZ(150);
+        var vt = new THREE.Mesh(new THREE.PlaneGeometry(Math.abs(dX1 - dX0) - WT, sZ1 - Z0), lam('#b3aea4')); vt.rotation.x = -Math.PI / 2; vt.position.set((dX0 + SX * WT + dX1) / 2, 0.02, (Z0 + sZ1) / 2); im(vt);
+        bx(Math.abs(dX1 - dX0) - WT, 0.07, 0.06, trimC, (dX0 + SX * WT + dX1) / 2, 0.035, sZ1);
+        [[-0.25, 0.25, '#2b2b2b'], [0.08, 0.45, '#f2f2f2'], [0.28, 0.2, '#3b5b8a']].forEach(function (q) { [-0.06, 0.06].forEach(function (d2) { bx(0.1, 0.08, 0.26, q[2], doorX + q[0] + d2, 0.06, Z0 + q[1] + 0.15); }); });
+        // 세면대·서랍 — 화장실 벽에 붙어 교실 쪽을 본다. 아래 냉장고
+        var kZ0 = tZ1 + WT, kZ1 = PZ(443), kd = kZ1 - kZ0, sx0 = X0, sx1 = PX(475);
+        bx(Math.abs(sx1 - sx0), 0.85, kd, '#a87a4f', (sx0 + sx1) / 2, 0.425, (kZ0 + kZ1) / 2); bx(Math.abs(sx1 - sx0) + 0.02, 0.03, kd + 0.02, '#7d7f80', (sx0 + sx1) / 2, 0.865, (kZ0 + kZ1) / 2);
+        for (var di = 0; di < 3; di++) { var dx2 = sx0 + (di + 0.5) * ((sx1 - sx0) / 3); bx(Math.abs(sx1 - sx0) / 3 - 0.04, 0.005, 0.005, '#6b4a2e', dx2, 0.62, kZ1 + 0.003); bx(0.02, 0.02, 0.12, '#d6d2c8', dx2, 0.75, kZ1 + 0.01); }
+        var skx = sx0 + SX * 0.55; bx(0.42, 0.02, 0.5, '#b8bcc0', skx, 0.885, (kZ0 + kZ1) / 2); bx(0.03, 0.28, 0.03, '#c9c9c4', skx, 1.02, kZ0 + 0.1); bx(0.03, 0.03, 0.14, '#c9c9c4', skx, 1.15, kZ0 + 0.16);
+        var mir = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.7), new THREE.MeshLambertMaterial({ color: 0xdfe8ee })); mir.position.set(skx, 1.55, kZ0 + 0.01); im(mir);
+        bx(Math.abs(sx1 - sx0), 0.65, 0.33, '#c49a6c', (sx0 + sx1) / 2, 2.0, kZ0 + 0.165);
+        var fx0 = sx1 + SX * 0.02, fx1 = PX(580);
+        bx(Math.abs(fx1 - fx0), 1.75, kd - 0.04, '#9fa8b1', (fx0 + fx1) / 2, 0.875, (kZ0 + kZ1) / 2); bx(Math.abs(fx1 - fx0) - 0.02, 0.012, 0.012, '#6b737b', (fx0 + fx1) / 2, 1.2, kZ1 - 0.015);   // 냉장고 — 은회색, 위아래 문 틈
+        bx(0.025, 0.35, 0.03, '#4b5259', fx0 + SX * 0.08, 1.45, kZ1 - 0.01); bx(0.025, 0.3, 0.03, '#4b5259', fx0 + SX * 0.08, 0.95, kZ1 - 0.01);
+        blk(X0, fx1, kZ0, kZ1);
+        // 소화기
+        var ex = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.5, 12), lam('#c62828')); ex.position.set(fx1 + SX * 0.15, 0.26, kZ1 - 0.12); im(ex);
+        // 앞 — 그림 위쪽 벽(x0): 화이트보드, TV책상(TV), 에어컨
+        var wbZ = (PZ(540) + PZ(770)) / 2, wbW = PZ(770) - PZ(540);   // 그림보다 조금 넓게
+        bx(0.03, 1.16, wbW + 0.06, '#c8c8c4', X0 + SX * 0.015, 1.55, wbZ);
+        var bd = new THREE.Mesh(new THREE.PlaneGeometry(wbW, 1.1), new THREE.MeshBasicMaterial({ map: boardTex() })); bd.position.set(X0 + SX * 0.035, 1.55, wbZ); bd.rotation.y = SX * Math.PI / 2; im(bd);
+        bx(0.06, 0.03, wbW * 0.8, '#c8c8c4', X0 + SX * 0.045, 0.98, wbZ);
+        var acZ = PZ(1201); bx(0.24, 0.3, 1.0, '#e6e8ea', X0 + SX * 0.13, 2.4, acZ); bx(0.02, 0.05, 0.9, '#8d949b', X0 + SX * 0.255, 2.29, acZ); bx(0.01, 0.03, 0.08, '#4caf50', X0 + SX * 0.255, 2.48, acZ + 0.38);   // 벽에어컨 — 앞벽 창가 쪽 끝
+        var tz0 = PZ(778), tz1 = PZ(1123), tdx = 0.5, tcz = (tz0 + tz1) / 2;
+        bx(tdx, 0.04, tz1 - tz0, '#cdb58c', X0 + SX * tdx / 2, TH - 0.02, tcz); [[0.05, 0.05], [tdx - 0.05, 0.05], [0.05, tz1 - tz0 - 0.05], [tdx - 0.05, tz1 - tz0 - 0.05]].forEach(function (q) { bx(0.04, TH - 0.04, 0.04, '#f2f2f0', X0 + SX * q[0], (TH - 0.04) / 2, tz0 + q[1]); });
+        var tvz = tcz + 0.2; bx(0.05, 0.62, 1.05, '#141414', X0 + SX * 0.2, TH + 0.35, tvz); bx(0.012, 0.56, 0.98, '#26292e', X0 + SX * 0.23, TH + 0.35, tvz); bx(0.2, 0.03, 0.3, '#141414', X0 + SX * 0.2, TH + 0.015, tvz);
+        blk(X0, X0 + SX * tdx, tz0, tz1);
+        // 선생님 의자 — 화이트보드와 TV책상 사이, 학생 쪽을 본다
+        var tcx = PX(158), tcz2 = PZ(766);
+        bx(0.44, 0.06, 0.44, '#6b2440', tcx, 0.46, tcz2); bx(0.05, 0.5, 0.44, '#6b2440', tcx - SX * 0.2, 0.76, tcz2);
+        [-1, 1].forEach(function (a) { [-1, 1].forEach(function (b2) { bx(0.03, 0.44, 0.03, '#b08a4a', tcx + a * 0.17, 0.22, tcz2 + b2 * 0.17); }); });
+        blk(tcx - 0.24, tcx + 0.24, tcz2 - 0.24, tcz2 + 0.24);
+        // 책상 2×2 — 그림 그대로. 앞(x0)을 보고 앉고, 책상마다 의자 3개. 책상 앞판은 검정, 의자는 자주 쿠션에 금색 다리
+        var TD = 0.5, legs = [], panels = [], seats = [], backs = [], clegs = [];
+        [[328, 408], [549, 629]].forEach(function (row) {
+          var dxc = PX(row[0]), chx = PX(row[1]) + SX * 0.05;
+          [[529, 887], [928, 1285]].forEach(function (span) {
+            var z0 = PZ(span[0]), z1 = PZ(span[1]), zc = (z0 + z1) / 2, TW = z1 - z0;
+            bx(TD, 0.04, TW, '#d8c29a', dxc, TH - 0.02, zc);
+            [-1, 1].forEach(function (e) { legs.push([dxc + SX * 0.12, (TH - 0.04) / 2, zc + e * (TW / 2 - 0.08)]); });
+            panels.push([dxc - SX * (TD / 2 - 0.03), TH - 0.3, zc]);
+            [-TW / 3, 0, TW / 3].forEach(function (d3) { var cz2 = zc + d3; seats.push([chx, 0.46, cz2]); backs.push([chx + SX * 0.2, 0.76, cz2]); [-1, 1].forEach(function (a) { [-1, 1].forEach(function (b) { clegs.push([chx + a * 0.17, 0.22, cz2 + b * 0.17]); }); }); });
+            blk(dxc - TD / 2, dxc + TD / 2, z0, z1); blk(chx - 0.22, chx + 0.24, z0, z1);
+          });
+        });
+        inst(new THREE.BoxGeometry(0.05, TH - 0.04, 0.05), '#f2f2f0', legs);
+        inst(new THREE.BoxGeometry(0.03, 0.52, (PZ(887) - PZ(529)) - 0.06), '#1b1b1b', panels);
+        inst(new THREE.BoxGeometry(0.42, 0.06, 0.42), '#6b2440', seats); inst(new THREE.BoxGeometry(0.05, 0.5, 0.42), '#6b2440', backs); inst(new THREE.BoxGeometry(0.03, 0.44, 0.03), '#b08a4a', clegs);
+        // 천장 등 — 교실 셋, 통로 하나
+        var lm = new THREE.MeshBasicMaterial({ color: 0xffffff });
+        [PZ(650), PZ(900), PZ(1150)].forEach(function (z) { bx(0.62, 0.05, 1.25, lm, CX, IH - 0.035, z); }); bx(0.5, 0.05, 0.5, lm, doorX, IH - 0.035, PZ(250));
+        // 문 — 누르면 나간다. 위에 이름판
+        bx(DW + 0.12, 2.18, 0.05, trimC, doorX, 1.09, Z0 + 0.02);
+        bx(DW - 0.04, 2.08, 0.05, '#4a2f1d', doorX, 1.04, Z0 + 0.045, 0, { exit: true });
+        bx(0.12, 0.03, 0.03, '#c9c9c4', doorX - DW / 2 + 0.12, 1.0, Z0 + 0.1, 0, { exit: true });
+        var r2 = roomOf(t.num), np2 = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.25), new THREE.MeshBasicMaterial({ map: nameTex(titleOf(t), r2.bg, r2.ink, 512, 128), transparent: true }));
+        np2.position.set(doorX, 2.42, Z0 + 0.012); im(np2, { info: true });
+        // 걸을 수 있는 곳 — 통로 + 교실
+        var A = [[dX0 + SX * WT, X1, Z0, PZ(443)], [X0, X1, PZ(443), Z1]].map(function (q) { var c = lw((q[0] + q[1]) / 2, (q[2] + q[3]) / 2); return { key: 'room', name: titleOf(t), pts: boxPts(c[0], c[1], Math.abs(q[1] - q[0]), q[3] - q[2], g.ang) }; });
+        areas[key] = A; obst[key] = obs2;
+        A.forEach(function (a) { flat(a.pts, floorY(g.f) + 0.22, true, pickMat, { room: key, f: g.f, walk: 'room' }); });
+        var e0 = lw(doorX, PZ(120)), ent = snapFree(key, { x: e0[0], z: e0[1] }) || { x: e0[0], z: e0[1] };
+        return { group: ig, entry: { x: ent.x, z: ent.z, yaw: g.ang + Math.PI }, light: lw(CX, PZ(900)), size: Math.hypot(W, L) };
+      }
+      // 바닥·천장
+      var ft = woodTex().clone(); ft.needsUpdate = true; ft.wrapS = ft.wrapT = THREE.RepeatWrapping; ft.repeat.set(wIn / 1.2, dIn / 1.2);
+      var fl = new THREE.Mesh(new THREE.PlaneGeometry(wIn, dIn), new THREE.MeshLambertMaterial({ map: ft })); fl.rotation.x = -Math.PI / 2; fl.position.y = 0.012; im(fl);
+      var ce = new THREE.Mesh(new THREE.PlaneGeometry(wIn, dIn), new THREE.MeshBasicMaterial({ color: 0xf4f2ee })); ce.rotation.x = Math.PI / 2; ce.position.y = IH - 0.01; im(ce);   // 천장은 빛을 안 받으니 그냥 밝게
+      // 벽 — 뒤(문 쪽). 창은 강의실이면 양옆, 다른 방은 앞(바깥)
+      bx(g.w, IH, WT, wallC, 0, IH / 2, -D2 + WT / 2);
+      var WY0 = 0.3, WY1 = 2.3, glassMat = new THREE.MeshLambertMaterial({ color: 0xcfe6f3, transparent: true, opacity: 0.28, depthWrite: false }), ct = curtainTex();
+      /** 옆벽(s = -1 오른쪽·+1 왼쪽, 창을 보고) — zc 가운데로 폭 WW 창 */
+      function sideWall(s, zc, WW) {
+        var x = s * (W2 - WT / 2);
+        if (!WW) { bx(WT, IH, g.d, wallC, x, IH / 2, 0); return; }
+        var za = zc - WW / 2, zb = zc + WW / 2, ix = x - s * (WT / 2 + 0.09), cw = 0.6;
+        bx(WT, IH, za + D2, wallC, x, IH / 2, (za - D2) / 2); bx(WT, IH, D2 - zb, wallC, x, IH / 2, (zb + D2) / 2);
+        bx(WT, WY0, WW, wallC, x, WY0 / 2, zc); bx(WT, IH - WY1, WW, wallC, x, (IH + WY1) / 2, zc);
+        bx(0.1, 0.06, WW, frameC, x, WY0 + 0.03, zc); bx(0.1, 0.06, WW, frameC, x, WY1 - 0.03, zc);
+        bx(0.1, WY1 - WY0, 0.06, frameC, x, (WY0 + WY1) / 2, za + 0.03); bx(0.1, WY1 - WY0, 0.06, frameC, x, (WY0 + WY1) / 2, zb - 0.03); bx(0.1, WY1 - WY0, 0.05, frameC, x, (WY0 + WY1) / 2, zc);
+        bx(0.02, WY1 - WY0 - 0.12, WW - 0.12, glassMat, x, (WY0 + WY1) / 2, zc);
+        [-1, 1].forEach(function (k) { var cz = zc + k * (WW / 2 + cw / 2 - 0.3), m = new THREE.Mesh(new THREE.BoxGeometry(0.14, IH - 0.18, cw), new THREE.MeshLambertMaterial({ map: ct })); m.position.set(ix, (IH - 0.18) / 2 + 0.02, cz); im(m); block(ix, cz, 0.2, cw); });
+        bx(0.04, 0.04, WW + 2 * cw, '#d9d5cc', ix, IH - 0.09, zc);
+      }
+      var fz = D2 - WT / 2;
+      if (style === 'classroom' && !basement) {
+        var wzc = (-D2 + WT + 1.0 + D2 - WT) / 2, wWW = Math.min(2.4, g.d - 2.4);   // 현관 앞 네모난 교실 가운데
+        sideWall(-1, wzc, wWW); sideWall(1, wzc, wWW);
+        bx(g.w, IH, WT, wallC, 0, IH / 2, fz);
+      } else {
+        sideWall(-1); sideWall(1);
+        if (basement) bx(g.w, IH, WT, wallC, 0, IH / 2, fz);
+        else {
+          var WW = Math.min(wIn - 1.2, 3.6), pier = (g.w - WW) / 2;
+          bx(pier, IH, WT, wallC, -(W2 - pier / 2), IH / 2, fz); bx(pier, IH, WT, wallC, W2 - pier / 2, IH / 2, fz);
+          bx(WW, WY0, WT, wallC, 0, WY0 / 2, fz); bx(WW, IH - WY1, WT, wallC, 0, (IH + WY1) / 2, fz);
+          bx(WW, 0.06, 0.1, frameC, 0, WY0 + 0.03, fz); bx(WW, 0.06, 0.1, frameC, 0, WY1 - 0.03, fz);
+          bx(0.06, WY1 - WY0, 0.1, frameC, -WW / 2 + 0.03, (WY0 + WY1) / 2, fz); bx(0.06, WY1 - WY0, 0.1, frameC, WW / 2 - 0.03, (WY0 + WY1) / 2, fz); bx(0.05, WY1 - WY0, 0.1, frameC, 0, (WY0 + WY1) / 2, fz);
+          bx(WW - 0.12, WY1 - WY0 - 0.12, 0.02, glassMat, 0, (WY0 + WY1) / 2, fz);
+          bx(WW, 0.08, 0.16, frameC, 0, WY0 - 0.02, fz - 0.05);   // 창턱
+          var cw = Math.min(0.7, pier + 0.3);
+          [-1, 1].forEach(function (k) { var cx = k * (WW / 2 + cw / 2 - 0.35), m = new THREE.Mesh(new THREE.BoxGeometry(cw, IH - 0.18, 0.14), new THREE.MeshLambertMaterial({ map: ct })); m.position.set(cx, (IH - 0.18) / 2 + 0.02, D2 - WT - 0.14); im(m); block(cx, D2 - WT - 0.14, cw, 0.2); });
+          bx(WW + 2 * cw, 0.04, 0.04, '#d9d5cc', 0, IH - 0.09, D2 - WT - 0.14);   // 커튼 봉
+        }
+      }
+      // 걸레받이·천장 몰딩 (짙은 나무)
+      [[0, -D2 + WT + 0.012, wIn, 0.024], [0, D2 - WT - 0.012, wIn, 0.024], [-W2 + WT + 0.012, 0, 0.024, dIn], [W2 - WT - 0.012, 0, 0.024, dIn]].forEach(function (s) { bx(s[2], 0.1, s[3], trimC, s[0], 0.05, s[1]); bx(s[2], 0.06, s[3], trimC, s[0], IH - 0.04, s[1]); });
+      // 천장 등 — 큰 곳은 여러 개
+      var lightMat = new THREE.MeshBasicMaterial({ color: 0xffffff }), nlx = Math.max(1, Math.round(wIn / 4)), nlz = Math.max(1, Math.round(dIn / 4));
+      for (var li = 0; li < nlx; li++) for (var lj = 0; lj < nlz; lj++) bx(1.25, 0.05, 0.62, lightMat, (li + 0.5) * (wIn / nlx) - wIn / 2, IH - 0.035, (lj + 0.5) * (dIn / nlz) - dIn / 2);
+      // 문 — 뒤 벽. 누르면 나간다
+      var doorX = style === 'classroom' ? W2 - WT - 0.95 : 0, dz = -D2 + WT;   // 강의실 문은 한쪽 구석 — 옆이 현관
+      bx(1.0, 2.15, 0.05, trimC, doorX, 1.075, dz + 0.02);
+      bx(0.86, 2.05, 0.05, '#4a2f1d', doorX, 1.025, dz + 0.045, 0, { exit: true });
+      bx(0.03, 0.03, 0.12, '#c9c9c4', doorX + 0.34, 1.0, dz + 0.1, 0, { exit: true });
+      // 이름판 — 문 옆
+      var r = t.num ? roomOf(t.num) : placeColor(g.kind);
+      var np = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.35), new THREE.MeshBasicMaterial({ map: nameTex(titleOf(t), r.bg, r.ink, 512, 128), transparent: true }));
+      np.position.set(style === 'classroom' ? doorX : doorX - 1.3, style === 'classroom' ? 2.45 : 2.0, dz + 0.012); im(np, { info: true });   // 누르면 명단·상세
+      if (style === 'classroom') {
+        var x0 = -W2 + WT, x1 = W2 - WT, z0 = dz, z1 = D2 - WT;
+        // 현관 — 문 앞 한 단 낮은 타일에 신발, 옆에 신발장. 턱을 넘어야 교실
+        var vx0 = doorX - 0.75, vz1 = z0 + 1.0;
+        var vt = new THREE.Mesh(new THREE.PlaneGeometry(x1 - vx0, vz1 - z0), lam('#b3aea4')); vt.rotation.x = -Math.PI / 2; vt.position.set((vx0 + x1) / 2, 0.02, (z0 + vz1) / 2); im(vt);
+        bx(x1 - vx0, 0.07, 0.06, trimC, (vx0 + x1) / 2, 0.035, vz1); bx(0.06, 0.07, vz1 - z0, trimC, vx0, 0.035, (z0 + vz1) / 2);
+        bx(0.34, 1.05, 0.8, '#e8e1d2', x1 - 0.17, 0.525, z0 + 0.5); bx(0.01, 0.9, 0.02, '#cfc7b6', x1 - 0.345, 0.55, z0 + 0.5); block(x1 - 0.17, z0 + 0.5, 0.34, 0.8);
+        [[-0.25, 0.35, '#2b2b2b'], [0.05, 0.4, '#f2f2f2'], [0.3, 0.32, '#3b5b8a']].forEach(function (q) { [-0.06, 0.06].forEach(function (d2) { bx(0.1, 0.08, 0.26, q[2], doorX + q[0] + d2, 0.06, z0 + q[1] + 0.3); }); });
+        // 문 쪽 — 냉장고·서랍·세면대(개수대)·윗장
+        var kx0 = x0, kx1 = vx0 - 0.06, kd = 0.6;
+        bx(0.7, 1.8, 0.66, '#e9ecef', kx0 + 0.35, 0.9, z0 + 0.33); bx(0.66, 0.01, 0.01, '#b9bec4', kx0 + 0.35, 1.15, z0 + 0.665); bx(0.03, 0.4, 0.03, '#b9bec4', kx0 + 0.62, 1.45, z0 + 0.68); block(kx0 + 0.35, z0 + 0.33, 0.7, 0.66);
+        var cx0 = kx0 + 0.75, cL = kx1 - cx0, ccx = (cx0 + kx1) / 2;
+        if (cL > 0.8) {
+          bx(cL, 0.85, kd, '#efe9dc', ccx, 0.425, z0 + kd / 2); bx(cL + 0.02, 0.03, kd + 0.02, '#d9d6d0', ccx, 0.865, z0 + kd / 2);
+          for (var di = 0; di < Math.floor(cL / 0.5); di++) { var dxx = cx0 + 0.25 + di * 0.5; bx(0.46, 0.005, 0.005, '#bdb6a8', dxx, 0.62, z0 + kd + 0.003); bx(0.12, 0.02, 0.02, '#9a9488', dxx, 0.75, z0 + kd + 0.01); }
+          var skx = cx0 + Math.min(cL - 0.35, 1.0); bx(0.55, 0.02, 0.42, '#b8bcc0', skx, 0.885, z0 + 0.3); bx(0.03, 0.28, 0.03, '#c9c9c4', skx, 1.02, z0 + 0.12); bx(0.03, 0.03, 0.14, '#c9c9c4', skx, 1.15, z0 + 0.18);
+          bx(cL, 0.7, 0.35, '#f3efe6', ccx, 1.95, z0 + 0.175);
+          block(ccx, z0 + kd / 2, cL, kd);
+        }
+        // 소화기 — 현관 턱 옆
+        var ex = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.5, 12), lam('#c62828')); ex.position.set(vx0 - 0.15, 0.26, vz1 + 0.12); im(ex);
+        // 앞 — 화이트보드(에어컨이 위), 선생님 책상에 TV
+        var bx0 = 0.55, bz = z1;
+        bx(1.66, 1.16, 0.03, '#c8c8c4', bx0, 1.6, bz - 0.015);
+        var bd = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.1), new THREE.MeshBasicMaterial({ map: boardTex() })); bd.position.set(bx0, 1.6, bz - 0.035); bd.rotation.y = Math.PI; im(bd);
+        bx(1.2, 0.03, 0.06, '#c8c8c4', bx0, 1.03, bz - 0.045);
+        bx(0.9, 0.3, 0.24, '#f6f6f4', bx0, 2.45, bz - 0.12);
+        var tvx = -1.45, TH = 0.72;
+        bx(1.2, 0.04, 0.5, '#cdb58c', tvx, TH - 0.02, bz - 0.3); [-1, 1].forEach(function (k) { bx(0.05, TH - 0.04, 0.05, '#f2f2f0', tvx + k * 0.55, (TH - 0.04) / 2, bz - 0.3); });
+        bx(1.05, 0.62, 0.05, '#141414', tvx, TH + 0.33, bz - 0.28); bx(0.98, 0.56, 0.012, '#26292e', tvx, TH + 0.33, bz - 0.31);
+        block(tvx, bz - 0.3, 1.3, 0.6);
+        // 책상 2×2 — 사진처럼 책상 두 개를 이어 붙인 줄이 앞(화이트보드)을 향해 두 줄. 의자는 줄마다 한쪽에만 책상당 3개,
+        // 옆을 보고 앉아 고개를 돌려 앞을 본다. 책상 앞판은 검정, 의자는 자주 쿠션에 금색 다리(연회장 의자)
+        var TW = 1.4, TD = 0.5, zEnd = z1 - 0.65, zA = zEnd - 2 * TW, legs = [], panels = [], seats = [], backs = [], clegs = [];
+        [x0 + 1.5, x0 + 3.75].forEach(function (rx) {
+          if (rx + TD / 2 > x1 - 0.2) rx = x1 - 0.2 - TD / 2;
+          [0, 1].forEach(function (k) {
+            var rz = zA + TW / 2 + k * TW;
+            bx(TD, 0.04, TW - 0.01, '#d8c29a', rx, TH - 0.02, rz);
+            [-1, 1].forEach(function (e) { legs.push([rx - TD / 2 + 0.06, (TH - 0.04) / 2, rz + e * (TW / 2 - 0.08)]); });
+            panels.push([rx + TD / 2 - 0.03, TH - 0.3, rz]);
+            [-TW / 3, 0, TW / 3].forEach(function (dz2) { var cx = rx - TD / 2 - 0.24, cz = rz + dz2; seats.push([cx, 0.46, cz]); backs.push([cx - 0.2, 0.76, cz]); [-1, 1].forEach(function (a2) { [-1, 1].forEach(function (b2) { clegs.push([cx + a2 * 0.17, 0.22, cz + b2 * 0.17]); }); }); });
+          });
+          block(rx, zA + TW, TD, 2 * TW); block(rx - TD / 2 - 0.24, zA + TW, 0.44, 2 * TW);
+        });
+        inst(new THREE.BoxGeometry(0.05, TH - 0.04, 0.05), '#f2f2f0', legs);
+        inst(new THREE.BoxGeometry(0.03, 0.52, TW - 0.06), '#1b1b1b', panels);
+        inst(new THREE.BoxGeometry(0.42, 0.06, 0.42), '#6b2440', seats); inst(new THREE.BoxGeometry(0.05, 0.5, 0.42), '#6b2440', backs); inst(new THREE.BoxGeometry(0.03, 0.44, 0.03), '#b08a4a', clegs);
+      } else {
+        // 아직 사진이 없는 종류 — 안내판만
+        var sp = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 0.5), new THREE.MeshBasicMaterial({ map: nameTex('안 모습은 준비 중이에요', '#f3f4f6', '#6b7280', 640, 128), transparent: true }));
+        sp.position.set(-W2 + WT + 0.02, 1.6, 0); sp.rotation.y = Math.PI / 2; im(sp);   // 오른쪽 벽
+      }
+      // 걸을 수 있는 자리 — 안쪽 바닥. 누르면 그리로
+      var pts = boxPts(g.c[0], g.c[1], wIn, dIn, g.ang);
+      areas[key] = [{ key: 'room', name: titleOf(t), pts: pts }]; obst[key] = obs;
+      flat(pts, floorY(g.f) + 0.22, true, pickMat, { room: key, f: g.f, walk: 'room' });   // 복도 바닥판(0.21)보다 살짝 위 — 먼저 맞는다
+      var e0 = lw(doorX, dz + 0.6), ent = snapFree(key, { x: e0[0], z: e0[1] }) || { x: e0[0], z: e0[1] };   // 문 안쪽, 걸을 수 있는 칸
+      return { group: ig, entry: { x: ent.x, z: ent.z, yaw: g.ang + Math.PI }, light: lw(0, 0), size: Math.hypot(wIn, dIn) };
+    }
+    var fading = false;
+    function fadeSwitch(fn) {
+      if (fading) return; fading = true; fade.style.opacity = '1';
+      setTimeout(function () { fn(); setTimeout(function () { fade.style.opacity = '0'; fading = false; }, 40); }, 200);
+    }
+    /** 방 문 앞(복도)·장소 앞 — 나갈 때 서는 자리 */
+    function doorFront(t, g) {
+      if (t.num) { var d = roomDoor[t.num]; return { x: d.x + d.nx * (HW + 1), z: d.z + d.nz * (HW + 1), yaw: Math.atan2(d.nx, d.nz), pitch: -0.1 }; }
+      var cs = Math.cos(g.ang), sn = Math.sin(g.ang), p = { x: g.c[0] - (g.d / 2 + 1.2) * sn, z: g.c[1] - (g.d / 2 + 1.2) * cs };
+      p = snapFree(g.f, p) || p; return { x: p.x, z: p.z, yaw: g.ang + Math.PI, pitch: -0.1 };
+    }
+    function enterRoom(t) {
+      var g = t.num ? roomGeom[t.num] : placeGeom[t.pid]; if (!g || fading) return;
+      var key = t.num ? 'r:' + t.num : 'p:' + t.pid;
+      var back = mode === 'walk' && walkFloor === g.f && !inRoom ? { x: eye.x, z: eye.z, yaw: yaw, pitch: pitch } : doorFront(t, g);
+      if (inRoom) leaveRoom(false);
+      if (mode !== 'walk') setMode('walk');
+      if (walkFloor !== g.f) setWalkFloor(g.f);
+      var it = interiors[key] || (interiors[key] = buildInterior(key, g, t));
+      fadeSwitch(function () {
+        inRoom = { key: key, num: t.num, pid: t.pid, f: g.f, title: titleOf(t), back: back };
+        resetWalkState(); eye.set(it.entry.x, floorY(g.f) + 1.6, it.entry.z); yaw = it.entry.yaw; pitch = -0.04;
+        roomLight.position.set(it.light[0], floorY(g.f) + IH - 0.2, it.light[1]); roomLight.distance = Math.max(12, it.size * 1.6); roomLight.intensity = 0.3;
+        hint.textContent = '끌어서 둘러보기 · 바닥을 눌러 이동 · 문을 누르면 나가기 · 이름판을 누르면 명단';
+        applyVis(); send({ type: 'inside', num: t.num || null, id: t.pid || null });
+      });
+    }
+    function leaveRoom(withFade) {
+      if (!inRoom) return;
+      var r = inRoom;
+      function done() {
+        inRoom = null; roomLight.intensity = 0; hint.textContent = '';
+        resetWalkState(); eye.x = r.back.x; eye.z = r.back.z; yaw = r.back.yaw; pitch = r.back.pitch;
+        applyVis(); send({ type: 'inside', num: null, id: null });
+      }
+      if (withFade) fadeSwitch(done); else done();
+    }
+    inBar.querySelector('button').onclick = function () { leaveRoom(true); };
 
     // ── 모드 ─────────────────────────────────────────────────────────
     function resetWalkState() { glide = null; markerUntil = 0; marker.visible = false; tip.style.display = 'none'; drag = null; }
@@ -929,11 +1280,13 @@ const VIEWER_JS = String.raw`
       p = snapFree(f, p) || p; eye.set(p.x, floorY(f) + 1.6, p.z); yaw = yw; pitch = -0.12;
     }
     function setWalkFloor(f) {
+      if (inRoom) leaveRoom(false);
       walkFloor = f; resetWalkState(); eye.y = floorY(f) + 1.6;
       if (!isFree(navGrid(f), eye.x, eye.z)) walkStart(f);   // 층마다 모양이 달라 벽 속이면 그 층 시작점으로
       applyVis(); miniSetup();
     }
     function setMode(m) {
+      if (inRoom) leaveRoom(false);
       mode = m; host.classList.toggle('walk', m === 'walk'); resetWalkState();
       if (m === 'walk') {
         var S = selList();
@@ -959,8 +1312,11 @@ const VIEWER_JS = String.raw`
         if (fx || fz) {
           glide = null;
           var dir = new THREE.Vector3(fx, 0, fz).normalize().multiplyScalar(8 * dt).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-          var g = navGrid(walkFloor), nx = eye.x + dir.x, nz = eye.z + dir.z;
-          if (isFree(g, nx, nz)) { eye.x = nx; eye.z = nz; } else if (isFree(g, nx, eye.z)) eye.x = nx; else if (isFree(g, eye.x, nz)) eye.z = nz;   // 벽에 막히면 벽을 따라 미끄러진다
+          var g = navGrid(navKey()), ns = Math.max(1, Math.ceil(dir.length() / (g.cs * 0.4)));   // 느린 화면에서 한 번에 크게 뛰면 좁은 곳에 걸린다 — 잘게 나눠 간다
+          for (var si = 0; si < ns; si++) {
+            var nx = eye.x + dir.x / ns, nz = eye.z + dir.z / ns;
+            if (isFree(g, nx, nz)) { eye.x = nx; eye.z = nz; } else if (isFree(g, nx, eye.z)) eye.x = nx; else if (isFree(g, eye.x, nz)) eye.z = nz; else break;   // 벽에 막히면 벽을 따라 미끄러진다
+          }
         }
         if (glide) stepGlide(now);
         if (markerUntil && now > markerUntil) { markerUntil = 0; marker.visible = false; }
@@ -1000,7 +1356,7 @@ const VIEWER_JS = String.raw`
       Object.keys(labelSets).forEach(function (k) { dropLabels(+k); }); syncLabels();
       drawMiniBase();
     });
-    gl = { setFloor: setFloorCmd, setMode: setMode, goTo: goTo, state: function () { return { x: eye.x, z: eye.z, yaw: yaw, gliding: !!glide, floor: walkFloor, mode: mode, sel: selList(), labels: Object.keys(labelSets).map(Number), roof: roofOn(), dist: dist, rotX: rotX, rotY: rotY, target: [target.x, target.y, target.z] }; } };
+    gl = { setFloor: setFloorCmd, setMode: setMode, goTo: goTo, enter: enterRoom, exit: function () { leaveRoom(true); }, pose: function (p) { if (p.x != null) eye.x = +p.x; if (p.z != null) eye.z = +p.z; if (p.yaw != null) yaw = +p.yaw; if (p.pitch != null) pitch = +p.pitch; }, state: function () { return { x: eye.x, z: eye.z, yaw: yaw, gliding: !!glide, floor: walkFloor, mode: mode, room: inRoom ? inRoom.key : null, sel: selList(), labels: Object.keys(labelSets).map(Number), roof: roofOn(), dist: dist, rotX: rotX, rotY: rotY, target: [target.x, target.y, target.z] }; } };
     ALLF.forEach(function (g) { sel[g] = P.floor ? g === P.floor : g > 0; });
     hint.textContent = ''; miniSetup(); setMode('orbit'); frameSel();
   }
@@ -1011,6 +1367,9 @@ const VIEWER_JS = String.raw`
     if (typeof m === 'string') { try { m = JSON.parse(m); } catch (e) { return; } }
     if (!m) return;
     if (m.type === 'goTo' && gl) gl.goTo(String(m.num));
+    if (m.type === 'enter' && gl) gl.enter(m.num != null ? { num: String(m.num) } : { pid: String(m.id) });
+    if (m.type === 'exit' && gl) gl.exit();
+    if (m.type === 'pose' && gl) gl.pose(m);   // 걷기 시점 바로 놓기 { x, z, yaw, pitch }
     if (m.type === 'setFloor' && gl) gl.setFloor(+m.floor);
     if (m.type === 'setMode' && gl) gl.setMode(m.mode);
     if (m.type === 'setRooms' && m.rooms) { ROOMS = m.rooms; onRooms.forEach(function (fn) { fn(); }); }

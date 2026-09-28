@@ -44,7 +44,7 @@ import { useAuth } from '../context/AuthContext';
 import { loadLodgingBundle, lodgingQueryKey } from '../services/lodgingBundle';
 import { LodgingFloorGrid, lodgingGridRoomRect } from '../components/lodging/LodgingFloorGrid';
 import { LodgingB1Map } from '../components/lodging/LodgingB1Map';
-import { LodgingViewer } from '../components/lodging/LodgingViewer';
+import { LodgingViewer, type LodgingViewerHandle } from '../components/lodging/LodgingViewer';
 import { LodgingRoomSheet, type LodgingTarget } from '../components/lodging/LodgingRoomSheet';
 import { PanZoomCanvas, type PanZoomHandle } from '../components/lodging/PanZoomCanvas';
 import { StudentDetailModal } from '../components/StudentDetailModal';
@@ -232,6 +232,25 @@ export function LodgingScreen() {
   );
   const [hitIdx, setHitIdx] = useState(0);
   const canvasRef = useRef<PanZoomHandle>(null);
+  // 시트의 '3D로 둘러보기' — 3D 보기가 아니면 먼저 바꾸고, 뷰어가 붙은 뒤에 보낸다
+  const viewerRef = useRef<LodgingViewerHandle>(null);
+  const pendingEnter = useRef<{ num?: string; id?: string } | null>(null);
+  const enter3D = useCallback(
+    (t: { num?: string; id?: string }) => {
+      setTarget(null);
+      if (view === '3d' && viewerRef.current) viewerRef.current.send({ type: 'enter', ...t });
+      else {
+        pendingEnter.current = t;
+        setView('3d');
+      }
+    },
+    [view, setView]
+  );
+  useEffect(() => {
+    if (view !== '3d' || !pendingEnter.current || !viewerRef.current) return;
+    viewerRef.current.send({ type: 'enter', ...pendingEnter.current });
+    pendingEnter.current = null;
+  }, [view]);
   /** 판 안에서 층 카드·격자가 놓인 자리 — `${보기}|${층}` */
   const cardPos = useRef<Record<string, XY>>({});
   const gridPos = useRef<Record<string, XY>>({});
@@ -531,7 +550,7 @@ export function LodgingScreen() {
 
       {isViewer ? (
         <View style={styles.viewerWrap}>
-          <LodgingViewer key="3d" building={building} rooms={shownRooms} places={places} mode="3d" onRoom={openRoom} onPlace={openPlace} />
+          <LodgingViewer ref={viewerRef} key="3d" building={building} rooms={shownRooms} places={places} mode="3d" onRoom={openRoom} onPlace={openPlace} />
         </View>
       ) : (
         <>
@@ -576,6 +595,15 @@ export function LodgingScreen() {
         studentOf={studentOf}
         onSaveRoom={saveRoom}
         onSavePlace={savePlace}
+        onEnter3D={
+          !target
+            ? undefined
+            : target.kind === 'room'
+              ? () => enter3D({ num: target.room.num })
+              : LODGING_MAJOR_KINDS.includes(target.place.kind)
+                ? () => enter3D({ id: target.place.id })
+                : undefined
+        }
       >
         {/* 방 시트 안에서 띄워야 누르자마자 뜬다 (iOS 는 모달 위에 바깥 모달을 못 올린다) */}
         {studentModal && data.campType && (

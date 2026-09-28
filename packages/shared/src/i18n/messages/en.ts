@@ -1405,6 +1405,7 @@ export const en: Messages = {
     loadingRoomRoster: "Loading room roster...",
     loadingRoster: "Loading roster…",
     lobbyFrontDeskUnconfirmed: "Lobby · Front desk (unconfirmed)",
+    lookInside3d: "Look inside (3D)",
     mainAnnexPassage: "Main ↔ Annex passage",
     mainBuilding: "Main building",
     myRoom: "My room",

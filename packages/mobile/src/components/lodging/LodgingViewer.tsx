@@ -10,8 +10,17 @@ import {
   type LodgingViewerMode,
 } from '@smis-mentor/shared';
 
+/** 뷰어에 보내는 명령. enter 는 방(num)·장소(id) 안으로 들어가 둘러보기 */
+export type LodgingViewerCmd =
+  | { type: 'goTo'; num: string }
+  | { type: 'enter'; num?: string; id?: string }
+  | { type: 'exit' }
+  | { type: 'setFloor'; floor: number }
+  | { type: 'setMode'; mode: 'orbit' | 'walk' };
+
 export interface LodgingViewerHandle {
-  send: (cmd: { type: 'goTo'; num: string } | { type: 'setFloor'; floor: number } | { type: 'setMode'; mode: 'orbit' | 'walk' }) => void;
+  /** 준비되기 전에 보내면 준비된 뒤에 전달된다 */
+  send: (cmd: LodgingViewerCmd) => void;
 }
 
 interface Props {

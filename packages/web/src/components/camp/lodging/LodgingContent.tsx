@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
 import {
@@ -36,7 +36,7 @@ import { getJobCodeById, getUsersByJobCodeId } from '@/lib/firebaseService';
 import { stSheetService, type CampCode } from '@/lib/stSheetService';
 import LodgingFloorGrid from './LodgingFloorGrid';
 import LodgingB1Map from './LodgingB1Map';
-import LodgingViewer from './LodgingViewer';
+import LodgingViewer, { type LodgingViewerHandle } from './LodgingViewer';
 import LodgingDetail, { type LodgingTarget } from './LodgingDetail';
 
 type ViewKey = 'all' | 'b1' | 'f1' | 'f2' | 'f3' | 'f4' | '3d';
@@ -190,6 +190,26 @@ export default function LodgingContent() {
     [places]
   );
   const closeDetail = useCallback(() => setTarget(null), []);
+
+  // 상세의 '3D로 둘러보기' — 3D 보기가 아니면 먼저 바꾸고, 뷰어가 붙은 뒤에 보낸다
+  const viewerRef = useRef<LodgingViewerHandle>(null);
+  const pendingEnter = useRef<{ num?: string; id?: string } | null>(null);
+  const enter3D = useCallback(
+    (t: { num?: string; id?: string }) => {
+      setTarget(null);
+      if (view === '3d' && viewerRef.current) viewerRef.current.send({ type: 'enter', ...t });
+      else {
+        pendingEnter.current = t;
+        setView('3d');
+      }
+    },
+    [view, setView]
+  );
+  useEffect(() => {
+    if (view !== '3d' || !pendingEnter.current || !viewerRef.current) return;
+    viewerRef.current.send({ type: 'enter', ...pendingEnter.current });
+    pendingEnter.current = null;
+  }, [view]);
 
   const persist = async (next: CampLodging) => {
     if (!campCode) return;
@@ -500,6 +520,7 @@ export default function LodgingContent() {
 
       {view === '3d' && (
         <LodgingViewer
+          ref={viewerRef}
           building={building}
           rooms={shownRooms}
           places={places}
@@ -548,6 +569,13 @@ export default function LodgingContent() {
           studentOf={studentOf}
           onSaveRoom={saveRoom}
           onSavePlace={savePlace}
+          onEnter3D={
+            target.kind === 'room'
+              ? () => enter3D({ num: target.room.num })
+              : LODGING_MAJOR_KINDS.includes(target.place.kind)
+                ? () => enter3D({ id: target.place.id })
+                : undefined
+          }
         />
       )}
     </div>

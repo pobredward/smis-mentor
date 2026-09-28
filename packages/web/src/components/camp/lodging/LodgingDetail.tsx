@@ -37,6 +37,8 @@ interface Props {
   studentOf?: (student: LodgingOccupant) => STSheetStudent | undefined;
   onSaveRoom: (num: string, setting: LodgingRoomSetting) => Promise<void>;
   onSavePlace: (id: string, setting: LodgingPlaceSetting) => Promise<void>;
+  /** 3D 뷰어에서 이 방·장소 안으로 들어가 둘러보기 (들어갈 수 있는 곳만 넘긴다) */
+  onEnter3D?: () => void;
 }
 
 /**
@@ -53,6 +55,7 @@ export default function LodgingDetail({
   studentOf,
   onSaveRoom,
   onSavePlace,
+  onEnter3D,
 }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -72,6 +75,15 @@ export default function LodgingDetail({
       >
         <div className="flex items-start justify-between gap-2 border-b border-gray-200 px-4 py-3">
           {target.kind === 'room' ? <RoomHead room={target.room} /> : <PlaceHead place={target.place} />}
+          {onEnter3D && (
+            <button
+              type="button"
+              onClick={onEnter3D}
+              className="shrink-0 rounded-md border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+            >
+              {L('lodging.lookInside3d')}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="shrink-0 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"

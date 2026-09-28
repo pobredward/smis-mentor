@@ -50,6 +50,8 @@ interface Props {
   studentOf?: (student: LodgingOccupant) => STSheetStudent | undefined;
   onSaveRoom: (num: string, setting: LodgingRoomSetting) => Promise<void>;
   onSavePlace: (id: string, setting: LodgingPlaceSetting) => Promise<void>;
+  /** 3D 뷰어에서 이 방·장소 안으로 들어가 둘러보기 (들어갈 수 있는 곳만 넘긴다) */
+  onEnter3D?: () => void;
   /** 시트 위에 띄울 모달 (학생 카드) — iOS 는 모달이 떠 있는 동안 바깥의 다른 모달을 못 띄우므로 이 안에 둔다 */
   children?: React.ReactNode;
 }
@@ -67,6 +69,7 @@ export function LodgingRoomSheet({
   studentOf,
   onSaveRoom,
   onSavePlace,
+  onEnter3D,
   children,
 }: Props) {
   return (
@@ -89,10 +92,11 @@ export function LodgingRoomSheet({
               onStudent={onStudent}
               studentOf={studentOf}
               onSave={onSaveRoom}
+              onEnter3D={onEnter3D}
             />
           )}
           {target?.kind === 'place' && (
-            <PlaceBody place={target.place} isAdmin={isAdmin} saving={saving} onClose={onClose} onSave={onSavePlace} />
+            <PlaceBody place={target.place} isAdmin={isAdmin} saving={saving} onClose={onClose} onSave={onSavePlace} onEnter3D={onEnter3D} />
           )}
           </View>
         </KeyboardAvoidingView>
@@ -113,6 +117,7 @@ function RoomBody({
   onStudent,
   studentOf,
   onSave,
+  onEnter3D,
 }: {
   room: LodgingRoomView;
   isAdmin: boolean;
@@ -125,6 +130,7 @@ function RoomBody({
   onStudent?: (student: LodgingOccupant, room: LodgingRoomView) => void;
   studentOf?: (student: LodgingOccupant) => STSheetStudent | undefined;
   onSave: (num: string, setting: LodgingRoomSetting) => Promise<void>;
+  onEnter3D?: () => void;
 }) {
   const c = lodgingRoomColor(room);
   // 한 줄 4칸이 폭을 꽉 채우도록 칸 너비를 잰다
@@ -170,6 +176,11 @@ function RoomBody({
             {room.note ? ` · ${room.note}` : ''}
           </Text>
         </View>
+        {onEnter3D && (
+          <TouchableOpacity onPress={onEnter3D} style={styles.enter3d} hitSlop={6}>
+            <Text style={styles.enter3dText}>{L('lodging.lookInside3d')}</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity onPress={onClose} style={styles.close} hitSlop={8}>
           <Text style={styles.closeText}>✕</Text>
         </TouchableOpacity>
@@ -299,12 +310,14 @@ function PlaceBody({
   saving,
   onClose,
   onSave,
+  onEnter3D,
 }: {
   place: LodgingPlaceView;
   isAdmin: boolean;
   saving: boolean;
   onClose: () => void;
   onSave: (id: string, setting: LodgingPlaceSetting) => Promise<void>;
+  onEnter3D?: () => void;
 }) {
   const c = LODGING_PLACE_COLORS[place.kind] ?? LODGING_PLACE_COLORS.etc;
   const [editing, setEditing] = useState(false);
@@ -327,6 +340,11 @@ function PlaceBody({
             {place.purpose ? ` · ${place.purpose}` : ''}
           </Text>
         </View>
+        {onEnter3D && (
+          <TouchableOpacity onPress={onEnter3D} style={styles.enter3d} hitSlop={6}>
+            <Text style={styles.enter3dText}>{L('lodging.lookInside3d')}</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity onPress={onClose} style={styles.close} hitSlop={8}>
           <Text style={styles.closeText}>✕</Text>
         </TouchableOpacity>
@@ -411,6 +429,8 @@ const styles = StyleSheet.create({
   meta: { fontSize: 12, color: '#6b7280', marginTop: 2 },
   close: { padding: 4 },
   closeText: { fontSize: 16, color: '#9ca3af' },
+  enter3d: { borderWidth: 1, borderColor: '#bfdbfe', backgroundColor: '#eff6ff', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, marginRight: 6 },
+  enter3dText: { fontSize: 11, fontWeight: '700', color: '#1d4ed8' },
   body: { paddingHorizontal: 12, paddingTop: 10 },
   kv: { marginBottom: 8, gap: 2 },
   kvText: { fontSize: 13, color: '#111827' },

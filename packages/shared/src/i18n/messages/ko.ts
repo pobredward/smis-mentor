@@ -1403,6 +1403,7 @@ export const ko = {
     loadingRoomRoster: "방명단 로딩 중...",
     loadingRoster: "명단 불러오는 중…",
     lobbyFrontDeskUnconfirmed: "로비·프런트 (미확인)",
+    lookInside3d: "3D로 둘러보기",
     mainAnnexPassage: "본관↔별관 통로",
     mainBuilding: "본관",
     myRoom: "내 방·담당",
