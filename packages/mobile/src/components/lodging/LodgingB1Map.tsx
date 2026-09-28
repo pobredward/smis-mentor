@@ -55,6 +55,10 @@ export function LodgingB1Map({ building, places, width, selected, onPlace }: Pro
           </TouchableOpacity>
         );
       })}
+      {/* 문 자리 */}
+      {places.flatMap((p) =>
+        (p.doors ?? []).map((d, i) => <View key={`${p.id}-d${i}`} pointerEvents="none" style={[styles.door, box(d)]} />)
+      )}
     </View>
   );
 }
@@ -73,6 +77,7 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   placeOn: { borderColor: '#2563eb', borderWidth: 2 },
+  door: { position: 'absolute', backgroundColor: '#6b7280', opacity: 0.75 },
   name: { fontWeight: '600', textAlign: 'center' },
   nameNarrow: { transform: [{ rotate: '-90deg' }], width: 80 },
   cap: { fontSize: 8, opacity: 0.7, marginTop: 1 },

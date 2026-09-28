@@ -25,6 +25,8 @@ export interface LodgingPlace {
   box: [number, number, number, number];
   area?: number;
   cap?: number;
+  /** 문 자리 [x0, y0, x1, y1] — 같은 좌표계. 3D 는 가장 가까운 벽에 유리문을 단다 */
+  doors?: Array<[number, number, number, number]>;
 }
 
 export interface LodgingBuilding {

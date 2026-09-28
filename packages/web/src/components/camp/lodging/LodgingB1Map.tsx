@@ -82,6 +82,12 @@ export default function LodgingB1Map({ building, places, selected, onPlace }: Pr
             </g>
           );
         })}
+        {/* 문 자리 */}
+        {places.flatMap((p) =>
+          (p.doors ?? []).map(([x0, y0, x1, y1], i) => (
+            <rect key={`${p.id}-d${i}`} x={x0} y={y0} width={x1 - x0} height={y1 - y0} fill="#6b7280" opacity={0.75} pointerEvents="none" />
+          ))
+        )}
       </svg>
     </div>
   );
