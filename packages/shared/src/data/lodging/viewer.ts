@@ -508,12 +508,12 @@ const VIEWER_JS = String.raw`
         (p.doors || []).forEach(function (dr, di) {
           var dcx = (dr[0] + dr[2]) / 2, dcy = (dr[1] + dr[3]) / 2, e = [Math.abs(dcy - by0), Math.abs(dcy - by1), Math.abs(dcx - bx0), Math.abs(dcx - bx1)], side = e.indexOf(Math.min.apply(null, e));
           var sd = sides[side], along = side < 2 ? (dcx - bcx) * sx : (dcy - bcy) * sz, dw = Math.min(2.0, Math.max(1.2, (side < 2 ? dr[2] - dr[0] : dr[3] - dr[1]) * sx));
-          var lx = side < 2 ? along : sd[0] + Math.sign(sd[0]) * 0.03, lz = side < 2 ? sd[1] + Math.sign(sd[1]) * 0.03 : along, fp = off(c, rot, lx, lz), ud = { f: -1, pid: p.id, walkOnly: true };
+          var lx = side < 2 ? along : sd[0] + Math.sign(sd[0]) * 0.03, lz = side < 2 ? sd[1] + Math.sign(sd[1]) * 0.03 : along, fp = off(c, rot, lx, lz), ud = { f: -1, pid: p.id, walkOnly: true, door: di };
           var nx2 = Math.sin(sd[2]), nz2 = Math.cos(sd[2]), isCU = p.id === 'b1-cu';
           if (p.kind === 'wc') { mesh(new THREE.BoxGeometry(Math.min(dw, 1.1), 2.1, 0.03), lam('#3b3632'), fp[0], y + 0.08 + 1.05, fp[1], sd[2], ud); mesh(new THREE.BoxGeometry(Math.min(dw, 1.1) + 0.12, 0.06, 0.05), lam('#6b5a4c'), fp[0], y + 2.2, fp[1], sd[2], ud); }
           else glassDoor(fp[0] + (isCU ? nx2 * 0.1 : 0), fp[1] + (isCU ? nz2 * 0.1 : 0), sd[2], dw, ud);
           if (!isCU) panel(nameTex(p.name, pc.bg, pc.ink, 448, 112), p.kind === 'wc' ? 1.0 : 1.3, p.kind === 'wc' ? 0.26 : 0.32, fp[0] + nx2 * 0.02, y + 2.62, fp[1] + nz2 * 0.02, sd[2], ud);
-          if (di === 0 && placeGeom[p.id]) placeGeom[p.id].door = { x: fp[0], z: fp[1], nx: nx2, nz: nz2 };
+          if (placeGeom[p.id]) { var dd0 = { x: fp[0], z: fp[1], nx: nx2, nz: nz2 }; (placeGeom[p.id].doors = placeGeom[p.id].doors || [])[di] = dd0; if (di === 0) placeGeom[p.id].door = dd0; }   // 문마다 — 그 문으로 들어가고 나온다
           // CU — 사진처럼: 문을 가운데 둔 알루미늄 틀 유리 가게 앞(안에 진열대가 비친다), 위에 남색 간판 띠('Nice to' 말풍선·흰 CU·연두 바)
           if (p.id === 'b1-cu' && di === 0) {
             var tx2 = Math.cos(sd[2]), tz2 = -Math.sin(sd[2]), SL = Math.min(12, sd[3] - 1), SC = Math.max(-sd[3] / 2 + SL / 2 + 0.5, Math.min(sd[3] / 2 - SL / 2 - 0.5, along)), sc0 = off(c, rot, side < 2 ? 0 : sd[0], side < 2 ? sd[1] : 0);
@@ -1067,10 +1067,10 @@ const VIEWER_JS = String.raw`
     }
     function tap(e) {
       var hit = hitAt(e); if (!hit) return; var ud = hit.object.userData;
-      if (ud.exit) { leaveRoom(true); return; }
+      if (ud.exit) { leaveRoom(true, ud); return; }
       if (ud.info && inRoom) { if (inRoom.num) send({ type: 'room', num: inRoom.num }); else send({ type: 'place', id: ud.infoPid || inRoom.pid }); return; }
       if (ud.walk) { glideTo(destFor(ud.walk, hit.point.x, hit.point.z)); return; }
-      if (enterable(ud)) { enterRoom(ud.num ? { num: ud.num } : { pid: ud.pid }); return; }   // 걷기에서 팻말·장소를 누르면 안으로
+      if (enterable(ud)) { enterRoom(ud.num ? { num: ud.num } : { pid: ud.pid, door: ud.door }); return; }   // 걷기에서 팻말·장소를 누르면 안으로
       if (ud.num) send({ type: 'room', num: ud.num }); else if (ud.pid) send({ type: 'place', id: ud.pid });
     }
 
@@ -1173,7 +1173,10 @@ const VIEWER_JS = String.raw`
         var MD = R(1574, 857, 1634, 1006), DOORX = MD.cx, DW2 = 1.6, DH = 2.3, LW2 = 5.0, LINKX = X0 + LW2 / 2;   // 대식당 연결 — 문 없이 뚫린 통로 (한식당 위쪽 벽에 붙어 있다)
         function wallZ(z, xa, xb, h, y) { h = h || IH; bx(Math.abs(xb - xa), h, WT, YEL, (xa + xb) / 2, (y || 0) + h / 2, z); }
         function wallX(x, za, zb) { bx(WT, IH, zb - za, YEL, x, IH / 2, (za + zb) / 2); }
-        wallX(X0 - WT / 2, Z0 - WT, Z1 + WT); wallX(X1 + WT / 2, Z0 - WT, Z1 + WT); wallZ(Z1 + WT / 2, X0, X1);
+        var PASS0 = R(1020, 93, 1229, 124), KY0 = 1.15, KY1 = 2.15;   // 배식구 — 벽을 뚫어 주방이 보인다
+        wallX(X0 - WT / 2, Z0 - WT, PASS0.z0); wallX(X0 - WT / 2, PASS0.z1, Z1 + WT);
+        bx(WT, KY0, PASS0.d, YEL, X0 - WT / 2, KY0 / 2, PASS0.cz); bx(WT, IH - KY1, PASS0.d, YEL, X0 - WT / 2, (IH + KY1) / 2, PASS0.cz);
+        wallX(X1 + WT / 2, Z0 - WT, Z1 + WT); wallZ(Z1 + WT / 2, X0, X1);
         var zg = [[LINKX + LW2 / 2, DOORX - DW2 / 2], [DOORX + DW2 / 2, X1]];
         zg.forEach(function (q) { wallZ(Z0 - WT / 2, q[0], q[1]); });
         [[LINKX, LW2], [DOORX, DW2]].forEach(function (q) { wallZ(Z0 - WT / 2, q[0] - q[1] / 2, q[0] + q[1] / 2, IH - DH, DH); });
@@ -1191,8 +1194,9 @@ const VIEWER_JS = String.raw`
         [[0, Z0, W, 0.02], [0, Z1, W, 0.02], [X0, CZ, 0.02, L], [X1, CZ, 0.02, L]].forEach(function (q) { bx(q[2], 0.08, q[3], '#5a3a22', q[0], 0.04, q[1]); });
         // 유리문 둘 — 누르면 나간다. 출입문 위에 이름판
         var glass = new THREE.MeshLambertMaterial({ color: 0x2f5f63, transparent: true, opacity: 0.55, depthWrite: false });
+        var EXK = { exit: true, exitPid: 'b1-korean', exitDoor: 0 }, EXD = { exit: true, exitPid: 'b1-dining', exitDoor: 0 }, EXB = { exit: true, exitPid: 'b1-dining', exitDoor: 1 };   // 나간 문 앞으로
         function glassDoor(cx, dw) {
-          [-1, 1].forEach(function (k) { bx(dw / 2 - 0.06, DH - 0.08, 0.03, glass, cx + k * dw / 4, DH / 2, Z0 + 0.03, 0, { exit: true }); bx(0.04, 0.9, 0.04, '#aeb4b9', cx + k * 0.1, 1.05, Z0 + 0.09, 0, { exit: true }); });
+          [-1, 1].forEach(function (k) { bx(dw / 2 - 0.06, DH - 0.08, 0.03, glass, cx + k * dw / 4, DH / 2, Z0 + 0.03, 0, EXK); bx(0.04, 0.9, 0.04, '#aeb4b9', cx + k * 0.1, 1.05, Z0 + 0.09, 0, EXK); });
           bx(dw + 0.1, 0.06, 0.08, '#8f969c', cx, DH, Z0 + 0.03); [-1, 0, 1].forEach(function (k) { bx(0.05, DH, 0.08, '#8f969c', cx + k * dw / 2, DH / 2, Z0 + 0.03); });
         }
         glassDoor(DOORX, DW2);
@@ -1221,10 +1225,6 @@ const VIEWER_JS = String.raw`
         var kdp = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.22), new THREE.MeshBasicMaterial({ map: nameTex('주방', '#e5e7eb', '#374151', 320, 100), transparent: true })); kdp.position.set(X0 + 0.02, 2.35, KD.cz); kdp.rotation.y = Math.PI / 2; im(kdp);
         // 배식구 — 벽에 뚫린 창 너머로 주방이 보이게 (밝은 타일 벽·선반·솥, 반쯤 내린 셔터)
         var PY0 = 1.15, PY1 = 2.15, pm = (PY0 + PY1) / 2;
-        bx(0.02, PY1 - PY0, PASS.d, '#e3e6e8', X0 + 0.012, pm, PASS.cz);
-        for (var ty2 = PY0 + 0.2; ty2 < PY1; ty2 += 0.2) bx(0.022, 0.008, PASS.d, '#c9ced2', X0 + 0.013, ty2, PASS.cz);
-        bx(0.06, 0.03, PASS.d - 0.2, '#aab0b5', X0 + 0.05, 1.65, PASS.cz);
-        [-0.25, 0, 0.25].forEach(function (k) { var pot2 = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.12, 0.2, 16), lam('#b4b9be')); pot2.position.set(X0 + 0.14, 1.77, PASS.cz + k * PASS.d); im(pot2); });
         bx(0.05, 0.28, PASS.d, '#9aa0a6', X0 + 0.04, PY1 - 0.14, PASS.cz); for (var sy = PY1 - 0.26; sy < PY1; sy += 0.05) bx(0.052, 0.006, PASS.d, '#7d848a', X0 + 0.04, sy, PASS.cz);
         bx(0.08, 0.08, PASS.d + 0.16, '#8a8f94', X0 + 0.04, PY1 + 0.04, PASS.cz); bx(0.08, PY1 - PY0 + 0.16, 0.08, '#8a8f94', X0 + 0.04, pm, PASS.z0 - 0.04); bx(0.08, PY1 - PY0 + 0.16, 0.08, '#8a8f94', X0 + 0.04, pm, PASS.z1 + 0.04);
         var psp = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.24), new THREE.MeshBasicMaterial({ map: nameTex('배식구', '#FBE9D0', '#6B3E0A', 384, 104), transparent: true })); psp.position.set(X0 + 0.02, PY1 + 0.3, PASS.cz); psp.rotation.y = Math.PI / 2; im(psp);
@@ -1238,13 +1238,58 @@ const VIEWER_JS = String.raw`
         var clk = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 24), lam('#f6f6f4')); clk.rotation.z = Math.PI / 2; clk.position.set(X0 + 0.03, 2.35, PZ(945)); im(clk);
         // 배식대 — 가운데 세로로 길게. 크림 몸통·검정 상판, 반찬통 줄. 위(그림) 끝은 국 — 스테인리스 국솥
         var SV = R(766, 250, 873, 987), SP = R(766, 250, 873, 332), CH = 0.9;
-        bx(SV.w - 0.08, CH - 0.06, SV.d - 0.08, '#efe6cf', SV.cx, (CH - 0.06) / 2, SV.cz); bx(SV.w, 0.06, SV.d, '#1b1c1e', SV.cx, CH - 0.03, SV.cz); bx(SV.w - 0.06, 0.1, SV.d - 0.06, '#5a4a3a', SV.cx, 0.05, SV.cz);
-        blk(SV.x0 - 0.1, SV.x1 + 0.1, SV.z0 - 0.1, SV.z1 + 0.1);
-        bx(SP.w - 0.1, 0.02, SP.d - 0.1, '#8d939a', SP.cx, CH + 0.005, SP.cz);
-        [-0.28, 0.28].forEach(function (k) { var pot = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.2, 0.32, 20), lam('#c4c8cc')); pot.position.set(SP.cx + k * SP.w * 0.5 + (k < 0 ? 0.1 : -0.1), CH + 0.17, SP.cz); im(pot); var lid = new THREE.Mesh(new THREE.CylinderGeometry(0.23, 0.23, 0.02, 20), lam('#9aa0a6')); lid.position.set(pot.position.x, CH + 0.34, SP.cz); im(lid); });
+        /** 배식대 — 사진처럼 흰 몸통·검정 상판 통을 여러 개 이어 붙인다(길이·높이·앞뒤가 조금씩 어긋난다).
+            x1 쪽(들어오는 쪽)부터 영상 순서대로 늘어놓고, 끝(x0)엔 따로 선 사각 국통 */
+        function buffet(x0, x1, zc, D, block, unit) {
+          var SOUP = 1.2, xs = x0 + SOUP, L = x1 - xs, seed = (Math.abs(Math.round(x0 * 97 + zc * 31)) % 2147483646) + 1;
+          function rnd() { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }
+          var WH = '#f7f6f2', STEEL = '#c3c7cb', FOODS = ['#c0392b', '#6b8e23', '#d4a017', '#8d5524', '#e67e22', '#f3e5ab'];
+          function cyl(r, h, color, x, yy, z, r2) { var m = new THREE.Mesh(new THREE.CylinderGeometry(r, r2 == null ? r : r2, h, 18), typeof color === 'string' ? lam(color) : color); m.position.set(x, yy, z); return im(m); }
+          // 영상 순서 — 수저·손소독제·접시 / 밥 / 김치·무침 / 밧드 셋 / 국물 컵·무생채 / 방울토마토·공기 / (끝) 국자 접시·공기, 따로 선 사각 국통
+          // 종류마다 한 통씩 — 길이 비율(김치·무침은 짧게). unit 을 주면 그 길이로(남는 자리는 비운다), 없으면 자리에 맞춘다
+          var order = ['cutlery', 'rice', 'kimchi', 'pans', 'soupcups', 'tomato'], WGT = [1, 1, 0.6, 1, 0.8, 0.8], CREAM = '#f3efe4', n = order.length;
+          var wsum = WGT.reduce(function (a, b) { return a + b; }, 0); unit = L / wsum; var cur = xs + wsum * unit;   // 자리를 끝까지 채운다 — 통이 길어지면 물건 사이도 벌어진다
+          function sq(x, z, food, ry) { bx(0.4, 0.13, 0.4, CREAM, x, top + 0.065, z, ry); bx(0.28, 0.03, 0.28, food, x, top + 0.12, z, ry); bx(0.02, 0.02, 0.26, STEEL, x + 0.06, top + 0.15, z, (ry || 0) + 0.5); }
+          function plate(x, z, tool) { cyl(0.15, 0.015, WH, x, top + 0.008, z); if (tool) { bx(0.3, 0.012, 0.03, STEEL, x + 0.02, top + 0.025, z - 0.03, 0.3); bx(0.28, 0.012, 0.025, STEEL, x - 0.02, top + 0.025, z + 0.04, -0.2); } }
+          function bowls(x, z) { var bh = 0.18 + rnd() * 0.12; cyl(0.085, bh, WH, x, top + bh / 2, z, 0.065); }
+          for (var i = 0; i < n; i++) {
+            var sl = WGT[i] * unit, sx1 = cur; cur -= sl; var len = sl - 0.04 + (rnd() - 0.5) * 0.12, cx = sx1 - sl / 2, cz = zc + (rnd() - 0.5) * 0.26, dd = D + (rnd() - 0.5) * 0.14, h = 0.9 + (rnd() - 0.5) * 0.05, top = h + 0.002;
+            bx(len - 0.06, h - 0.1, dd - 0.08, '#f1ece2', cx, (h - 0.1) / 2 + 0.05, cz); bx(len, 0.05, dd, '#141516', cx, h - 0.025, cz); bx(len - 0.1, 0.06, dd - 0.1, '#3a3632', cx, 0.03, cz);
+            block(cx - len / 2 - 0.08, cx + len / 2 + 0.08, cz - dd / 2 - 0.08, cz + dd / 2 + 0.08);
+            var kind = order[i], hl = len / 2 - 0.25, hd = dd / 2 - 0.2;
+            if (kind === 'cutlery') {   // 지나가는 순서대로 — 손소독제 둘(안내 종이) → 수저통 넷 → 접시 더미 넷, 각각 앞뒤(z)로 한 줄
+              var xS = cx + hl * 0.8, xK = cx + hl * 0.12, xP = cx - hl * 0.62;
+              [-0.4, 0.4].forEach(function (k) { var z = cz + k * hd; cyl(0.04, 0.17, '#f4f4f2', xS, top + 0.085, z); bx(0.005, 0.08, 0.05, '#2f5fb3', xS + 0.04, top + 0.09, z); bx(0.03, 0.05, 0.03, '#ffffff', xS, top + 0.2, z); });
+              bx(0.2, 0.003, 0.3, '#ffffff', xS, top + 0.002, cz);
+              [-0.75, -0.25, 0.25, 0.75].forEach(function (k, j) { var z = cz + k * hd; cyl(0.1, 0.22, STEEL, xK, top + 0.11, z); cyl(j % 3 ? 0.12 : 0.1, 0.07, '#4a4e52', xK, top + 0.25, z, 0.08); });
+              [-0.75, -0.25, 0.25, 0.75].forEach(function (k) { var ph = 0.25 + rnd() * 0.18; cyl(0.16, ph, WH, xP, top + ph / 2, cz + k * hd); });
+            } else if (kind === 'rice') {   // 밥판(밥)·뚜껑 덮인 밥판, 주걱 꽂힌 작은 그릇 둘
+              cyl(0.38, 0.06, STEEL, cx + hl * 0.45, top + 0.03, cz); cyl(0.34, 0.05, '#f3ecd6', cx + hl * 0.45, top + 0.05, cz);
+              cyl(0.38, 0.04, STEEL, cx - hl * 0.45, top + 0.02, cz); cyl(0.34, 0.03, '#d7dadd', cx - hl * 0.45, top + 0.055, cz); bx(0.14, 0.03, 0.04, '#b9bec3', cx - hl * 0.45, top + 0.09, cz);
+              [-1, 1].forEach(function (k) { cyl(0.08, 0.07, WH, cx, top + 0.035, cz + k * hd * 0.8, 0.07); bx(0.03, 0.015, 0.14, '#ffffff', cx + 0.03, top + 0.1, cz + k * hd * 0.8, 0.6); });
+            } else if (kind === 'kimchi') {   // 김치 하나·무침 하나 (한 세트)
+              sq(cx + hl * 0.45, cz, '#d9502e', 0.3); sq(cx - hl * 0.45, cz, '#c9a064', -0.3);
+            } else if (kind === 'pans') {   // 흰 천 위 밧드 셋(빨간 볶음·노란 계란·튀김), 앞뒤로 집게 접시
+              var pg = Math.max(0.58, hl * 0.62); bx(2 * pg + 0.7, 0.004, 0.5, '#fbfbf8', cx, top + 0.002, cz);
+              [[-1, '#a8401e'], [0, '#f0d24a'], [1, '#c98a45']].forEach(function (q) { var x = cx + q[0] * pg; bx(0.54, 0.08, 0.34, STEEL, x, top + 0.045, cz); bx(0.48, 0.025, 0.28, q[1], x, top + 0.08, cz); });
+              [-pg, 0, pg].forEach(function (k) { plate(cx + k, cz - hd * 0.95, true); plate(cx + k, cz + hd * 0.95, true); });
+            } else if (kind === 'soupcups') {   // 받침 위 국물 컵 둘, 무생채 사각 그릇 둘
+              [-1, 1].forEach(function (k) { var x = cx - hl * 0.5, z = cz + k * hd * 0.6; cyl(0.12, 0.015, WH, x, top + 0.008, z); cyl(0.08, 0.075, WH, x, top + 0.05, z, 0.065); cyl(0.07, 0.005, '#9aa15a', x, top + 0.085, z); sq(cx + hl * 0.45, z, '#e0602f', 0.3 * k); });
+            } else {   // 방울토마토 둘, 공기 더미 넷
+              [-1, 1].forEach(function (k) { var x = cx + hl * 0.45, z = cz + k * hd * 0.6; sq(x, z, '#e0301e', 0.3 * k); var tp = []; for (var t = 0; t < 9; t++) tp.push([x + (rnd() - 0.5) * 0.2, top + 0.15, z + (rnd() - 0.5) * 0.2]); instC(new THREE.SphereGeometry(0.03, 8, 6), '#e0301e', tp); });
+              [[-0.35, -0.5], [-0.35, 0.5], [-0.75, -0.5], [-0.75, 0.5]].forEach(function (q) { bowls(cx + q[0] * hl, cz + q[1] * hd); });
+            }
+            if (i === n - 1) { [-1, 1].forEach(function (k) { plate(cx - hl * 0.9, cz + k * hd * 0.7, true); }); }   // 끝 — 국자·집게 접시
+          }
+          // 국통 — 배식대 끝에 따로 선 스테인리스 사각 국통(윗면이 뚫린 통, 안에 국)
+          var sxc = x0 + 0.5, szc = zc, SH = 0.88;
+          bx(0.8, SH, 0.72, '#b9bec3', sxc, SH / 2, szc); bx(0.84, 0.05, 0.76, '#d3d7da', sxc, SH, szc);
+          bx(0.66, 0.02, 0.58, '#7a5a34', sxc, SH - 0.06, szc); bx(0.02, 0.08, 0.6, '#9aa0a6', sxc - 0.35, SH + 0.02, szc); bx(0.02, 0.08, 0.6, '#9aa0a6', sxc + 0.35, SH + 0.02, szc);
+          bx(0.02, 0.02, 0.2, '#6b7075', sxc + 0.2, SH - 0.2, szc + 0.36);
+          block(sxc - 0.5, sxc + 0.5, szc - 0.45, szc + 0.45);
+        }
+        buffet(SV.x0, SV.x1, SV.cz, SV.d, blk);
         var gp = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.2), new THREE.MeshBasicMaterial({ map: nameTex('국', '#f3f4f6', '#374151', 256, 100), transparent: true })); gp.position.set(SP.x0 - 0.01, 0.7, SP.cz); gp.rotation.y = -Math.PI / 2; im(gp);
-        var wells = []; for (var wx = SP.x1 + 0.45; wx < SV.x1 - 0.3; wx += 0.62) wells.push([wx, CH + 0.005, SV.cz]);
-        instC(new THREE.BoxGeometry(0.5, 0.02, 0.62), '#b8bcc0', wells); instC(new THREE.BoxGeometry(0.42, 0.025, 0.52), '#2c2f33', wells.map(function (q) { return [q[0], q[1] + 0.004, q[2]]; }));
         // 테이블 — 그림 그대로. 책상은 가로(z)로 길고, 위아래(x)에 의자 둘씩. 오른쪽 무리 끝 열은 한 줄 적다
         var tops = [], tlegs = [], tissue = [], tissueW = [], seats = [], backs = [], clegs = [], TY = 0.74, TWd = 1.25, TDd = 0.8;
         var cols = [219, 416, 613, 1032, 1229, 1427], rows = [313, 466, 618, 770, 923];
@@ -1280,12 +1325,12 @@ const VIEWER_JS = String.raw`
         // ── 대식당 — 평면도(963×915 그림, 걷기 편하게 약 2.2cm/px)와 사진. 그림 위쪽 벽(한식당 연결)이 통로 쪽(+z), 그림 오른쪽이 +x.
         //    흰 벽돌 기둥, 밝은 나무 긴 테이블(6인), 전부 커버 씌운 의자, 오른쪽 벽 높은 창, 뒷벽 환기 그릴 ──
         // 대식당은 통로 끝(연결 가운데)을 원점으로 짓고, 다 지은 뒤 한 무리로 묶어 TH2 만큼 돌린다
-        var S2 = 0.03, LX = 0, PWo = PW / Math.cos(TH2), mark = ig.children.length, cT = Math.cos(TH2), sT = Math.sin(TH2);
+        var S2 = 0.025, LX = 0, PWo = PW / Math.cos(TH2), mark = ig.children.length, cT = Math.cos(TH2), sT = Math.sin(TH2);
         function T(x, z) { return [LINKX + x * cT + z * sT, Zt - x * sT + z * cT]; }
         function blkB(xa, xb, za, zb) { var x0 = Math.min(xa, xb), x1 = Math.max(xa, xb), z0 = Math.min(za, zb), z1 = Math.max(za, zb); obs2.push([[x0, z0], [x1, z0], [x1, z1], [x0, z1]].map(function (q) { var p2 = T(q[0], q[1]); return lw(p2[0], p2[1]); })); }
         var SB = -1;   // 한식당에서 들어서면 앞으로 길게, 오른쪽에 문(그림 왼쪽 벽), 왼쪽에 시리얼 배식대(그림 오른쪽 벽)
         function QX(a) { return LX + SB * (a - 679) * S2; }
-        var S2Z = 0.042;   // 들어서서 앞으로 길게 — 앞뒤는 더 늘린다 (약 38m)
+        var S2Z = 0.033;   // 들어서서 앞으로 길게 — 앞뒤는 더 늘린다 (약 38m)
         function QZ(b) { return -(b - 42) * S2Z; }
         function Q(a0, b0, a1, b1) { var x0 = Math.min(QX(a0), QX(a1)), x1 = Math.max(QX(a0), QX(a1)), z0 = QZ(b1), z1 = QZ(b0); return { x0: x0, x1: x1, z0: z0, z1: z1, cx: (x0 + x1) / 2, cz: (z0 + z1) / 2, w: x1 - x0, d: z1 - z0 }; }
         var BX0 = QX(368), BX1 = QX(1331), BZ0 = QZ(957), BZ1 = 0, BCX = (BX0 + BX1) / 2, BCZ = (BZ0 + BZ1) / 2, BW = Math.abs(BX1 - BX0), XL = Math.min(BX0, BX1), XR = Math.max(BX0, BX1), BL = BZ1 - BZ0;
@@ -1303,35 +1348,38 @@ const VIEWER_JS = String.raw`
         bx(0.9, 0.3, BL - 1.0, '#d9d2c2', QX(826), IH - 0.16, BCZ);
         // 벽 — 위(통로 구멍), 왼쪽(문), 아래(뒷문), 오른쪽(높은 창)
         var DDZ = Q(350, 42, 381, 108), DD0 = QZ(108), DD1 = BZ1, BD = Q(780, 937, 870, 965), WZ0 = QZ(900), WZ1 = QZ(470), WY0b = 1.25, WY1b = 2.55;
-        wallZ(BZ1 + WT / 2, XL - WT, LX - PWo / 2); wallZ(BZ1 + WT / 2, LX + PWo / 2, XR + WT); wallZ(BZ1 + WT / 2, LX - PWo / 2, LX + PWo / 2, IH - DH - 0.2, DH + 0.2);
+        var BPo = Q(863, 42, 1095, 60);   // 대식당 배식구 — 벽을 뚫어 주방이 보인다
+        wallZ(BZ1 + WT / 2, XL - WT, BPo.x0); wallZ(BZ1 + WT / 2, BPo.x1, LX - PWo / 2); wallZ(BZ1 + WT / 2, BPo.x0, BPo.x1, 1.15); wallZ(BZ1 + WT / 2, BPo.x0, BPo.x1, IH - 2.15, 2.15); wallZ(BZ1 + WT / 2, LX + PWo / 2, XR + WT); wallZ(BZ1 + WT / 2, LX - PWo / 2, LX + PWo / 2, IH - DH - 0.2, DH + 0.2);
         wallX2(BX0 - SB * WT / 2, BZ0 - WT, DD0); wallX2(BX0 - SB * WT / 2, DD0, DD1, IH - DH, DH);
         wallZ(BZ0 - WT / 2, XL - WT, BD.x0); wallZ(BZ0 - WT / 2, BD.x1, XR + WT); wallZ(BZ0 - WT / 2, BD.x0, BD.x1, IH - DH, DH);
         wallX2(BX1 + SB * WT / 2, BZ0 - WT, BZ1 + WT, WY0b); wallX2(BX1 + SB * WT / 2, BZ0 - WT, BZ1 + WT, IH - WY1b, WY1b); wallX2(BX1 + SB * WT / 2, BZ0 - WT, WZ0, WY1b - WY0b, WY0b); wallX2(BX1 + SB * WT / 2, WZ1, BZ1 + WT, WY1b - WY0b, WY0b);
         bx(0.03, WY1b - WY0b, WZ1 - WZ0, new THREE.MeshLambertMaterial({ color: 0x9fd6e6, transparent: true, opacity: 0.55, depthWrite: false }), BX1 + SB * 0.02, (WY0b + WY1b) / 2, (WZ0 + WZ1) / 2);
         for (var mz = WZ0; mz <= WZ1 + 0.01; mz += (WZ1 - WZ0) / 5) bx(0.1, WY1b - WY0b, 0.07, '#8f969c', BX1 - SB * 0.03, (WY0b + WY1b) / 2, mz);
         bx(0.1, 0.07, WZ1 - WZ0, '#8f969c', BX1 - SB * 0.03, WY0b, (WZ0 + WZ1) / 2); bx(0.1, 0.07, WZ1 - WZ0, '#8f969c', BX1 - SB * 0.03, WY1b, (WZ0 + WZ1) / 2); bx(0.1, 0.05, WZ1 - WZ0, '#8f969c', BX1 - SB * 0.03, WY0b + 0.45, (WZ0 + WZ1) / 2);
-        wainscot('x', BZ1, -1, XL, XR, [[LX - PWo / 2 - 0.05, LX + PWo / 2 + 0.05]]); wainscot('x', BZ0, 1, XL, XR, [[BD.x0 - 0.05, BD.x1 + 0.05]]);
+        wainscot('x', BZ1, -1, XL, XR, [[LX - PWo / 2 - 0.05, LX + PWo / 2 + 0.05], [BPo.x0 - 0.05, BPo.x1 + 0.05]]); wainscot('x', BZ0, 1, XL, XR, [[BD.x0 - 0.05, BD.x1 + 0.05]]);
         wainscot('z', BX0, SB, BZ0, BZ1, [[DD0 - 0.05, DD1 + 0.05]]); bx(0.012, 0.55, BL, ORG, BX1 - SB * 0.006, 0.275, BCZ);
         // 문 — 왼쪽 벽 유리문(누르면 나간다, 위에 '대식당' 이름판), 뒷문
         var ddc = (DD0 + DD1) / 2, ddw = DD1 - DD0;
-        [-1, 1].forEach(function (k) { bx(0.03, DH - 0.08, ddw / 2 - 0.06, glass, BX0 + SB * 0.03, DH / 2, ddc + k * ddw / 4, 0, { exit: true }); bx(0.04, 0.9, 0.04, '#aeb4b9', BX0 + SB * 0.09, 1.05, ddc + k * 0.1, 0, { exit: true }); });
+        [-1, 1].forEach(function (k) { bx(0.03, DH - 0.08, ddw / 2 - 0.06, glass, BX0 + SB * 0.03, DH / 2, ddc + k * ddw / 4, 0, EXD); bx(0.04, 0.9, 0.04, '#aeb4b9', BX0 + SB * 0.09, 1.05, ddc + k * 0.1, 0, EXD); });
         bx(0.08, 0.06, ddw + 0.1, '#8f969c', BX0 + SB * 0.03, DH, ddc); [-1, 0, 1].forEach(function (k) { bx(0.08, DH, 0.05, '#8f969c', BX0 + SB * 0.03, DH / 2, ddc + k * ddw / 2); });
         var bp = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.28), new THREE.MeshBasicMaterial({ map: nameTex('대식당', '#FBE9D0', '#6B3E0A', 512, 112), transparent: true }));
         bp.position.set(BX0 + SB * 0.012, DH + 0.25, ddc); bp.rotation.y = SB * Math.PI / 2; im(bp, { info: true, infoPid: 'b1-dining' });
-        bx(BD.w - 0.08, DH - 0.06, 0.05, '#7d858c', BD.cx, DH / 2, BZ0 + 0.03, 0, { exit: true }); bx(0.2, 0.03, 0.04, '#c9c9c4', BD.cx + BD.w / 2 - 0.25, 1.0, BZ0 + 0.08, 0, { exit: true });
+        bx(BD.w - 0.08, DH - 0.06, 0.05, '#7d858c', BD.cx, DH / 2, BZ0 + 0.03, 0, EXB); bx(0.2, 0.03, 0.04, '#c9c9c4', BD.cx + BD.w / 2 - 0.25, 1.0, BZ0 + 0.08, 0, EXB);
         var bdp = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.22), new THREE.MeshBasicMaterial({ map: nameTex('뒷문', '#e5e7eb', '#374151', 320, 100), transparent: true })); bdp.position.set(BD.cx, DH + 0.2, BZ0 + 0.012); im(bdp);
         var tsp = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.26), new THREE.MeshBasicMaterial({ map: nameTex('한식당 →', '#FBE9D0', '#6B3E0A', 512, 112), transparent: true })); tsp.position.set(LX, DH + 0.35, BZ1 - 0.012); tsp.rotation.y = Math.PI; im(tsp);
         // 흰 벽돌 기둥
         var brick = texCanvas('brick', 256, 256, function (g2, w2, h2) { g2.fillStyle = '#d9d6cf'; g2.fillRect(0, 0, w2, h2); g2.fillStyle = '#f2f0ea'; for (var r2 = 0; r2 < 8; r2++) for (var c2 = -1; c2 < 5; c2++) { var ox2 = (r2 % 2) * 32; g2.fillRect(c2 * 64 + ox2 + 3, r2 * 32 + 3, 58, 26); } });
         brick.wrapS = brick.wrapT = THREE.RepeatWrapping;
-        [Q(789, 30, 863, 63), Q(789, 209, 863, 281), Q(789, 577, 863, 648), Q(1264, 354, 1331, 461)].forEach(function (r) {
+        function shrink(r, k) { var w = r.w * k, d = r.d * k; return { x0: r.cx - w / 2, x1: r.cx + w / 2, z0: r.cz - d / 2, z1: r.cz + d / 2, cx: r.cx, cz: r.cz, w: w, d: d }; }
+        var PIL1 = shrink(Q(789, 209, 863, 281), 0.72), PIL2 = shrink(Q(789, 577, 863, 648), 0.72);   // 가운데 기둥 둘 — 조금 가늘게
+        [Q(789, 30, 863, 63), PIL1, PIL2, Q(1264, 354, 1331, 461)].forEach(function (r) {
           var bt = brick.clone(); bt.needsUpdate = true; bt.repeat.set(Math.max(r.w, r.d) / 1.0, IH / 1.0);
           bx(r.w, IH, r.d, new THREE.MeshLambertMaterial({ map: bt }), r.cx, IH / 2, r.cz); blkB(r.x0 - 0.05, r.x1 + 0.05, r.z0 - 0.05, r.z1 + 0.05);
         });
-        var clk2 = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 24), lam('#f6f6f4')); clk2.rotation.x = Math.PI / 2; var p2c = Q(789, 209, 863, 281); clk2.position.set(p2c.cx, 2.2, p2c.z1 + 0.03); im(clk2);
+        var clk2 = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.17, 0.04, 24), lam('#f6f6f4')); clk2.rotation.x = Math.PI / 2; var p2c = PIL1; clk2.position.set(p2c.cx, 2.2, p2c.z1 + 0.03); im(clk2);
         // 위쪽 벽 — 배식구(앞에 책상), 주방 연결문, 간이벽, 퇴식대
         var BP = Q(863, 42, 1095, 60), BPY0 = 1.15, BPY1 = 2.15;
-        bx(BP.w, BPY1 - BPY0, 0.02, '#e3e6e8', BP.cx, (BPY0 + BPY1) / 2, BZ1 - 0.012); bx(BP.w + 0.12, 0.08, 0.08, '#8a8f94', BP.cx, BPY1 + 0.04, BZ1 - 0.04);
+        bx(BP.w + 0.12, 0.08, 0.08, '#8a8f94', BP.cx, BPY1 + 0.04, BZ1 - 0.04);
         [-1, 1].forEach(function (k) { bx(0.08, BPY1 - BPY0 + 0.1, 0.08, '#8a8f94', BP.cx + k * BP.w / 2, (BPY0 + BPY1) / 2, BZ1 - 0.04); });
         bx(BP.w, 0.28, 0.05, '#9aa0a6', BP.cx, BPY1 - 0.14, BZ1 - 0.04);
         bx(BP.w - 0.1, 0.75, 0.55, '#d9b98a', BP.cx, 0.375, BZ1 - 0.3); blkB(BP.x0, BP.x1, BZ1 - 0.6, BZ1);
@@ -1340,13 +1388,42 @@ const VIEWER_JS = String.raw`
         var BTR = Q(1036, 53, 1095, 95); bx(BTR.w, 0.9, BTR.d, '#b9bec3', BTR.cx, 0.45, BTR.cz); bx(BTR.w, 0.9, 0.3, '#c8ccd0', BTR.cx, 1.35, BTR.z1 - 0.15); blkB(BTR.x0, BTR.x1, BTR.z0, BTR.z1);
         // 배식대 — 가로로 길게, 오른쪽 끝은 국. 시리얼 배식대(조식)
         var BSV = Q(425, 118, 1156, 171), BSP = Q(1156, 118, 1223, 171);
-        [BSV, BSP].forEach(function (r) { bx(r.w - 0.06, CH - 0.06, r.d - 0.06, '#efe6cf', r.cx, (CH - 0.06) / 2, r.cz); bx(r.w, 0.06, r.d, '#1b1c1e', r.cx, CH - 0.03, r.cz); bx(r.w - 0.04, 0.1, r.d - 0.04, '#5a4a3a', r.cx, 0.05, r.cz); blkB(r.x0 - 0.1, r.x1 + 0.1, r.z0 - 0.1, r.z1 + 0.1); });
-        var w2s = []; for (var wx2 = BSV.x0 + 0.5; wx2 < BSV.x1 - 0.3; wx2 += 0.65) w2s.push([wx2, CH + 0.005, BSV.cz]);
-        instC(new THREE.BoxGeometry(0.52, 0.02, 0.62), '#b8bcc0', w2s); instC(new THREE.BoxGeometry(0.44, 0.025, 0.52), '#2c2f33', w2s.map(function (q) { return [q[0], q[1] + 0.004, q[2]]; }));
-        [-0.25, 0.25].forEach(function (k) { var pot3 = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.2, 0.32, 20), lam('#c4c8cc')); pot3.position.set(BSP.cx, CH + 0.17, BSP.cz + k * BSP.d * 0.9); im(pot3); });
+        var BUFX1 = Math.max(BSV.x1, BSP.x1), BGAP = Math.abs(BX0 - BUFX1);   // 옆문에서 들어서면 배식대까지 — 지금 틈의 두 배
+        buffet(Math.min(BSV.x0, BSP.x0), BUFX1 - BGAP, BSV.cz, BSV.d, blkB);   // 국(BSP)은 x 가 작은 쪽 끝
         var CE = Q(1264, 128, 1331, 231);
-        bx(CE.w, 0.85, CE.d, '#d9b98a', CE.cx, 0.425, CE.cz); bx(CE.w + 0.02, 0.03, CE.d + 0.02, '#8f7a5c', CE.cx, 0.865, CE.cz); blkB(CE.x0, CE.x1, CE.z0, CE.z1);
-        [-0.3, 0, 0.3].forEach(function (k) { var cy = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.45, 14), new THREE.MeshLambertMaterial({ color: 0xf1e3b8, transparent: true, opacity: 0.8 })); cy.position.set(CE.cx, 1.12, CE.cz + k * CE.d); im(cy); });
+        // 시리얼 자리 — 책상 둘을 벽에 나란히. 벽을 보고 서면 왼쪽이 빵, 오른쪽이 시리얼 (조식)
+        (function () {
+          var tcx = BX1 - SB * 0.6, TH3 = 0.75, TW4 = 1.4, TD4 = 0.8;
+          function P(zc2, u, w) { return [tcx - SB * w, zc2 + u]; }   // u: 벽을 보고 왼쪽(+z), w: 방 쪽(+)
+          function B(zc2, u, w, sx, sy, sz, color, y0, ry) { var q = P(zc2, u, w); return bx(sz, sy, sx, color, q[0], y0 + sy / 2, q[1], ry); }   // sx: 책상 따라, sz: 벽에서 방 쪽
+          function C(zc2, u, w, r, h, color, y0, r2) { var q = P(zc2, u, w), m = new THREE.Mesh(new THREE.CylinderGeometry(r, r2 == null ? r : r2, h, 18), typeof color === 'string' ? lam(color) : color); m.position.set(q[0], y0 + h / 2, q[1]); return im(m); }
+          function table(zc2) {
+            B(zc2, 0, 0, TW4, 0.04, TD4, '#141516', TH3 - 0.04); [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (e) { B(zc2, e[0] * (TW4 / 2 - 0.06), e[1] * (TD4 / 2 - 0.06), 0.05, TH3 - 0.04, 0.05, '#2a2a2a', 0); });
+            var q0 = P(zc2, -TW4 / 2, -TD4 / 2), q1 = P(zc2, TW4 / 2, TD4 / 2); blkB(q0[0], q1[0], q0[1], q1[1]);
+          }
+          var T0 = TH3, zB = CE.cz + 0.85, zC = CE.cz - 0.85;
+          // 빵 — 토스터·식빵 봉지·모닝빵 봉지, 받침 달린 은쟁반에 식빵 삼각·모닝빵, 가위 접시, 잼·버터 바구니
+          table(zB);
+          B(zB, 0.45, -0.24, 0.3, 0.2, 0.2, '#f2f2f0', T0); B(zB, 0.45, -0.24, 0.2, 0.01, 0.03, '#3a3a3a', T0 + 0.2);
+          B(zB, 0.18, -0.3, 0.14, 0.24, 0.16, new THREE.MeshLambertMaterial({ color: 0xe8dcc0, transparent: true, opacity: 0.8 }), T0);
+          B(zB, -0.12, -0.3, 0.3, 0.14, 0.14, new THREE.MeshLambertMaterial({ color: 0xe9c48a, transparent: true, opacity: 0.85 }), T0);
+          C(zB, 0, 0.05, 0.1, 0.08, '#c3c7cb', T0); C(zB, 0, 0.05, 0.34, 0.03, '#d3d7da', T0 + 0.08);
+          var toast = [], buns = [];
+          for (var ti = 0; ti < 10; ti++) { var tq = P(zB, 0.12 - (ti % 5) * 0.06, -0.1 + Math.floor(ti / 5) * 0.14); toast.push([tq[0], T0 + 0.14 + (ti % 3) * 0.02, tq[1], ti * 0.6]); }
+          for (var bi2 = 0; bi2 < 12; bi2++) { var bq = P(zB, -0.12 - (bi2 % 4) * 0.06, -0.05 + Math.floor(bi2 / 4) * 0.09); buns.push([bq[0], T0 + 0.15, bq[1]]); }
+          instC(new THREE.BoxGeometry(0.1, 0.02, 0.1), '#e2b56a', toast); instC(new THREE.SphereGeometry(0.05, 10, 8), '#d69a4a', buns);
+          C(zB, 0.55, 0.22, 0.13, 0.015, '#f7f6f2', T0); B(zB, 0.55, 0.22, 0.14, 0.012, 0.03, '#d62828', T0 + 0.02, 0.4);
+          [[-0.5, -0.05, '#b8323a'], [-0.52, 0.22, '#f4f1ea']].forEach(function (q) { C(zB, q[0], q[1], 0.15, 0.06, '#b07a3e', T0, 0.13); var pk = []; for (var k = 0; k < 7; k++) { var pq = P(zB, q[0] + ((k % 3) - 1) * 0.06, q[1] + (Math.floor(k / 3) - 1) * 0.05); pk.push([pq[0], T0 + 0.07, pq[1], k]); } instC(new THREE.BoxGeometry(0.05, 0.015, 0.035), q[2], pk); });
+          // 시리얼 — 콘푸레이크·초코 사각 그릇(국자), 그릇 더미, 시리얼 봉지 셋, 우유갑, 우유 디스펜서(철사 받침·흰 천)
+          table(zC);
+          [[0.42, -0.14, '#4a2c1a'], [0.38, 0.2, '#d9a441']].forEach(function (q) { B(zC, q[0], q[1], 0.42, 0.13, 0.42, '#f3efe4', T0, 0.25); B(zC, q[0], q[1], 0.3, 0.03, 0.3, q[2], T0 + 0.1, 0.25); });
+          [[0.08, -0.22], [0.08, -0.06], [0.08, 0.1], [-0.08, -0.22], [-0.08, -0.06], [-0.08, 0.1]].forEach(function (q, k) { C(zC, q[0], q[1], 0.075, 0.2 + (k % 3) * 0.05, '#f7f6f2', T0, 0.06); });
+          [[-0.2, '#f1ede4'], [-0.36, '#2a4fa0'], [-0.52, '#6b4a33']].forEach(function (q) { B(zC, q[0], -0.3, 0.17, 0.36, 0.08, q[1], T0); });
+          [-0.22, -0.34].forEach(function (u) { B(zC, u, -0.06, 0.09, 0.2, 0.07, '#f7f7f5', T0); B(zC, u, -0.06, 0.092, 0.05, 0.072, '#5b8fd6', T0 + 0.05); });
+          B(zC, -0.5, 0.12, 0.3, 0.004, 0.3, '#fbfbf8', T0);
+          [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (e) { B(zC, -0.5 + e[0] * 0.1, 0.12 + e[1] * 0.1, 0.012, 0.12, 0.012, '#1d1d1d', T0); });
+          C(zC, -0.5, 0.12, 0.13, 0.3, new THREE.MeshLambertMaterial({ color: 0xf4f4f0, transparent: true, opacity: 0.88 }), T0 + 0.12); C(zC, -0.5, 0.12, 0.1, 0.03, '#b9bec3', T0 + 0.42);
+        })();
         var cep = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.22), new THREE.MeshBasicMaterial({ map: nameTex('시리얼 (조식)', '#fff7e6', '#6B3E0A', 448, 100), transparent: true })); cep.position.set(BX1 - SB * 0.012, 1.7, CE.cz); cep.rotation.y = -SB * Math.PI / 2; im(cep);
         // 스탠드 에어컨·환기 그릴·게시판·액자
         var BAC = Q(1273, 317, 1331, 354); bx(0.55, 1.85, 0.5, '#f2f2f0', BX1 - SB * 0.3, 0.925, BAC.cz); bx(0.02, 0.5, 0.4, '#d0d4d8', BX1 - SB * 0.58, 1.45, BAC.cz); blkB(BX1 - SB * 0.6, BX1, BAC.cz - 0.3, BAC.cz + 0.3);
@@ -1366,6 +1443,52 @@ const VIEWER_JS = String.raw`
         instC(new THREE.BoxGeometry(TW3, 0.04, TD3), '#dcc39a', bt2); instC(new THREE.CylinderGeometry(0.025, 0.025, TY - 0.03, 8), '#a4aab0', bl2);
         instC(new THREE.BoxGeometry(0.48, 0.48, 0.48), '#b8b09f', bSeat); instC(new THREE.BoxGeometry(0.48, 0.4, 0.07), '#b8b09f', bBack);   // 등받이 낮게
         var bg = new THREE.Group(); ig.children.slice(mark).forEach(function (m) { bg.add(m); }); bg.position.set(LINKX, 0, Zt); bg.rotation.y = TH2; ig.add(bg);
+        // ── 주방 — 한식당 배식구(서쪽 벽)·대식당 배식구(남쪽 벽) 너머. 사진 참고: 흰 타일 벽, 큰 스테인리스 후드와 화구,
+        //    배식구 앞 스테인리스 작업대, 노란 가스관, 벽 온수기, 밥솥·수건·분홍 고무장갑 선반, 파란 통, 선풍기. 들어가 걷지는 않는다 ──
+        (function () {
+          var kx1 = X0 - WT, kx0 = kx1 - 12, kz0 = Z0, kz1 = Z0 + 17, kcx = (kx0 + kx1) / 2, kcz = (kz0 + kz1) / 2, pc = PASS.cz, STL = '#b4b9be';
+          var tile = (function () { var c4 = document.createElement('canvas'); c4.width = c4.height = 64; var g4 = c4.getContext('2d'); g4.fillStyle = '#f3f4f2'; g4.fillRect(0, 0, 64, 64); g4.fillStyle = '#d4d8da'; g4.fillRect(0, 31, 64, 2); g4.fillRect(31, 0, 2, 64); var t4 = new THREE.CanvasTexture(c4); t4.wrapS = t4.wrapT = THREE.RepeatWrapping; return t4; })();
+          function tileMat(u, v) { var t5 = tile.clone(); t5.needsUpdate = true; t5.repeat.set(u / 0.6, v / 0.6); return new THREE.MeshLambertMaterial({ map: t5 }); }
+          /** 타일 벽 판 — x 고정(면이 ±x) 또는 z 고정 */
+          function tX(x, za, zb, y0, y1) { var m = new THREE.Mesh(new THREE.BoxGeometry(0.02, y1 - y0, zb - za), tileMat(zb - za, y1 - y0)); m.position.set(x, (y0 + y1) / 2, (za + zb) / 2); im(m); }
+          function tZ(z, xa, xb, y0, y1) { var m = new THREE.Mesh(new THREE.BoxGeometry(xb - xa, y1 - y0, 0.02), tileMat(xb - xa, y1 - y0)); m.position.set((xa + xb) / 2, (y0 + y1) / 2, z); im(m); }
+          function cyl2(r, h, color, x, y0, z) { var m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, h, 16), typeof color === 'string' ? lam(color) : color); m.position.set(x, y0 + h / 2, z); return im(m); }
+          // 바닥·천장·벽
+          var fl2 = new THREE.Mesh(new THREE.PlaneGeometry(kx1 - kx0, kz1 - kz0), tileMat(kx1 - kx0, kz1 - kz0)); fl2.material.color.set(0x9aa0a3); fl2.rotation.x = -Math.PI / 2; fl2.position.set(kcx, 0.012, kcz); im(fl2);
+          ceil(kcx, kcz, kx1 - kx0, kz1 - kz0, 0xdfe3e6);
+          bx(WT, IH, kz1 - kz0 + 2 * WT, '#e9ebe8', kx0 - WT / 2, IH / 2, kcz); bx(kx1 - kx0 + 2 * WT, IH, WT, '#e9ebe8', kcx, IH / 2, kz1 + WT / 2);
+          tX(kx0 + 0.011, kz0, kz1, 0, IH); tZ(kz1 - 0.011, kx0, kx1, 0, IH);
+          tX(kx1 - 0.011, kz0, PASS.z0, 0, IH); tX(kx1 - 0.011, PASS.z1, kz1, 0, IH); tX(kx1 - 0.011, PASS.z0, PASS.z1, 0, KY0); tX(kx1 - 0.011, PASS.z0, PASS.z1, KY1, IH);
+          var bpx0 = LINKX + BPo.x0, bpx1 = LINKX + BPo.x1;   // 대식당 배식구 (주방 북쪽 벽)
+          tZ(kz0 + 0.011, kx0, bpx0, 0, IH); tZ(kz0 + 0.011, bpx1, kx1, 0, IH); tZ(kz0 + 0.011, bpx0, bpx1, 0, 1.15); tZ(kz0 + 0.011, bpx0, bpx1, 2.15, IH);
+          bx(0.9, 0.05, KD.d, '#8a8f94', kx1 - 0.03, 1.05, KD.cz); bx(0.05, 2.1, KD.d - 0.1, '#9aa0a6', kx1 - 0.04, 1.05, KD.cz);   // 주방 연결문 (주방 쪽)
+          // 형광등
+          [pc - 3, pc, pc + 3].forEach(function (z) { bx(0.6, 0.04, 1.2, new THREE.MeshBasicMaterial({ color: 0xffffff }), kx1 - 3.5, IH - 0.03, z); bx(0.6, 0.04, 1.2, new THREE.MeshBasicMaterial({ color: 0xffffff }), kx1 - 8.5, IH - 0.03, z); });
+          // 배식구 안쪽 — 넓은 스테인리스 받침대
+          bx(0.9, 1.1, PASS.d + 0.8, STL, kx1 - 0.45, 0.55, pc); bx(0.94, 0.04, PASS.d + 0.84, '#d3d7da', kx1 - 0.45, 1.12, pc);
+          // 작업대 — 가운데, 분홍 볼·쟁반·도마·통
+          bx(0.85, 0.04, 3.0, '#cfd3d7', kx1 - 2.7, 0.88, pc); bx(0.8, 0.03, 2.9, STL, kx1 - 2.7, 0.2, pc);
+          [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (e) { bx(0.04, 0.88, 0.04, STL, kx1 - 2.7 + e[0] * 0.38, 0.44, pc + e[1] * 1.45); });
+          cyl2(0.2, 0.1, '#e75480', kx1 - 2.7, 0.9, pc - 0.9); bx(0.5, 0.03, 0.35, '#f4f4f2', kx1 - 2.6, 0.9, pc - 0.2); bx(0.55, 0.05, 0.4, '#c3c7cb', kx1 - 2.75, 0.9, pc + 0.6); bx(0.55, 0.05, 0.4, '#c3c7cb', kx1 - 2.75, 0.95, pc + 0.6);
+          [-0.15, 0.1].forEach(function (k) { cyl2(0.07, 0.16, '#d6dadd', kx1 - 2.55, 0.9, pc + 1.1 + k); });
+          // 화구 줄 + 큰 후드
+          bx(1.0, 0.85, 8.0, '#aeb3b8', kx1 - 6.4, 0.425, pc - 0.5); bx(1.04, 0.04, 8.04, '#8d9398', kx1 - 6.4, 0.87, pc - 0.5);
+          [-3, -1.5, 0, 1.5, 3].forEach(function (k) { cyl2(0.22, 0.03, '#2a2c2e', kx1 - 6.4, 0.89, pc - 0.5 + k); });
+          cyl2(0.35, 0.45, '#c8ccd0', kx1 - 6.4, 0.92, pc - 2); cyl2(0.3, 0.35, '#c8ccd0', kx1 - 6.4, 0.92, pc + 1); bx(0.3, 0.02, 0.05, '#e03a2a', kx1 - 6.0, 1.3, pc + 1);
+          bx(2.6, 0.6, 9.0, '#bcc1c6', kx1 - 6.4, IH - 0.55, pc - 0.5); bx(2.7, 0.06, 9.1, '#9aa0a6', kx1 - 6.4, IH - 0.86, pc - 0.5); bx(1.0, 0.3, 1.2, '#bcc1c6', kx1 - 6.4, IH - 0.12, pc - 0.5);
+          // 노란 가스관 — 세로 하나, 서쪽 벽을 따라 가로
+          cyl2(0.045, IH, '#e8c21a', kx1 - 4.5, 0, pc + 1.3); var gpz = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, kz1 - kz0 - 1, 10), lam('#e8c21a')); gpz.rotation.x = Math.PI / 2; gpz.position.set(kx0 + 0.12, 2.35, kcz); im(gpz);
+          // 서쪽 벽 — 온수기 둘, 선풍기
+          [pc - 1.2, pc + 1.0].forEach(function (z) { bx(0.25, 0.6, 0.4, '#f4f4f2', kx0 + 0.14, 1.95, z); bx(0.02, 0.1, 0.12, '#9aa0a6', kx0 + 0.27, 1.9, z); });
+          var fan = cyl2(0.26, 0.05, '#dfe2e5', kx0 + 1.2, 2.2, kz1 - 0.5); fan.rotation.x = Math.PI / 2;
+          // 북쪽(대식당 배식구 쪽) — 밥솥·수건·분홍 고무장갑 선반, 파란 통
+          bx(1.6, 0.04, 0.6, '#cfd3d7', kx1 - 1.6, 0.9, kz0 + 0.4); bx(1.5, 0.03, 0.55, STL, kx1 - 1.6, 0.25, kz0 + 0.4);
+          [-0.5, 0.0].forEach(function (k) { cyl2(0.17, 0.3, '#2c2f33', kx1 - 1.6 + k, 0.92, kz0 + 0.35); cyl2(0.18, 0.04, '#aab0b5', kx1 - 1.6 + k, 1.22, kz0 + 0.35); });
+          bx(0.4, 0.15, 0.35, '#ffffff', kx1 - 1.05, 0.92, kz0 + 0.4); bx(0.38, 0.12, 0.33, '#f4f4f2', kx1 - 1.05, 1.07, kz0 + 0.42);
+          var bar = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.4, 8), lam('#c3c7cb')); bar.rotation.z = Math.PI / 2; bar.position.set(kx1 - 1.6, 0.8, kz0 + 0.72); im(bar);
+          [-0.4, -0.1, 0.3].forEach(function (k) { bx(0.12, 0.28, 0.02, '#ff5fa2', kx1 - 1.6 + k, 0.66, kz0 + 0.74); });
+          cyl2(0.25, 0.7, '#2e6fb5', kx1 - 3.1, 0, kz0 + 0.5);
+        })();
         // 걸을 수 있는 곳 — 한식당·통로·대식당
         var c0 = lw(0, CZ), pts = boxPts(c0[0], c0[1], W, L, g.ang), c1 = lw(LINKX, (Z0 + Zt - PH) / 2), c2 = T(BCX, BCZ); c2 = lw(c2[0], c2[1]);
         var A2 = [{ key: 'room', name: '한식당', pts: pts }, { key: 'room', name: '한식당↔대식당 통로', pts: boxPts(c1[0], c1[1], PW, PLEN + PH + 0.4, g.ang) }, { key: 'room', name: '대식당', pts: boxPts(c2[0], c2[1], BW, BL, g.ang + TH2) }];
@@ -1373,7 +1496,8 @@ const VIEWER_JS = String.raw`
         A2.forEach(function (a3) { flat(a3.pts, floorY(g.f) + 0.22, true, pickMat, { room: key, f: g.f, walk: 'room' }); });
         var e0 = lw(DOORX, Z0 + 1.0), ent = snapFree(key, { x: e0[0], z: e0[1] }) || { x: e0[0], z: e0[1] };
         var e2 = T(BX0 + SB * 1.0, ddc); e2 = lw(e2[0], e2[1]); var ent2 = snapFree(key, { x: e2[0], z: e2[1] }) || { x: e2[0], z: e2[1] };
-        return { group: ig, entry: { x: ent.x, z: ent.z, yaw: g.ang + Math.PI }, entry2: { x: ent2.x, z: ent2.z, yaw: g.ang - SB * Math.PI / 2 + TH2 }, light: lw(0, CZ), size: Math.hypot(W, L) };
+        var e3 = T(BD.cx, BZ0 + 1.0); e3 = lw(e3[0], e3[1]); var ent3 = snapFree(key, { x: e3[0], z: e3[1] }) || { x: e3[0], z: e3[1] };   // 뒷문 안쪽
+        return { group: ig, entry: { x: ent.x, z: ent.z, yaw: g.ang + Math.PI }, entry2: { x: ent2.x, z: ent2.z, yaw: g.ang - SB * Math.PI / 2 + TH2 }, entry3: { x: ent3.x, z: ent3.z, yaw: g.ang + Math.PI + TH2 }, light: lw(0, CZ), size: Math.hypot(W, L) };
       }
       /** 강의실 — 사용자가 그려 준 평면도(1389×675 그림)를 그대로 옮긴다. 걸어 다니기 편하게 실제보다 넉넉히 약 0.73cm/px (폭 약 4.9m, 문→창 약 10m).
           그림 가로 → 문(복도)에서 창(바깥) 쪽 z, 그림 세로 → x (그림 위쪽 벽이 교실 앞 — 화이트보드·TV) */
@@ -1599,6 +1723,7 @@ const VIEWER_JS = String.raw`
       setTimeout(function () { fn(); setTimeout(function () { fade.style.opacity = '0'; fading = false; }, 40); }, 200);
     }
     /** 방 문 앞(복도)·장소 앞 — 나갈 때 서는 자리 */
+    function frontOf(f, d) { var q = { x: d.x + d.nx * 2.6, z: d.z + d.nz * 2.6 }, dp = snapFree(f, q) || q; return { x: dp.x, z: dp.z, yaw: Math.atan2(d.nx, d.nz), pitch: -0.1 }; }
     function doorFront(t, g) {
       if (t.num) { var d = roomDoor[t.num]; return { x: d.x + d.nx * (HW + 1), z: d.z + d.nz * (HW + 1), yaw: Math.atan2(d.nx, d.nz), pitch: -0.1 }; }
       if (g.door) { var dp = snapFree(g.f, { x: g.door.x + g.door.nx * 2.6, z: g.door.z + g.door.nz * 2.6 }) || { x: g.door.x + g.door.nx * 2.6, z: g.door.z + g.door.nz * 2.6 }; return { x: dp.x, z: dp.z, yaw: Math.atan2(g.door.nx, g.door.nz), pitch: -0.1 }; }   // 배치도 문 앞에서 문을 본다
@@ -1611,12 +1736,16 @@ const VIEWER_JS = String.raw`
       var g = t.num ? roomGeom[t.num] : placeGeom[t.pid]; if (!g || fading) return;
       var hall = !!(t.pid && HALL[t.pid] && placeGeom['b1-korean']);
       var key = t.num ? 'r:' + t.num : hall ? 'p:b1-hall' : 'p:' + t.pid;
-      var back = mode === 'walk' && walkFloor === g.f && !inRoom ? { x: eye.x, z: eye.z, yaw: yaw, pitch: pitch } : doorFront(t, g);
+      var here = mode === 'walk' && walkFloor === g.f && !inRoom, di = t.door;
+      if (di == null && here && g.doors && g.doors.length > 1) {   // 문을 콕 누르지 않았으면 — 서 있는 자리에서 가까운 문
+        var bd = 1e9; g.doors.forEach(function (d, k) { if (!d) return; var dd = Math.hypot(d.x - eye.x, d.z - eye.z); if (dd < bd) { bd = dd; di = k; } });
+      }
+      var back = here ? { x: eye.x, z: eye.z, yaw: yaw, pitch: pitch } : doorFront(t, g);
       if (inRoom) leaveRoom(false);
       if (mode !== 'walk') setMode('walk');
       if (walkFloor !== g.f) setWalkFloor(g.f);
       var it = interiors[key] || (interiors[key] = hall ? buildInterior(key, placeGeom['b1-korean'], { pid: 'b1-korean' }) : buildInterior(key, g, t));
-      var en = t.pid === 'b1-dining' && it.entry2 ? it.entry2 : it.entry;
+      var en = t.pid === 'b1-dining' && it.entry2 ? (di === 1 && it.entry3 ? it.entry3 : it.entry2) : it.entry;
       fadeSwitch(function () {
         inRoom = { key: key, num: t.num, pid: t.pid, f: g.f, title: titleOf(t), back: back };
         resetWalkState(); eye.set(en.x, floorY(g.f) + 1.6, en.z); yaw = en.yaw; pitch = -0.04;
@@ -1625,12 +1754,12 @@ const VIEWER_JS = String.raw`
         applyVis(); send({ type: 'inside', num: t.num || null, id: t.pid || null });
       });
     }
-    function leaveRoom(withFade) {
+    function leaveRoom(withFade, via) {
       if (!inRoom) return;
-      var r = inRoom;
+      var r = inRoom, vg = via && via.exitPid && placeGeom[via.exitPid], vd = vg && vg.doors && vg.doors[via.exitDoor || 0], bk = vd ? frontOf(r.f, vd) : r.back;   // 누른 문 앞으로 — 없으면 들어온 자리
       function done() {
         inRoom = null; roomLight.intensity = 0; hint.textContent = '';
-        resetWalkState(); eye.x = r.back.x; eye.z = r.back.z; yaw = r.back.yaw; pitch = r.back.pitch;
+        resetWalkState(); eye.x = bk.x; eye.z = bk.z; yaw = bk.yaw; pitch = bk.pitch;
         applyVis(); send({ type: 'inside', num: null, id: null });
       }
       if (withFade) fadeSwitch(done); else done();
