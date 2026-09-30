@@ -1,3 +1,4 @@
+import { compareCampCodes } from '@smis-mentor/shared';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -442,7 +443,7 @@ export function UploadScreen({ navigation }: AdminStackScreenProps<'Upload'>) {
                         }
                         
                         // 숫자가 같으면 코드명으로 알파벳 순
-                        return (a.code || '').localeCompare(b.code || '');
+                        return compareCampCodes(a.code, b.code);
                       })
                       .map(tpl => ({
                         label: `[${tpl.code || '미지정'}] ${tpl.title}`,

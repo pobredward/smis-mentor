@@ -5,7 +5,7 @@ import { Timestamp } from 'firebase/firestore';
 import ImageCropper from '@/components/common/ImageCropper';
 import MyEscortPanel from '@/components/camp/patient/MyEscortPanel';
 import EscortSsn from '@/components/camp/patient/EscortSsn';
-import { isActiveEscortVisit, L, dataLabel, isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, resolveGroups, normalizeGroupKey, getCampClassInfo, getCampTimetableCommon, getCampDayPlan, dialablePhone, type Whereabouts, type WhereaboutsInput, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind, campDateYmd, addDaysYmd, DEFAULT_MED_DAYS, isVideoUrl, campEndYmd, localYmd, visitScheduledAt, visitDayLabel, emptyMedListForm, medListFormFrom, medListScheduleOf, toggleMemoPhrase, type MedListForm } from '@smis-mentor/shared';
+import { CAMP_GROUP_ORDER, isActiveEscortVisit, L, dataLabel, isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, resolveGroups, normalizeGroupKey, getCampClassInfo, getCampTimetableCommon, getCampDayPlan, dialablePhone, type Whereabouts, type WhereaboutsInput, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind, campDateYmd, addDaysYmd, DEFAULT_MED_DAYS, isVideoUrl, campEndYmd, localYmd, visitScheduledAt, visitDayLabel, emptyMedListForm, medListFormFrom, medListScheduleOf, toggleMemoPhrase, type MedListForm } from '@smis-mentor/shared';
 import {
   SYMPTOM_GUIDES, getHospitalPresets, isKoreanStaff, ACTION_NOTE_PLACEHOLDER, ACTION_NOTE_EXAMPLE,
   makeMedTimeKey, schedActiveOn, isInDateRange, calcTotalDoses, todayDateKey as todayStr,
@@ -574,7 +574,7 @@ export default function PatientContent() {
   }, [allRecords, campUsers, activeJobCodeId]);
 
   // 그룹 순서 (고정 순서 기준, 알 수 없는 그룹은 뒤로)
-  const FIXED_GROUP_ORDER = ['junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter', 'common', 'short1', 'short2', 'short3', 'short4', 'manager'];
+  const FIXED_GROUP_ORDER: string[] = [...CAMP_GROUP_ORDER];   // 그룹 순서는 shared 한 곳
   const GROUP_DISPLAY_NAMES: Record<string, string> = localizeLabels({
     junior: '주니어', middle: '미들', senior: '시니어',
     spring: '스프링', summer: '서머', autumn: '어텀', winter: '원터',

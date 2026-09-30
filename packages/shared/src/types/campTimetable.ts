@@ -294,7 +294,27 @@ const GROUP_ALIASES: Record<string, string> = {
   윈터: 'winter',
   common: 'common',
   공통: 'common',
+  short1: 'short1', 단기1: 'short1',
+  short2: 'short2', 단기2: 'short2',
+  short3: 'short3', 단기3: 'short3',
+  short4: 'short4', 단기4: 'short4',
+  manager: 'manager', 매니저: 'manager', 운영진: 'manager', all: 'manager', 전체: 'manager',
 };
+
+/**
+ * ★ 캠프 그룹 순서 — 앱 전체가 이 한 곳을 따른다 (새 화면에서 순서를 따로 만들지 말 것).
+ * Junior → Middle → Senior → Spring → Summer → Autumn → Winter → (그 밖의 그룹, 가나다) → Common → 단기1~4 → 매니저
+ * 매니저(운영진)를 맨 위에 두는 명단은 groupRank(g, { managerFirst: true }).
+ */
+export const CAMP_GROUP_ORDER = ['junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter', 'common', 'short1', 'short2', 'short3', 'short4', 'manager'] as const;
+
+/** 그룹 이름(표기 무관) → 정렬 순위. 모르는 그룹은 Winter 다음·Common 앞 */
+export function groupRank(name: string | undefined | null, opts?: { managerFirst?: boolean }): number {
+  const k = normalizeGroupKey(name);
+  if (opts?.managerFirst && k === 'manager') return -1;
+  const i = (CAMP_GROUP_ORDER as readonly string[]).indexOf(k);
+  return i >= 0 ? i : CAMP_GROUP_ORDER.indexOf('common') - 0.5;
+}
 
 /** 그룹 이름 표기 차이를 흡수 (Junior / junior / 주니어 / "Junior Group") */
 export function normalizeGroupKey(name: string | undefined | null): string {
@@ -569,7 +589,6 @@ export interface MemberLike {
   jobExperiences?: Array<{ id: string; group?: string; groupRole?: string; classCode?: string }>;
 }
 
-const GROUP_ORDER = ['junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter'];
 /** 그룹이 아닌 값 — 시간표 탭에 띄우지 않는다 */
 const NON_GROUP = new Set(['manager', 'common', '공통', '매니저']);
 
@@ -608,23 +627,15 @@ export function deriveGroupsFromMembers(members: MemberLike[], jobCodeId: string
   // (매니저·원어민만 배정된 단계. 담임이 붙으면 그때 나타난다)
   const list = [...acc.values()].filter((g) => g.classCodes.length > 0);
   list.forEach((g) => g.classCodes.sort());
-  return list.sort((a, b) => {
-    const ia = GROUP_ORDER.indexOf(a.key);
-    const ib = GROUP_ORDER.indexOf(b.key);
-    if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-    return a.name.localeCompare(b.name);
-  });
+  return list.sort((a, b) => groupRank(a.key) - groupRank(b.key) || a.name.localeCompare(b.name));
 }
 
 /** 배정이 아직 없을 때 쓰는 기본 그룹 구성 */
 export const FALLBACK_GROUPS = ['Junior', 'Middle', 'Senior'];
 
-/** 그룹 이름 차례 — Junior, Middle, Senior, Spring, Summer, Autumn, Winter, 그 밖은 가나다 (시간표 탭과 같은 규칙) */
-export function compareGroupNames(a: string, b: string): number {
-  const ia = GROUP_ORDER.indexOf(normalizeGroupKey(a));
-  const ib = GROUP_ORDER.indexOf(normalizeGroupKey(b));
-  if (ia !== -1 || ib !== -1) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-  return a.localeCompare(b, 'ko');
+/** 그룹 이름 차례 — CAMP_GROUP_ORDER 기준, 같은 순위면 가나다 */
+export function compareGroupNames(a: string, b: string, opts?: { managerFirst?: boolean }): number {
+  return groupRank(a, opts) - groupRank(b, opts) || String(a).localeCompare(String(b), 'ko');
 }
 
 /**

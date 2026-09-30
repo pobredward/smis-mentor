@@ -1,3 +1,5 @@
+import { compareCampCodes } from '@smis-mentor/shared';
+import { CAMP_GROUP_ORDER } from '@smis-mentor/shared';
 import React, { useState, useEffect } from 'react';
 import { logger } from '@smis-mentor/shared';
 import {
@@ -91,22 +93,8 @@ const groupColors: Record<string, { bg: string; text: string }> = {
   short4: { bg: '#ede9fe', text: '#6d28d9' },
 };
 
-// 단기1~4는 맨 아래에 위치
-const groupOrder = [
-  'manager',
-  'common',
-  'junior',
-  'middle',
-  'senior',
-  'spring',
-  'summer',
-  'autumn',
-  'winter',
-  'short1',
-  'short2',
-  'short3',
-  'short4',
-];
+// 그룹 순서는 shared 한 곳 (CAMP_GROUP_ORDER) — 이 명단은 매니저를 맨 위로
+const groupOrder: string[] = ['manager', ...CAMP_GROUP_ORDER.filter((g) => g !== 'manager')];
 
 export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck'>) {
   const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
@@ -181,7 +169,7 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
         // 둘 다 우선순위에 있는 경우
         if (aPriority !== -1 && bPriority !== -1) {
           if (aPriority !== bPriority) return aPriority - bPriority;
-          return a.code.localeCompare(b.code);
+          return compareCampCodes(a.code, b.code);
         }
         
         // a만 우선순위에 있는 경우
@@ -191,7 +179,7 @@ export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck
         if (bPriority !== -1) return 1;
         
         // 둘 다 우선순위에 없는 경우 알파벳 순서
-        return a.code.localeCompare(b.code);
+        return compareCampCodes(a.code, b.code);
       });
     setCodesForGeneration(filteredCodes);
 

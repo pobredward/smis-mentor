@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { authenticatedGet, authenticatedFetch } from '@/lib/apiClient';
-import { CAMP_PROFILE_FIELD_LABELS, type CampProfileField } from '@smis-mentor/shared';
+import { CAMP_PROFILE_FIELD_LABELS, groupRank, type CampProfileField } from '@smis-mentor/shared';
 
 type Row = Record<string, string> & { userId: string; missing: CampProfileField[] };
 type Sel = { r0: number; c0: number; r1: number; c1: number };
@@ -93,11 +93,10 @@ const GROUPS: Record<'basic' | 'pay' | 'intl' | 'passport', { label: string; lab
 };
 type GroupKey = keyof typeof GROUPS;
 /** 정렬 — /admin/user-check 카드와 같은 순서: 그룹 → (매니저·원어민은 역할) → 반 코드 → 이름 */
-const GROUP_ORDER = ['manager', 'common', 'junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter', 'short1', 'short2', 'short3', 'short4'];
 const MANAGER_ROLE_ORDER: Record<string, number> = { '매니저': 1, '부매니저': 2, 'Manager': 3, 'Sub Manager': 4 };
 const FOREIGN_ROLE_ORDER: Record<string, number> = { Speaking: 1, Reading: 2, Writing: 3, Mix: 4 };
 function compareRoster(a: Record<string, string>, b: Record<string, string>): number {
-  const gi = (g: string) => { const i = GROUP_ORDER.indexOf(g); return i < 0 ? 999 : i; };
+  const gi = (g: string) => groupRank(g, { managerFirst: true });   // 그룹 순서는 shared 한 곳 (CAMP_GROUP_ORDER)
   if (gi(a.group) !== gi(b.group)) return gi(a.group) - gi(b.group);
   if (a.group === 'manager') {
     const d = (MANAGER_ROLE_ORDER[a.groupRole] ?? 999) - (MANAGER_ROLE_ORDER[b.groupRole] ?? 999);

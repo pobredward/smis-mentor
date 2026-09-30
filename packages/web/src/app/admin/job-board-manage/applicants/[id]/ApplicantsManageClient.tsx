@@ -1,4 +1,5 @@
 'use client';
+import { compareCampCodes } from '@smis-mentor/shared';
 import { logger, fillRecruitmentTemplate } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -345,11 +346,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     const filtered = allJobCodes.filter(code => code.generation === selectedGeneration);
     
     // 코드 기준으로 정렬
-    filtered.sort((a, b) => {
-      if (a.code < b.code) return -1;
-      if (a.code > b.code) return 1;
-      return 0;
-    });
+    filtered.sort((a, b) => compareCampCodes(a.code, b.code));   // J·E → S → F → 그 밖 (앱 공통)
     
     setFilteredJobCodes(filtered);
     setSelectedJobCodeId(''); // 선택 초기화

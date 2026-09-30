@@ -1,4 +1,5 @@
 'use client';
+import { compareCampCodes } from '@smis-mentor/shared';
 import { logger } from '@smis-mentor/shared';
 
 import { useEffect, useState, useRef } from 'react';
@@ -827,7 +828,7 @@ export default function AdminUploadTemplatePage() {
                             }
                             
                             // 숫자가 같으면 코드명으로 알파벳 순
-                            return (a.code || '').localeCompare(b.code || '');
+                            return compareCampCodes(a.code, b.code);
                           })
                           .map(tpl => (
                             <option key={tpl.id} value={tpl.id}>

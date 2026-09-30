@@ -767,3 +767,14 @@ export interface Task {
   updatedAt: Timestamp;
   createdBy: string;
 }
+
+/**
+ * ★ 캠프 코드 순서 — 앱 전체 공통: J·E(제주) → S(싱말) → F → 그 밖 (같은 종류 안에서는 코드 순, 숫자는 크기대로)
+ * 기수(generation) 정렬이 먼저 필요하면 그 뒤에 이걸 쓴다.
+ */
+export const CAMP_CODE_PREFIX_ORDER = ['J', 'E', 'S', 'F'] as const;
+export function compareCampCodes(a: string | undefined | null, b: string | undefined | null): number {
+  const rank = (c: string) => { const i = (CAMP_CODE_PREFIX_ORDER as readonly string[]).indexOf(c.trim().charAt(0).toUpperCase()); return i < 0 ? CAMP_CODE_PREFIX_ORDER.length : i; };
+  const x = String(a ?? ''), y = String(b ?? '');
+  return rank(x) - rank(y) || x.localeCompare(y, 'en', { numeric: true, sensitivity: 'base' });
+}

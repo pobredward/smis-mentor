@@ -1,3 +1,4 @@
+import { compareCampCodes } from '@smis-mentor/shared';
 import React, { useState, useEffect } from 'react';
 import { logger } from '@smis-mentor/shared';
 import {
@@ -196,7 +197,7 @@ export function UserGenerateScreen({ navigation }: any) {
         // 둘 다 우선순위에 있는 경우
         if (aPriority !== -1 && bPriority !== -1) {
           if (aPriority !== bPriority) return aPriority - bPriority;
-          return a.code.localeCompare(b.code);
+          return compareCampCodes(a.code, b.code);
         }
         
         // a만 우선순위에 있는 경우
@@ -206,7 +207,7 @@ export function UserGenerateScreen({ navigation }: any) {
         if (bPriority !== -1) return 1;
         
         // 둘 다 우선순위에 없는 경우 알파벳 순서
-        return a.code.localeCompare(b.code);
+        return compareCampCodes(a.code, b.code);
       });
   };
 

@@ -95,7 +95,7 @@ import {
   classifyFever,
   isFeverLevel,
   dosesForProgressLog, L, dataLabel, isEnglishUI, localizeLabels, isMultiUse, getCampLodging, patientPlaceOptions, patientPlaceKind, campDateYmd, addDaysYmd, DEFAULT_MED_DAYS, isVideoUrl, campEndYmd, localYmd, visitScheduledAt, visitDayLabel, emptyMedListForm, medListFormFrom, medListScheduleOf, toggleMemoPhrase, type MedListForm,
-  isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, normalizeGroupKey, dialablePhone, type Whereabouts } from '@smis-mentor/shared';
+  isStaffPatient, midReportCount, STAFF_PATIENT_CLASS, staffPatientId, studentWhereabouts, normalizeGroupKey, dialablePhone, CAMP_GROUP_ORDER, type Whereabouts } from '@smis-mentor/shared';
 import type {
   PatientRecord,
   PatientType,
@@ -161,7 +161,7 @@ const HOSPITAL_STATUS_COLOR: Record<HospitalStatus, { bg: string; text: string }
   내원완료: { bg: '#dcfce7', text: '#166534' },
 };
 
-const FIXED_GROUP_ORDER = ['junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter', 'common', 'short1', 'short2', 'short3', 'short4', 'manager'] as const;
+const FIXED_GROUP_ORDER = CAMP_GROUP_ORDER;   // 그룹 순서는 shared 한 곳
 
 const GROUP_DISPLAY_NAMES: Record<string, string> = localizeLabels({
   junior: '주니어', middle: '미들', senior: '시니어',
