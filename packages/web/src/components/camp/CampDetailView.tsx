@@ -1,5 +1,6 @@
 'use client';
 
+import BackButton from '@/components/common/BackButton';
 import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import { logger } from '@smis-mentor/shared';
 import { useState, useEffect } from 'react';
@@ -184,6 +185,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh]">
         <p className="text-gray-600">{L('content.itemNotFound')}</p>
+        <BackButton fallbackHref={`/camp/${category}`} className="mt-3" label={L('common.back')} />
       </div>
     );
   }
@@ -195,14 +197,7 @@ export default function CampDetailView({ category, itemId }: CampDetailViewProps
         <div className="max-w-5xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <button
-                onClick={() => router.back()}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                </svg>
-              </button>
+              <BackButton fallbackHref={`/camp/${category}`} />
               
               <div>
                 <div className="flex items-center gap-2">

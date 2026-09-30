@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import type { CampPage } from '@smis-mentor/shared';
 import SharePageViewer from './SharePageViewer';
+import BackButton from '@/components/common/BackButton';
 
 interface PageProps {
   params: Promise<{
@@ -87,6 +88,7 @@ export default async function ShareEducationPage({ params }: PageProps) {
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-4">
           <div className="flex items-center gap-4">
+            <BackButton fallbackHref="/camp/education" />
             <span className="text-2xl">
               {page.emoji || '📄'}
             </span>
