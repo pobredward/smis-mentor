@@ -484,7 +484,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       const userCredential = await signUp(completeSignUpData.email!, completeSignUpData.password!);
       const firebaseUser = userCredential.user;
       
-      // users 문서 생성·탈퇴 계정 정리는 서버가 (신규 멘토는 mentor_temp → 관리자 검토 후 승격). 실패 시 서버가 Auth 계정 삭제
+      // users 문서 생성·탈퇴 계정 정리는 서버가 (가입을 마치면 멘토). 실패 시 서버가 Auth 계정 삭제
       const { completeSignupViaApi } = await import('../services/authService');
       try {
         await completeSignupViaApi({

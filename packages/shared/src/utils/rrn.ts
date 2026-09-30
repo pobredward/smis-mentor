@@ -8,7 +8,7 @@
  * 2, 4, 6, 8: 여성(F)
  */
 export const getGenderFromRRN = (rrnFront: string, rrnLast: string): 'M' | 'F' | '' => {
-  if (!rrnFront || !rrnLast || rrnFront.length !== 6 || rrnLast.length !== 7) {
+  if (!rrnFront || !rrnLast || rrnFront.length !== 6 || !/^[0-9]/.test(rrnLast)) {   // 뒷자리는 첫 숫자만 있어도 된다 (가입 폼은 한 자리만 받는다)
     return '';
   }
 
@@ -36,7 +36,7 @@ export const getGenderFromRRN = (rrnFront: string, rrnLast: string): 'M' | 'F' |
  * 예: 98년생은 28살, 99년생은 27살, 00년생은 26살, 01년생은 25살 등
  */
 export const getAgeFromRRN = (rrnFront: string, rrnLast: string): number => {
-  if (!rrnFront || !rrnLast || rrnFront.length !== 6 || rrnLast.length !== 7) {
+  if (!rrnFront || !rrnLast || rrnFront.length !== 6 || !/^[0-9]/.test(rrnLast)) {   // 뒷자리는 첫 숫자만 있어도 된다 (가입 폼은 한 자리만 받는다)
     return 0;
   }
 
@@ -79,7 +79,7 @@ export const getAgeFromRRN = (rrnFront: string, rrnLast: string): number => {
  * 주민등록번호로부터 생년월일 Date 객체를 생성합니다.
  */
 export const getBirthDateFromRRN = (rrnFront: string, rrnLast: string): Date | null => {
-  if (!rrnFront || !rrnLast || rrnFront.length !== 6 || rrnLast.length !== 7) {
+  if (!rrnFront || !rrnLast || rrnFront.length !== 6 || !/^[0-9]/.test(rrnLast)) {   // 뒷자리는 첫 숫자만 있어도 된다 (가입 폼은 한 자리만 받는다)
     return null;
   }
 

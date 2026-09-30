@@ -16,6 +16,7 @@ import {
   normalizePhoneForMatch,
   phoneQueryVariants,
   logger,
+  getAgeFromRRN,
   type CompleteSignupInput,
   type CompleteSignupResult,
   type SignupProviderId,
@@ -45,7 +46,7 @@ function sanitizeProfile(input: CompleteSignupInput) {
   put('address', str(p.address, 300));
   put('addressDetail', str(p.addressDetail, 200));
   if (p.gender === 'M' || p.gender === 'F') out.gender = p.gender;
-  if (typeof p.age === 'number' && p.age >= 0 && p.age < 120) out.age = Math.floor(p.age);
+  if (typeof p.age === 'number' && p.age > 0 && p.age < 120) out.age = Math.floor(p.age);   // 0 은 계산 실패 값 — 받지 않는다
   put('referralPath', str(p.referralPath, 100));
   put('referrerName', str(p.referrerName, 50));
   put('otherReferralDetail', str(p.otherReferralDetail, 200));
@@ -61,16 +62,9 @@ function sanitizeProfile(input: CompleteSignupInput) {
     if (rrnFront && /^\d{6}$/.test(rrnFront)) out.rrnFront = rrnFront;
     const g = str(p.rrnGenderDigit, 1);
     if (g && /^[0-9]$/.test(g)) out.rrnGenderDigit = g;
-    if (out.age === undefined && out.rrnFront && out.rrnGenderDigit) {
-      const d = String(out.rrnGenderDigit);
-      const century = ['1', '2', '5', '6'].includes(d) ? 1900 : ['3', '4', '7', '8'].includes(d) ? 2000 : 1800;
-      const yy = century + Number(String(out.rrnFront).slice(0, 2));
-      const mm = Number(String(out.rrnFront).slice(2, 4)) - 1;
-      const dd = Number(String(out.rrnFront).slice(4, 6));
-      const today = new Date();
-      let age = today.getFullYear() - yy;
-      if (today.getMonth() < mm || (today.getMonth() === mm && today.getDate() < dd)) age -= 1;
-      if (age >= 0 && age < 120) out.age = age;
+    if (out.rrnFront && out.rrnGenderDigit) {   // 나이는 주민번호로 서버가 정한다 (web·mobile 같은 셈법)
+      const age = getAgeFromRRN(String(out.rrnFront), String(out.rrnGenderDigit));
+      if (age > 0 && age < 120) out.age = age;
     }
     if (!out.gender && out.rrnGenderDigit) out.gender = Number(out.rrnGenderDigit) % 2 === 1 ? 'M' : 'F';
     put('university', str(p.university, 100));
@@ -185,7 +179,7 @@ export async function completeSignup(uid: string, tokenEmail: string | undefined
     const t = temp?.data ?? {};
     const role = temp
       ? (t.role === 'foreign_temp' ? 'foreign' : t.role === 'admin' ? 'admin' : 'mentor')
-      : (kind === 'foreign' ? 'foreign' : 'mentor_temp'); // 신규 멘토는 관리자 검토 후 mentor 로 승격
+      : (kind === 'foreign' ? 'foreign' : 'mentor'); // 가입을 마치면 바로 멘토 (mentor_temp 는 관리자가 미리 만든 가입 전 계정에만)
     const providerId = PROVIDERS.includes(input?.provider?.providerId) ? input.provider.providerId : 'password';
     const now = Timestamp.now();
     const jobExperiences = Array.isArray(t.jobExperiences) ? t.jobExperiences : [];

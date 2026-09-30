@@ -422,7 +422,7 @@ export default function SignUpDetails() {
           };
         }
 
-        // 서버가 users 문서 생성 + 같은 이메일의 탈퇴 계정 정리 (신규 멘토는 mentor_temp → 관리자 검토 후 승격)
+        // 서버가 users 문서 생성 + 같은 이메일의 탈퇴 계정 정리 (가입을 마치면 멘토)
         const p0 = authProvidersData?.authProviders?.[0] ?? {};
         await completeSignupViaApi({
           kind: 'mentor',
