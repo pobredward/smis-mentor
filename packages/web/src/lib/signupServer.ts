@@ -121,6 +121,14 @@ async function findTempAccount(kind: 'mentor' | 'foreign', profile: Record<strin
       return { id: hintSnap.id, data };
     }
   }
+  // 원어민 DB 시트에서 옮겨 온 temp (전화번호·성이 없다) — 이름(first name)이 같은 사람이 딱 한 명일 때만 이어받는다.
+  // 동명이인(Kevin 등)이면 넘기지 않고 관리자가 사용자 관리에서 합친다.
+  if (kind === 'foreign' && ft?.firstName) {
+    const imp = await db.collection('users').where('importSource', '==', 'foreign-db-sheet').where('status', '==', 'temp').get();
+    const same = imp.docs.filter((d) => normalizeNameForMatch(d.data().foreignTeacher?.firstName) === normalizeNameForMatch(ft.firstName));
+    if (same.length === 1) return { id: same[0].id, data: same[0].data() as Record<string, any> };
+    if (same.length > 1) logger.warn('⚠️ 시트에서 옮긴 원어민 temp 가 같은 이름으로 여럿 — 자동 연결 안 함:', { firstName: ft.firstName, count: same.length });
+  }
   if (hint) logger.warn('⚠️ temp 계정 힌트가 전화번호·이름과 맞지 않아 무시:', { hint });
   return null;
 }
@@ -197,6 +205,10 @@ export async function completeSignup(uid: string, tokenEmail: string | undefined
         feedback: t.feedback || '', partTimeJobs: Array.isArray(t.partTimeJobs) ? t.partTimeJobs : [],
         ...(t.profileImage && { profileImage: t.profileImage }),
         ...(!profile.address && t.address && { address: t.address, addressDetail: t.addressDetail || '' }),
+        // 원어민 소개 (DB 시트에서 옮겨 온 국적·경력)
+        ...(t.teachingYears && { teachingYears: t.teachingYears }),
+        ...(t.teachingExperience && { teachingExperience: t.teachingExperience }),
+        ...(t.nationality && { nationality: t.nationality }),
       }),
       // 사용자 입력 (허용 필드만)
       ...profile,

@@ -27,7 +27,7 @@ import {
   type CampProfileStatus,
 } from '@smis-mentor/shared';
 import { PHONE_COUNTRY_CODES, splitPhoneByCountry as splitPhone } from '@smis-mentor/shared';
-import { L, isEnglishUI } from '@smis-mentor/shared';
+import { L, isEnglishUI, cleanTeachingExperiences, formatTeachingPeriod, sortTeachingExperiences, type TeachingExperienceItem } from '@smis-mentor/shared';
 export { PHONE_COUNTRY_CODES };
 
 // ─── 공통 ───────────────────────────────────────────────────────────────────
@@ -711,4 +711,86 @@ export function ReferralSection() {
     onSave={async () => {
       await save({ referralPath: path === '기타' && other.trim() ? `기타: ${other.trim()}` : path, referrerName: path === '지인 소개' ? referrer.trim() : '' });
     }} />;
+}
+
+// ─── Teaching Experience (원어민) ─────────────────────────────────────────────
+// 역할 · 장소 · 기간(YYYY 또는 YYYY.MM ~ YYYY / Present) · 내용 — 설명회 '원어민 선생님' 화면에 그대로 보인다.
+
+const emptyTeaching = (): TeachingExperienceItem => ({ role: '', place: '', start: '', end: '', description: '' });
+
+export function TeachingExperienceSection() {
+  const { userData } = useAuth();
+  const save = useSave();
+  const [items, setItems] = useState<TeachingExperienceItem[]>([]);
+  const [years, setYears] = useState('');
+  const [err, setErr] = useState('');
+  if (!userData) return null;
+  const u = userData as User & { teachingExperiences?: TeachingExperienceItem[]; teachingYears?: string };
+  const list = sortTeachingExperiences(u.teachingExperiences ?? []);
+
+  const onSave = async () => {
+    const { items: cleaned, error } = cleanTeachingExperiences(items);
+    if (error) { setErr(error); return false; }
+    const y = years.trim().replace(/^(\d+)$/, '$1 Years');
+    setErr('');
+    await save({ teachingExperiences: sortTeachingExperiences(cleaned), teachingYears: y } as Partial<User>);
+  };
+  const upd = (i: number, k: keyof TeachingExperienceItem, v: string) => setItems(items.map((it, x) => (x === i ? { ...it, [k]: v } : it)));
+  const move = (i: number, d: -1 | 1) => { const j = i + d; if (j < 0 || j >= items.length) return; const n = [...items]; [n[i], n[j]] = [n[j], n[i]]; setItems(n); };
+
+  const view = (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-700">Total teaching experience: <b>{u.teachingYears || '—'}</b></p>
+      {list.length === 0 ? <p className="text-sm text-gray-400">No teaching experience added yet.</p> : list.map((it, i) => (
+        <div key={i} className="border rounded-md p-3">
+          <div className="flex flex-col sm:flex-row sm:justify-between gap-1">
+            <div>
+              <p className="font-semibold text-gray-900 text-sm">{it.role || it.place}</p>
+              {it.role && it.place && <p className="text-xs text-blue-600">{it.place}</p>}
+            </div>
+            <p className="text-xs text-gray-500 whitespace-nowrap">{formatTeachingPeriod(it)}</p>
+          </div>
+          {it.description && <p className="text-sm text-gray-700 mt-2">{it.description}</p>}
+        </div>
+      ))}
+    </div>
+  );
+  const edit = (
+    <div className="space-y-3">
+      <Field label="Total teaching experience (years)">
+        <input className={`${inputCls} max-w-[160px]`} value={years} onChange={(e) => setYears(e.target.value)} placeholder="e.g. 12" />
+      </Field>
+      {items.map((it, i) => (
+        <div key={i} className="border border-gray-200 rounded-md p-3 relative">
+          <div className="absolute top-2 right-2 flex gap-2 text-xs text-gray-400">
+            <button type="button" onClick={() => move(i, -1)} className="hover:text-gray-700" title="Move up">↑</button>
+            <button type="button" onClick={() => move(i, 1)} className="hover:text-gray-700" title="Move down">↓</button>
+            <button type="button" onClick={() => setItems(items.filter((_, x) => x !== i))} className="hover:text-red-500">Delete</button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pr-24 sm:pr-28">
+            <input className={inputCls} value={it.role} onChange={(e) => upd(i, 'role', e.target.value)} placeholder="Role (e.g. Assistant Professor)" />
+            <input className={inputCls} value={it.place} onChange={(e) => upd(i, 'place', e.target.value)} placeholder="Place (e.g. Namseoul University, Cheonan)" />
+          </div>
+          <div className="flex flex-wrap items-center gap-2 mt-2">
+            <input className={`${inputCls} w-28`} value={it.start} onChange={(e) => upd(i, 'start', e.target.value)} placeholder="From (2019)" />
+            <span className="text-gray-400">–</span>
+            <input className={`${inputCls} w-28`} value={it.end === 'present' ? '' : it.end} disabled={it.end === 'present'}
+              onChange={(e) => upd(i, 'end', e.target.value)} placeholder="To (2022)" />
+            <label className="flex items-center gap-1 text-xs text-gray-600">
+              <input type="checkbox" checked={it.end === 'present'} onChange={(e) => upd(i, 'end', e.target.checked ? 'present' : '')} /> Present
+            </label>
+          </div>
+          <textarea className={`${inputCls} mt-2`} rows={2} value={it.description ?? ''} onChange={(e) => upd(i, 'description', e.target.value)} placeholder="Details (optional)" />
+        </div>
+      ))}
+      <button type="button" onClick={() => setItems([...items, emptyTeaching()])}
+        className="w-full py-2 border border-dashed border-gray-300 rounded-md text-sm text-gray-600 hover:bg-gray-50">+ Add experience</button>
+      <p className="text-xs text-gray-400">Dates: YYYY or YYYY.MM (e.g. 2019.03). Newest first is shown to parents at camp info sessions.</p>
+      {err && <p className="text-xs text-red-600">{err}</p>}
+    </div>
+  );
+  return (
+    <EditableSection id="teaching-experience" title="Teaching Experience" view={view} edit={edit} onSave={onSave}
+      onStartEdit={() => { setItems(list.length ? list.map((x) => ({ ...x })) : [emptyTeaching()]); setYears(u.teachingYears ?? ''); setErr(''); }} />
+  );
 }

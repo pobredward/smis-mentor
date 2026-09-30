@@ -8,6 +8,8 @@ export * from './eslBook';
 export * from './timetableGuide';
 export * from './campDayPlan';
 export * from './lodging';
+export * from './campRoster';
+export * from './teachingExperience';
 export * from './permission';
 export * from './evaluation';
 export * from './sms';

@@ -16,8 +16,9 @@ import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useCampDataPrefetch } from '@/hooks/useCampDataPrefetch';
 import NotificationSettingsCard from '@/components/profile/NotificationSettingsCard';
+import MyCampRosterCard from '@/components/profile/MyCampRosterCard';
 import LanguageSettingCard from '@/components/profile/LanguageSettingCard';
-import { BasicInfoSection, CampProfileSection, RrnSection, AddressSection, EducationSection, ExperienceSection, IntroSection, ReferralSection } from '@/components/profile/ProfileSections';
+import { BasicInfoSection, CampProfileSection, RrnSection, AddressSection, EducationSection, ExperienceSection, IntroSection, ReferralSection, TeachingExperienceSection } from '@/components/profile/ProfileSections';
 import { L } from '@smis-mentor/shared';
 
 export default function ProfilePage() {
@@ -1097,11 +1098,17 @@ export default function ProfilePage() {
           </div>
         </div>
 
+        {/* 이번 캠프 배정 — 관리자 '캠프 선생님 표' (반·강의실·방·항공) */}
+        <MyCampRosterCard />
+
         {/* 캠프 참가 정보 (캠프 코드가 있는 멘토·원어민) */}
         <CampProfileSection />
 
         {/* 원어민 주소 */}
         {isForeign && <AddressSection />}
+
+        {/* 원어민 경력 — 역할·장소·기간·내용 (설명회 '원어민 선생님' 화면과 연동) */}
+        {isForeign && <TeachingExperienceSection />}
 
         {/* 원어민 제출 서류 (in-place 업로드) */}
         {isForeign && userData.foreignTeacher && (

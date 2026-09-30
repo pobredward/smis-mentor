@@ -541,6 +541,13 @@ service cloud.firestore {
     // 역할: admin(전체 CRUD), 캠프 스태프(읽기)
     // 용도: 임시데이터 on/off 설정 (useTemporaryData), sheetColumnMap
     // ──────────────────────────────────────────────────────────────
+    // campRosters 컬렉션 (캠프 선생님 표 — 관리자가 동기화 리스트를 붙여넣어 저장)
+    // 역할: 캠프 스태프(읽기), 쓰기는 서버(Admin SDK)만. 민감 정보(주민번호·여권·휴대폰)는 여기 두지 않는다
+    match /campRosters/{jobCodeId} {
+      allow read: if isCampStaff();
+      allow write: if false;
+    }
+
     match /campSettings/{campCode} {
       allow read: if isCampStaff();
       allow create, update: if isAdmin();

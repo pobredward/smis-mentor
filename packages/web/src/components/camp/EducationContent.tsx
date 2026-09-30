@@ -2,6 +2,7 @@
 
 import { useAuth } from '@/contexts/AuthContext';
 import CampContentList from './CampContentList';
+import CampRosterGroups from './CampRosterGroups';
 import { L } from '@smis-mentor/shared';
 
 export default function EducationContent() {
@@ -9,6 +10,9 @@ export default function EducationContent() {
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
 
   return (
+    <>
+    {/* 관리자가 '캠프 선생님 표'에 넣은 그룹·반·항공 정보 (없으면 안 보임) */}
+    <CampRosterGroups />
     <CampContentList
       category="education"
       linkType="educationLinks"
@@ -23,5 +27,6 @@ export default function EducationContent() {
       emptyTitle={L('content.noEducationMaterialsYet')}
       emptyDescription={[L('content.eduEmptyLine1'), L('content.eduEmptyLine2')]}
     />
+    </>
   );
 }

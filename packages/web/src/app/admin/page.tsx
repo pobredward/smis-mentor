@@ -55,10 +55,22 @@ export default function AdminDashboard() {
       title: '교육 관련',
       items: [
         {
-          title: '캠프별 유저 조회',
+          title: '한국인 멘토 선생님',
           href: '/admin/user-check',
           iconClass: 'text-red-600',
           icon: <IoSearch className="w-5 h-5" />,
+        },
+        {
+          title: '원어민 선생님',
+          href: '/admin/foreign-teachers',
+          iconClass: 'text-sky-600',
+          icon: <IoSearch className="w-5 h-5" />,
+        },
+        {
+          title: '선생님 명단 관리',
+          href: '/admin/camp-roster',
+          iconClass: 'text-emerald-600',
+          icon: <IoPeople className="w-5 h-5" />,
         },
         {
           title: '수업 템플릿 관리',

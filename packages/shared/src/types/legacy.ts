@@ -137,6 +137,13 @@ export interface User {
     applicationDate?: Timestamp;
   };
 
+  /** 원어민 소개 — 국적 · 총 경력 연수("18 Years") · 경력 목록 (마이페이지에서 작성) */
+  nationality?: string;
+  teachingYears?: string;
+  teachingExperiences?: import('./teachingExperience').TeachingExperienceItem[];
+  /** 예전 자유 글 경력 (DB 시트 원문) */
+  teachingExperience?: string;
+
   // 활성화된 캠프 코드 (최근 추가)
   activeJobExperienceId?: string;
   /** 관리자가 캠프를 임시로 활성화했을 때의 jobCode id */
