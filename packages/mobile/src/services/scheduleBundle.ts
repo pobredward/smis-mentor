@@ -36,7 +36,11 @@ export interface ScheduleBundle {
   classInfo: Record<string, CampClassInfo>;
   /** 그룹명 → 그 그룹의 모든 Day 가 함께 쓰는 값 */
   timetableCommon: Record<string, CampTimetableCommon>;
-  /** 칸 이름 → 그 칸을 눌렀을 때 뜨는 설명 (캠프당 한 벌) */
+  /**
+   * 칸 이름 → 그 칸을 눌렀을 때 뜨는 설명 (캠프당 한 벌).
+   * 멘토·부매니저용과 원어민용(foreign)이 함께 들어 있다 — 누구에게 무엇을 보일지는
+   * 화면(ScheduleScreen)이 guideAudienceOf(role) 로 고른다. 관리자는 둘 다 봐야 해서 여기서 거르지 않는다.
+   */
   timetableGuides: Record<string, TimetableGuide>;
   /** L-Code → 교재 3권 (전사 공용) */
   books: EslBookList;

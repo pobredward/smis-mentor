@@ -2445,6 +2445,9 @@ export const ko = {
     addVariant: "다른 날짜용 표 추가",
     variantAdded: "{{v0}} 표를 만들었습니다",
     variantNeedsSave: "먼저 이 표를 저장해 주세요",
+    backToTimetable: "시간표로",
+    guideEmpty: "아직 설명이 없습니다. 관리자가 시간표 편집 > 칸 설명에서 쓸 수 있습니다.",
+    watchVideo: "동영상 보기",
   },
   settings: {
     allNotifications: "전체 알림",

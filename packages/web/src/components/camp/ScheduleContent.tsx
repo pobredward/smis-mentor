@@ -11,6 +11,7 @@ import {
   getCampTimetableCommon,
   getCampTimetableGuides,
   findGuide,
+  guideAudienceOf,
   guideKeyOf,
   hasGuideContent,
   getCampGroups,
@@ -90,6 +91,8 @@ export default function ScheduleContent() {
   const { userData } = useAuth();
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
   const isAdmin = userData?.role === 'admin';
+  /** 칸 설명 — 원어민은 원어민용, 나머지는 멘토·부매니저용 (관리자는 둘 다) */
+  const guideAudience = guideAudienceOf(userData?.role);
 
   const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
 
@@ -295,14 +298,17 @@ export default function ScheduleContent() {
       .filter((x): x is { slot: (typeof x)['slot']; table: CampTimetable } => !!x.table);
   }, [current, timetables, derived, groups, activeGroup, campCode, activeJobCodeId, timetableCommon]);
 
-  /** 설명이 실제로 들어 있는 칸 이름만 — 빈 칸을 눌러 봐야 허탕이라 */
+  /**
+   * 설명이 실제로 들어 있는 칸 이름만 — 빈 칸을 눌러 봐야 허탕이라.
+   * 보는 사람에게 보일 설명 기준 (원어민 → 원어민용, 멘토·부매니저 → 멘토용, 관리자 → 둘 중 하나라도)
+   */
   const guidedLabels = useMemo(() => {
     const keys = new Set<string>();
     Object.entries(timetableGuides).forEach(([key, guide]) => {
-      if (hasGuideContent(guide)) keys.add(guideKeyOf(key));
+      if (hasGuideContent(guide, isAdmin ? undefined : guideAudience)) keys.add(guideKeyOf(key));
     });
     return keys;
-  }, [timetableGuides]);
+  }, [timetableGuides, isAdmin, guideAudience]);
 
   /** Day·그룹을 바꾸면 열어 둔 세부페이지는 닫는다 */
   useEffect(() => setGuideLabel(null), [activeCategory, activeGroup]);
@@ -464,6 +470,8 @@ export default function ScheduleContent() {
           <GuideDetail
             label={guideLabel}
             guide={findGuide(guideLabel, timetableGuides)}
+            audience={guideAudience}
+            isAdmin={isAdmin}
             onBack={() => setGuideLabel(null)}
           />
         ) : (
@@ -473,6 +481,8 @@ export default function ScheduleContent() {
         <GuideDetail
           label={guideLabel}
           guide={findGuide(guideLabel, timetableGuides)}
+          audience={guideAudience}
+          isAdmin={isAdmin}
           onBack={() => setGuideLabel(null)}
         />
       ) : current ? (

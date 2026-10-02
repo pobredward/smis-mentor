@@ -160,6 +160,7 @@ export interface CampSettings {
   /**
    * 칸 이름(소문자 정규화) → 그 칸을 눌렀을 때 뜨는 설명.
    * Day 가 아니라 캠프 단위라, Breakfast 처럼 여러 Day 에 걸치는 것도 한 번만 쓴다.
+   * 칸마다 멘토·부매니저용과 원어민용(foreign)을 따로 둘 수 있다 (timetableGuide.ts).
    */
   timetableGuides?: Record<string, TimetableGuide>;
   /** 숙소 — 방 용도·선생님 배치·장소 용도 (건물 자체는 shared/data/lodging 에 고정) */

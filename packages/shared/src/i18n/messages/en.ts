@@ -2447,6 +2447,9 @@ export const en: Messages = {
     addVariant: "Add a table for another date",
     variantAdded: "Created the {{v0}} table",
     variantNeedsSave: "Save this table first",
+    backToTimetable: "Back to timetable",
+    guideEmpty: "No description yet.",
+    watchVideo: "Watch video",
   },
   settings: {
     allNotifications: "All notifications",

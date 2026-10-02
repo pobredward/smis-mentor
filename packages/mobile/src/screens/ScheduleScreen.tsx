@@ -15,6 +15,7 @@ import {
   timetableVariants,
   monthDayLabel,
   findGuide,
+  guideAudienceOf,
   guideKeyOf,
   hasGuideContent,
   teacherMapOf,
@@ -81,6 +82,8 @@ export function ScheduleScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const excitingTop = useRef(0);
   const isAdmin = userData?.role === 'admin';
+  /** 칸 설명 — 원어민은 원어민용, 나머지는 멘토·부매니저용 (관리자는 둘 다) */
+  const guideAudience = guideAudienceOf(userData?.role);
 
   // 지난번에 고른 그룹 복원
   useEffect(() => {
@@ -116,14 +119,17 @@ export function ScheduleScreen() {
 
   /** 지금 열어 둔 세부페이지의 칸 이름 */
   const [guideLabel, setGuideLabel] = useState<string | null>(null);
-  /** 설명이 실제로 들어 있는 칸 이름만 — 빈 칸을 눌러 봐야 허탕이라 */
+  /**
+   * 설명이 실제로 들어 있는 칸 이름만 — 빈 칸을 눌러 봐야 허탕이라.
+   * 보는 사람에게 보일 설명 기준 (원어민 → 원어민용, 멘토·부매니저 → 멘토용, 관리자 → 둘 중 하나라도)
+   */
   const guidedLabels = useMemo(() => {
     const keys = new Set<string>();
     Object.entries(data?.timetableGuides ?? {}).forEach(([key, guide]) => {
-      if (hasGuideContent(guide)) keys.add(guideKeyOf(key));
+      if (hasGuideContent(guide, isAdmin ? undefined : guideAudience)) keys.add(guideKeyOf(key));
     });
     return keys;
-  }, [data?.timetableGuides]);
+  }, [data?.timetableGuides, isAdmin, guideAudience]);
 
   const myExp = useMemo(
     () =>
@@ -384,6 +390,8 @@ export function ScheduleScreen() {
         <GuideDetail
           label={guideLabel}
           guide={findGuide(guideLabel, data?.timetableGuides)}
+          audience={guideAudience}
+          isAdmin={isAdmin}
           onBack={() => setGuideLabel(null)}
         />
       ) : activeCategory === EXCITING_CATEGORY ? (
@@ -402,6 +410,8 @@ export function ScheduleScreen() {
         <GuideDetail
           label={guideLabel}
           guide={findGuide(guideLabel, data?.timetableGuides)}
+          audience={guideAudience}
+          isAdmin={isAdmin}
           onBack={() => setGuideLabel(null)}
         />
       ) : current ? (

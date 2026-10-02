@@ -156,7 +156,11 @@ export const updateCampTimetableCommon = async (
 };
 
 
-/** campSettings/{campCode}.timetableGuides — 칸 설명 조회 */
+/**
+ * campSettings/{campCode}.timetableGuides — 칸 설명 조회.
+ * 멘토·부매니저용과 원어민용(foreign)이 함께 온다 — 누구에게 무엇을 보일지는 화면이 정한다
+ * (guideAudienceOf · hasGuideContent(g, audience) · guideBodyFor).
+ */
 export const getCampTimetableGuides = async (
   db: Firestore,
   campCode: string
@@ -183,7 +187,8 @@ export const updateCampTimetableGuides = async (
   const cleaned: Record<string, TimetableGuide> = {};
   Object.entries(guides).forEach(([key, guide]) => {
     const g = cleanGuide(guide);
-    if (!g.summary && !g.sections?.length) return;
+    // 멘토·부매니저용도 원어민용도 없으면 뺀다 (원어민용만 있는 칸도 남는다)
+    if (!g.summary && !g.sections?.length && !g.foreign) return;
     cleaned[key] = { ...g, updatedAt: now, ...(userId ? { updatedBy: userId } : {}) };
   });
   const ref = doc(db, 'campSettings', campCode);
