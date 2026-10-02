@@ -2187,6 +2187,8 @@ export const en: Messages = {
     lastDigitsEntered: "Last digits entered",
     lastDigitsNotEntered: "Last digits not entered{{v0}}",
     lastDigitsNotEntered2: "Last digits not entered",
+    lastUsedLogin: "Last used",
+    lastUsedLoginA11y: "You last signed in with this method",
     leaveBlankToKeepThe: "Leave blank to keep the saved value.",
     length: "Length",
     linkApple: "Link Apple",

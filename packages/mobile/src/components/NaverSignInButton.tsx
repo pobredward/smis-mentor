@@ -6,13 +6,16 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import type { SocialUserData } from '@smis-mentor/shared';
+import type { SocialUserData, LastLoginInfo } from '@smis-mentor/shared';
+import { LastLoginMark, lastLoginA11yHint } from './LastLoginMark';
 import { signInWithNaver } from '../services/naverAuthService';
 
 interface NaverSignInButtonProps {
   onSuccess: (socialData: SocialUserData) => void;
   onError: (error: Error) => void;
   disabled?: boolean;
+  /** 이 기기에서 마지막으로 쓴 로그인 방법이면 기록 — '최근 로그인' 꼬리표 표시 */
+  lastUsed?: LastLoginInfo | null;
 }
 
 /**
@@ -25,6 +28,7 @@ export function NaverSignInButton({
   onSuccess,
   onError,
   disabled = false,
+  lastUsed = null,
 }: NaverSignInButtonProps) {
   const [loading, setLoading] = useState(false);
 
@@ -43,24 +47,27 @@ export function NaverSignInButton({
   };
 
   return (
-    <TouchableOpacity
-      style={[
-        styles.button,
-        (disabled || loading) && styles.buttonDisabled,
-      ]}
-      onPress={handlePress}
-      disabled={disabled || loading}
-      activeOpacity={0.7}
-    >
-      {loading ? (
-        <ActivityIndicator color="#ffffff" />
-      ) : (
-        <View style={styles.content}>
-          <Text style={styles.icon}>N</Text>
-          <Text style={styles.text}>네이버로 계속하기</Text>
-        </View>
-      )}
-    </TouchableOpacity>
+    <LastLoginMark active={!!lastUsed} caption={lastUsed?.maskedEmail}>
+      <TouchableOpacity
+        style={[
+          styles.button,
+          (disabled || loading) && styles.buttonDisabled,
+        ]}
+        onPress={handlePress}
+        disabled={disabled || loading}
+        activeOpacity={0.7}
+        accessibilityHint={lastLoginA11yHint(!!lastUsed)}
+      >
+        {loading ? (
+          <ActivityIndicator color="#ffffff" />
+        ) : (
+          <View style={styles.content}>
+            <Text style={styles.icon}>N</Text>
+            <Text style={styles.text}>네이버로 계속하기</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </LastLoginMark>
   );
 }
 

@@ -30,6 +30,11 @@ import {
   createUserLookup,
   type SocialProof,
   type SocialUserData,
+  LAST_LOGIN_STORAGE_KEY,
+  serializeLastLogin,
+  parseLastLogin,
+  lastLoginMethodOfProvider,
+  type LastLoginInfo,
 } from '@smis-mentor/shared';
 
 /** 웹 API 베이스 URL (www 리디렉션 시 POST 손실 방지) */
@@ -65,6 +70,34 @@ export async function persistLoginRememberEmail(email: string): Promise<void> {
     AsyncStorage.setItem(STORAGE_KEYS.SAVED_EMAIL, email),
     AsyncStorage.setItem(STORAGE_KEYS.LOGIN_EXPIRY, expiryDate.toISOString()),
   ]);
+}
+
+/**
+ * 최근 로그인 방법 기록 — 로그인 화면의 '최근 로그인' 표시용.
+ * 방법과 가린 이메일(ab***@gmail.com)만 남긴다 (비밀번호·토큰 X).
+ * 로그아웃(clearLoginRememberEmail)에서 지우지 않는다 — 로그인이 풀린 뒤에 보여주는 게 목적.
+ */
+export async function persistLastLoginMethod(
+  /** 'password' 또는 소셜 providerId ('google.com', 'apple.com', 'naver' …) */
+  methodOrProviderId: string | null | undefined,
+  email?: string | null
+): Promise<void> {
+  const method = lastLoginMethodOfProvider(methodOrProviderId);
+  if (!method) return;
+  try {
+    await AsyncStorage.setItem(LAST_LOGIN_STORAGE_KEY, serializeLastLogin(method, email));
+  } catch (error) {
+    logger.warn('최근 로그인 방법 저장 실패 (무시):', error);
+  }
+}
+
+/** 이 기기에서 마지막으로 성공한 로그인 방법 (없으면 null) */
+export async function getLastLoginMethod(): Promise<LastLoginInfo | null> {
+  try {
+    return parseLastLogin(await AsyncStorage.getItem(LAST_LOGIN_STORAGE_KEY));
+  } catch {
+    return null;
+  }
 }
 
 async function clearLoginRememberEmail(): Promise<void> {

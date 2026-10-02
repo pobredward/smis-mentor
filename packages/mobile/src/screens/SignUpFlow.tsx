@@ -6,7 +6,7 @@ import { SignUpStep2Screen } from './SignUpStep2Screen';
 import { SignUpStep3Screen } from './SignUpStep3Screen';
 import { SignUpStep4Screen } from './SignUpStep4Screen';
 import type { SocialUserData, SignUpState } from '@smis-mentor/shared';
-import { signUp, persistLoginRememberEmail, signUpWithSocialToken, completeSignupViaApi } from '../services/authService';
+import { signUp, persistLoginRememberEmail, persistLastLoginMethod, signUpWithSocialToken, completeSignupViaApi } from '../services/authService';
 import { ConsentCheckbox } from '../components/ConsentCheckbox';
 
 interface SignUpFlowProps {
@@ -88,6 +88,8 @@ export function SignUpFlow({
       if (rememberEmail) {
         await persistLoginRememberEmail(rememberEmail);
       }
+      // 로그인 화면 '최근 로그인' 표시용 (가입한 소셜 방법)
+      await persistLastLoginMethod(data.socialData?.providerId, data.socialData?.email || rememberEmail);
 
       const { auth: firebaseAuth } = await import('../config/firebase');
 
@@ -169,6 +171,11 @@ export function SignUpFlow({
       if (rememberEmail) {
         await persistLoginRememberEmail(rememberEmail);
       }
+      // 로그인 화면 '최근 로그인' 표시용 (소셜 가입이면 그 소셜, 아니면 이메일)
+      await persistLastLoginMethod(
+        finalData.isSocialSignUp && finalData.socialData ? finalData.socialData.providerId : 'password',
+        finalData.isSocialSignUp ? finalData.socialData?.email || rememberEmail : rememberEmail
+      );
 
       if (finalData.isSocialSignUp && finalData.socialData) {
         const { auth: firebaseAuth } = await import('../config/firebase');

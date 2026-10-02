@@ -9,13 +9,16 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { SocialUserData } from '@smis-mentor/shared';
+import type { SocialUserData, LastLoginInfo } from '@smis-mentor/shared';
+import { LastLoginMark, lastLoginA11yHint } from './LastLoginMark';
 import { signInWithApple, isAppleAuthAvailable } from '../services/appleAuthService';
 
 interface AppleSignInButtonProps {
   onSuccess: (socialData: SocialUserData, credential?: any) => void;
   onError: (error: Error) => void;
   disabled?: boolean;
+  /** 이 기기에서 마지막으로 쓴 로그인 방법이면 기록 — '최근 로그인' 꼬리표 표시 */
+  lastUsed?: LastLoginInfo | null;
 }
 
 /**
@@ -27,6 +30,7 @@ export function AppleSignInButton({
   onSuccess,
   onError,
   disabled = false,
+  lastUsed = null,
 }: AppleSignInButtonProps) {
   const [loading, setLoading] = useState(false);
   const [isAvailable, setIsAvailable] = useState(false);
@@ -78,24 +82,27 @@ export function AppleSignInButton({
   }
 
   return (
-    <TouchableOpacity
-      style={[
-        styles.button,
-        (disabled || loading) && styles.buttonDisabled,
-      ]}
-      onPress={handlePress}
-      disabled={disabled || loading}
-      activeOpacity={0.7}
-    >
-      {loading ? (
-        <ActivityIndicator color="#FFFFFF" />
-      ) : (
-        <View style={styles.content}>
-          <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
-          <Text style={styles.text}>Apple로 계속하기</Text>
-        </View>
-      )}
-    </TouchableOpacity>
+    <LastLoginMark active={!!lastUsed} caption={lastUsed?.maskedEmail}>
+      <TouchableOpacity
+        style={[
+          styles.button,
+          (disabled || loading) && styles.buttonDisabled,
+        ]}
+        onPress={handlePress}
+        disabled={disabled || loading}
+        activeOpacity={0.7}
+        accessibilityHint={lastLoginA11yHint(!!lastUsed)}
+      >
+        {loading ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <View style={styles.content}>
+            <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
+            <Text style={styles.text}>Apple로 계속하기</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </LastLoginMark>
   );
 }
 

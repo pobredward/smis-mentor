@@ -8,13 +8,16 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import type { SocialUserData } from '@smis-mentor/shared';
+import type { SocialUserData, LastLoginInfo } from '@smis-mentor/shared';
+import { LastLoginMark, lastLoginA11yHint } from './LastLoginMark';
 import { signInWithGoogleDirect } from '../services/googleAuthService';
 
 interface GoogleSignInButtonProps {
   onSuccess: (socialData: SocialUserData, credential?: any) => void;
   onError: (error: Error) => void;
   disabled?: boolean;
+  /** 이 기기에서 마지막으로 쓴 로그인 방법이면 기록 — '최근 로그인' 꼬리표 표시 */
+  lastUsed?: LastLoginInfo | null;
 }
 
 /**
@@ -26,6 +29,7 @@ export function GoogleSignInButton({
   onSuccess,
   onError,
   disabled = false,
+  lastUsed = null,
 }: GoogleSignInButtonProps) {
   const [loading, setLoading] = useState(false);
 
@@ -46,24 +50,27 @@ export function GoogleSignInButton({
   };
 
   return (
-    <TouchableOpacity
-      style={[
-        styles.button,
-        (disabled || loading) && styles.buttonDisabled,
-      ]}
-      onPress={handlePress}
-      disabled={disabled || loading}
-      activeOpacity={0.7}
-    >
-      {loading ? (
-        <ActivityIndicator color="#4285F4" />
-      ) : (
-        <View style={styles.content}>
-          <Ionicons name="logo-google" size={20} color="#4285F4" />
-          <Text style={styles.text}>Google로 계속하기</Text>
-        </View>
-      )}
-    </TouchableOpacity>
+    <LastLoginMark active={!!lastUsed} caption={lastUsed?.maskedEmail}>
+      <TouchableOpacity
+        style={[
+          styles.button,
+          (disabled || loading) && styles.buttonDisabled,
+        ]}
+        onPress={handlePress}
+        disabled={disabled || loading}
+        activeOpacity={0.7}
+        accessibilityHint={lastLoginA11yHint(!!lastUsed)}
+      >
+        {loading ? (
+          <ActivityIndicator color="#4285F4" />
+        ) : (
+          <View style={styles.content}>
+            <Ionicons name="logo-google" size={20} color="#4285F4" />
+            <Text style={styles.text}>Google로 계속하기</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+    </LastLoginMark>
   );
 }
 

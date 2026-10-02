@@ -25,8 +25,10 @@ import {
   getUserById as _getUserById,
   persistLoginRememberEmail,
   getPersistedLoginRememberEmail,
+  persistLastLoginMethod,
+  getLastLoginMethod,
 } from '../services/authService';
-import { GoogleSignInButton, PhoneInputModal, ForeignPhoneInputModal, PasswordInputModal, NaverSignInButton, AppleSignInButton } from '../components';
+import { GoogleSignInButton, PhoneInputModal, ForeignPhoneInputModal, PasswordInputModal, NaverSignInButton, AppleSignInButton, LastLoginMark, lastLoginA11yHint } from '../components';
 import { 
   handleSocialLogin, 
   checkTempAccountByPhone,
@@ -35,7 +37,7 @@ import {
   getSocialProviderName,
 } from '@smis-mentor/shared';
 import { getUserByForeignName } from '../services/authService';
-import type { SocialUserData } from '@smis-mentor/shared';
+import type { SocialUserData, LastLoginInfo, LastLoginMethod } from '@smis-mentor/shared';
 import type { User as LegacyUser } from '@smis-mentor/shared';
 
 // shared가 기대하는 legacy.User 타입과 mobile.User 간의 타입 호환 래퍼
@@ -91,10 +93,14 @@ export function SignInScreen({
   // signIn으로 auth.currentUser가 기존 계정으로 교체될 수 있어,
   // 모달 취소 시 기존 계정을 잘못 삭제하는 것을 방지한다.
   const [socialTempUid, setSocialTempUid] = useState<string | null>(null);
+  // 이 기기에서 마지막으로 성공한 로그인 방법 — 해당 버튼에 '최근 로그인' 표시 (로그아웃해도 유지)
+  const [lastLogin, setLastLogin] = useState<LastLoginInfo | null>(null);
+  const lastUsedFor = (method: LastLoginMethod) => (lastLogin?.method === method ? lastLogin : null);
 
   // 컴포넌트 마운트 시 저장된 로그인 정보 확인
   React.useEffect(() => {
     checkSavedLogin();
+    getLastLoginMethod().then(setLastLogin).catch(() => {});
   }, []);
 
   const checkSavedLogin = async () => {
@@ -133,6 +139,7 @@ export function SignInScreen({
     try {
       await signIn(email, password);
       await persistLoginRememberEmail(email);
+      await persistLastLoginMethod('password', email);
 
       onSignInSuccess();
     } catch (error: any) {
@@ -259,6 +266,7 @@ export function SignInScreen({
             }
 
             await persistLoginRememberEmail(result.user.email);
+            await persistLastLoginMethod(socialUserData.providerId, socialUserData.email || result.user.email);
             onSignInSuccess();
           } catch (authError: any) {
             logger.error('❌ Firebase Auth 로그인 실패:', authError);
@@ -363,6 +371,7 @@ export function SignInScreen({
             const { signInWithCustomToken, buildSocialProof } = await import('../services/authService');
             await signInWithCustomToken(result.user.userId, await buildSocialProof(socialUserData));
             await persistLoginRememberEmail(result.user.email);
+            await persistLastLoginMethod(socialUserData.providerId, socialUserData.email || result.user.email);
 
             logger.info('✅ Firebase Auth 로그인 완료');
             onSignInSuccess();
@@ -481,6 +490,7 @@ export function SignInScreen({
             }
 
             await persistLoginRememberEmail(result.user.email);
+            await persistLastLoginMethod(socialUserData.providerId, socialUserData.email || result.user.email);
             onSignInSuccess();
           } catch (authError: any) {
             logger.error('❌ Firebase Auth 로그인 실패:', authError);
@@ -619,6 +629,7 @@ export function SignInScreen({
               const { signInWithCustomToken: signInCustom, buildSocialProof: buildProof } = await import('../services/authService');
               await signInCustom(existingUser.userId || (existingUser as any).id, await buildProof(socialData));
               await persistLoginRememberEmail(existingUser.email);
+              await persistLastLoginMethod(socialData.providerId, socialData.email || existingUser.email);
               onSignInSuccess();
             } catch (loginError) {
               logger.error('❌ 원어민 재로그인 실패:', loginError);
@@ -911,6 +922,8 @@ export function SignInScreen({
       );
 
       await persistLoginRememberEmail(existingUserEmail);
+      // 소셜 버튼으로 시작해 기존 계정에 연동했으니 다음에도 그 소셜로 들어오면 된다
+      await persistLastLoginMethod(socialData.providerId, socialData.email || existingUserEmail);
 
       setShowPasswordModal(false);
       setSocialTempUid(null);
@@ -1115,21 +1128,24 @@ export function SignInScreen({
               </View>
             </View>
 
-            <TouchableOpacity
-              style={[
-                styles.loginButton,
-                isLoading && styles.loginButtonDisabled,
-              ]}
-              onPress={handleLogin}
-              disabled={isLoading}
-              activeOpacity={0.7}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <Text style={styles.loginButtonText}>로그인</Text>
-              )}
-            </TouchableOpacity>
+            <LastLoginMark active={!!lastUsedFor('password')} caption={lastUsedFor('password')?.maskedEmail}>
+              <TouchableOpacity
+                style={[
+                  styles.loginButton,
+                  isLoading && styles.loginButtonDisabled,
+                ]}
+                onPress={handleLogin}
+                disabled={isLoading}
+                activeOpacity={0.7}
+                accessibilityHint={lastLoginA11yHint(!!lastUsedFor('password'))}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.loginButtonText}>로그인</Text>
+                )}
+              </TouchableOpacity>
+            </LastLoginMark>
 
             {/* 비밀번호 찾기 / 회원가입 버튼 */}
             <View style={styles.actionButtons}>
@@ -1188,6 +1204,7 @@ export function SignInScreen({
               onSuccess={handleGoogleSignInSuccess}
               onError={handleGoogleSignInError}
               disabled={isLoading}
+              lastUsed={lastUsedFor('google')}
             />
             
             {/* 네이버 로그인 버튼 */}
@@ -1195,6 +1212,7 @@ export function SignInScreen({
               onSuccess={handleNaverSignInSuccess}
               onError={handleNaverSignInError}
               disabled={isLoading}
+              lastUsed={lastUsedFor('naver')}
             />
             
             {/* Apple 로그인 버튼 (iOS만) */}
@@ -1202,6 +1220,7 @@ export function SignInScreen({
               onSuccess={handleAppleSignInSuccess}
               onError={handleAppleSignInError}
               disabled={isLoading}
+              lastUsed={lastUsedFor('apple')}
             />
           </View>
         </View>

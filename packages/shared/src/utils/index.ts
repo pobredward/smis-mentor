@@ -26,3 +26,4 @@ export * from './id';
 export * from './studentModal';
 export * from './whereabouts';
 export * from './timetableVariants';
+export * from './lastLogin';

@@ -9,6 +9,7 @@ export { TemplateSelector } from './TemplateSelector';
 export { GoogleSignInButton } from './GoogleSignInButton';
 export { NaverSignInButton } from './NaverSignInButton';
 export { AppleSignInButton } from './AppleSignInButton';
+export { LastLoginMark, lastLoginA11yHint } from './LastLoginMark';
 export { PhoneInputModal } from './PhoneInputModal';
 export { ForeignPhoneInputModal } from './ForeignPhoneInputModal';
 export { PasswordInputModal } from './PasswordInputModal';

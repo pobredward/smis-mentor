@@ -1,7 +1,7 @@
 "use client";
 import { logger } from '@smis-mentor/shared';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
@@ -15,6 +15,9 @@ import Button from '@/components/common/Button';
 import GoogleSignInButton from '@/components/common/GoogleSignInButton';
 import NaverSignInButton from '@/components/common/NaverSignInButton';
 import AppleSignInButton from '@/components/common/AppleSignInButton';
+import LastLoginMark from '@/components/common/LastLoginMark';
+import { rememberLastLogin, readLastLogin } from '@/lib/lastLogin';
+import type { LastLoginInfo, LastLoginMethod } from '@smis-mentor/shared';
 import PhoneInputModal from '@/components/common/PhoneInputModal';
 import ForeignPhoneInputModal from '@/components/common/ForeignPhoneInputModal';
 import RoleSelectionModal from '@/components/common/RoleSelectionModal';
@@ -79,6 +82,12 @@ export function SignInClient() {
   // linkSocialToExistingAccount 내부 signIn으로 auth.currentUser가 교체될 수 있어,
   // 모달 닫기 시 삭제 대상이 기존 계정으로 바뀌는 것을 방지한다.
   const [socialTempUid, setSocialTempUid] = useState<string | null>(null);
+  // 이 브라우저에서 마지막으로 성공한 로그인 방법 — 해당 버튼에 '최근 로그인' 표시 (로그아웃해도 유지)
+  const [lastLogin, setLastLogin] = useState<LastLoginInfo | null>(null);
+  useEffect(() => {
+    setLastLogin(readLastLogin());
+  }, []);
+  const lastUsedFor = (method: LastLoginMethod) => (lastLogin?.method === method ? lastLogin : null);
   
   const {
     register,
@@ -112,6 +121,8 @@ export function SignInClient() {
         return;
       }
       
+      rememberLastLogin('password', data.email);
+
       // 멘토이고 프로필이 미완성인 경우 체크
       const isMentor = userRecord?.role === 'mentor';
       const hasProfileImage = !!userRecord?.profileImage;
@@ -285,6 +296,7 @@ export function SignInClient() {
           }
         }
         
+        rememberLastLogin(data.providerId, data.email || result.user?.email);
         toast.success('로그인에 성공했습니다!');
         setTimeout(() => {
           const params = new URLSearchParams(window.location.search);
@@ -525,6 +537,7 @@ export function SignInClient() {
                   }
                 }
 
+                rememberLastLogin(socialData.providerId, socialData.email || existingUser.email);
                 toast.success('Welcome back! Logging you in...');
                 setTimeout(() => {
                   const params = new URLSearchParams(window.location.search);
@@ -859,6 +872,9 @@ export function SignInClient() {
         arrayUnion // ✅ arrayUnion 전달
       );
       
+      // 소셜 버튼으로 시작해 기존 계정에 연동했으니 다음에도 그 소셜로 들어오면 된다
+      rememberLastLogin(socialData.providerId, socialData.email || existingUserEmail);
+
       // providerId에 따라 메시지 구별
       const providerName = socialData.providerId === 'google.com' 
         ? 'Google' 
@@ -979,15 +995,21 @@ export function SignInClient() {
               )}
             </div>
             
-            <Button
-              type="submit"
-              variant="primary"
-              fullWidth
-              isLoading={isLoading}
-              className="!mt-6 !bg-blue-600 hover:!bg-blue-700 !py-3 !text-base !font-semibold"
+            <LastLoginMark
+              className="!mt-6"
+              active={!!lastUsedFor('password')}
+              caption={lastUsedFor('password')?.maskedEmail}
             >
-              로그인
-            </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                fullWidth
+                isLoading={isLoading}
+                className="!bg-blue-600 hover:!bg-blue-700 !py-3 !text-base !font-semibold"
+              >
+                로그인
+              </Button>
+            </LastLoginMark>
             
             {/* 구분선 */}
             <div className="relative flex items-center justify-center py-4">
@@ -1001,23 +1023,29 @@ export function SignInClient() {
             
             {/* 소셜 로그인 버튼들 */}
             <div className="space-y-3">
-              <GoogleSignInButton
-                onSuccess={handleGoogleSignInSuccess}
-                onError={handleGoogleSignInError}
-                disabled={isLoading}
-              />
+              <LastLoginMark active={!!lastUsedFor('google')} caption={lastUsedFor('google')?.maskedEmail}>
+                <GoogleSignInButton
+                  onSuccess={handleGoogleSignInSuccess}
+                  onError={handleGoogleSignInError}
+                  disabled={isLoading}
+                />
+              </LastLoginMark>
               
-              <NaverSignInButton
-                onSuccess={handleGoogleSignInSuccess}
-                onError={handleNaverSignInError}
-                disabled={isLoading}
-              />
+              <LastLoginMark active={!!lastUsedFor('naver')} caption={lastUsedFor('naver')?.maskedEmail}>
+                <NaverSignInButton
+                  onSuccess={handleGoogleSignInSuccess}
+                  onError={handleNaverSignInError}
+                  disabled={isLoading}
+                />
+              </LastLoginMark>
               
-              <AppleSignInButton
-                onSuccess={handleGoogleSignInSuccess}
-                onError={handleAppleSignInError}
-                disabled={isLoading}
-              />
+              <LastLoginMark active={!!lastUsedFor('apple')} caption={lastUsedFor('apple')?.maskedEmail}>
+                <AppleSignInButton
+                  onSuccess={handleGoogleSignInSuccess}
+                  onError={handleAppleSignInError}
+                  disabled={isLoading}
+                />
+              </LastLoginMark>
             </div>
             
             {/* 비밀번호 찾기 / 회원가입 버튼 */}

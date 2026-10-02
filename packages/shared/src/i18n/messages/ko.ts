@@ -2185,6 +2185,8 @@ export const ko = {
     lastDigitsEntered: "뒷자리 입력됨",
     lastDigitsNotEntered: "뒷자리 미입력{{v0}}",
     lastDigitsNotEntered2: "뒷자리 미입력",
+    lastUsedLogin: "최근 로그인",
+    lastUsedLoginA11y: "최근에 이 방법으로 로그인했어요",
     leaveBlankToKeepThe: "비워두면 기존 저장 정보가 유지됩니다.",
     length: "총기장",
     linkApple: "Apple 연동",
