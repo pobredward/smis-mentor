@@ -275,9 +275,9 @@ export const PAGE_REGISTRY: PageMeta[] = [
     hasContent: false,
   },
   {
-    path: '/admin/upload',
+    path: '/admin/lesson-templates',
     title: '수업 템플릿 관리',
-    description: '수업 자료 템플릿 업로드/관리 도구.',
+    description: '캠프별 수업 자료 템플릿(주제·소제목·대상) 관리 도구.',
     access: 'admin',
     tags: ['수업', '템플릿'],
     hasContent: false,

@@ -121,7 +121,7 @@ export function ExcitingDayList({ set, focusDate, onFocusLayout, groupName, guid
           <View key={date} onLayout={focused && onFocusLayout ? (e) => onFocusLayout(e.nativeEvent.layout.y) : undefined}>
             {/* 제목 — 시간표 아래 붙는 인문학 표와 같은 모양 */}
             <View style={s.exTitleRow}>
-              <Text style={s.exTitle}>{monthDayLabel(date)} ({weekdayOf(date)}) Exciting Day</Text>
+              <Text style={s.exTitle}>{monthDayLabel(date)} ({weekdayOf(date)}) {findDayKind(entry.kind)?.short ?? 'Exciting Day'}</Text>
               {isToday && <Text style={s.todayBadge}>{L('schedule.today')}</Text>}
               {!!entry.note && <Text style={s.exTitleNote}>{entry.note}</Text>}
             </View>

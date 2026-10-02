@@ -39,7 +39,14 @@ import {
   mergedColumnName,
   normalizeGroupKey,
   resolveGroups,
-  resolveTimetable,
+  resolveTimetables,
+  savedTimetablesFor,
+  planDatesFor,
+  nextUnclaimedDate,
+  getCampDayPlan,
+  daySetForGroup,
+  monthDayLabel,
+  L,
   dutyByBlock,
   sortBlocks,
   timetableGroupNames,
@@ -202,18 +209,39 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
   const showRotationFill = !isCommon && !!findCategory(activeCategory)?.rotation;
   const activeGroup = (editGroup && groups.find((g) => isSameGroup(g, editGroup))) || groups[0] || null;
 
+  /** 같은 Day·그룹의 날짜별 표 (예: 고잉업 1/21 · 1/28) — 두 장 이상이면 위에서 골라 고친다 (web 과 같다) */
+  const variantList = useMemo(
+    () => (isCommon ? [] : savedTimetablesFor(timetables, activeCategory, activeGroup)),
+    [isCommon, timetables, activeCategory, activeGroup]
+  );
+  const [variantId, setVariantId] = useState<string | null>(null);
+  const activeVariantId = variantList.find((t) => t.id === variantId)?.id ?? variantList[0]?.id ?? null;
+
+  /** 일정표 — 이 Day 가 열리는 날짜를 골라 '이 표를 쓰는 날' 로 붙인다 */
+  const { data: dayPlan = null } = useQuery({
+    queryKey: ['campDayPlan', campCode],
+    queryFn: () => getCampDayPlan(db, campCode),
+    enabled: !!campCode,
+    staleTime: 5 * 60 * 1000,
+  });
+  const daySet = useMemo(() => daySetForGroup(dayPlan, activeGroup), [dayPlan, activeGroup]);
+  const planDates = useMemo(
+    () => (isCommon ? [] : planDatesFor(daySet, activeCategory, campCode)),
+    [isCommon, daySet, activeCategory, campCode]
+  );
+
   /**
    * 고른 Day·그룹의 표. 저장된 게 있으면 그것을, 없으면 기본 틀을 초안으로 연다.
    * 저장을 누르면 그때 이 캠프 전용 표로 만들어진다.
    */
-  const draftKey = `${activeCategory}::${normalizeGroupKey(activeGroup)}`;
+  const draftKey = `${activeCategory}::${normalizeGroupKey(activeGroup)}::${activeVariantId ?? ''}`;
   const loadedKey = useRef<string | null>(null);
   useEffect(() => {
     // 편집 중인데 데이터만 새로고침된 경우에는 고쳐 둔 내용을 지우지 않는다
     if (loadedKey.current === draftKey && draft) return;
-    const resolved = isCommon
-      ? buildCommonDraft()
-      : resolveTimetable({
+    const list = isCommon
+      ? []
+      : resolveTimetables({
           timetables,
           groups: derived,
           category: activeCategory,
@@ -222,6 +250,7 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
           jobCodeId,
           common: commonByGroup,
         });
+    const resolved = isCommon ? buildCommonDraft() : list.find((t) => t.id === activeVariantId) ?? list[0];
     setDraft(resolved ? D.cloneDraft(resolved) : null);
     loadedKey.current = draftKey;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -387,6 +416,34 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
     }
   };
 
+  /** 다른 날짜용 표 — 지금 표를 복제해 아직 아무 표도 맡지 않은 이 Day 의 날짜를 붙인다 (web 과 같다) */
+  const handleAddVariant = async () => {
+    if (!draft || isCommon || !userData?.userId) return;
+    if (isNew) {
+      Alert.alert('', L('schedule.variantNeedsSave'));
+      return;
+    }
+    const date = nextUnclaimedDate(variantList, daySet, activeCategory, campCode);
+    try {
+      const created = await campTimetableService.create({
+        campCode,
+        jobCodeId,
+        ...D.toUpdatePayload(draft),
+        dates: date ? [date] : [],
+        order: draft.order,
+        userId: userData.userId,
+      });
+      setVariantId(created.id);
+      loadedKey.current = null;
+      await refetch();
+      queryClient.invalidateQueries({ queryKey: scheduleQueryKey(jobCodeId) });
+      Alert.alert('', L('schedule.variantAdded', { v0: date ? monthDayLabel(date) : L('schedule.otherDays') }));
+    } catch (e) {
+      Alert.alert('오류', '표를 만들지 못했습니다.');
+      console.error(e);
+    }
+  };
+
   const handleDelete = () => {
     if (!draft || isNew || isCommon) return;
     Alert.alert('삭제', `"${draft.groupName} · ${draft.dayTypeLabel}" 를 삭제할까요?`, [
@@ -397,6 +454,7 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
         onPress: async () => {
           try {
             await campTimetableService.remove(draft.id);
+            setVariantId(null);
             loadedKey.current = null;
             await refetch();
             queryClient.invalidateQueries({ queryKey: scheduleQueryKey(jobCodeId) });
@@ -472,6 +530,47 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
               </TouchableOpacity>
             );
           })}
+        </View>
+      )}
+
+      {/* 날짜별 표 — 이 Day 가 여러 날 열리는데 날마다 표가 다를 때만 쓴다 */}
+      {!!draft && !isCommon && (variantList.length > 1 || planDates.length > 1) && (
+        <View style={s.variantBox}>
+          {variantList.length > 1 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+              {variantList.map((t) => {
+                const on = t.id === activeVariantId;
+                return (
+                  <TouchableOpacity key={t.id} onPress={() => setVariantId(t.id)} style={[s.chip, on && s.chipOn]}>
+                    <Text style={[s.chipText, on && s.chipTextOn]}>
+                      {t.dates?.length ? t.dates.map(monthDayLabel).join(', ') : L('schedule.baseTable')}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
+          <Text style={s.variantLabel}>{L('schedule.variantDates')}</Text>
+          <View style={s.variantDates}>
+            {planDates.map((d) => {
+              const on = !!draft.dates?.includes(d);
+              const taken = variantList.some((t) => t.id !== draft.id && t.dates?.includes(d));
+              return (
+                <TouchableOpacity
+                  key={d}
+                  disabled={taken}
+                  onPress={() => patch((x) => D.toggleDate(x, d))}
+                  style={[s.dateChip, on && s.dateChipOn, taken && s.dateChipTaken]}
+                >
+                  <Text style={[s.chipText, on && s.chipTextOn, taken && { color: '#d1d5db' }]}>{monthDayLabel(d)}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <TouchableOpacity onPress={handleAddVariant} style={s.variantAdd}>
+            <Text style={s.variantAddText}>+ {L('schedule.addVariant')}</Text>
+          </TouchableOpacity>
+          <Text style={[s.hint, { marginTop: 6, marginBottom: 0 }]}>{L('schedule.variantHint')}</Text>
         </View>
       )}
 
@@ -1172,6 +1271,15 @@ const s = StyleSheet.create({
   chipOn: { backgroundColor: '#111827', borderColor: '#111827' },
   chipText: { fontSize: 12, color: '#374151' },
   chipTextOn: { color: '#fff' },
+
+  variantBox: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, padding: 10, marginBottom: 12 },
+  variantLabel: { fontSize: 12, fontWeight: '600', color: '#374151', marginBottom: 6 },
+  variantDates: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  dateChip: { borderWidth: 1, borderColor: '#d1d5db', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  dateChipOn: { backgroundColor: '#2563eb', borderColor: '#2563eb' },
+  dateChipTaken: { backgroundColor: '#f3f4f6', borderColor: '#f3f4f6' },
+  variantAdd: { alignSelf: 'flex-start', marginTop: 10, borderWidth: 1, borderColor: '#bfdbfe', backgroundColor: '#eff6ff', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 5 },
+  variantAddText: { fontSize: 12, fontWeight: '600', color: '#1d4ed8' },
 
 
   placeholder: { textAlign: 'center', color: '#6b7280', fontSize: 13, paddingVertical: 32, lineHeight: 20 },

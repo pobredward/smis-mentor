@@ -29,3 +29,4 @@ export type {
 
 export * from './community';
 export * from './lessonMaterial';
+export * from './lessonPlanDoc';

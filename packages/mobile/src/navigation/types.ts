@@ -2,7 +2,7 @@ import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { CompositeScreenProps } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MaterialTopTabScreenProps } from '@react-navigation/material-top-tabs';
-import type { CampPageCategory } from '@smis-mentor/shared';
+import type { CampPageCategory, CampTeacherKind } from '@smis-mentor/shared';
 
 // Root Stack (전체 네비게이션)
 export type RootStackParamList = {
@@ -25,6 +25,8 @@ export type RootStackParamList = {
   TermsOfService: undefined;
   /** 게시글 세부 화면 (댓글 포함) */
   PostDetail: { postId: string };
+  /** 원어민 레슨플랜 — bookKey(내 교재) · planId(문서) · sample(샘플: speaking·reading·writing) */
+  LessonPlan: { bookKey?: string; planId?: string; sample?: string };
   /** 게시글 작성/수정 화면 */
   PostWrite: {
     scope: 'all' | 'camp' | 'group' | 'dev';
@@ -71,7 +73,8 @@ export type AdminStackParamList = {
   InterviewManage: undefined;
   UserManage: undefined;
   UserManageDetail: { user: any };
-  UserCheck: undefined;
+  /** 한국인 멘토 선생님 / 원어민 선생님 (웹 /admin/user-check · /admin/foreign-teachers) */
+  UserCheck: { kind?: CampTeacherKind } | undefined;
   UserMap: undefined;
   Upload: undefined;
   AppConfig: undefined;

@@ -6,10 +6,12 @@ import { compareCampCodes } from '@smis-mentor/shared';
  * "이 선생님들이 참여합니다" — 캠프별로 운영진과 그룹별 선생님을 사진 카드로 보여 준다. kind 로 멘토·원어민 페이지를 나눈다.
  * - 그룹 순서는 shared 의 CAMP_GROUP_ORDER (compareGroupNames) 하나를 따른다
  * - 순서·그룹·반은 '선생님 명단 관리'(campRosters) 기준. 표가 없으면 캠프 배정(jobExperiences)으로 만든다
- * - 연락처·대학·개인정보는 보이지 않는다 (관리용 표·알림 현황은 '선생님 명단 관리' 페이지로 옮김)
+ * - 한국인 멘토: 한 줄에 한 명 — 사진 · 나이·성별·학교/학과 · 이 캠프의 수업 자료(올림/아직, 눌러서 바로 보기)
+ * - 원어민: 한 줄에 한 명 — 사진 · 국적·참여 횟수·경력
+ * - 연락처·개인정보는 보이지 않는다 (관리용 표·알림 현황은 '선생님 명단 관리' 페이지로 옮김)
  * - 발표 모드: 메뉴를 가리고 화면을 꽉 채운다 (Esc 로 나가기)
  */
-import { useEffect, useMemo, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import Layout from '@/components/common/Layout';
 import { db } from '@/lib/firebase';
@@ -17,73 +19,27 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getAllJobCodes, getUsersByJobCodeId } from '@/lib/firebaseService';
 import type { JobCodeWithId, User } from '@/types';
 import {
-  compareGroupNames,
+  CAMP_TEACHER_TITLE,
+  buildCampTeachers,
+  campTeacherCaption,
+  countryFlag,
   formatTeachingPeriod,
   getCampRoster,
+  groupCampTeachers,
+  loadTeacherLessons,
+  ordinalEn,
   resolveActiveJobCodeId,
-  sortTeachingExperiences,
-  type TeachingExperienceItem,
-  rosterColumnsOf,
-  rosterFillInherited,
-  type CampRosterDoc,
+  uploadedLessonTopics,
+  type CampTeacher,
+  type TeacherLesson,
 } from '@smis-mentor/shared';
 
-type Person = {
-  key: string;
-  kind: 'mentor' | 'foreign';
-  name: string;
-  englishName: string;
-  photo: string;
-  role: string;        // 담임·수업·매니저·부매니저 / Speaking…
-  group: string;       // 표시용 그룹 이름 (Spring …)
-  classCode: string;
-  className: string;
-  grade: string;
-  /** 원어민 소개용 — 국적 · SMIS 참여 횟수 · 경력 연수 · 경력 */
-  nationality?: string;
-  smisCount?: number;
-  teachingYears?: string;
-  teachingExperience?: string;
-  /** 마이페이지에서 쓴 경력 (역할·장소·기간·내용) — 있으면 이걸 먼저 보여 준다 */
-  teachingExperiences?: TeachingExperienceItem[];
-  /** 참여한 캠프 (jobCode id) — 확대 창에 코드로 보여 준다 */
-  campIds?: string[];
-};
+/** 사람 목록·묶기·소개·수업 자료 불러오기 규칙은 shared/utils/campTeachers.ts (앱과 같은 코드) */
+type Person = CampTeacher;
+type MentorLesson = TeacherLesson;
+const ordinal = ordinalEn;
+const flagOf = countryFlag;
 
-/** 원어민 이름 — 이름 + 성 (미들네임 빼고). 대문자로만 적힌 이름은 첫 글자만 대문자로 */
-function foreignFullName(u: any): string {
-  const tidy = (v: string) => String(v ?? '').trim().replace(/\s+/g, ' ');
-  const cap = (v: string) => (v && v === v.toUpperCase() ? v.toLowerCase().replace(/(^|[\s-])([a-z])/g, (_m, a, b) => a + b.toUpperCase()) : v);
-  const first = tidy(u?.foreignTeacher?.firstName), last = tidy(u?.foreignTeacher?.lastName);
-  if (first) return cap([first, last].filter(Boolean).join(' '));
-  const parts = tidy(u?.name).split(' ').filter(Boolean);
-  return cap(parts.length >= 3 ? `${parts[0]} ${parts[parts.length - 1]}` : parts.join(' '));
-}
-
-/** 사용자 문서 → 원어민 소개 정보 (참여 횟수는 캠프 배정 수) */
-function introOf(u: any): Pick<Person, 'nationality' | 'smisCount' | 'teachingYears' | 'teachingExperience' | 'teachingExperiences' | 'campIds'> {
-  if (!u) return {};
-  const nat = String(u.nationality ?? '');
-  return {
-    nationality: /^\+/.test(nat) ? '' : nat,
-    smisCount: Array.isArray(u.jobCodeIds) ? new Set(u.jobCodeIds).size : Array.isArray(u.jobExperiences) ? u.jobExperiences.length : 0,
-    teachingYears: String(u.teachingYears ?? ''),
-    teachingExperience: String(u.teachingExperience ?? ''),
-    teachingExperiences: Array.isArray(u.teachingExperiences) ? sortTeachingExperiences(u.teachingExperiences) : [],
-    campIds: Array.isArray(u.jobCodeIds) ? [...new Set<string>(u.jobCodeIds)] : (u.jobExperiences ?? []).map((e: any) => e?.id).filter(Boolean),
-  };
-}
-const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
-const FLAG: Record<string, string> = {
-  'united states': '🇺🇸', usa: '🇺🇸', 'u.s.a': '🇺🇸', canada: '🇨🇦', 'united kingdom': '🇬🇧', uk: '🇬🇧', 'u.k': '🇬🇧', ireland: '🇮🇪',
-  australia: '🇦🇺', 'new zealand': '🇳🇿', 'south africa': '🇿🇦', philippines: '🇵🇭', india: '🇮🇳',
-};
-const flagOf = (n?: string) => FLAG[String(n ?? '').trim().toLowerCase()] ?? '';
-
-const GROUP_NAME: Record<string, string> = {
-  spring: 'Spring', summer: 'Summer', autumn: 'Autumn', winter: 'Winter', junior: 'Junior', middle: 'Middle', senior: 'Senior',
-  common: 'Common', manager: '운영진', short1: '단기 1', short2: '단기 2', short3: '단기 3', short4: '단기 4',
-};
 /** 그룹 색 — 관리시트 동기화 리스트와 같은 계열 */
 const GROUP_TONE: Record<string, { bar: string; soft: string; text: string }> = {
   spring: { bar: 'bg-amber-400', soft: 'bg-amber-50', text: 'text-amber-700' },
@@ -95,17 +51,7 @@ const GROUP_TONE: Record<string, { bar: string; soft: string; text: string }> = 
   senior: { bar: 'bg-indigo-500', soft: 'bg-indigo-50', text: 'text-indigo-700' },
 };
 const toneOf = (g: string) => GROUP_TONE[g.toLowerCase()] ?? { bar: 'bg-[#2E26D3]', soft: 'bg-indigo-50', text: 'text-[#2E26D3]' };
-const isStaffRole = (role: string) => /매니저|manager/i.test(role);
-const groupKeyOf = (label: string) => label.trim().toLowerCase();
 
-function mentorRoleOf(v: string) {
-  const s = v.replace(/\s+/g, '');
-  if (/부매니저|sub/i.test(s)) return '부매니저';
-  if (/매니저|manager/i.test(s)) return '매니저';
-  if (/수업/.test(s)) return '수업';
-  if (/담임/.test(s)) return '담임';
-  return v.trim();
-}
 const toDate = (v: unknown): Date | null => {
   if (!v) return null;
   if (typeof (v as { toDate?: () => Date }).toDate === 'function') return (v as { toDate: () => Date }).toDate();
@@ -114,50 +60,7 @@ const toDate = (v: unknown): Date | null => {
 };
 const fmt = (d: Date | null) => (d ? `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}` : '');
 
-/** 표(있으면) 또는 캠프 배정으로 사람 목록 만들기 */
-function buildPeople(jobCodeId: string, users: User[], roster: CampRosterDoc | null): Person[] {
-  const byId = new Map(users.map((u) => [u.userId, u]));
-  const photoOf = (uid?: string | null) => (uid && (byId.get(uid) as any)?.profileImage) || '';
-  if (roster && ((roster.mentors?.length ?? 0) + (roster.foreign?.length ?? 0)) > 0) {
-    const out: Person[] = [];
-    rosterFillInherited(roster.mentors ?? [], rosterColumnsOf('mentor', roster.tier)).forEach((r, i) => {
-      const c = r.cells;
-      const u = r.userId ? byId.get(r.userId) : undefined;
-      const name = u?.name || c.name || '';
-      if (!name) return;
-      out.push({
-        key: `m${i}`, kind: 'mentor', name, englishName: c.englishName || (u as any)?.englishNickname || '', photo: photoOf(r.userId),
-        role: mentorRoleOf(c.role || ''), group: c.group || '', classCode: c.classCode || '', className: c.className || '', grade: c.grade || '',
-      });
-    });
-    rosterFillInherited(roster.foreign ?? [], rosterColumnsOf('foreign', roster.tier)).forEach((r, i) => {
-      const c = r.cells;
-      const u = r.userId ? byId.get(r.userId) : undefined;
-      const name = (u && foreignFullName(u)) || c.englishName || '';
-      if (!name) return;
-      out.push({ key: `f${i}`, kind: 'foreign', name, englishName: '', photo: photoOf(r.userId), role: c.subject || '', group: c.group || '', classCode: '', className: '', grade: '', ...introOf(u) });
-    });
-    return out;
-  }
-  // 표가 없을 때 — 캠프 배정 정보로
-  return users
-    .filter((u) => u.status !== 'deleted' && u.status !== 'inactive' && ['mentor', 'mentor_temp', 'foreign', 'foreign_temp', 'admin'].includes(String(u.role)))
-    .map((u) => {
-      const exp = (u.jobExperiences ?? []).find((e: any) => e?.id === jobCodeId) as any;
-      const foreign = u.role === 'foreign' || u.role === 'foreign_temp';   // 가입 전(임시) 원어민도 — DB 시트에서 옮겨 옴
-      const g = String(exp?.group ?? '');
-      return {
-        key: u.userId, kind: foreign ? 'foreign' : 'mentor', name: foreign ? foreignFullName(u) : u.name,
-        ...(foreign ? introOf(u) : {}),
-        englishName: foreign ? '' : (u as any).englishNickname ?? '', photo: (u as any).profileImage ?? '',
-        role: String(exp?.groupRole ?? ''), group: GROUP_NAME[g] ?? g, classCode: String(exp?.classCode ?? ''), className: '', grade: '',
-      } as Person;
-    })
-    .filter((p) => p.role || p.group);
-}
-
-const FOREIGN_ORDER: Record<string, number> = { speaking: 1, reading: 2, writing: 3, mix: 4 };
-const TITLE = { mentor: '한국인 멘토 선생님', foreign: '원어민 선생님' } as const;
+const TITLE = CAMP_TEACHER_TITLE;
 
 export default function CampTeachersShowcase({ kind }: { kind: 'mentor' | 'foreign' }) {
   const { userData } = useAuth();
@@ -167,7 +70,11 @@ export default function CampTeachersShowcase({ kind }: { kind: 'mentor' | 'forei
   const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(false);
   const [present, setPresent] = useState(false);
+  const [expandAll, setExpandAll] = useState<{ open: boolean; v: number }>({ open: false, v: 0 });
   const [zoom, setZoom] = useState<Person | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  /** userId → 이 캠프 수업 자료 (한국인 멘토 화면만) */
+  const [lessons, setLessons] = useState<Record<string, MentorLesson> | null>(null);
 
   useEffect(() => {
     getAllJobCodes().then((list) => {
@@ -185,7 +92,7 @@ export default function CampTeachersShowcase({ kind }: { kind: 'mentor' | 'forei
     let alive = true;
     setLoading(true);
     Promise.all([getUsersByJobCodeId(jobCodeId), getCampRoster(db, jobCodeId).catch(() => null)])
-      .then(([us, roster]) => { if (alive) setPeople(buildPeople(jobCodeId, us as User[], roster)); })
+      .then(([us, roster]) => { if (alive) { setUsers(us as User[]); setPeople(buildCampTeachers(jobCodeId, us as any, roster)); } })
       .catch(() => alive && setPeople([]))
       .finally(() => alive && setLoading(false));
     return () => { alive = false; };
@@ -204,32 +111,24 @@ export default function CampTeachersShowcase({ kind }: { kind: 'mentor' | 'forei
   }, [present]);
 
   const jc = codes.find((c) => c.id === jobCodeId);
+
+  // 한국인 멘토 — 사람 목록이 뜬 뒤 각자의 수업 자료를 불러온다
+  useEffect(() => {
+    if (kind !== 'mentor' || !jc?.code || !people.length) { setLessons(null); return; }
+    let alive = true;
+    setLessons(null);
+    const ids = [...new Set(people.filter((p) => p.kind === 'mentor' && p.userId).map((p) => p.userId as string))];
+    loadTeacherLessons(db, { users: users as any, ids, jobCodeId, code: jc.code }).then((r) => alive && setLessons(r)).catch(() => alive && setLessons({}));
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, people, jc?.code]);
+
   const gens = useMemo(() => [...new Set(codes.map((c) => String(c.generation)))], [codes]);
 
-  const view = useMemo(() => {
-    const mine = people.filter((p) => p.kind === kind);
-    const staff = mine.filter((p) => isStaffRole(p.role));
-    const rest = mine.filter((p) => !isStaffRole(p.role));
-    const groups: string[] = [];
-    rest.forEach((p) => { const g = p.group || '기타'; if (!groups.includes(g) && groupKeyOf(g) !== 'all') groups.push(g); });
-    groups.sort((a, b) => compareGroupNames(a, b));   // 단기1~4 는 맨 아래 — 앱 공통 순서
-    const sections = groups.map((g) => {
-      const inG = rest.filter((p) => (p.group || '기타') === g);
-      const list = kind === 'foreign'
-        ? [...inG].sort((a, b) => (FOREIGN_ORDER[a.role.toLowerCase()] ?? 9) - (FOREIGN_ORDER[b.role.toLowerCase()] ?? 9))
-        : [
-          ...inG.filter((p) => p.role === '담임').sort((a, b) => a.classCode.localeCompare(b.classCode, 'en', { numeric: true })),
-          ...inG.filter((p) => p.role !== '담임'),
-        ];
-      const grades = [...new Set(inG.filter((p) => p.role === '담임').map((p) => p.grade).filter(Boolean))];
-      return { g, list, grades };
-    });
-    const extra = rest.filter((p) => groupKeyOf(p.group) === 'all');
-    staff.sort((a, b) => compareGroupNames(a.group, b.group));
-    return { staff: [...staff, ...extra], sections, count: mine.length };
-  }, [people, kind]);
+  const view = useMemo(() => groupCampTeachers(people, kind), [people, kind]);
 
   const start = toDate((jc as any)?.startDate), end = toDate((jc as any)?.endDate);
+  const campsAside = (p: Person) => <CampHistory ids={p.campIds ?? []} codes={codes} current={jobCodeId} tight full roles={p.campRoles} />;
 
   const body = (
     <div className={present ? 'max-w-[1500px] mx-auto px-10 py-12' : 'max-w-6xl mx-auto px-4 py-8'}>
@@ -256,7 +155,11 @@ export default function CampTeachersShowcase({ kind }: { kind: 'mentor' | 'forei
           {view.staff.length > 0 && (
             <section>
               <SectionTitle title="운영진" tone={{ bar: 'bg-[#2E26D3]', text: 'text-[#2E26D3]' }} sub="Camp Managers" />
-              {kind === 'foreign' ? <ForeignCards people={view.staff} present={present} onZoom={setZoom} /> : <Cards people={view.staff} present={present} onZoom={setZoom} caption={(p) => [p.group && groupKeyOf(p.group) !== 'all' ? p.group : '', p.role].filter(Boolean).join(' ')} />}
+              {/* 운영진은 오른쪽에 참여한 캠프 */}
+              {kind === 'foreign'
+                ? <ForeignCards people={view.staff} present={present} onZoom={setZoom} aside={campsAside} />
+                : <MentorRows people={view.staff} present={present} onZoom={setZoom} lessons={lessons} aside={campsAside}
+                    caption={(p) => campTeacherCaption(p, true)} />}
             </section>
           )}
           {view.sections.map(({ g, list, grades }) => {
@@ -268,8 +171,8 @@ export default function CampTeachersShowcase({ kind }: { kind: 'mentor' | 'forei
                 {kind === 'foreign' ? (
                   <ForeignCards people={list} present={present} onZoom={setZoom} tone={tone} />
                 ) : (
-                  <Cards people={list} present={present} onZoom={setZoom} tone={tone}
-                    caption={(p) => (p.role === '담임' ? [p.classCode, p.className].filter(Boolean).join(' · ') : p.role === '수업' ? '패턴 수업' : p.role)} />
+                  <MentorRows people={list} present={present} onZoom={setZoom} tone={tone} lessons={lessons}
+                    caption={(p) => campTeacherCaption(p, false)} />
                 )}
               </section>
             );
@@ -281,6 +184,7 @@ export default function CampTeachersShowcase({ kind }: { kind: 'mentor' | 'forei
 
   return (
     <Layout requireAuth requireAdmin>
+      <ExpandAllContext.Provider value={expandAll}>
       {/* 고르기 — 발표 모드에서는 숨김 */}
       <div className="max-w-6xl mx-auto px-4 pt-6">
         <div className="flex flex-wrap items-center gap-2">
@@ -294,6 +198,11 @@ export default function CampTeachersShowcase({ kind }: { kind: 'mentor' | 'forei
             </button>
           ))}
           <div className="flex-1" />
+          <button type="button" onClick={() => setExpandAll((s) => ({ open: !s.open, v: s.v + 1 }))}
+            className="hidden md:inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border bg-white hover:bg-gray-50 text-gray-700">
+            <svg className={`w-4 h-4 transition-transform ${expandAll.open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            {expandAll.open ? '카드 모두 접기' : '카드 모두 펼치기'}
+          </button>
           <div className="flex text-sm rounded-lg bg-gray-100 p-0.5">
             <Link href="/admin/user-check" className={`px-3 py-1.5 rounded-md ${kind === 'mentor' ? 'bg-white shadow-sm font-semibold' : 'text-gray-500'}`}>멘토</Link>
             <Link href="/admin/foreign-teachers" className={`px-3 py-1.5 rounded-md ${kind === 'foreign' ? 'bg-white shadow-sm font-semibold' : 'text-gray-500'}`}>원어민</Link>
@@ -309,29 +218,90 @@ export default function CampTeachersShowcase({ kind }: { kind: 'mentor' | 'forei
       ) : body}
 
       {zoom && (
-        <div className="fixed inset-0 z-[120] bg-black/70 flex items-center justify-center p-6" onClick={() => setZoom(null)}>
+        <div className="fixed inset-0 z-[120] bg-black/70 flex items-center justify-center p-3 sm:p-6" onClick={() => setZoom(null)}>
           {zoom.kind === 'foreign' ? (
-            <div className="bg-white rounded-3xl overflow-hidden w-full max-w-3xl max-h-[90vh] shadow-2xl grid sm:grid-cols-[280px_1fr]" onClick={(e) => e.stopPropagation()}>
-              <Photo person={zoom} className="h-48 sm:h-full text-6xl" />
-              <div className="p-6 sm:p-7 overflow-y-auto max-h-[calc(90vh-12rem)] sm:max-h-[90vh]">
-                <ForeignHead p={zoom} big />
+            <div className="relative bg-white rounded-3xl w-full max-w-3xl max-h-[92vh] sm:max-h-[90vh] shadow-2xl overflow-y-auto sm:overflow-hidden sm:grid sm:grid-cols-[260px_1fr] sm:items-start" onClick={(e) => e.stopPropagation()}>
+              <button type="button" onClick={() => setZoom(null)} aria-label="닫기"
+              className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/90 text-gray-500 hover:bg-gray-100 shadow-sm">✕</button>
+            <div className="hidden sm:block p-4 sm:pr-0"><Photo person={zoom} className="aspect-[3/4] object-cover rounded-2xl text-6xl" /></div>
+              <div className="p-5 sm:p-7 sm:overflow-y-auto sm:max-h-[90vh]">
+                <div className="flex items-start gap-4 pr-8 sm:pr-0">
+                  <div className="w-24 shrink-0 sm:hidden"><Photo person={zoom} className="aspect-[3/4] object-cover rounded-xl text-3xl" /></div>
+                  <ForeignHead p={zoom} big />
+                </div>
                 <CampHistory ids={zoom.campIds ?? []} codes={codes} current={jobCodeId} />
                 <Experience p={zoom} />
               </div>
             </div>
           ) : (
-          <div className="bg-white rounded-3xl overflow-hidden w-full max-w-sm shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <Photo person={zoom} className="aspect-[4/5] text-6xl" />
-            <div className="p-6 text-center">
-              <p className="text-2xl font-extrabold text-gray-900">{zoom.name}</p>
-              {zoom.englishName && <p className="text-lg text-gray-500 mt-0.5">{zoom.englishName}</p>}
-              <p className="text-sm text-gray-400 mt-2">{[zoom.group, zoom.role === '담임' ? `담임 ${zoom.classCode}` : zoom.role, zoom.className].filter(Boolean).join(' · ')}</p>
+          <div className="relative bg-white rounded-3xl w-full max-w-3xl max-h-[92vh] sm:max-h-[90vh] shadow-2xl overflow-y-auto sm:overflow-hidden sm:grid sm:grid-cols-[260px_1fr] sm:items-start" onClick={(e) => e.stopPropagation()}>
+            <button type="button" onClick={() => setZoom(null)} aria-label="닫기"
+              className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/90 text-gray-500 hover:bg-gray-100 shadow-sm">✕</button>
+            <div className="hidden sm:block p-4 sm:pr-0"><Photo person={zoom} className="aspect-[3/4] object-cover rounded-2xl text-6xl" /></div>
+            <div className="p-5 sm:p-7 sm:overflow-y-auto sm:max-h-[90vh]">
+              <div className="flex items-start gap-4 pr-8 sm:pr-0">
+                <div className="w-24 shrink-0 sm:hidden"><Photo person={zoom} className="aspect-[3/4] object-cover rounded-xl text-3xl" /></div>
+                <MentorHead p={zoom} big caption={[zoom.group, zoom.role === '담임' ? `담임 ${zoom.classCode}` : zoom.role, zoom.className].filter(Boolean).join(' · ')} />
+              </div>
+              {/* 카드를 누르면 — 이 캠프 수업 자료(누르면 새 탭) · 참여 캠프 */}
+              <div className="mt-5">
+                <LessonSummary lesson={zoom.userId ? lessons?.[zoom.userId] : undefined} loading={!lessons} />
+              </div>
+              <div className="mt-5">
+                <p className="text-[10px] font-semibold text-gray-400 tracking-wider mb-2">참여한 캠프</p>
+                <CampHistory ids={zoom.campIds ?? []} codes={codes} current={jobCodeId} tight full roles={zoom.campRoles} />
+              </div>
             </div>
           </div>
           )}
         </div>
       )}
+
+      </ExpandAllContext.Provider>
     </Layout>
+  );
+}
+
+/**
+ * 카드 오른쪽 칸 — 최대 높이를 넘으면 아래를 흐리게 덮고 화살표로 펼치기/접기.
+ * 안쪽 내용 높이를 재서(ResizeObserver) 넘칠 때만 화살표가 나온다 (수업 자료가 뒤늦게 불러와져도 다시 잰다)
+ */
+/** '모두 펼치기 / 모두 접기' — 누를 때마다 v 가 바뀌고, 모든 카드가 open 값으로 맞춘다 (그 뒤 카드별로 따로 열고 닫을 수 있다) */
+const ExpandAllContext = createContext<{ open: boolean; v: number }>({ open: false, v: 0 });
+
+function Collapsible({ children, max = 156 }: { children: ReactNode; max?: number }) {
+  const inner = useRef<HTMLDivElement>(null);
+  const all = useContext(ExpandAllContext);
+  const [open, setOpen] = useState(all.open);
+  useEffect(() => { if (all.v) setOpen(all.open); }, [all.v, all.open]);
+  const [over, setOver] = useState(false);
+  useEffect(() => {
+    const el = inner.current;
+    if (!el) return;
+    const check = () => setOver(el.offsetHeight > max + 8);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [max]);
+  const toggle = (e: React.MouseEvent) => { e.stopPropagation(); setOpen((v) => !v); };
+  return (
+    <div className="relative">
+      <div className="overflow-hidden" style={over && !open ? { maxHeight: max } : undefined}>
+        <div ref={inner}>{children}</div>
+      </div>
+      {over && !open && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white via-white/70 to-transparent backdrop-blur-[2px] [mask-image:linear-gradient(to_bottom,transparent,black_60%)]" />
+      )}
+      {over && (
+        <div className={open ? 'flex justify-center mt-2' : 'absolute inset-x-0 bottom-0 flex justify-center'}>
+          <button type="button" onClick={toggle} aria-label={open ? '접기' : '펼치기'} title={open ? '접기' : '펼치기'}
+            className="w-8 h-8 rounded-full bg-white ring-1 ring-gray-200 shadow-sm text-gray-500 hover:text-gray-900 hover:ring-gray-300 flex items-center justify-center">
+            <svg className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M19 9l-7 7-7-7" /></svg>
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -356,29 +326,108 @@ function Photo({ person, className = '' }: { person: Person; className?: string 
   );
 }
 
-function Cards({ people, present, onZoom, label, caption, tone }: {
-  people: Person[]; present: boolean; onZoom: (p: Person) => void; label?: string; caption: (p: Person) => string; tone?: { soft: string; text: string };
+/** 한국인 멘토 머리 — 역할/반 · 이름 · 나이·성별 · 학교/학과 · SMIS 참여 */
+function MentorHead({ p, big, caption, tone }: { p: Person; big?: boolean; caption?: string; tone?: { soft: string; text: string } }) {
+  const basics = [p.age ? `${p.age}세` : '', p.gender].filter(Boolean).join(' · ');
+  const school = [p.school, p.major].filter(Boolean).join(' ');
+  return (
+    <div className="min-w-0">
+      {caption && <span className={`inline-block text-xs font-bold px-2 py-0.5 rounded-full ${tone ? `${tone.soft} ${tone.text}` : 'bg-indigo-50 text-[#2E26D3]'}`}>{caption}</span>}
+      <p className="mt-1.5 flex items-baseline gap-2 flex-wrap">
+        <span className={`font-extrabold text-gray-900 ${big ? 'text-3xl' : 'text-xl'}`}>{p.name}</span>
+        {p.englishName && <span className="text-sm text-gray-400">{p.englishName}</span>}
+      </p>
+      {basics && <p className="text-sm text-gray-600 mt-1">{basics}</p>}
+      {(school || p.schoolYear) && (
+        <p className="text-sm text-gray-500 mt-0.5 leading-snug">{school}{p.schoolYear && <span className="text-gray-400">{school ? ' · ' : ''}{p.schoolYear}</span>}</p>
+      )}
+      {!!p.smisCount && (
+        <div className="inline-block rounded-xl bg-gray-50 px-3 py-1.5 mt-3">
+          <p className="text-[10px] font-semibold text-gray-400 tracking-wider">SMIS</p>
+          <p className="text-base font-extrabold text-gray-900 leading-tight">{p.smisCount}회</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 이 캠프의 수업 자료 — 올린 것만 (링크가 없는 주제·칸은 감춘다). 누르면 새 탭으로 열린다 */
+function LessonSummary({ lesson, loading }: { lesson?: MentorLesson; loading: boolean }) {
+  if (loading) return <p className="text-xs text-gray-300">수업 자료 불러오는 중…</p>;
+  if (lesson?.failed) return <p className="text-xs text-amber-600">수업 자료를 불러오지 못했습니다</p>;
+  const topics = uploadedLessonTopics(lesson);
+  if (!topics.length) return <p className="text-xs text-gray-300">아직 올린 수업 자료가 없습니다</p>;
+  return (
+    <div>
+      <p className="text-[10px] font-semibold text-gray-400 tracking-wider mb-1.5">수업 자료</p>
+      <div className="space-y-1.5">
+        {topics.map((t, i) => (
+          <div key={i} className="flex items-start gap-2">
+            <span className="w-20 shrink-0 text-xs font-semibold text-gray-700 truncate pt-0.5" title={t.title}>{t.title}</span>
+            <div className="flex flex-wrap gap-1 min-w-0">
+              {/* 칸마다 공개보기 · 원본 둘 다 (새 탭) — 같은 링크면 하나만 */}
+              {t.sections.map((s, j) => (
+                <span key={j} className="inline-flex items-stretch max-w-full rounded-md text-[11px] bg-indigo-50 ring-1 ring-indigo-100 overflow-hidden">
+                  <span className="px-2 py-0.5 font-medium text-gray-800 min-w-0 truncate" title={s.title}>{s.title}</span>
+                  {s.view && (
+                    <a href={s.view} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                      className="shrink-0 whitespace-nowrap px-1.5 py-0.5 border-l border-indigo-100 font-semibold text-[#2E26D3] hover:bg-indigo-100">공개보기</a>
+                  )}
+                  {s.original && s.original !== s.view && (
+                    <a href={s.original} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                      className="shrink-0 whitespace-nowrap px-1.5 py-0.5 border-l border-indigo-100 font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100">원본편집</a>
+                  )}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** 한국인 멘토 — 넓은 화면: 한 줄에 한 명(사진 · 소개 · 오른쪽: 수업 자료, 운영진은 참여 캠프) / 휴대폰: 사진 카드 셋씩 */
+function MentorRows({ people, present, onZoom, caption, tone, lessons, aside }: {
+  people: Person[]; present: boolean; onZoom: (p: Person) => void; caption: (p: Person) => string;
+  tone?: { soft: string; text: string }; lessons: Record<string, MentorLesson> | null;
+  /** 오른쪽 칸 — 없으면 수업 자료 */
+  aside?: (p: Person) => ReactNode;
 }) {
   return (
-    <div className="mb-7">
-      {label && <p className={`text-xs font-bold tracking-wider mb-2.5 ${tone?.text ?? 'text-gray-500'}`}>{label}</p>}
-      <div className={`grid gap-3 ${present ? 'grid-cols-5 lg:grid-cols-6 2xl:grid-cols-8' : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6'}`}>
+    <>
+      <div className="grid grid-cols-3 gap-2 md:hidden">
         {people.map((p) => (
-          <button key={p.key} onClick={() => onZoom(p)} className="group text-left rounded-2xl bg-white ring-1 ring-gray-200 overflow-hidden hover:ring-gray-300 hover:shadow-lg transition">
-            <div className="overflow-hidden">
-              <Photo person={p} className="aspect-[4/5] text-4xl group-hover:scale-[1.03] transition-transform duration-300" />
-            </div>
-            <div className="px-3 py-2.5">
-              <p className="flex items-baseline gap-1.5 flex-wrap">
-                <span className={`font-extrabold text-gray-900 ${present ? 'text-lg' : 'text-base'}`}>{p.name}</span>
-                {p.englishName && <span className="text-sm text-gray-400">{p.englishName}</span>}
-              </p>
-              {caption(p) && <p className={`text-xs font-semibold mt-1 inline-block px-2 py-0.5 rounded-full ${tone ? `${tone.soft} ${tone.text}` : 'bg-gray-100 text-gray-600'}`}>{caption(p)}</p>}
+          <button key={p.key} onClick={() => onZoom(p)} className="text-left rounded-xl bg-white ring-1 ring-gray-200 overflow-hidden">
+            <Photo person={p} className="aspect-[3/4] text-3xl" />
+            <div className="px-2 py-1.5">
+              <p className="font-extrabold text-sm text-gray-900 truncate">{p.name}</p>
+              <p className={`text-[11px] font-semibold truncate ${tone?.text ?? 'text-[#2E26D3]'}`}>{caption(p)}</p>
             </div>
           </button>
         ))}
       </div>
-    </div>
+      <div className="hidden md:block space-y-3">
+        {people.map((p) => (
+          <div key={p.key} role="button" tabIndex={0} onClick={() => onZoom(p)} onKeyDown={(e) => { if (e.key === 'Enter') onZoom(p); }}
+            className="cursor-pointer rounded-2xl bg-white ring-1 ring-gray-200 overflow-hidden hover:ring-gray-300 hover:shadow-lg transition flex items-start">
+            <div className={`${present ? 'w-44' : 'w-36'} shrink-0 p-3 pr-0`}>
+              <Photo person={p} className="aspect-[3/4] rounded-xl text-4xl" />
+            </div>
+            <div className="flex-1 min-w-0 p-5 grid gap-x-8 gap-y-4 lg:grid-cols-[270px_1fr]">
+              <div className="self-start">
+                <MentorHead p={p} caption={caption(p)} tone={tone} big={present} />
+              </div>
+              <div className="min-w-0">
+                <Collapsible>
+                  {aside ? aside(p) : <LessonSummary lesson={p.userId ? lessons?.[p.userId] : undefined} loading={!lessons} />}
+                </Collapsible>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -409,7 +458,7 @@ function ForeignHead({ p, big, tone }: { p: Person; big?: boolean; tone?: { soft
 
 /** 경력 — 구조화된 목록(역할·장소·기간·내용)이 있으면 그걸, 없으면 예전 글.
  *  카드에서는 최대 높이로 자르고(아래는 흐리게), 확대 창에서는 전부 보여 준다 */
-function Experience({ p, compact, tight }: { p: Person; compact?: boolean; tight?: boolean }) {
+function Experience({ p, compact, tight, brief }: { p: Person; compact?: boolean; tight?: boolean; brief?: boolean }) {
   const items = p.teachingExperiences ?? [];
   const legacy = items.length ? [] : String(p.teachingExperience ?? '').split(/\r?\n/).map((l) => l.replace(/^[-•·@\s]+/, '').trim()).filter(Boolean);
   if (!items.length && !legacy.length) return null;
@@ -425,7 +474,7 @@ function Experience({ p, compact, tight }: { p: Person; compact?: boolean; tight
                   <p className="text-gray-900"><span className="font-semibold">{it.role || it.place}</span>{it.role && it.place && <span className="text-gray-500"> · {it.place}</span>}</p>
                   <span className="text-xs text-gray-400 whitespace-nowrap">{formatTeachingPeriod(it)}</span>
                 </div>
-                {it.description && !compact && <p className="text-gray-600 mt-0.5">{it.description}</p>}
+                {it.description && !compact && !brief && <p className="text-gray-600 mt-0.5">{it.description}</p>}
               </li>
             ))}
           </ul>
@@ -441,14 +490,18 @@ function Experience({ p, compact, tight }: { p: Person; compact?: boolean; tight
 }
 
 /** 원어민 카드 — 한 줄에 한 명: 사진 · 소개 · 경력 (설명회에서 한눈에) */
-function ForeignCards({ people, present, onZoom, tone }: { people: Person[]; present: boolean; onZoom: (p: Person) => void; tone?: { soft: string; text: string } }) {
+function ForeignCards({ people, present, onZoom, tone, aside }: {
+  people: Person[]; present: boolean; onZoom: (p: Person) => void; tone?: { soft: string; text: string };
+  /** 오른쪽 칸 — 없으면 경력 (운영진은 참여 캠프) */
+  aside?: (p: Person) => ReactNode;
+}) {
   return (
     <>
       {/* 휴대폰 — 사진 카드만 한 줄에 셋 (경력은 눌러서) */}
       <div className="grid grid-cols-3 gap-2 md:hidden">
         {people.map((p) => (
           <button key={p.key} onClick={() => onZoom(p)} className="text-left rounded-xl bg-white ring-1 ring-gray-200 overflow-hidden">
-            <Photo person={p} className="aspect-[4/5] text-3xl" />
+            <Photo person={p} className="aspect-[3/4] text-3xl" />
             <div className="px-2 py-1.5">
               <p className="font-extrabold text-sm text-gray-900 truncate">{p.name}</p>
               <p className={`text-[11px] font-semibold truncate ${tone?.text ?? 'text-[#2E26D3]'}`}>{p.role}</p>
@@ -459,14 +512,20 @@ function ForeignCards({ people, present, onZoom, tone }: { people: Person[]; pre
       {/* 넓은 화면 — 한 줄에 한 명: 사진 · 소개 · 경력(최대 높이) */}
       <div className="hidden md:block space-y-3">
         {people.map((p) => (
-          <button key={p.key} onClick={() => onZoom(p)}
-            className="w-full text-left rounded-2xl bg-white ring-1 ring-gray-200 overflow-hidden hover:ring-gray-300 hover:shadow-lg transition flex">
-            <div className={`${present ? 'w-44' : 'w-36'} shrink-0`}><Photo person={p} className="h-full min-h-[200px] max-h-[230px] text-4xl" /></div>
-            <div className="flex-1 min-w-0 p-5 grid gap-x-8 gap-y-3 grid-cols-[230px_1fr]">
-              <ForeignHead p={p} tone={tone} big={present} />
-              <Experience p={p} compact tight />
+          <div key={p.key} role="button" tabIndex={0} onClick={() => onZoom(p)} onKeyDown={(e) => { if (e.key === 'Enter') onZoom(p); }}
+            className="cursor-pointer rounded-2xl bg-white ring-1 ring-gray-200 overflow-hidden hover:ring-gray-300 hover:shadow-lg transition flex items-start">
+            <div className={`${present ? 'w-44' : 'w-36'} shrink-0 p-3 pr-0`}>
+              <Photo person={p} className="aspect-[3/4] rounded-xl text-4xl" />
             </div>
-          </button>
+            <div className="flex-1 min-w-0 p-5 grid gap-x-8 gap-y-4 lg:grid-cols-[270px_1fr]">
+              <div className="self-start">
+                <ForeignHead p={p} tone={tone} big={present} />
+              </div>
+              <div className="min-w-0">
+                <Collapsible>{aside ? aside(p) : <Experience p={p} tight brief />}</Collapsible>
+              </div>
+            </div>
+          </div>
         ))}
       </div>
     </>
@@ -474,14 +533,37 @@ function ForeignCards({ people, present, onZoom, tone }: { people: Person[]; pre
 }
 
 /** 참여한 캠프 — 기수 최신순, 지금 캠프는 강조 */
-function CampHistory({ ids, codes, current }: { ids: string[]; codes: JobCodeWithId[]; current: string }) {
+/** full: 운영진용 — 코드 대신 '29기 싱&말 영어캠프' 처럼 캠프 이름까지 한 줄씩 (참여 이력이 한눈에) */
+function CampHistory({ ids, codes, current, tight, full, roles }: {
+  ids: string[]; codes: JobCodeWithId[]; current: string; tight?: boolean; full?: boolean;
+  /** 캠프별 그때의 역할 (full 일 때 이름 옆에) */
+  roles?: Record<string, string>;
+}) {
   const list = ids
     .map((id) => codes.find((c) => c.id === id))
     .filter((c): c is JobCodeWithId => !!c)
     .sort((a, b) => String(b.generation).localeCompare(String(a.generation), 'ko', { numeric: true }) || compareCampCodes(a.code, b.code));
   if (!list.length) return null;
+  if (full) {
+    return (
+      <div className={tight ? '' : 'mt-4'}>
+        {/* 위에서 아래로 최신 기수부터 — 넓은 화면은 두 단 (단 안에서 차례대로) */}
+        <ul className="space-y-1.5">
+          {list.map((c) => (
+            <li key={c.id} className="flex items-center gap-2.5 min-w-0">
+              <span className={`shrink-0 w-14 text-center px-1.5 py-0.5 rounded-md text-[11px] font-bold ${c.id === current ? 'bg-[#2E26D3] text-white' : 'bg-gray-100 text-gray-700'}`}>{c.code}</span>
+              <span className={`text-[13px] truncate ${c.id === current ? 'font-bold text-gray-900' : 'text-gray-700'}`}>{c.generation} {c.name}</span>
+              {roles?.[c.id] && (
+                <span className={`shrink-0 text-[11px] font-semibold px-1.5 py-0.5 rounded ${c.id === current ? 'bg-indigo-50 text-[#2E26D3]' : 'bg-gray-50 text-gray-500'}`}>{roles[c.id]}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
   return (
-    <div className="mt-4">
+    <div className={tight ? '' : 'mt-4'}>
       <p className="text-[10px] font-semibold text-gray-400 tracking-wider mb-1.5">SMIS CAMPS · {list.length}</p>
       <div className="flex flex-wrap gap-1.5">
         {list.map((c) => (

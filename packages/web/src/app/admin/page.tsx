@@ -74,9 +74,15 @@ export default function AdminDashboard() {
         },
         {
           title: '수업 템플릿 관리',
-          href: '/admin/upload',
+          href: '/admin/lesson-templates',
           iconClass: 'text-cyan-600',
           icon: <IoFolder className="w-5 h-5" />,
+        },
+        {
+          title: '원어민 레슨플랜',
+          href: '/admin/lesson-plans',
+          iconClass: 'text-sky-600',
+          icon: <IoBook className="w-5 h-5" />,
         },
       ],
     },

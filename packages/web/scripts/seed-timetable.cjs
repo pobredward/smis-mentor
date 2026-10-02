@@ -6,6 +6,11 @@
  * --apply   없으면 드라이런(출력만)
  * --replace 같은 캠프의 기존 시간표를 먼저 모두 지우고 새로 넣는다
  *
+ * S캠프 템플릿 (Spring·Autumn·Winter 4반 + Summer 3반, 고잉업 주제1~4, 인문학 1~4주차):
+ *   node scripts/seed-timetable.cjs scripts/seed/s-timetable.json --camp S30 [--apply]
+ *   (대상 캠프의 campSettings.groups 를 먼저 만들어 두면 그룹 순서·반번호대로 옮겨 넣는다.
+ *    입소·입소 D+1·퇴소 D-1·퇴소는 S캠프 일정이 J와 달라 비워 둔다)
+ *
  * 사람 이름은 넣지 않는다. 담임은 반번호로, 원어민은 그룹+역할로 앱에서 조인된다.
  */
 const fs = require('fs');
@@ -44,6 +49,8 @@ if (!timetables.length) {
 const campArg = process.argv.indexOf('--camp');
 const targetCamp = campArg > -1 ? process.argv[campArg + 1] : null;
 const campCode = targetCamp || timetables[0].campCode;
+// 날짜별 표(같은 그룹·같은 Day 여러 장)는 맡은 날짜까지 합쳐 한 장으로 본다
+const keyOf = (t) => `${t.groupName}__${t.dayType}__${[...(t.dates || [])].sort().join(',')}`;
 
 admin.initializeApp({
   credential: admin.credential.cert({
@@ -114,13 +121,20 @@ const db = admin.firestore();
             e.dutyRotation ? { ...e, dutyRotation: e.dutyRotation.map((c) => map.get(c) ?? c) } : e
           ),
           blocks: t.blocks.map((bk) => (bk.cells ? { ...bk, cells: remapCells(bk.cells, map) } : bk)),
+          // 날짜는 그 캠프 일정에 묶인 값이라 다른 캠프로 옮길 때는 뺀다 (기본 표로 들어간다)
+          dates: [],
         };
       });
+    const dated = new Map();
+    timetables.forEach((t) => dated.set(keyOf(t), (dated.get(keyOf(t)) || 0) + 1));
+    if ([...dated.values()].some((n) => n > 1)) {
+      console.warn('  ⚠ 날짜별 표가 있는 프리셋입니다 — 다른 캠프로 옮기면 날짜가 빠져 같은 Day 표가 겹칩니다. 기본 표만 남겨 쓰세요.');
+    }
   }
 
   const existing = await db.collection('campTimetables').where('jobCodeId', '==', jobCodeId).get();
   const byKey = new Map();
-  existing.forEach((d) => byKey.set(`${d.data().groupName}__${d.data().dayType}`, d.id));
+  existing.forEach((d) => byKey.set(keyOf(d.data()), d.id));
 
   if (replace && existing.size) {
     console.log(`기존 ${existing.size}건 삭제${apply ? '' : ' (드라이런)'}`);
@@ -138,7 +152,7 @@ const db = admin.firestore();
   let updated = 0;
 
   for (const t of timetables) {
-    const key = `${t.groupName}__${t.dayType}`;
+    const key = keyOf(t);
     const id = byKey.get(key) ?? randomUUID();
     const isUpdate = byKey.has(key);
     const doc = {
@@ -154,6 +168,7 @@ const db = admin.firestore();
       subjects: t.subjects ?? [],
       blocks: t.blocks ?? [],
       note: t.note ?? '',
+      ...(t.dates?.length ? { dates: [...t.dates].sort() } : {}),
       updatedAt: now,
       updatedBy: actor,
       ...(isUpdate ? {} : { createdAt: now, createdBy: actor }),
@@ -165,6 +180,7 @@ const db = admin.firestore();
     const foreigns = doc.subjects.filter((s) => s.partner === 'foreign').length;
     console.log(
       `  ${isUpdate ? '갱신' : '생성'}  ${doc.dayTypeLabel.padEnd(12)} ${doc.groupName.padEnd(8)} ` +
+        (doc.dates ? `(${doc.dates.join(',')}) ` : '') +
         `[${doc.layout}] 반 ${doc.classes.length} · 줄 ${String(doc.blocks.length).padStart(2)} ` +
         `(세트 ${sets}, 공통 ${shared}) · 과목 ${doc.subjects.length} (원어민 ${foreigns}, 담임 ${owners})`
     );

@@ -76,7 +76,6 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
   const hasNoCampAssigned = !!userData && !hasCampAccess(userData);
   const isPendingAccount = !!userData && !isCampStaffRole(userData.role);
   
-  // 원어민 유저는 '수업' 탭 제외
   const allTabs: { id: TabName; title: string; path: string }[] = [
     { id: 'education', title: L('nav.education'), path: '/camp/education' },
     { id: 'lesson', title: L('nav.lessons'), path: '/camp/lesson' },
@@ -88,9 +87,8 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
     { id: 'inventory', title: L('nav.inventory'), path: '/camp/inventory' },
   ];
   
-  const tabs = isForeign 
-    ? allTabs.filter(tab => tab.id !== 'lesson')
-    : allTabs;
+  // 원어민도 '수업' 탭을 본다 — 반별 레슨플랜 (어떤 자료가 보이는지는 템플릿 대상이 정한다)
+  const tabs = allTabs;
   
   // 저장된 탭이 현재 사용자에게 유효한지 검증
   const isValidTabForUser = (tabId: string): boolean => {

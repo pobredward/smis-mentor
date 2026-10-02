@@ -1,0 +1,3205 @@
+{
+ "timetables": [
+  {
+   "campCode": "S29",
+   "groupName": "Spring",
+   "dayType": "regular",
+   "dayTypeLabel": "정규",
+   "layout": "time",
+   "order": 0,
+   "classes": [
+    {
+     "classCode": "S01",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S02",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S03",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S04",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    }
+   ],
+   "extraColumns": [
+    {
+     "key": "duty",
+     "label": "교무실(사진)조",
+     "dutyRotation": [
+      "S02",
+      "S01",
+      "S04",
+      "S03"
+     ]
+    }
+   ],
+   "subjects": [
+    {
+     "key": "Math",
+     "partner": "pattern",
+     "color": "#dbeafe",
+     "teacherRole": "ownTeacher",
+     "partnerTeacherRole": "수업"
+    },
+    {
+     "key": "Speaking",
+     "partner": "foreign",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "Reading",
+     "partner": "foreign",
+     "color": "#fdead4"
+    },
+    {
+     "key": "Writing",
+     "partner": "foreign",
+     "color": "#dcf0dc"
+    }
+   ],
+   "blocks": [
+    {
+     "id": "c725efc9-c5bd-4bc9-a3d1-b73de79370fd",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "08:20",
+       "end": "09:20"
+      }
+     ],
+     "label": "Breakfast",
+     "cells": {
+      "duty": {
+       "texts": [
+        "Photo"
+       ]
+      }
+     }
+    },
+    {
+     "id": "1d15df00-4256-4f49-822b-1a161c3263cd",
+     "kind": "class",
+     "times": [
+      {
+       "start": "09:20",
+       "end": "10:00"
+      },
+      {
+       "start": "10:05",
+       "end": "10:45"
+      }
+     ],
+     "cells": {
+      "S01": {
+       "subject": "Math"
+      },
+      "S02": {
+       "subject": "Speaking"
+      },
+      "S03": {
+       "subject": "Reading"
+      },
+      "S04": {
+       "subject": "Writing"
+      }
+     }
+    },
+    {
+     "id": "ca302268-6b57-4c54-8045-436fc68abf1b",
+     "kind": "class",
+     "times": [
+      {
+       "start": "10:55",
+       "end": "11:35"
+      },
+      {
+       "start": "11:40",
+       "end": "12:20"
+      }
+     ],
+     "cells": {
+      "S01": {
+       "subject": "Writing"
+      },
+      "S02": {
+       "subject": "Math"
+      },
+      "S03": {
+       "subject": "Speaking"
+      },
+      "S04": {
+       "subject": "Reading"
+      }
+     }
+    },
+    {
+     "id": "0be45faa-84ec-42d5-9c75-4b6bd3ffd258",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "12:20",
+       "end": "13:20"
+      }
+     ],
+     "label": "Lunch"
+    },
+    {
+     "id": "e80ab6d1-6b4a-4c8a-a1a6-09d6ddbaad4c",
+     "kind": "class",
+     "times": [
+      {
+       "start": "13:20",
+       "end": "14:00"
+      },
+      {
+       "start": "14:05",
+       "end": "14:45"
+      }
+     ],
+     "cells": {
+      "S01": {
+       "subject": "Reading"
+      },
+      "S02": {
+       "subject": "Writing"
+      },
+      "S03": {
+       "subject": "Math"
+      },
+      "S04": {
+       "subject": "Speaking"
+      }
+     }
+    },
+    {
+     "id": "7abda9d2-d25e-4775-874b-58cc359f1ad4",
+     "kind": "class",
+     "times": [
+      {
+       "start": "14:55",
+       "end": "15:35"
+      },
+      {
+       "start": "15:40",
+       "end": "16:20"
+      }
+     ],
+     "cells": {
+      "S01": {
+       "subject": "Speaking"
+      },
+      "S02": {
+       "subject": "Reading"
+      },
+      "S03": {
+       "subject": "Writing"
+      },
+      "S04": {
+       "subject": "Math"
+      }
+     }
+    },
+    {
+     "id": "cbc0d14a-b510-4ef5-bf84-9899513a5b6f",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "16:30",
+       "end": "18:30"
+      }
+     ],
+     "label": "P.E & Shower"
+    },
+    {
+     "id": "65371893-8102-4b0b-a269-5d76ac7bf009",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "18:30",
+       "end": "19:30"
+      }
+     ],
+     "label": "Dinner"
+    },
+    {
+     "id": "7b0bae99-07d1-4a29-b8dc-1eb6e099de64",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "19:30",
+       "end": "20:10"
+      }
+     ],
+     "label": "세계사 인문학"
+    },
+    {
+     "id": "79499e40-06b7-410b-bc15-c0a42c7f6ecf",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "20:15",
+       "end": "20:55"
+      }
+     ],
+     "label": "세계사 인문학"
+    }
+   ],
+   "note": ""
+  },
+  {
+   "campCode": "S29",
+   "groupName": "Spring",
+   "dayType": "steam",
+   "dayTypeLabel": "고잉업",
+   "layout": "time",
+   "order": 5,
+   "classes": [
+    {
+     "classCode": "S01",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S02",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S03",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S04",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    }
+   ],
+   "extraColumns": [],
+   "subjects": [
+    {
+     "key": "주제1",
+     "partner": "owner",
+     "ownerClassCode": "S01",
+     "color": "#dbeafe"
+    },
+    {
+     "key": "주제2",
+     "partner": "owner",
+     "ownerClassCode": "S02",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "주제3",
+     "partner": "owner",
+     "ownerClassCode": "S03",
+     "color": "#fdf3c7"
+    },
+    {
+     "key": "주제4",
+     "partner": "owner",
+     "ownerClassCode": "S04",
+     "color": "#dcf0dc"
+    }
+   ],
+   "blocks": [
+    {
+     "id": "a5bf8a6c-a876-4fec-bd73-f6ac0fe7331d",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "08:20",
+       "end": "09:20"
+      }
+     ],
+     "label": "Breakfast"
+    },
+    {
+     "id": "416c6d9a-ad66-45b0-88ca-3197be176e22",
+     "kind": "class",
+     "times": [
+      {
+       "start": "09:20",
+       "end": "10:00"
+      },
+      {
+       "start": "10:05",
+       "end": "10:45"
+      }
+     ],
+     "cells": {
+      "S01": {
+       "subject": "주제4"
+      },
+      "S02": {
+       "subject": "주제1"
+      },
+      "S03": {
+       "subject": "주제2"
+      },
+      "S04": {
+       "subject": "주제3"
+      }
+     }
+    },
+    {
+     "id": "e4d66e76-43b1-46ce-818a-1aa94dbf3c26",
+     "kind": "class",
+     "times": [
+      {
+       "start": "10:55",
+       "end": "11:35"
+      },
+      {
+       "start": "11:40",
+       "end": "12:20"
+      }
+     ],
+     "cells": {
+      "S01": {
+       "subject": "주제3"
+      },
+      "S02": {
+       "subject": "주제4"
+      },
+      "S03": {
+       "subject": "주제1"
+      },
+      "S04": {
+       "subject": "주제2"
+      }
+     }
+    },
+    {
+     "id": "cf8a3b5d-e3fb-4af5-a0a0-772a86902d8b",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "12:20",
+       "end": "13:20"
+      }
+     ],
+     "label": "Lunch"
+    },
+    {
+     "id": "75a0fd55-c387-4712-9812-9142a01d6600",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "13:20",
+       "end": "15:20"
+      }
+     ],
+     "label": "드림 멘토링"
+    },
+    {
+     "id": "fe9ee3fc-d050-4c65-ab2a-da4ca181aaeb",
+     "kind": "class",
+     "times": [
+      {
+       "start": "15:30",
+       "end": "16:10"
+      },
+      {
+       "start": "16:15",
+       "end": "16:55"
+      }
+     ],
+     "cells": {
+      "S01": {
+       "subject": "주제2"
+      },
+      "S02": {
+       "subject": "주제3"
+      },
+      "S03": {
+       "subject": "주제4"
+      },
+      "S04": {
+       "subject": "주제1"
+      }
+     }
+    },
+    {
+     "id": "a6e77df3-6305-4f30-91bd-2f12d820216b",
+     "kind": "class",
+     "times": [
+      {
+       "start": "17:05",
+       "end": "17:45"
+      },
+      {
+       "start": "17:50",
+       "end": "18:30"
+      }
+     ],
+     "cells": {
+      "S01": {
+       "subject": "주제1"
+      },
+      "S02": {
+       "subject": "주제2"
+      },
+      "S03": {
+       "subject": "주제3"
+      },
+      "S04": {
+       "subject": "주제4"
+      }
+     }
+    },
+    {
+     "id": "d829b123-4d9f-4e3e-ae14-f231fae3565f",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "18:30",
+       "end": "19:30"
+      }
+     ],
+     "label": "Dinner"
+    },
+    {
+     "id": "7bb527cb-b852-4adf-99ae-e81202debe0d",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "19:30",
+       "end": "20:10"
+      }
+     ],
+     "label": "장기자랑"
+    },
+    {
+     "id": "fc382109-4c3c-41fb-a2c0-f35a3a1c822d",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "20:15",
+       "end": "20:55"
+      }
+     ],
+     "label": "장기자랑"
+    }
+   ],
+   "note": "주제가 정해지면 과목 이름(주제1~4)만 바꾸세요."
+  },
+  {
+   "campCode": "S29",
+   "groupName": "Spring",
+   "dayType": "humanities",
+   "dayTypeLabel": "인문학",
+   "layout": "date",
+   "order": 15,
+   "classes": [
+    {
+     "classCode": "S01",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S02",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S03",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S04",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    }
+   ],
+   "extraColumns": [
+    {
+     "key": "duty",
+     "label": "교무실(사진)조",
+     "staticText": "-"
+    }
+   ],
+   "subjects": [
+    {
+     "key": "문화",
+     "partner": "owner",
+     "ownerClassCode": "S01",
+     "color": "#dbeafe"
+    },
+    {
+     "key": "음식",
+     "partner": "owner",
+     "ownerClassCode": "S02",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "랜드마크",
+     "partner": "owner",
+     "ownerClassCode": "S03",
+     "color": "#fdf3c7"
+    },
+    {
+     "key": "국제관계",
+     "partner": "owner",
+     "ownerClassCode": "S04",
+     "color": "#dcf0dc"
+    }
+   ],
+   "blocks": [
+    {
+     "id": "e89ec2d6-2fa4-4b69-92df-e600242116eb",
+     "kind": "class",
+     "dateLabel": "1주차",
+     "lines": 2,
+     "cells": {
+      "S01": {
+       "subject": "문화"
+      },
+      "S02": {
+       "subject": "음식"
+      },
+      "S03": {
+       "subject": "랜드마크"
+      },
+      "S04": {
+       "subject": "국제관계"
+      }
+     }
+    },
+    {
+     "id": "9e5f9797-2009-4333-b93e-4f74442541ab",
+     "kind": "class",
+     "dateLabel": "2주차",
+     "lines": 2,
+     "cells": {
+      "S01": {
+       "subject": "국제관계"
+      },
+      "S02": {
+       "subject": "문화"
+      },
+      "S03": {
+       "subject": "음식"
+      },
+      "S04": {
+       "subject": "랜드마크"
+      }
+     }
+    },
+    {
+     "id": "70f68f45-66a4-4a50-b825-fd4d6cb1f558",
+     "kind": "class",
+     "dateLabel": "3주차",
+     "lines": 2,
+     "cells": {
+      "S01": {
+       "subject": "랜드마크"
+      },
+      "S02": {
+       "subject": "국제관계"
+      },
+      "S03": {
+       "subject": "문화"
+      },
+      "S04": {
+       "subject": "음식"
+      }
+     }
+    },
+    {
+     "id": "37fa9b27-52e9-4ed5-a606-f26ff539dae0",
+     "kind": "class",
+     "dateLabel": "4주차",
+     "lines": 2,
+     "cells": {
+      "S01": {
+       "subject": "음식"
+      },
+      "S02": {
+       "subject": "랜드마크"
+      },
+      "S03": {
+       "subject": "국제관계"
+      },
+      "S04": {
+       "subject": "문화"
+      }
+     }
+    }
+   ],
+   "note": "날짜 확정 전 — 1~4주차 자리표시입니다."
+  },
+  {
+   "campCode": "S29",
+   "groupName": "Summer",
+   "dayType": "regular",
+   "dayTypeLabel": "정규",
+   "layout": "time",
+   "order": 1,
+   "classes": [
+    {
+     "classCode": "S05",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S06",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S07",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    }
+   ],
+   "extraColumns": [
+    {
+     "key": "duty",
+     "label": "교무실(사진)조",
+     "dutyRotation": [
+      "S05",
+      "S06",
+      "S07",
+      "S07"
+     ]
+    }
+   ],
+   "subjects": [
+    {
+     "key": "Speaking",
+     "partner": "foreign",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "Reading",
+     "partner": "foreign",
+     "color": "#fdead4"
+    },
+    {
+     "key": "Writing",
+     "partner": "foreign",
+     "color": "#dcf0dc"
+    },
+    {
+     "key": "PBL",
+     "partner": "foreign",
+     "color": "#ede9fe"
+    }
+   ],
+   "blocks": [
+    {
+     "id": "18cfca51-1039-49c3-9113-41ab1b08c7fe",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "08:20",
+       "end": "09:20"
+      }
+     ],
+     "label": "Breakfast",
+     "cells": {
+      "duty": {
+       "texts": [
+        "Photo"
+       ]
+      }
+     }
+    },
+    {
+     "id": "c659666c-c842-43d7-9f2c-f268db68c38b",
+     "kind": "class",
+     "times": [
+      {
+       "start": "09:20",
+       "end": "10:00"
+      },
+      {
+       "start": "10:05",
+       "end": "10:45"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "Speaking"
+      },
+      "S06": {
+       "subject": "Reading"
+      },
+      "S07": {
+       "subject": "Writing"
+      }
+     }
+    },
+    {
+     "id": "8db1c589-104f-479e-9271-bc91bf6cc836",
+     "kind": "class",
+     "times": [
+      {
+       "start": "10:55",
+       "end": "11:35"
+      },
+      {
+       "start": "11:40",
+       "end": "12:20"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "Writing"
+      },
+      "S06": {
+       "subject": "Speaking"
+      },
+      "S07": {
+       "subject": "Reading"
+      }
+     }
+    },
+    {
+     "id": "ec0e6553-3573-4194-9289-503b9ab918ac",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "12:20",
+       "end": "13:20"
+      }
+     ],
+     "label": "Lunch"
+    },
+    {
+     "id": "254b36b7-6481-4058-8f45-abda67931391",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "13:20",
+       "end": "15:20"
+      }
+     ],
+     "label": "P.E & Shower"
+    },
+    {
+     "id": "6c3923e6-06f3-4528-85a3-98b483b69b0b",
+     "kind": "class",
+     "times": [
+      {
+       "start": "15:30",
+       "end": "16:10"
+      },
+      {
+       "start": "16:15",
+       "end": "16:55"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "Reading"
+      },
+      "S06": {
+       "subject": "Writing"
+      },
+      "S07": {
+       "subject": "Speaking"
+      }
+     }
+    },
+    {
+     "id": "a1c83a42-1b1f-4824-91c5-253e2d0d52b1",
+     "kind": "class",
+     "times": [
+      {
+       "start": "17:05",
+       "end": "17:45"
+      },
+      {
+       "start": "17:50",
+       "end": "18:30"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "PBL",
+       "partnerRole": "Speaking"
+      },
+      "S06": {
+       "subject": "PBL",
+       "partnerRole": "Reading"
+      },
+      "S07": {
+       "subject": "PBL",
+       "partnerRole": "Writing"
+      }
+     }
+    },
+    {
+     "id": "50537b23-db3d-4400-b83c-fc306f207664",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "18:30",
+       "end": "19:30"
+      }
+     ],
+     "label": "Dinner"
+    },
+    {
+     "id": "1ed7dcb2-efeb-4656-a0b1-26544d0dac30",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "19:30",
+       "end": "20:10"
+      }
+     ],
+     "label": "세계사 인문학"
+    },
+    {
+     "id": "e7e38224-27e1-41d0-8b37-cbb12cdb5125",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "20:15",
+       "end": "20:55"
+      }
+     ],
+     "label": "세계사 인문학"
+    }
+   ],
+   "note": ""
+  },
+  {
+   "campCode": "S29",
+   "groupName": "Summer",
+   "dayType": "steam",
+   "dayTypeLabel": "고잉업",
+   "layout": "time",
+   "order": 6,
+   "classes": [
+    {
+     "classCode": "S05",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S06",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S07",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    }
+   ],
+   "extraColumns": [],
+   "subjects": [
+    {
+     "key": "주제1 1차",
+     "partner": "owner",
+     "ownerClassCode": "S05",
+     "color": "#dbeafe"
+    },
+    {
+     "key": "주제1 2차",
+     "partner": "owner",
+     "ownerClassCode": "S05",
+     "color": "#dbeafe"
+    },
+    {
+     "key": "주제1 3차",
+     "partner": "owner",
+     "ownerClassCode": "S05",
+     "color": "#dbeafe"
+    },
+    {
+     "key": "주제2 1차",
+     "partner": "owner",
+     "ownerClassCode": "S06",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "주제2 2차",
+     "partner": "owner",
+     "ownerClassCode": "S06",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "주제2 3차",
+     "partner": "owner",
+     "ownerClassCode": "S06",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "주제3 1차",
+     "partner": "owner",
+     "ownerClassCode": "S07",
+     "color": "#fdf3c7"
+    },
+    {
+     "key": "주제3 2차",
+     "partner": "owner",
+     "ownerClassCode": "S07",
+     "color": "#fdf3c7"
+    },
+    {
+     "key": "주제3 3차",
+     "partner": "owner",
+     "ownerClassCode": "S07",
+     "color": "#fdf3c7"
+    }
+   ],
+   "blocks": [
+    {
+     "id": "64d6fd5f-7427-4fd8-ba45-590ea5b2c0f6",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "08:20",
+       "end": "09:20"
+      }
+     ],
+     "label": "Breakfast"
+    },
+    {
+     "id": "7c732637-4ccb-4d2a-a655-bc8c1fa99b55",
+     "kind": "class",
+     "times": [
+      {
+       "start": "09:20",
+       "end": "10:00"
+      },
+      {
+       "start": "10:05",
+       "end": "10:45"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "주제1 1차"
+      },
+      "S06": {
+       "subject": "주제2 1차"
+      },
+      "S07": {
+       "subject": "주제3 1차"
+      }
+     }
+    },
+    {
+     "id": "a75e4c15-1d16-4f5e-bb2b-c24b204e8f05",
+     "kind": "class",
+     "times": [
+      {
+       "start": "10:55",
+       "end": "11:35"
+      },
+      {
+       "start": "11:40",
+       "end": "12:20"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "주제3 1차"
+      },
+      "S06": {
+       "subject": "주제1 1차"
+      },
+      "S07": {
+       "subject": "주제2 1차"
+      }
+     }
+    },
+    {
+     "id": "68e696fc-4d6f-41c2-aeac-3e14019b7c56",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "12:20",
+       "end": "13:20"
+      }
+     ],
+     "label": "Lunch"
+    },
+    {
+     "id": "492a5117-9b53-474c-bb39-fc8f8dc007d4",
+     "kind": "class",
+     "times": [
+      {
+       "start": "13:20",
+       "end": "14:00"
+      },
+      {
+       "start": "14:05",
+       "end": "14:45"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "주제2 1차"
+      },
+      "S06": {
+       "subject": "주제3 1차"
+      },
+      "S07": {
+       "subject": "주제1 1차"
+      }
+     }
+    },
+    {
+     "id": "0c40b21f-fc08-4c6c-9b7a-ec04aec6477b",
+     "kind": "class",
+     "times": [
+      {
+       "start": "14:55",
+       "end": "15:35"
+      },
+      {
+       "start": "15:40",
+       "end": "16:20"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "주제1 2차"
+      },
+      "S06": {
+       "subject": "주제2 2차"
+      },
+      "S07": {
+       "subject": "주제3 2차"
+      }
+     }
+    },
+    {
+     "id": "c630d346-d51d-4a8a-9b2b-5f3cd11bd8da",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "16:30",
+       "end": "18:30"
+      }
+     ],
+     "label": "장기자랑 준비"
+    },
+    {
+     "id": "2d87e955-9bef-4370-b998-b5a9f0906b27",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "18:30",
+       "end": "19:30"
+      }
+     ],
+     "label": "Dinner"
+    },
+    {
+     "id": "d73a67f2-2f72-4bc3-9659-4f93089e9837",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "19:30",
+       "end": "20:10"
+      }
+     ],
+     "label": "드림 멘토링"
+    },
+    {
+     "id": "1291cc09-a1ad-4bc7-b6ae-e2976e07550d",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "20:15",
+       "end": "20:55"
+      }
+     ],
+     "label": "드림 멘토링"
+    }
+   ],
+   "note": "주제가 정해지면 과목 이름(주제1~3)만 바꾸세요. 회차(1·2·3차)는 그대로 둡니다.",
+   "dates": [
+    "2027-01-21"
+   ]
+  },
+  {
+   "campCode": "S29",
+   "groupName": "Summer",
+   "dayType": "steam",
+   "dayTypeLabel": "고잉업",
+   "layout": "time",
+   "order": 6,
+   "classes": [
+    {
+     "classCode": "S05",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S06",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S07",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    }
+   ],
+   "extraColumns": [],
+   "subjects": [
+    {
+     "key": "주제1 1차",
+     "partner": "owner",
+     "ownerClassCode": "S05",
+     "color": "#dbeafe"
+    },
+    {
+     "key": "주제1 2차",
+     "partner": "owner",
+     "ownerClassCode": "S05",
+     "color": "#dbeafe"
+    },
+    {
+     "key": "주제1 3차",
+     "partner": "owner",
+     "ownerClassCode": "S05",
+     "color": "#dbeafe"
+    },
+    {
+     "key": "주제2 1차",
+     "partner": "owner",
+     "ownerClassCode": "S06",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "주제2 2차",
+     "partner": "owner",
+     "ownerClassCode": "S06",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "주제2 3차",
+     "partner": "owner",
+     "ownerClassCode": "S06",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "주제3 1차",
+     "partner": "owner",
+     "ownerClassCode": "S07",
+     "color": "#fdf3c7"
+    },
+    {
+     "key": "주제3 2차",
+     "partner": "owner",
+     "ownerClassCode": "S07",
+     "color": "#fdf3c7"
+    },
+    {
+     "key": "주제3 3차",
+     "partner": "owner",
+     "ownerClassCode": "S07",
+     "color": "#fdf3c7"
+    }
+   ],
+   "blocks": [
+    {
+     "id": "55b2f6ef-9ee0-42e3-b906-a30b1c18d440",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "08:20",
+       "end": "09:20"
+      }
+     ],
+     "label": "Breakfast"
+    },
+    {
+     "id": "365123f9-c35c-4af3-b523-3ad2f56c86b8",
+     "kind": "class",
+     "times": [
+      {
+       "start": "09:20",
+       "end": "10:00"
+      },
+      {
+       "start": "10:05",
+       "end": "10:45"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "주제3 2차"
+      },
+      "S06": {
+       "subject": "주제1 2차"
+      },
+      "S07": {
+       "subject": "주제2 2차"
+      }
+     }
+    },
+    {
+     "id": "5aafd6c0-e4e0-4b26-84dc-51aaf0aa58c2",
+     "kind": "class",
+     "times": [
+      {
+       "start": "10:55",
+       "end": "11:35"
+      },
+      {
+       "start": "11:40",
+       "end": "12:20"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "주제3 3차"
+      },
+      "S06": {
+       "subject": "주제1 3차"
+      },
+      "S07": {
+       "subject": "주제2 3차"
+      }
+     }
+    },
+    {
+     "id": "22972e1c-4eaf-4dbe-828d-953b44364b91",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "12:20",
+       "end": "13:20"
+      }
+     ],
+     "label": "Lunch"
+    },
+    {
+     "id": "6b5f4501-01b2-4c17-920f-c2dde508a3f6",
+     "kind": "class",
+     "times": [
+      {
+       "start": "13:20",
+       "end": "14:00"
+      },
+      {
+       "start": "14:05",
+       "end": "14:45"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "주제2 2차"
+      },
+      "S06": {
+       "subject": "주제3 2차"
+      },
+      "S07": {
+       "subject": "주제1 2차"
+      }
+     }
+    },
+    {
+     "id": "f71af189-a3bd-4a4c-8e69-3e650740d426",
+     "kind": "class",
+     "times": [
+      {
+       "start": "14:55",
+       "end": "15:35"
+      },
+      {
+       "start": "15:40",
+       "end": "16:20"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "주제2 3차"
+      },
+      "S06": {
+       "subject": "주제3 3차"
+      },
+      "S07": {
+       "subject": "주제1 3차"
+      }
+     }
+    },
+    {
+     "id": "657f9406-4fa5-43d0-ab9f-4cdf786a00be",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "16:30",
+       "end": "18:30"
+      }
+     ],
+     "label": "장기자랑"
+    },
+    {
+     "id": "c3848f20-faab-4efb-b69d-eeed476dd8e3",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "18:30",
+       "end": "19:30"
+      }
+     ],
+     "label": "Dinner"
+    },
+    {
+     "id": "f2922316-5c58-41d1-848a-d5249a2536c4",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "19:30",
+       "end": "20:10"
+      }
+     ],
+     "label": "드림 멘토링"
+    },
+    {
+     "id": "b0a22b89-567d-4b42-b31c-39a03a28a3f4",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "20:15",
+       "end": "20:55"
+      }
+     ],
+     "label": "드림 멘토링"
+    }
+   ],
+   "note": "주제가 정해지면 과목 이름(주제1~3)만 바꾸세요. 회차(1·2·3차)는 그대로 둡니다.",
+   "dates": [
+    "2027-01-28"
+   ]
+  },
+  {
+   "campCode": "S29",
+   "groupName": "Summer",
+   "dayType": "humanities",
+   "dayTypeLabel": "인문학",
+   "layout": "date",
+   "order": 16,
+   "classes": [
+    {
+     "classCode": "S05",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S06",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S07",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    }
+   ],
+   "extraColumns": [
+    {
+     "key": "duty",
+     "label": "교무실(사진)조",
+     "staticText": "-"
+    }
+   ],
+   "subjects": [
+    {
+     "key": "혁신의 탄생",
+     "partner": "owner",
+     "ownerClassCode": "S05",
+     "color": "#dbeafe"
+    },
+    {
+     "key": "자본의 탄생",
+     "partner": "owner",
+     "ownerClassCode": "S06",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "자유의 탄생",
+     "partner": "owner",
+     "ownerClassCode": "S07",
+     "color": "#fdf3c7"
+    },
+    {
+     "key": "주제1 3차",
+     "partner": "owner",
+     "ownerClassCode": "S05",
+     "color": "#dbeafe"
+    },
+    {
+     "key": "주제2 3차",
+     "partner": "owner",
+     "ownerClassCode": "S06",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "주제3 3차",
+     "partner": "owner",
+     "ownerClassCode": "S07",
+     "color": "#fdf3c7"
+    }
+   ],
+   "blocks": [
+    {
+     "id": "841fcb08-53de-48fb-b824-ab50c141e8df",
+     "kind": "class",
+     "dateLabel": "1/14, 1/15, 1/16",
+     "lines": 2,
+     "cells": {
+      "S05": {
+       "subject": "혁신의 탄생"
+      },
+      "S06": {
+       "subject": "자본의 탄생"
+      },
+      "S07": {
+       "subject": "자유의 탄생"
+      }
+     },
+     "dayOffsets": [
+      6,
+      7,
+      8
+     ]
+    },
+    {
+     "id": "9c245afe-3901-4409-a411-d5638a5896c7",
+     "kind": "class",
+     "dateLabel": "1/17, 1/19, 1/20",
+     "lines": 2,
+     "cells": {
+      "S05": {
+       "subject": "자유의 탄생"
+      },
+      "S06": {
+       "subject": "혁신의 탄생"
+      },
+      "S07": {
+       "subject": "자본의 탄생"
+      }
+     },
+     "dayOffsets": [
+      9,
+      11,
+      12
+     ]
+    },
+    {
+     "id": "369d12ca-51f7-4fb2-aa7c-267e7d63906a",
+     "kind": "class",
+     "dateLabel": "1/23, 1/24, 1/26",
+     "lines": 2,
+     "cells": {
+      "S05": {
+       "subject": "자본의 탄생"
+      },
+      "S06": {
+       "subject": "자유의 탄생"
+      },
+      "S07": {
+       "subject": "혁신의 탄생"
+      }
+     },
+     "dayOffsets": [
+      15,
+      16,
+      18
+     ]
+    },
+    {
+     "id": "498df8b1-a630-40e5-937a-eac3545a9470",
+     "kind": "class",
+     "dateLabel": "1/27",
+     "lines": 2,
+     "cells": {
+      "S05": {
+       "subject": "주제1 3차"
+      },
+      "S06": {
+       "subject": "주제2 3차"
+      },
+      "S07": {
+       "subject": "주제3 3차"
+      }
+     },
+     "dayOffsets": [
+      19
+     ]
+    }
+   ],
+   "note": ""
+  },
+  {
+   "campCode": "S29",
+   "groupName": "Summer",
+   "dayType": "departure_d1",
+   "dayTypeLabel": "퇴소 D-1",
+   "layout": "time",
+   "order": 11,
+   "classes": [
+    {
+     "classCode": "S05",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S06",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S07",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    }
+   ],
+   "extraColumns": [
+    {
+     "key": "duty",
+     "label": "교무실(사진)조",
+     "dutyRotation": [
+      "S05",
+      "S06",
+      "S07",
+      "S07"
+     ]
+    }
+   ],
+   "subjects": [
+    {
+     "key": "Speaking",
+     "partner": "foreign",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "Reading",
+     "partner": "foreign",
+     "color": "#fdead4"
+    },
+    {
+     "key": "Writing",
+     "partner": "foreign",
+     "color": "#dcf0dc"
+    },
+    {
+     "key": "PBL",
+     "partner": "foreign",
+     "color": "#ede9fe"
+    }
+   ],
+   "blocks": [
+    {
+     "id": "f839b45e-393f-4ea9-b045-627f9582e620",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "08:20",
+       "end": "09:20"
+      }
+     ],
+     "label": "Breakfast",
+     "cells": {
+      "duty": {
+       "texts": [
+        "Photo"
+       ]
+      }
+     }
+    },
+    {
+     "id": "3faaa55f-a07e-4fe6-b57c-9f6f6c8f47af",
+     "kind": "class",
+     "times": [
+      {
+       "start": "09:20",
+       "end": "10:00"
+      },
+      {
+       "start": "10:05",
+       "end": "10:45"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "Speaking"
+      },
+      "S06": {
+       "subject": "Reading"
+      },
+      "S07": {
+       "subject": "Writing"
+      }
+     }
+    },
+    {
+     "id": "b4dde5c6-b83b-4c87-9364-f48a250f8098",
+     "kind": "class",
+     "times": [
+      {
+       "start": "10:55",
+       "end": "11:35"
+      },
+      {
+       "start": "11:40",
+       "end": "12:20"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "Writing"
+      },
+      "S06": {
+       "subject": "Speaking"
+      },
+      "S07": {
+       "subject": "Reading"
+      }
+     }
+    },
+    {
+     "id": "762f6985-7746-483a-9dfb-1a693221ea1b",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "12:20",
+       "end": "13:20"
+      }
+     ],
+     "label": "Lunch"
+    },
+    {
+     "id": "2642ce51-a580-4eae-80b7-b203dae68a67",
+     "kind": "class",
+     "times": [
+      {
+       "start": "13:20",
+       "end": "14:00"
+      },
+      {
+       "start": "14:05",
+       "end": "14:45"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "Reading"
+      },
+      "S06": {
+       "subject": "Writing"
+      },
+      "S07": {
+       "subject": "Speaking"
+      }
+     }
+    },
+    {
+     "id": "09dfb380-2215-4f4a-adc7-783e49d15fa0",
+     "kind": "class",
+     "times": [
+      {
+       "start": "14:55",
+       "end": "15:35"
+      },
+      {
+       "start": "15:40",
+       "end": "16:20"
+      }
+     ],
+     "cells": {
+      "S05": {
+       "subject": "PBL",
+       "partnerRole": "Speaking"
+      },
+      "S06": {
+       "subject": "PBL",
+       "partnerRole": "Reading"
+      },
+      "S07": {
+       "subject": "PBL",
+       "partnerRole": "Writing"
+      }
+     }
+    },
+    {
+     "id": "1765ad93-2d39-4bce-85b7-0b8f5e582e0d",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "16:30",
+       "end": "18:30"
+      }
+     ],
+     "label": "Final Test"
+    },
+    {
+     "id": "22037944-3c3c-4077-a90c-10b638e1f7fc",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "18:30",
+       "end": "19:30"
+      }
+     ],
+     "label": "Dinner"
+    },
+    {
+     "id": "ce23cb2a-5da5-4cdb-9f8c-68c8baaddd28",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "19:30",
+       "end": "20:10"
+      }
+     ],
+     "label": "비욘드 레크레이션"
+    },
+    {
+     "id": "4e34ea70-fad0-4ac7-a9e9-e30c4c881948",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "20:15",
+       "end": "20:55"
+      }
+     ],
+     "label": "비욘드 레크레이션"
+    }
+   ],
+   "note": "Summer 1/30 (Final Test) 시간표"
+  },
+  {
+   "campCode": "S29",
+   "groupName": "Autumn",
+   "dayType": "regular",
+   "dayTypeLabel": "정규",
+   "layout": "time",
+   "order": 2,
+   "classes": [
+    {
+     "classCode": "S08",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S09",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S10",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S11",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    }
+   ],
+   "extraColumns": [
+    {
+     "key": "duty",
+     "label": "교무실(사진)조",
+     "dutyRotation": [
+      "S09",
+      "S08",
+      "S11",
+      "S10"
+     ]
+    }
+   ],
+   "subjects": [
+    {
+     "key": "Math",
+     "partner": "pattern",
+     "color": "#dbeafe",
+     "teacherRole": "ownTeacher",
+     "partnerTeacherRole": "수업"
+    },
+    {
+     "key": "Speaking",
+     "partner": "foreign",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "Reading",
+     "partner": "foreign",
+     "color": "#fdead4"
+    },
+    {
+     "key": "Writing",
+     "partner": "foreign",
+     "color": "#dcf0dc"
+    }
+   ],
+   "blocks": [
+    {
+     "id": "3f4bd3c4-c8fd-4e2f-a838-e52a2e83dad6",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "08:20",
+       "end": "09:20"
+      }
+     ],
+     "label": "Breakfast",
+     "cells": {
+      "duty": {
+       "texts": [
+        "Photo"
+       ]
+      }
+     }
+    },
+    {
+     "id": "a59fde6d-0334-47c1-b70d-b87f6c72292b",
+     "kind": "class",
+     "times": [
+      {
+       "start": "09:20",
+       "end": "10:00"
+      },
+      {
+       "start": "10:05",
+       "end": "10:45"
+      }
+     ],
+     "cells": {
+      "S08": {
+       "subject": "Math",
+       "partnerFirst": true
+      },
+      "S09": {
+       "subject": "Speaking"
+      },
+      "S10": {
+       "subject": "Reading"
+      },
+      "S11": {
+       "subject": "Writing"
+      }
+     }
+    },
+    {
+     "id": "068a651c-fced-4dad-87d9-b807999fe19b",
+     "kind": "class",
+     "times": [
+      {
+       "start": "10:55",
+       "end": "11:35"
+      },
+      {
+       "start": "11:40",
+       "end": "12:20"
+      }
+     ],
+     "cells": {
+      "S08": {
+       "subject": "Writing"
+      },
+      "S09": {
+       "subject": "Math",
+       "partnerFirst": true
+      },
+      "S10": {
+       "subject": "Speaking"
+      },
+      "S11": {
+       "subject": "Reading"
+      }
+     }
+    },
+    {
+     "id": "baba7b3e-8b1a-41f6-9281-7e1b055cf99b",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "12:20",
+       "end": "13:20"
+      }
+     ],
+     "label": "Lunch"
+    },
+    {
+     "id": "a12e7697-68ae-44b5-9731-610d3fff6a8e",
+     "kind": "class",
+     "times": [
+      {
+       "start": "13:20",
+       "end": "14:00"
+      },
+      {
+       "start": "14:05",
+       "end": "14:45"
+      }
+     ],
+     "cells": {
+      "S08": {
+       "subject": "Reading"
+      },
+      "S09": {
+       "subject": "Writing"
+      },
+      "S10": {
+       "subject": "Math",
+       "partnerFirst": true
+      },
+      "S11": {
+       "subject": "Speaking"
+      }
+     }
+    },
+    {
+     "id": "98d261e3-c35f-44e2-83d9-151682ee5923",
+     "kind": "class",
+     "times": [
+      {
+       "start": "14:55",
+       "end": "15:35"
+      },
+      {
+       "start": "15:40",
+       "end": "16:20"
+      }
+     ],
+     "cells": {
+      "S08": {
+       "subject": "Speaking"
+      },
+      "S09": {
+       "subject": "Reading"
+      },
+      "S10": {
+       "subject": "Writing"
+      },
+      "S11": {
+       "subject": "Math",
+       "partnerFirst": true
+      }
+     }
+    },
+    {
+     "id": "c2a7bfe1-1030-467c-bcd5-ab7791ab8b1b",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "16:30",
+       "end": "18:30"
+      }
+     ],
+     "label": "P.E & Shower"
+    },
+    {
+     "id": "30e9993d-c214-4295-bb52-d688585f4c05",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "18:30",
+       "end": "19:30"
+      }
+     ],
+     "label": "Dinner"
+    },
+    {
+     "id": "9028748f-1623-43af-8fe4-678cf73c2e3a",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "19:30",
+       "end": "20:10"
+      }
+     ],
+     "label": "세계사 인문학"
+    },
+    {
+     "id": "3a597a63-19cd-4d1f-a666-411e87cf5649",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "20:15",
+       "end": "20:55"
+      }
+     ],
+     "label": "세계사 인문학"
+    }
+   ],
+   "note": ""
+  },
+  {
+   "campCode": "S29",
+   "groupName": "Autumn",
+   "dayType": "steam",
+   "dayTypeLabel": "고잉업",
+   "layout": "time",
+   "order": 7,
+   "classes": [
+    {
+     "classCode": "S08",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S09",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S10",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S11",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    }
+   ],
+   "extraColumns": [],
+   "subjects": [
+    {
+     "key": "주제1",
+     "partner": "owner",
+     "ownerClassCode": "S08",
+     "color": "#dbeafe"
+    },
+    {
+     "key": "주제2",
+     "partner": "owner",
+     "ownerClassCode": "S09",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "주제3",
+     "partner": "owner",
+     "ownerClassCode": "S10",
+     "color": "#fdf3c7"
+    },
+    {
+     "key": "주제4",
+     "partner": "owner",
+     "ownerClassCode": "S11",
+     "color": "#dcf0dc"
+    }
+   ],
+   "blocks": [
+    {
+     "id": "96f17669-eed2-4bf0-9e8b-8914032ba802",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "08:20",
+       "end": "09:20"
+      }
+     ],
+     "label": "Breakfast"
+    },
+    {
+     "id": "e0742076-52c3-41f6-ac06-e5dda43fa4b5",
+     "kind": "class",
+     "times": [
+      {
+       "start": "09:20",
+       "end": "10:00"
+      },
+      {
+       "start": "10:05",
+       "end": "10:45"
+      }
+     ],
+     "cells": {
+      "S08": {
+       "subject": "주제1"
+      },
+      "S09": {
+       "subject": "주제2"
+      },
+      "S10": {
+       "subject": "주제3"
+      },
+      "S11": {
+       "subject": "주제4"
+      }
+     }
+    },
+    {
+     "id": "023b782f-f46d-455d-aa0d-1cda8e248697",
+     "kind": "class",
+     "times": [
+      {
+       "start": "10:55",
+       "end": "11:35"
+      },
+      {
+       "start": "11:40",
+       "end": "12:20"
+      }
+     ],
+     "cells": {
+      "S08": {
+       "subject": "주제3"
+      },
+      "S09": {
+       "subject": "주제4"
+      },
+      "S10": {
+       "subject": "주제1"
+      },
+      "S11": {
+       "subject": "주제2"
+      }
+     }
+    },
+    {
+     "id": "471b0b2b-afbc-4b97-b668-1f3984741933",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "12:20",
+       "end": "13:20"
+      }
+     ],
+     "label": "Lunch"
+    },
+    {
+     "id": "a8e15fb2-1b2c-41a2-8674-45f3004a54c8",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "13:20",
+       "end": "15:20"
+      }
+     ],
+     "label": "장기자랑"
+    },
+    {
+     "id": "d1a18b20-3722-4b9d-bf8b-a5c309ab6f3c",
+     "kind": "class",
+     "times": [
+      {
+       "start": "15:30",
+       "end": "16:10"
+      },
+      {
+       "start": "16:15",
+       "end": "16:55"
+      }
+     ],
+     "cells": {
+      "S08": {
+       "subject": "주제2"
+      },
+      "S09": {
+       "subject": "주제3"
+      },
+      "S10": {
+       "subject": "주제4"
+      },
+      "S11": {
+       "subject": "주제1"
+      }
+     }
+    },
+    {
+     "id": "f28916bf-0ad5-442a-b7c9-be0ff5167f23",
+     "kind": "class",
+     "times": [
+      {
+       "start": "17:05",
+       "end": "17:45"
+      },
+      {
+       "start": "17:50",
+       "end": "18:30"
+      }
+     ],
+     "cells": {
+      "S08": {
+       "subject": "주제4"
+      },
+      "S09": {
+       "subject": "주제1"
+      },
+      "S10": {
+       "subject": "주제2"
+      },
+      "S11": {
+       "subject": "주제3"
+      }
+     }
+    },
+    {
+     "id": "f070c67b-8341-466c-aba7-15cda19e93c2",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "18:30",
+       "end": "19:30"
+      }
+     ],
+     "label": "Dinner"
+    },
+    {
+     "id": "93bcf346-2952-4b5a-be0c-b9b461f16ac0",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "19:30",
+       "end": "20:10"
+      }
+     ],
+     "label": "드림 멘토링"
+    },
+    {
+     "id": "7623ef88-6a01-4c0f-8579-495268c55846",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "20:15",
+       "end": "20:55"
+      }
+     ],
+     "label": "드림 멘토링"
+    }
+   ],
+   "note": "주제가 정해지면 과목 이름(주제1~4)만 바꾸세요."
+  },
+  {
+   "campCode": "S29",
+   "groupName": "Autumn",
+   "dayType": "humanities",
+   "dayTypeLabel": "인문학",
+   "layout": "date",
+   "order": 17,
+   "classes": [
+    {
+     "classCode": "S08",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S09",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S10",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S11",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    }
+   ],
+   "extraColumns": [
+    {
+     "key": "duty",
+     "label": "교무실(사진)조",
+     "staticText": "-"
+    }
+   ],
+   "subjects": [
+    {
+     "key": "문화",
+     "partner": "owner",
+     "ownerClassCode": "S08",
+     "color": "#dbeafe"
+    },
+    {
+     "key": "음식",
+     "partner": "owner",
+     "ownerClassCode": "S09",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "랜드마크",
+     "partner": "owner",
+     "ownerClassCode": "S10",
+     "color": "#fdf3c7"
+    },
+    {
+     "key": "국제관계",
+     "partner": "owner",
+     "ownerClassCode": "S11",
+     "color": "#dcf0dc"
+    }
+   ],
+   "blocks": [
+    {
+     "id": "6cb7849b-3b22-46dc-b693-14e5172e2c08",
+     "kind": "class",
+     "dateLabel": "1주차",
+     "lines": 2,
+     "cells": {
+      "S08": {
+       "subject": "문화"
+      },
+      "S09": {
+       "subject": "음식"
+      },
+      "S10": {
+       "subject": "랜드마크"
+      },
+      "S11": {
+       "subject": "국제관계"
+      }
+     }
+    },
+    {
+     "id": "d626083e-f643-414c-a873-1533c84236c8",
+     "kind": "class",
+     "dateLabel": "2주차",
+     "lines": 2,
+     "cells": {
+      "S08": {
+       "subject": "국제관계"
+      },
+      "S09": {
+       "subject": "문화"
+      },
+      "S10": {
+       "subject": "음식"
+      },
+      "S11": {
+       "subject": "랜드마크"
+      }
+     }
+    },
+    {
+     "id": "3a8c31fe-4fa8-49a0-b019-9cfc56f11e88",
+     "kind": "class",
+     "dateLabel": "3주차",
+     "lines": 2,
+     "cells": {
+      "S08": {
+       "subject": "랜드마크"
+      },
+      "S09": {
+       "subject": "국제관계"
+      },
+      "S10": {
+       "subject": "문화"
+      },
+      "S11": {
+       "subject": "음식"
+      }
+     }
+    },
+    {
+     "id": "f2725204-e705-4824-817f-186cf14a93c4",
+     "kind": "class",
+     "dateLabel": "4주차",
+     "lines": 2,
+     "cells": {
+      "S08": {
+       "subject": "음식"
+      },
+      "S09": {
+       "subject": "랜드마크"
+      },
+      "S10": {
+       "subject": "국제관계"
+      },
+      "S11": {
+       "subject": "문화"
+      }
+     }
+    }
+   ],
+   "note": "날짜 확정 전 — 1~4주차 자리표시입니다."
+  },
+  {
+   "campCode": "S29",
+   "groupName": "Winter",
+   "dayType": "regular",
+   "dayTypeLabel": "정규",
+   "layout": "time",
+   "order": 3,
+   "classes": [
+    {
+     "classCode": "S12",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S13",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S14",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S15",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    }
+   ],
+   "extraColumns": [
+    {
+     "key": "duty",
+     "label": "교무실(사진)조",
+     "dutyRotation": [
+      "S13",
+      "S12",
+      "S15",
+      "S14"
+     ]
+    }
+   ],
+   "subjects": [
+    {
+     "key": "Math",
+     "partner": "pattern",
+     "color": "#dbeafe",
+     "teacherRole": "ownTeacher",
+     "partnerTeacherRole": "수업"
+    },
+    {
+     "key": "Speaking",
+     "partner": "foreign",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "Reading",
+     "partner": "foreign",
+     "color": "#fdead4"
+    },
+    {
+     "key": "Writing",
+     "partner": "foreign",
+     "color": "#dcf0dc"
+    }
+   ],
+   "blocks": [
+    {
+     "id": "23398d09-f8b7-4692-a4fb-6b236a662341",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "08:20",
+       "end": "09:20"
+      }
+     ],
+     "label": "Breakfast",
+     "cells": {
+      "duty": {
+       "texts": [
+        "Photo"
+       ]
+      }
+     }
+    },
+    {
+     "id": "efbcd420-f566-4bc3-8964-743428f87aba",
+     "kind": "class",
+     "times": [
+      {
+       "start": "09:20",
+       "end": "10:00"
+      },
+      {
+       "start": "10:05",
+       "end": "10:45"
+      }
+     ],
+     "cells": {
+      "S12": {
+       "subject": "Math",
+       "partnerFirst": true
+      },
+      "S13": {
+       "subject": "Speaking"
+      },
+      "S14": {
+       "subject": "Reading"
+      },
+      "S15": {
+       "subject": "Writing"
+      }
+     }
+    },
+    {
+     "id": "fd7606e6-0bef-4c94-be47-a9afa0d0bc0b",
+     "kind": "class",
+     "times": [
+      {
+       "start": "10:55",
+       "end": "11:35"
+      },
+      {
+       "start": "11:40",
+       "end": "12:20"
+      }
+     ],
+     "cells": {
+      "S12": {
+       "subject": "Writing"
+      },
+      "S13": {
+       "subject": "Math",
+       "partnerFirst": true
+      },
+      "S14": {
+       "subject": "Speaking"
+      },
+      "S15": {
+       "subject": "Reading"
+      }
+     }
+    },
+    {
+     "id": "e48f694d-64cd-4f50-a14a-5eb06b8e0de5",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "12:20",
+       "end": "13:20"
+      }
+     ],
+     "label": "Lunch"
+    },
+    {
+     "id": "a26d71bd-81a3-4eaf-aacc-c7857b033dad",
+     "kind": "class",
+     "times": [
+      {
+       "start": "13:20",
+       "end": "14:00"
+      },
+      {
+       "start": "14:05",
+       "end": "14:45"
+      }
+     ],
+     "cells": {
+      "S12": {
+       "subject": "Reading"
+      },
+      "S13": {
+       "subject": "Writing"
+      },
+      "S14": {
+       "subject": "Math",
+       "partnerFirst": true
+      },
+      "S15": {
+       "subject": "Speaking"
+      }
+     }
+    },
+    {
+     "id": "9830d68d-3231-4503-aa02-08d4f02597ed",
+     "kind": "class",
+     "times": [
+      {
+       "start": "14:55",
+       "end": "15:35"
+      },
+      {
+       "start": "15:40",
+       "end": "16:20"
+      }
+     ],
+     "cells": {
+      "S12": {
+       "subject": "Speaking"
+      },
+      "S13": {
+       "subject": "Reading"
+      },
+      "S14": {
+       "subject": "Writing"
+      },
+      "S15": {
+       "subject": "Math",
+       "partnerFirst": true
+      }
+     }
+    },
+    {
+     "id": "ecb34820-d8bc-4c7f-bdd7-acd9c7aaf912",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "16:30",
+       "end": "18:30"
+      }
+     ],
+     "label": "P.E & Shower"
+    },
+    {
+     "id": "4c39a3e9-416d-4916-886f-1c597652610e",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "18:30",
+       "end": "19:30"
+      }
+     ],
+     "label": "Dinner"
+    },
+    {
+     "id": "bba295f0-68a0-479a-8b5b-8f9348b765b3",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "19:30",
+       "end": "20:10"
+      }
+     ],
+     "label": "세계사 인문학"
+    },
+    {
+     "id": "fcad3b28-007d-4af3-88ac-9f933660049b",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "20:15",
+       "end": "20:55"
+      }
+     ],
+     "label": "세계사 인문학"
+    }
+   ],
+   "note": ""
+  },
+  {
+   "campCode": "S29",
+   "groupName": "Winter",
+   "dayType": "steam",
+   "dayTypeLabel": "고잉업",
+   "layout": "time",
+   "order": 8,
+   "classes": [
+    {
+     "classCode": "S12",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S13",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S14",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S15",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    }
+   ],
+   "extraColumns": [],
+   "subjects": [
+    {
+     "key": "주제1",
+     "partner": "owner",
+     "ownerClassCode": "S12",
+     "color": "#dbeafe"
+    },
+    {
+     "key": "주제2",
+     "partner": "owner",
+     "ownerClassCode": "S13",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "주제3",
+     "partner": "owner",
+     "ownerClassCode": "S14",
+     "color": "#fdf3c7"
+    },
+    {
+     "key": "주제4",
+     "partner": "owner",
+     "ownerClassCode": "S15",
+     "color": "#dcf0dc"
+    }
+   ],
+   "blocks": [
+    {
+     "id": "c75cc12e-6cb0-4831-bf1c-99958c30574b",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "08:20",
+       "end": "09:20"
+      }
+     ],
+     "label": "Breakfast"
+    },
+    {
+     "id": "510caa34-2e85-465f-a8d0-704dcf22258f",
+     "kind": "class",
+     "times": [
+      {
+       "start": "09:20",
+       "end": "10:00"
+      },
+      {
+       "start": "10:05",
+       "end": "10:45"
+      }
+     ],
+     "cells": {
+      "S12": {
+       "subject": "주제1"
+      },
+      "S13": {
+       "subject": "주제2"
+      },
+      "S14": {
+       "subject": "주제3"
+      },
+      "S15": {
+       "subject": "주제4"
+      }
+     }
+    },
+    {
+     "id": "f226e003-59e1-459f-86dc-bb0319dfca9e",
+     "kind": "class",
+     "times": [
+      {
+       "start": "10:55",
+       "end": "11:35"
+      },
+      {
+       "start": "11:40",
+       "end": "12:20"
+      }
+     ],
+     "cells": {
+      "S12": {
+       "subject": "주제3"
+      },
+      "S13": {
+       "subject": "주제4"
+      },
+      "S14": {
+       "subject": "주제1"
+      },
+      "S15": {
+       "subject": "주제2"
+      }
+     }
+    },
+    {
+     "id": "18368a30-2a39-42eb-8122-e37f34bb819d",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "12:20",
+       "end": "13:20"
+      }
+     ],
+     "label": "Lunch"
+    },
+    {
+     "id": "9150a1ac-7763-428a-af67-ebc61861c585",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "13:20",
+       "end": "15:20"
+      }
+     ],
+     "label": "장기자랑"
+    },
+    {
+     "id": "2ab644a2-bedd-45c0-a9a9-1d2eaa0e8e9d",
+     "kind": "class",
+     "times": [
+      {
+       "start": "15:30",
+       "end": "16:10"
+      },
+      {
+       "start": "16:15",
+       "end": "16:55"
+      }
+     ],
+     "cells": {
+      "S12": {
+       "subject": "주제2"
+      },
+      "S13": {
+       "subject": "주제3"
+      },
+      "S14": {
+       "subject": "주제4"
+      },
+      "S15": {
+       "subject": "주제1"
+      }
+     }
+    },
+    {
+     "id": "fa1dbdd0-4047-4d62-b2f9-0adc1418f577",
+     "kind": "class",
+     "times": [
+      {
+       "start": "17:05",
+       "end": "17:45"
+      },
+      {
+       "start": "17:50",
+       "end": "18:30"
+      }
+     ],
+     "cells": {
+      "S12": {
+       "subject": "주제4"
+      },
+      "S13": {
+       "subject": "주제1"
+      },
+      "S14": {
+       "subject": "주제2"
+      },
+      "S15": {
+       "subject": "주제3"
+      }
+     }
+    },
+    {
+     "id": "a62a8274-9bbc-42b3-8301-48b9cad895e9",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "18:30",
+       "end": "19:30"
+      }
+     ],
+     "label": "Dinner"
+    },
+    {
+     "id": "d238906c-99b9-40f3-93c9-396bd26ecf48",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "19:30",
+       "end": "20:10"
+      }
+     ],
+     "label": "드림 멘토링"
+    },
+    {
+     "id": "8f2c2089-6d6a-4a1f-9b5c-dd3ff7aa46a5",
+     "kind": "shared",
+     "times": [
+      {
+       "start": "20:15",
+       "end": "20:55"
+      }
+     ],
+     "label": "드림 멘토링"
+    }
+   ],
+   "note": "주제가 정해지면 과목 이름(주제1~4)만 바꾸세요."
+  },
+  {
+   "campCode": "S29",
+   "groupName": "Winter",
+   "dayType": "humanities",
+   "dayTypeLabel": "인문학",
+   "layout": "date",
+   "order": 18,
+   "classes": [
+    {
+     "classCode": "S12",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S13",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S14",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    },
+    {
+     "classCode": "S15",
+     "className": "",
+     "classroom": "",
+     "grade": ""
+    }
+   ],
+   "extraColumns": [
+    {
+     "key": "duty",
+     "label": "교무실(사진)조",
+     "staticText": "-"
+    }
+   ],
+   "subjects": [
+    {
+     "key": "문화",
+     "partner": "owner",
+     "ownerClassCode": "S12",
+     "color": "#dbeafe"
+    },
+    {
+     "key": "음식",
+     "partner": "owner",
+     "ownerClassCode": "S13",
+     "color": "#fde2e4"
+    },
+    {
+     "key": "랜드마크",
+     "partner": "owner",
+     "ownerClassCode": "S14",
+     "color": "#fdf3c7"
+    },
+    {
+     "key": "국제관계",
+     "partner": "owner",
+     "ownerClassCode": "S15",
+     "color": "#dcf0dc"
+    }
+   ],
+   "blocks": [
+    {
+     "id": "5f6a5f6a-9ba7-4505-9c82-42f94daa83f0",
+     "kind": "class",
+     "dateLabel": "1주차",
+     "lines": 2,
+     "cells": {
+      "S12": {
+       "subject": "문화"
+      },
+      "S13": {
+       "subject": "음식"
+      },
+      "S14": {
+       "subject": "랜드마크"
+      },
+      "S15": {
+       "subject": "국제관계"
+      }
+     }
+    },
+    {
+     "id": "2e2cb6fb-0103-4133-9be5-f14d9f85a82d",
+     "kind": "class",
+     "dateLabel": "2주차",
+     "lines": 2,
+     "cells": {
+      "S12": {
+       "subject": "국제관계"
+      },
+      "S13": {
+       "subject": "문화"
+      },
+      "S14": {
+       "subject": "음식"
+      },
+      "S15": {
+       "subject": "랜드마크"
+      }
+     }
+    },
+    {
+     "id": "619e1d8f-f7a3-449d-b4dc-856f0b4a99b7",
+     "kind": "class",
+     "dateLabel": "3주차",
+     "lines": 2,
+     "cells": {
+      "S12": {
+       "subject": "랜드마크"
+      },
+      "S13": {
+       "subject": "국제관계"
+      },
+      "S14": {
+       "subject": "문화"
+      },
+      "S15": {
+       "subject": "음식"
+      }
+     }
+    },
+    {
+     "id": "755db814-b45d-4597-89b0-489d1861a097",
+     "kind": "class",
+     "dateLabel": "4주차",
+     "lines": 2,
+     "cells": {
+      "S12": {
+       "subject": "음식"
+      },
+      "S13": {
+       "subject": "랜드마크"
+      },
+      "S14": {
+       "subject": "국제관계"
+      },
+      "S15": {
+       "subject": "문화"
+      }
+     }
+    }
+   ],
+   "note": "날짜 확정 전 — 1~4주차 자리표시입니다."
+  }
+ ],
+ "warnings": [],
+ "campGroups": [
+  {
+   "name": "Spring",
+   "classCodes": [
+    "S01",
+    "S02",
+    "S03",
+    "S04"
+   ]
+  },
+  {
+   "name": "Summer",
+   "classCodes": [
+    "S05",
+    "S06",
+    "S07"
+   ]
+  },
+  {
+   "name": "Autumn",
+   "classCodes": [
+    "S08",
+    "S09",
+    "S10",
+    "S11"
+   ]
+  },
+  {
+   "name": "Winter",
+   "classCodes": [
+    "S12",
+    "S13",
+    "S14",
+    "S15"
+   ]
+  }
+ ],
+ "classInfo": {
+  "S01": {
+   "bookCode": "Bc"
+  },
+  "S02": {
+   "bookCode": "Bd"
+  },
+  "S03": {
+   "bookCode": "Be"
+  },
+  "S04": {
+   "bookCode": "Bd"
+  },
+  "S05": {
+   "bookCode": "Bc"
+  },
+  "S06": {
+   "bookCode": "Bd"
+  },
+  "S07": {
+   "bookCode": "Cc"
+  },
+  "S08": {
+   "bookCode": "Be"
+  },
+  "S09": {
+   "bookCode": "Da"
+  },
+  "S10": {
+   "bookCode": "Db"
+  },
+  "S11": {
+   "bookCode": "Dc"
+  },
+  "S12": {
+   "bookCode": "Be"
+  },
+  "S13": {
+   "bookCode": "Da"
+  },
+  "S14": {
+   "bookCode": "Db"
+  },
+  "S15": {
+   "bookCode": "Dc"
+  }
+ }
+}

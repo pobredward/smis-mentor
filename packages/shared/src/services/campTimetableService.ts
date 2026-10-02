@@ -19,6 +19,7 @@ import type {
   TimetableClassColumn,
   TimetableExtraColumn,
   TimetableLayout,
+  TimetableOwn,
   TimetableSubject,
 } from '../types/campTimetable';
 
@@ -37,6 +38,10 @@ export interface CreateTimetableInput {
   blocks?: TimetableBlock[];
   note?: string;
   order?: number;
+  /** 날짜별 표 — 이 표를 쓰는 날짜 ('YYYY-MM-DD'). 비우면 기본 표 */
+  dates?: string[];
+  /** 공통에서 떨어져 나온 항목 (복제할 때 그대로 옮긴다) */
+  own?: TimetableOwn;
   userId: string;
 }
 
@@ -53,6 +58,7 @@ export type UpdateTimetableInput = Partial<
     | 'subjects'
     | 'blocks'
     | 'note'
+    | 'dates'
   >
 >;
 
@@ -122,6 +128,8 @@ export class CampTimetableService {
       subjects: input.subjects ?? [],
       blocks: input.blocks ?? [],
       note: input.note ?? '',
+      ...(input.dates?.length ? { dates: [...input.dates].sort() } : {}),
+      ...(input.own && Object.keys(input.own).length ? { own: input.own } : {}),
       createdAt: now,
       createdBy: input.userId,
       updatedAt: now,

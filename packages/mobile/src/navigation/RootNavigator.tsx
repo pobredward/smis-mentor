@@ -17,6 +17,7 @@ import { useAuth } from '../context/AuthContext';
 import { ProfileEditScreen } from '../screens/ProfileEditScreen';
 import { PostDetailScreen } from '../screens/PostDetailScreen';
 import { PostWriteScreen } from '../screens/PostWriteScreen';
+import { LessonPlanScreen } from '../screens/LessonPlanScreen';
 import { L } from '@smis-mentor/shared';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -164,6 +165,15 @@ function AppStack() {
       <Stack.Screen
         name="PostDetail"
         component={PostDetailScreen}
+        options={{
+          headerShown: false,
+          presentation: 'card',
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="LessonPlan"
+        component={LessonPlanScreen}
         options={{
           headerShown: false,
           presentation: 'card',

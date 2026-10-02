@@ -92,6 +92,11 @@ export interface TimetableCell {
   room?: string;
   /** 짝 교시(원어민·Pattern)가 진행되는 강의실 */
   partnerRoom?: string;
+  /**
+   * 짝 원어민을 과목 대신 이 역할로 찾는다 (과목 partner 가 'foreign' 일 때만).
+   * 예: Summer PBL — 반마다 Speaking·Reading·Writing 원어민이 따로 붙는다.
+   */
+  partnerRole?: string;
 }
 
 export interface TimetableTime {
@@ -206,6 +211,12 @@ export interface CampTimetable {
    *  - roster: classes + staffOverrides (반 구성 · 이름 수정)
    */
   own?: TimetableOwn;
+
+  /**
+   * 이 표를 쓰는 날짜 ('YYYY-MM-DD'). 비어 있으면 그 Day 의 기본 표.
+   * 같은 그룹·같은 Day 라도 날마다 표가 다를 때(예: 고잉업 1/21 · 1/28) 날짜별로 한 장씩 둔다.
+   */
+  dates?: string[];
 
   createdAt: Timestamp;
   createdBy: string;
@@ -463,10 +474,11 @@ export function renderCell(
       break;
     }
     case 'foreign': {
-      const hit = ctx.resolveForeign(spec.key);
+      const role = cell.partnerRole?.trim() || spec.key;
+      const hit = ctx.resolveForeign(role);
       partner = hit
         ? { text: hit.name, isName: true, manual: hit.manual }
-        : { text: `${spec.key} 원어민`, isName: true, muted: true };
+        : { text: `${role} 원어민`, isName: true, muted: true };
       break;
     }
     case 'owner': {
@@ -586,6 +598,8 @@ export interface DerivedGroup {
 export interface MemberLike {
   name?: string;
   role?: string;
+  /** 원어민은 학생들이 부르는 영어 이름(예: Maurice)이 계정 이름(Maurrice Nofemele)과 다를 수 있다 */
+  englishNickname?: string;
   jobExperiences?: Array<{ id: string; group?: string; groupRole?: string; classCode?: string }>;
 }
 
@@ -620,7 +634,10 @@ export function deriveGroupsFromMembers(members: MemberLike[], jobCodeId: string
     }
     if (exp.groupRole) {
       const r = exp.groupRole.toLowerCase();
-      if (!g.staffByRole[r]) g.staffByRole[r] = m.name;
+      // 원어민은 학생들에게 보이는 영어 이름을 쓴다 (없으면 계정 이름 → 시간표에서 첫 단어)
+      const isForeign = m.role === 'foreign' || m.role === 'foreign_temp';
+      const display = isForeign && m.englishNickname?.trim() ? m.englishNickname.trim() : m.name;
+      if (!g.staffByRole[r]) g.staffByRole[r] = display;
     }
   }
   // 반이 하나도 배정되지 않은 그룹은 표를 만들 수 없으므로 제외한다

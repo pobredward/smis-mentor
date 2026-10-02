@@ -39,6 +39,7 @@ export function CampScreen() {
   const allTabs: { id: TabName; title: string }[] = isForeign
     ? [
         { id: 'education', title: 'Edu' },
+        { id: 'lesson', title: 'Lessons' },
         { id: 'tasks', title: 'Tasks' },
         { id: 'schedule', title: 'Schedule' },
         { id: 'guide', title: 'Lodging' },
@@ -118,7 +119,7 @@ export function CampScreen() {
           <EducationScreen />
         </View>
         <View style={[styles.tabContent, activeTab !== 'lesson' && styles.hiddenTab]} pointerEvents={activeTab !== 'lesson' ? 'none' : 'auto'}>
-          {!isForeign && <LessonScreen />}
+          <LessonScreen />
         </View>
         <View style={[styles.tabContent, activeTab !== 'tasks' && styles.hiddenTab]} pointerEvents={activeTab !== 'tasks' ? 'none' : 'auto'}>
           <TasksScreen />

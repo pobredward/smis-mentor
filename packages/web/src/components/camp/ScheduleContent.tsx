@@ -1,7 +1,7 @@
 'use client';
 
 import { resolveActiveJobCodeId } from '@smis-mentor/shared';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   applyClassInfo,
@@ -19,6 +19,9 @@ import {
   normalizeGroupKey,
   resolveGroups,
   resolveTimetable,
+  resolveTimetables,
+  timetableVariants,
+  monthDayLabel,
   teacherMapOf,
   timetableCategories,
   timetableGroupNames,
@@ -44,6 +47,11 @@ import { L } from '@smis-mentor/shared';
 
 /** 시간표 탭 줄의 '전체' (일정표) */
 const ALL_TAB = '__all';
+
+const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+/** '2027-01-21' 들 → '1/21 (THU) · 1/28 (THU)' — 익사이팅 데이 제목과 같은 모양 */
+const datesLabel = (dates: string[]) =>
+  dates.map((d) => `${monthDayLabel(d)} (${WEEKDAYS[new Date(`${d}T00:00:00`).getDay()]})`).join(' · ');
 
 /** 고른 그룹은 캠프별로 기억한다 — 다른 탭 다녀와도 그대로 */
 const GROUP_KEY = (jobCodeId: string) => `SMIS_TIMETABLE_GROUP_${jobCodeId}`;
@@ -216,18 +224,23 @@ export default function ScheduleContent() {
     const cat = dayCategory(daySet, date, campCode);
     if (!cat) return;
     setCategory(cat);
-    if (cat === EXCITING_CATEGORY) {
-      setTimeout(() => document.getElementById(`exciting-${date}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
-    }
+    setTimeout(() => {
+      const el = cat === EXCITING_CATEGORY
+        ? document.getElementById(`exciting-${date}`)
+        // 날짜별 표가 여러 장이면 그 날짜 표로 (한 장이면 찾을 것도 없다)
+        : document.querySelector(`[data-dates~="${date}"]`);
+      el?.scrollIntoView({ behavior: 'smooth', block: cat === EXCITING_CATEGORY ? 'center' : 'start' });
+    }, 60);
   };
   /** 같은 일정을 쓰는 그룹 이름 (Spring · Summer) */
   const sharedGroupNames = (daySet?.groups ?? [])
     .map((k) => groups.find((g) => normalizeGroupKey(g) === k) ?? k)
     .join(' · ');
 
-  const current: CampTimetable | undefined = useMemo(
+  /** 고른 Day·그룹의 표 — 날짜별 표가 있으면 여러 장 (기본 표가 먼저, 그다음 날짜 순) */
+  const currentList: CampTimetable[] = useMemo(
     () =>
-      resolveTimetable({
+      resolveTimetables({
         timetables,
         groups: derived,
         category: tableCategory,
@@ -238,6 +251,27 @@ export default function ScheduleContent() {
       }),
     [timetables, derived, groups, tableCategory, activeGroup, campCode, activeJobCodeId, timetableCommon]
   );
+  const current: CampTimetable | undefined = currentList[0];
+  /**
+   * 두 장 이상이면 날짜를 제목으로 달아 위에서부터 쌓는다 (익사이팅 데이 목록과 같은 방식).
+   * 칩으로 바꿔 보는 것보다 한눈에 비교되고, 일정표에서 날짜를 누르면 그 표로 스크롤된다.
+   */
+  const variants = useMemo(
+    () => (currentList.length > 1 ? timetableVariants(currentList, daySet, tableCategory, campCode) : []),
+    [currentList, daySet, tableCategory, campCode]
+  );
+  const todayYmd = localYmd(new Date());
+  const categoryName = categories.find((c) => c.key === tableCategory)?.label ?? '';
+
+  // 오늘 표가 아래쪽에 쌓여 있으면, 탭을 처음 열 때 한 번 그 표로 내려 준다
+  const scrolledFor = useRef<string | null>(null);
+  useEffect(() => {
+    const key = `${tableCategory}::${activeGroup}`;
+    if (!variants.length || scrolledFor.current === key) return;
+    scrolledFor.current = key;
+    const i = variants.findIndex((v) => v.dates.includes(todayYmd));
+    if (i > 0) setTimeout(() => document.querySelector(`[data-dates~="${todayYmd}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+  }, [variants, tableCategory, activeGroup, todayYmd]);
 
   /**
    * 인문학처럼 "하루를 통째로 쓰지 않고 정규 데이 한 시간대에 들어가는" 표.
@@ -443,18 +477,46 @@ export default function ScheduleContent() {
         />
       ) : current ? (
         <>
-          <TimetableView
-            timetable={withClassInfo(current)!}
-            guidedLabels={guidedLabels}
-            onOpenGuide={setGuideLabel}
-            teacherByClassCode={teacherByClassCode}
-            foreignBySubject={groupOf(current.groupName)?.staffByRole ?? {}}
-            myClassCode={myExp?.classCode}
-            isForeign={isForeign}
-            nowMinutes={nowMinutes}
-            linkedLabels={inlineTables.map((x) => x.slot.label)}
-            campStart={campStart}
-          />
+          {variants.length ? (
+            variants.map((v) => {
+              const isToday = v.dates.includes(todayYmd);
+              return (
+                <section key={v.table.id} data-dates={v.dates.join(' ')} className="mb-6 scroll-mt-4">
+                  <div className="mb-2 flex flex-wrap items-baseline gap-x-2">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      {v.dates.length ? datesLabel(v.dates) : L('schedule.otherDays')} {categoryName}
+                    </h3>
+                    {isToday && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">{L('schedule.today')}</span>}
+                  </div>
+                  <TimetableView
+                    timetable={withClassInfo(v.table)!}
+                    guidedLabels={guidedLabels}
+                    onOpenGuide={setGuideLabel}
+                    teacherByClassCode={teacherByClassCode}
+                    foreignBySubject={groupOf(v.table.groupName)?.staffByRole ?? {}}
+                    myClassCode={myExp?.classCode}
+                    isForeign={isForeign}
+                    nowMinutes={isToday ? nowMinutes : null}
+                    linkedLabels={inlineTables.map((x) => x.slot.label)}
+                    campStart={campStart}
+                  />
+                </section>
+              );
+            })
+          ) : (
+            <TimetableView
+              timetable={withClassInfo(current)!}
+              guidedLabels={guidedLabels}
+              onOpenGuide={setGuideLabel}
+              teacherByClassCode={teacherByClassCode}
+              foreignBySubject={groupOf(current.groupName)?.staffByRole ?? {}}
+              myClassCode={myExp?.classCode}
+              isForeign={isForeign}
+              nowMinutes={nowMinutes}
+              linkedLabels={inlineTables.map((x) => x.slot.label)}
+              campStart={campStart}
+            />
+          )}
 
           {inlineTables.map(({ slot, table }) => (
             <section key={slot.category.key} className="mt-6">

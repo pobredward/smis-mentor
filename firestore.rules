@@ -496,6 +496,39 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────────────────────
+    // lessonPlans 컬렉션 (원어민 레슨플랜 — 앱에서 작성, 선생님 × 교재 한 문서)
+    // 역할: 캠프 스태프(읽기), 본인(작성·수정·제출), admin(승인·수정 요청)
+    // 본인은 승인(approved)으로 바꿀 수 없다 — 이미 승인된 문서를 고치는 건 허용(editedAfterApproval 표시)
+    // ──────────────────────────────────────────────────────────────
+    match /lessonPlans/{planId} {
+      allow read: if isCampStaff();
+      allow create: if (
+        isAdmin() ||
+        (
+          isCampStaff() &&
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.status in ['draft', 'submitted']
+        )
+      );
+      allow update: if (
+        isAdmin() ||
+        (
+          isCampStaff() &&
+          resource.data.userId == request.auth.uid &&
+          request.resource.data.userId == resource.data.userId &&
+          (
+            request.resource.data.status in ['draft', 'submitted'] ||
+            request.resource.data.status == resource.data.status
+          )
+        )
+      );
+      allow delete: if (
+        isAdmin() ||
+        (isCampStaff() && resource.data.userId == request.auth.uid)
+      );
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // interviewSettings 컬렉션 (면접 설정/링크)
     // 역할: admin(전체), 인증 사용자(읽기)
     // ──────────────────────────────────────────────────────────────

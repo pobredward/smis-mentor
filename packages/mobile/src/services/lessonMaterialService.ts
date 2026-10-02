@@ -7,6 +7,9 @@ export type { SectionData, LessonMaterialData, LessonMaterialTemplateSection, Le
 export const {
   getLessonMaterials,
   addLessonMaterial,
+  ensureTemplateMaterial,
+  saveTemplateSection,
+  clearTemplateSection,
   updateLessonMaterial,
   deleteLessonMaterial,
   reorderLessonMaterials,

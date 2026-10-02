@@ -163,7 +163,11 @@ export function setCellSubject(d: CampTimetable, blockId: string, colKey: string
   if (!b) return;
   b.cells ??= {};
   if (!subject) delete b.cells[colKey];
-  else b.cells[colKey] = { ...b.cells[colKey], subject, texts: undefined };
+  else {
+    const prev = b.cells[colKey];
+    // 과목이 바뀌면 그 칸에만 붙여 둔 짝 원어민 역할도 의미가 없어진다
+    b.cells[colKey] = { ...prev, subject, texts: undefined, ...(prev?.subject !== subject ? { partnerRole: undefined } : {}) };
+  }
 }
 
 export function setCellRoom(
@@ -261,7 +265,16 @@ export function toUpdatePayload(d: CampTimetable) {
     blocks: sortBlocks(d.blocks, d.layout),
     note: d.note ?? '',
     own: d.own ?? {},
+    dates: [...new Set(d.dates ?? [])].sort(),
   };
+}
+
+/** 이 표가 맡을 날짜를 켜고 끈다 (아무것도 없으면 그 Day 의 기본 표) */
+export function toggleDate(d: CampTimetable, date: string): void {
+  const set = new Set(d.dates ?? []);
+  if (set.has(date)) set.delete(date);
+  else set.add(date);
+  d.dates = [...set].sort();
 }
 
 // ── 공통 / 이 Day 만 따로 ────────────────────────────────────────────

@@ -1,1243 +1,627 @@
 'use client';
-import { resolveActiveJobCodeId } from '@smis-mentor/shared';
-import { logger } from '@smis-mentor/shared';
 
-import { useEffect, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAuth } from '@/contexts/AuthContext';
+/**
+ * 캠프 → 수업 탭 — 내가 올려야 할 수업 자료와 올린 링크.
+ *
+ * - 어떤 템플릿(주제)이 보이는지는 템플릿 대상(한국인 멘토·원어민, 담임·수업…)으로 정한다 — 규칙은 shared/utils/lessonPlan.ts
+ * - 원어민 레슨플랜처럼 '반별로 만들기' 템플릿은 맡은 그룹의 반마다 칸이 생긴다 (보조 교재 반은 하나 더)
+ * - 맨 위 진행률 · 칸마다 올림/아직 표시 · '링크 올리기'는 창에서 (자주 하는 링크 실수를 잡아 준다)
+ * - 원어민은 영어 화면 + 링크 한 칸 (구글 문서·드라이브)
+ */
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
+import { db } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 import {
-  getLessonMaterials,
   addLessonMaterial,
-  getSections,
   addSection,
-  updateSection,
-  deleteSection,
-  LessonMaterialData,
-  SectionData,
-  getLessonMaterialTemplates,
-  LessonMaterialTemplate,
+  clearTemplateSection,
   deleteLessonMaterial,
+  deleteSection,
+  saveTemplateSection,
   updateLessonMaterial,
+  updateSection,
+  type LessonMaterialData,
 } from '@/lib/lessonMaterialService';
-import { getUserJobCodesInfo } from '@/lib/firebaseService';
-import { JobCodeWithGroup } from '@/types';
+import { getUserJobCodesInfo, getUsersByJobCodeId } from '@/lib/firebaseService';
 import { campQueryKeys } from '@/hooks/useCampDataPrefetch';
+import LessonPlanHub from '@/components/lessonPlan/LessonPlanHub';
+import {
+  L,
+  audienceOf,
+  checkLessonLinks,
+  hasLessonLink,
+  lessonProgress,
+  lessonViewerOf,
+  loadLessonBundle,
+  logger,
+  resolveActiveJobCodeId,
+  safeLessonUrl,
+  type LessonBundle,
+  type LessonLinkIssue,
+  type LessonSectionView,
+  type LessonTopic,
+  type LessonViewer,
+} from '@smis-mentor/shared';
 
-// SectionData 타입 확장 (관리자 links 지원)
-type SectionDataWithLinks = SectionData & {
-  links?: { label: string; url: string }[];
-  isFromTemplate?: boolean;
-  templateSectionId?: string;
-};
+/** 본인 수업 탭에서는 대주제 문서가 항상 있다 (없으면 불러올 때 만든다) */
+type Topic = LessonTopic & { material: LessonMaterialData };
+type LessonState = Omit<LessonBundle, 'topics' | 'custom'> & { topics: Topic[]; custom: Topic[] };
 
-function SectionForm({
-  onSave,
-  onCancel,
-  initial,
-  isFromTemplate = false,
-}: {
-  onSave: (data: Omit<SectionData, 'id'>) => void;
-  onCancel: () => void;
-  initial?: Partial<SectionData>;
-  isFromTemplate?: boolean;
-}) {
-  const [title, setTitle] = useState(initial?.title || '');
-  const [viewUrl, setViewUrl] = useState(initial?.viewUrl || '');
-  const [originalUrl, setOriginalUrl] = useState(initial?.originalUrl || '');
+type LinkMode = 'canva' | 'single';
 
-  const isValidUrl = (url: string) => {
-    if (!url.trim()) return true; // 빈 값은 허용
-    try {
-      const urlObj = new URL(url);
-      return urlObj.protocol === 'http:' || urlObj.protocol === 'https:';
-    } catch {
-      return false;
-    }
-  };
+/** 원어민 자료(반별 레슨플랜 등)는 링크 한 칸, 한국인 멘토 Canva 자료는 공개보기 + 원본 */
+function linkModeOf(topic: Topic, viewer: LessonViewer): LinkMode {
+  if (topic.template?.perClass) return 'single';
+  if (topic.template) {
+    const a = audienceOf(topic.template);
+    if (a.roles.length === 1 && a.roles[0] === 'foreign') return 'single';
+  }
+  return viewer.kind === 'foreign' ? 'single' : 'canva';
+}
 
-  const handleSubmit = (event: React.FormEvent) => {
-    event.preventDefault();
-    
-    // URL 형식 검증 (값이 있을 때만)
-    if (viewUrl && !isValidUrl(viewUrl)) {
-      alert('공개보기 링크의 URL 형식이 올바르지 않습니다.\n예: https://docs.google.com/...');
-      return;
-    }
-    if (originalUrl && !isValidUrl(originalUrl)) {
-      alert('원본 링크의 URL 형식이 올바르지 않습니다.\n예: https://docs.google.com/...');
-      return;
-    }
-    
-    onSave({
-      title,
-      viewUrl,
-      originalUrl,
-      order: initial?.order ?? 0,
-    });
-  };
+const processedKey = (uid: string, jobCodeId: string) => ['processedLesson2', uid, jobCodeId] as const;
 
-  return (
-    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-3">
-      <form
-        className="space-y-3"
-        onSubmit={handleSubmit}
-      >
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">소제목 이름</label>
-          <input
-            className={`w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all ${
-              isFromTemplate ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'
-            }`}
-            placeholder="예: 1차시 수업자료"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-            aria-label="소제목"
-            disabled={isFromTemplate}
-            readOnly={isFromTemplate}
-          />
-          {isFromTemplate && (
-            <p className="text-xs text-gray-500 mt-1">관리자가 설정한 제목은 수정할 수 없습니다.</p>
-          )}
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">공개보기 링크</label>
-          <input
-            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
-            placeholder="https://docs.google.com/presentation/d/..."
-            value={viewUrl}
-            onChange={(e) => setViewUrl(e.target.value)}
-            aria-label="공개보기 링크"
-          />
-          <p className="text-xs text-red-600 font-medium mt-1">
-            ⚠️ 필수: Canva에서 '공유' → '공개 보기 링크' → '공개 보기 링크 만들기' → '복사' 클릭
-          </p>
-        </div>
-
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">원본 링크</label>
-          <input
-            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
-            placeholder="https://docs.google.com/presentation/d/..."
-            value={originalUrl}
-            onChange={(e) => setOriginalUrl(e.target.value)}
-            aria-label="원본 링크"
-          />
-          <p className="text-xs text-red-600 font-medium mt-1">
-            ⚠️ 필수: Canva에서 '액세스 수준'을 '링크가 있는 모든 사용자'로 변경 → '링크 복사' 클릭 
-          </p>
-        </div>
-
-        <div className="flex gap-2 justify-end pt-1">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-500 transition-all"
-          >
-            취소
-          </button>
-          <button
-            type="submit"
-            className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
-          >
-            {initial?.title ? '수정 완료' : '추가하기'}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
+/** 내 수업 자료 — 규칙·중복 처리는 shared 의 loadLessonBundle (앱과 같은 코드) */
+async function loadLesson(user: { userId: string; role?: string; jobExperiences?: any[] }, jobCodeId: string): Promise<LessonState> {
+  const viewer = lessonViewerOf(user as any, jobCodeId);
+  const [info] = await getUserJobCodesInfo([jobCodeId]);
+  const bundle = await loadLessonBundle(db, {
+    userId: user.userId,
+    viewer,
+    code: String(info?.code ?? ''),
+    jobCodeId,
+    createMissing: true,
+    members: () => getUsersByJobCodeId(jobCodeId) as any,
+  });
+  return bundle as LessonState;
 }
 
 export default function LessonContent() {
   const { userData, loading: authLoading } = useAuth();
-  // 교육 · 다른 캠프 탭과 같은 기준 (관리자 임시 캠프 → 활성 캠프 → 첫 배정 캠프)
-  const lessonJobCodeId = resolveActiveJobCodeId(userData);
+  const jobCodeId = resolveActiveJobCodeId(userData);
   const queryClient = useQueryClient();
-  const [sections, setSections] = useState<Record<string, SectionDataWithLinks[]>>({});
+  const [state, setState] = useState<LessonState | null>(null);
   const [loading, setLoading] = useState(true);
-  const [addingSectionFor, setAddingSectionFor] = useState<string | null>(null);
-  const [editingSection, setEditingSection] = useState<{
-    materialId: string;
-    section: SectionDataWithLinks;
-  } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [templates, setTemplates] = useState<LessonMaterialTemplate[]>([]);
-  const [selectedMaterialCode, setSelectedMaterialCode] = useState<string>('');
-  const [userJobCodes, setUserJobCodes] = useState<JobCodeWithGroup[]>([]);
-  const [mounted, setMounted] = useState(false);
-  const [showAddMaterialForm, setShowAddMaterialForm] = useState(false);
-  const [newMaterialTitle, setNewMaterialTitle] = useState('');
+  const [failed, setFailed] = useState(false);
+  const [dialog, setDialog] = useState<{ topicId: string; section: LessonSectionView | null } | null>(null);
+  const [addingTopic, setAddingTopic] = useState(false);
+  const [topicTitle, setTopicTitle] = useState('');
 
-  // 프리페칭 캐시를 활용하는 useQuery (초기 로딩 시 캐시 HIT 목적; refetch는 무한 루프를 유발하므로 사용하지 않음)
-  const { data: rawMaterials } = useQuery({
-    queryKey: userData?.userId ? campQueryKeys.lessonMaterials(userData.userId) : ['lessonMaterials', null],
-    queryFn: () => getLessonMaterials(userData!.userId),
-    enabled: !!userData?.userId,
-  });
+  const uid = userData?.userId ?? '';
+  // 역할·그룹·반이 바뀌면(관리자가 배정을 고치면) 다시 불러온다
+  const viewerKey = JSON.stringify(lessonViewerOf(userData as any, jobCodeId));
+  /** 불러오기 차례 — 늦게 끝난 옛 요청이 새 결과를 덮지 않게 */
+  const loadSeq = useRef(0);
+  /** 화면에서 고친 횟수 — 불러오는 사이에 저장했으면 그 결과(저장 전 값)는 버린다 */
+  const editSeq = useRef(0);
 
-  // 뮤테이션 후 캐시 무효화 헬퍼
-  const invalidateMaterialsCache = () => {
-    if (userData?.userId) {
+  const refresh = useCallback(async () => {
+    if (!userData || !jobCodeId) return;
+    const seq = ++loadSeq.current;
+    const edits = editSeq.current;
+    try {
+      const next = await loadLesson(userData as any, jobCodeId);
+      if (seq !== loadSeq.current || edits !== editSeq.current) return;
+      setState(next);
+      setFailed(false);
+      queryClient.setQueryData(processedKey(userData.userId, jobCodeId), next);
       queryClient.invalidateQueries({ queryKey: campQueryKeys.lessonMaterials(userData.userId) });
-    }
-  };
-
-  // materials는 fetchAll에서 가공된 값을 사용 (useQuery는 원시 데이터 제공)
-  const [materials, setMaterials] = useState<LessonMaterialData[]>([]);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // 활성화된 캠프의 jobCode 정보 가져오기
-  const fetchActiveJobCode = async () => {
-    if (!lessonJobCodeId) {
-      setUserJobCodes([]);
-      return [];
-    }
-    
-    try {
-      // activeJobExperienceId를 배열로 전달
-      const jobCodesInfo = await getUserJobCodesInfo([lessonJobCodeId]);
-      setUserJobCodes(jobCodesInfo);
-      return jobCodesInfo;
-    } catch (error) {
-      logger.error('활성화된 직무 코드 정보 가져오기 오류:', error);
-      return [];
-    }
-  };
-
-  // 사용자가 접근할 수 있는 템플릿 필터링 (활성화된 코드만)
-  const getAccessibleTemplates = (
-    allTemplates: LessonMaterialTemplate[],
-    activeJobCode: JobCodeWithGroup[]
-  ) => {
-    if (!activeJobCode.length) return [];
-    const codes = activeJobCode.map((jc) => jc.code);
-    return allTemplates.filter((template) => template.code && codes.includes(template.code));
-  };
-
-  // 대제목/소제목 fetch 및 자동 템플릿 추가
-  const fetchAll = async () => {
-    if (!userData) return;
-    
-    // 활성화된 캠프가 없으면 빈 상태로 표시
-    if (!lessonJobCodeId) {
-      setLoading(false);
-      setMaterials([]);
-      setSections({});
-      return;
-    }
-    
-    setLoading(true);
-    try {
-      const activeJobCode = await fetchActiveJobCode();
-      const allTemplates = await getLessonMaterialTemplates();
-      setTemplates(allTemplates);
-
-      const accessibleTemplates = getAccessibleTemplates(allTemplates, activeJobCode);
-      // useQuery 캐시에서 데이터를 활용하고, 없으면 직접 fetch (루프 방지를 위해 캐시만 읽고 refetch는 하지 않음)
-      const mats = rawMaterials ?? await getLessonMaterials(userData.userId);
-
-      const activeCodesList = activeJobCode.map((uc) => uc.code);
-      const seenTemplateIds = new Set<string>();
-      const materialsToUpdate: { id: string; newTitle: string }[] = [];
-
-      for (const mat of mats) {
-        if (!mat.templateId) {
-          // 사용자가 추가한 대주제 - 활성화된 코드와 일치하는지 확인
-          if (mat.userCode && !activeCodesList.includes(mat.userCode)) {
-            // 활성화된 코드가 아니면 숨김 (삭제하지 않음)
-            continue;
-          }
-          continue;
-        }
-
-        const template = allTemplates.find((t) => t.id === mat.templateId);
-        if (!template) {
-          // 템플릿이 존재하지 않는 경우에도 유지 (사용자 데이터 보호)
-          continue;
-        }
-
-        if (!template.code || !activeCodesList.includes(template.code)) {
-          // 활성화된 코드가 아닌 템플릿도 유지 (사용자 데이터 보호)
-          continue;
-        }
-
-        if (seenTemplateIds.has(mat.templateId)) {
-          // 중복된 템플릿도 유지 (첫 번째 것만 표시)
-          continue;
-        }
-
-        seenTemplateIds.add(mat.templateId);
-
-        if (mat.title !== template.title) {
-          materialsToUpdate.push({ id: mat.id, newTitle: template.title });
-        }
-      }
-
-      for (const { id, newTitle } of materialsToUpdate) {
-        await updateLessonMaterial(id, { title: newTitle });
-      }
-
-      for (let i = 0; i < accessibleTemplates.length; i++) {
-        const template = accessibleTemplates[i];
-        if (!seenTemplateIds.has(template.id)) {
-          await addLessonMaterial(userData.userId, template.title, i, template.id);
-        }
-      }
-
-      // 자동 추가/업데이트 후 최신 데이터를 직접 fetch (refetchMaterials 호출 시 rawMaterials 변경 → useEffect 재트리거 → 무한 루프 발생하므로 직접 fetch 사용)
-      const finalMats = await getLessonMaterials(userData.userId);
-      // 캐시도 갱신
-      invalidateMaterialsCache();
-      
-      // 활성화된 코드에 해당하는 자료만 필터링 + 중복 제거
-      const seenTemplateIdsInFinal = new Set<string>();
-      const filteredMats = finalMats.filter((mat) => {
-        // 활성 코드 체크
-        if (mat.templateId) {
-          const template = allTemplates.find((t) => t.id === mat.templateId);
-          if (!template?.code || !activeCodesList.includes(template.code)) {
-            return false;
-          }
-          
-          // 중복 templateId 체크 (첫 번째만 표시)
-          if (seenTemplateIdsInFinal.has(mat.templateId)) {
-            logger.info('🚫 중복 제거:', mat.id, mat.title, `(templateId: ${mat.templateId})`);
-            return false;
-          }
-          seenTemplateIdsInFinal.add(mat.templateId);
-          return true;
-        } else {
-          // 사용자가 추가한 대주제는 userCode로 필터링 (중복 없음)
-          return mat.userCode && activeCodesList.includes(mat.userCode);
-        }
-      });
-      
-      setMaterials(filteredMats);
-
-      // 모든 자료의 섹션을 병렬로 fetch (직렬 대비 N배 빠름)
-      const allSectionResults = await Promise.all(finalMats.map((mat) => getSections(mat.id)));
-
-      const allSections: Record<string, SectionDataWithLinks[]> = {};
-      finalMats.forEach((mat, index) => {
-        const matSections = allSectionResults[index];
-        const template = mat.templateId ? allTemplates.find((t) => t.id === mat.templateId) : null;
-
-        const mergedSections: SectionDataWithLinks[] = [];
-        const processedUserSectionIds = new Set<string>();
-
-        if (template?.sections) {
-          // 삭제된 섹션 ID 목록
-          const deletedSectionIds = new Set(template.deletedSectionIds || []);
-          
-          for (const templateSection of template.sections) {
-            // 삭제된 섹션은 건너뛰기
-            if (deletedSectionIds.has(templateSection.id)) {
-              continue;
-            }
-            
-            // templateSectionId로 유저 section 찾기 (order 대신)
-            const userSection = matSections.find((s) => s.templateSectionId === templateSection.id);
-
-            if (userSection) {
-              mergedSections.push({
-                ...userSection,
-                isFromTemplate: true,
-                templateSectionId: templateSection.id,
-                title: templateSection.title,
-                links: templateSection.links || [],
-                order: templateSection.order, // 템플릿 순서 적용
-              });
-              processedUserSectionIds.add(userSection.id);
-            } else {
-              mergedSections.push({
-                id: `template-${templateSection.id}`,
-                title: templateSection.title,
-                order: templateSection.order,
-                viewUrl: '',
-                originalUrl: '',
-                links: templateSection.links || [],
-                isFromTemplate: true,
-                templateSectionId: templateSection.id,
-              });
-            }
-          }
-        }
-
-        const additionalUserSections = matSections
-          .filter((s) => !processedUserSectionIds.has(s.id))
-          .map((section) => ({
-            ...section,
-            isFromTemplate: false,
-          }));
-
-        allSections[mat.id] = [...mergedSections, ...additionalUserSections];
-      });
-      setSections(allSections);
-
-      // 처리 결과를 캐시에 저장 → 탭 재방문 시 로딩 없이 즉시 표시
-      queryClient.setQueryData(
-        campQueryKeys.processedLesson(userData.userId),
-        { materials: filteredMats, sections: allSections }
-      );
-    } catch (error) {
-      logger.error('데이터 로드 오류:', error);
-      setError('데이터를 불러오는 중 오류가 발생했습니다.');
+    } catch (e) {
+      if (seq !== loadSeq.current) return;
+      logger.error('수업 자료 불러오기 실패:', e);
+      setFailed(true);
+      toast.error(L('lesson.loadFailed'));
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, jobCodeId, viewerKey]);
 
   useEffect(() => {
-    if (!userData) return;
+    if (!userData || !jobCodeId) { setLoading(false); return; }
+    // 탭을 다시 열면 지난번 결과를 먼저 보여 주고 뒤에서 새로 불러온다 (다른 캠프의 결과는 보이지 않게)
+    const cached = queryClient.getQueryData<LessonState>(processedKey(userData.userId, jobCodeId));
+    setState(cached ?? null);
+    setLoading(!cached);
+    setFailed(false);
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh]);
 
-    // 탭 재방문 시: 캐시된 처리 결과가 있으면 즉시 표시 (로딩 스킵)
-    // fetchAll은 백그라운드에서 계속 실행해 최신 데이터로 갱신
-    const cached = queryClient.getQueryData<{
-      materials: LessonMaterialData[];
-      sections: Record<string, SectionDataWithLinks[]>;
-    }>(campQueryKeys.processedLesson(userData.userId));
+  /** 화면 상태 고치기 + 캐시도 같이 */
+  const patch = (fn: (s: LessonState) => LessonState) => {
+    editSeq.current += 1;
+    setState((prev) => {
+      if (!prev) return prev;
+      const next = fn(prev);
+      if (uid && jobCodeId) queryClient.setQueryData(processedKey(uid, jobCodeId), next);
+      return next;
+    });
+  };
+  const patchTopic = (topicId: string, fn: (t: Topic) => Topic) =>
+    patch((s) => ({
+      ...s,
+      topics: s.topics.map((t) => (t.material.id === topicId ? fn(t) : t)),
+      custom: s.custom.map((t) => (t.material.id === topicId ? fn(t) : t)),
+    }));
 
-    if (cached) {
-      setMaterials(cached.materials);
-      setSections(cached.sections);
-      setLoading(false);
-    }
+  const findTopic = (topicId: string) => state?.topics.find((t) => t.material.id === topicId) ?? state?.custom.find((t) => t.material.id === topicId);
 
-    fetchAll();
-  // rawMaterials를 의존성에 포함하면 invalidateMaterialsCache → rawMaterials 갱신 → fetchAll 재실행 무한 루프 발생
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userData]);
+  // ── 저장 · 삭제 ───────────────────────────────────────────────
+  /** 템플릿 칸은 칸 id(templateSectionId)로 찾는다 — 창을 연 뒤 다른 기기에서 먼저 채웠어도 같은 칸 */
+  const sameSlot = (a: LessonSectionView, b: LessonSectionView) =>
+    a.isFromTemplate && b.isFromTemplate && !!a.templateSectionId ? a.templateSectionId === b.templateSectionId : a.id === b.id;
 
-  // 코드별 필터링을 위한 materialCodeMap 생성
-  const materialCodeMap: Record<string, string> = {};
-  materials.forEach((m) => {
-    if (m.templateId) {
-      const tpl = templates.find((t) => t.id === m.templateId);
-      materialCodeMap[m.id] = tpl?.code || '미지정';
-    } else {
-      materialCodeMap[m.id] = m.userCode || '개인 자료';
-    }
-  });
-
-  const userCodes = userJobCodes.map((jc) => jc.code);
-  const allMaterialCodes = Array.from(new Set(Object.values(materialCodeMap))).filter(
-    (code) => userCodes.includes(code) || code === '개인 자료'
-  );
-  const sortedMaterialCodes = allMaterialCodes.sort((a, b) => {
-    if (a === '개인 자료') return 1;
-    if (b === '개인 자료') return -1;
-    return a.localeCompare(b);
-  });
-  
-  logger.info('📊 [WEB] materialCodeMap:', materialCodeMap);
-  logger.info('📊 [WEB] userCodes:', userCodes);
-  logger.info('📊 [WEB] allMaterialCodes:', allMaterialCodes);
-  logger.info('📊 [WEB] sortedMaterialCodes:', sortedMaterialCodes);
-  logger.info('📊 [WEB] selectedMaterialCode:', selectedMaterialCode);
-  logger.info('📊 [WEB] 대주제 추가 버튼 표시 조건:', selectedMaterialCode && selectedMaterialCode !== '개인 자료');
-
-  const filteredMaterials = selectedMaterialCode
-    ? materials.filter((m) => materialCodeMap[m.id] === selectedMaterialCode)
-    : materials;
-
-  // 커스텀 대주제가 먼저 오도록 정렬 (templateId가 없는 것이 위로)
-  const sortedFilteredMaterials = [...filteredMaterials].sort((a, b) => {
-    // templateId가 없는 것(커스텀)이 위로
-    if (!a.templateId && b.templateId) return -1;
-    if (a.templateId && !b.templateId) return 1;
-    // 둘 다 커스텀이거나 둘 다 템플릿이면 order 순서 유지
-    return a.order - b.order;
-  });
-
-  // 코드 필터 초기화
-  useEffect(() => {
-    logger.info('📍 [WEB] 코드 필터 초기화 useEffect');
-    logger.info('  - sortedMaterialCodes:', sortedMaterialCodes);
-    logger.info('  - selectedMaterialCode:', selectedMaterialCode);
-    logger.info('  - materials 개수:', materials.length);
-    
-    if (sortedMaterialCodes.length > 0) {
-      // selectedMaterialCode가 없거나, sortedMaterialCodes에 포함되지 않으면 업데이트
-      if (!selectedMaterialCode || !sortedMaterialCodes.includes(selectedMaterialCode)) {
-        const hasPersonalMaterials = materials.some((m) => !m.templateId);
-        logger.info('  - hasPersonalMaterials:', hasPersonalMaterials);
-        
-        if (hasPersonalMaterials && sortedMaterialCodes.includes('개인 자료')) {
-          logger.info('  ✅ selectedMaterialCode 설정: 개인 자료');
-          setSelectedMaterialCode('개인 자료');
-        } else {
-          logger.info('  ✅ selectedMaterialCode 설정:', sortedMaterialCodes[0]);
-          setSelectedMaterialCode(sortedMaterialCodes[0]);
-        }
+  const saveSection = async (topicId: string, section: LessonSectionView | null, data: { title: string; viewUrl: string; originalUrl: string }) => {
+    const topic = findTopic(topicId);
+    if (!topic) return false;
+    try {
+      if (!section) {
+        // 직접 추가하는 소제목
+        const order = topic.sections.length;
+        const id = await addSection(topicId, { title: data.title, viewUrl: data.viewUrl, originalUrl: data.originalUrl, order });
+        patchTopic(topicId, (t) => ({ ...t, sections: [...t.sections, { id, title: data.title, viewUrl: data.viewUrl, originalUrl: data.originalUrl, order, isFromTemplate: false, links: [] }] }));
+      } else if (section.isFromTemplate && section.templateSectionId) {
+        // 템플릿 칸 — 이미 문서가 있으면(다른 기기 포함) 그걸 고치고, 없으면 만든다
+        const id = await saveTemplateSection(topicId, section.templateSectionId, { title: section.title, order: section.order, viewUrl: data.viewUrl, originalUrl: data.originalUrl });
+        patchTopic(topicId, (t) => ({ ...t, sections: t.sections.map((s) => (sameSlot(s, section) ? { ...s, id, viewUrl: data.viewUrl, originalUrl: data.originalUrl, isPlaceholder: false } : s)) }));
       } else {
-        logger.info('  ℹ️ selectedMaterialCode 유지:', selectedMaterialCode);
+        await updateSection(topicId, section.id, { viewUrl: data.viewUrl, originalUrl: data.originalUrl, title: data.title });
+        patchTopic(topicId, (t) => ({ ...t, sections: t.sections.map((s) => (s.id === section.id ? { ...s, title: data.title, viewUrl: data.viewUrl, originalUrl: data.originalUrl } : s)) }));
       }
+      toast.success(L('lesson.saved'));
+      return true;
+    } catch (e) {
+      logger.error('수업 자료 저장 실패:', e);
+      toast.error(L('lesson.saveFailed'));
+      return false;
     }
-  }, [sortedMaterialCodes, selectedMaterialCode, materials]);
+  };
 
-  // 소제목 추가
-  const handleAddSection = async (materialId: string, data: Omit<SectionData, 'id'>) => {
+  /** 템플릿 칸의 링크 지우기 — 그 칸의 문서를 지우면 빈 칸으로 돌아간다 */
+  const clearSection = async (topicId: string, section: LessonSectionView) => {
+    if (!section.templateSectionId) return false;
     try {
-      const currentSections = sections[materialId] || [];
-      const templateSections = currentSections.filter((s) => s.isFromTemplate);
-      const userSections = currentSections.filter((s) => !s.isFromTemplate);
-      const order = templateSections.length + userSections.length;
-
-      const sectionId = await addSection(materialId, { 
-        ...data, 
-        order,
-        // templateSectionId는 일반 유저 섹션이므로 없음
-      });
-
-      const newSection: SectionDataWithLinks = {
-        id: sectionId,
-        title: data.title,
-        order,
-        viewUrl: data.viewUrl,
-        originalUrl: data.originalUrl,
-        links: [],
-        isFromTemplate: false,
-      };
-
-      setSections((prev) => ({
-        ...prev,
-        [materialId]: [...(prev[materialId] || []), newSection],
+      await clearTemplateSection(topicId, section.templateSectionId);
+      patchTopic(topicId, (t) => ({
+        ...t,
+        sections: t.sections.map((s) => (sameSlot(s, section) ? { ...s, id: `template-${section.templateSectionId}`, viewUrl: '', originalUrl: '', isPlaceholder: true } : s)),
       }));
-
-      setAddingSectionFor(null);
-      toast.success('소제목이 추가되었습니다.');
-    } catch (error) {
-      logger.error('소제목 추가 오류:', error);
-      toast.error('소제목 추가 중 오류가 발생했습니다.');
+      toast.success(L('lesson.cleared'));
+      return true;
+    } catch (e) {
+      logger.error('링크 지우기 실패:', e);
+      toast.error(L('lesson.saveFailed'));
+      return false;
     }
   };
 
-  // 소제목 수정
-  const handleEditSection = async (
-    materialId: string,
-    sectionId: string,
-    data: Omit<SectionData, 'id'>
-  ) => {
+  const removeSection = async (topicId: string, section: LessonSectionView) => {
+    if (!confirm(L('lesson.confirmDeleteItem'))) return false;
     try {
-      const section = sections[materialId]?.find((s) => s.id === sectionId);
-
-      if (section?.isFromTemplate) {
-        if (sectionId.startsWith('template-')) {
-          // 가상 ID인 경우 새로운 유저 섹션 생성 (templateSectionId 포함)
-          const order = section.order;
-          const newSectionId = await addSection(materialId, { 
-            ...data, 
-            order,
-            title: section.title, // 템플릿 제목 유지
-            templateSectionId: section.templateSectionId, // templateSectionId 전달
-          });
-
-          const newSection: SectionDataWithLinks = {
-            id: newSectionId,
-            title: section.title,
-            order,
-            viewUrl: data.viewUrl,
-            originalUrl: data.originalUrl,
-            links: section.links || [],
-            isFromTemplate: true,
-            templateSectionId: section.templateSectionId,
-          };
-
-          setSections((prev) => ({
-            ...prev,
-            [materialId]: prev[materialId]?.map((s) => (s.id === sectionId ? newSection : s)) || [],
-          }));
-        } else {
-          // 실제 유저 섹션 업데이트 (제목은 템플릿 것 유지)
-          await updateSection(materialId, sectionId, {
-            ...data,
-            title: section.title,
-            templateSectionId: section.templateSectionId,
-          });
-
-          setSections((prev) => ({
-            ...prev,
-            [materialId]:
-              prev[materialId]?.map((s) =>
-                s.id === sectionId ? { ...s, viewUrl: data.viewUrl, originalUrl: data.originalUrl } : s
-              ) || [],
-          }));
-        }
-      } else {
-        // 일반 유저 섹션 업데이트
-        await updateSection(materialId, sectionId, data);
-
-        setSections((prev) => ({
-          ...prev,
-          [materialId]: prev[materialId]?.map((s) => (s.id === sectionId ? { ...s, ...data } : s)) || [],
-        }));
-      }
-
-      setEditingSection(null);
-      toast.success('소제목이 수정되었습니다.');
-    } catch (error) {
-      logger.error('소제목 수정 오류:', error);
-      toast.error('소제목 수정 중 오류가 발생했습니다.');
+      await deleteSection(topicId, section.id);
+      patchTopic(topicId, (t) => ({ ...t, sections: t.sections.filter((s) => s.id !== section.id) }));
+      toast.success(L('lesson.deleted'));
+      return true;
+    } catch (e) {
+      logger.error('자료 삭제 실패:', e);
+      toast.error(L('lesson.saveFailed'));
+      return false;
     }
   };
 
-  // 소제목 삭제
-  const handleDeleteSection = async (materialId: string, sectionId: string) => {
-    const section = sections[materialId]?.find((s) => s.id === sectionId);
-    if (section?.isFromTemplate) {
-      toast.error('관리자가 설정한 소제목은 삭제할 수 없습니다.');
-      return;
-    }
-
-    if (!confirm('정말 삭제하시겠습니까?')) return;
-
+  const addTopic = async () => {
+    const title = topicTitle.trim();
+    if (!title || !state || !uid) return;
     try {
-      await deleteSection(materialId, sectionId);
-
-      setSections((prev) => ({
-        ...prev,
-        [materialId]: prev[materialId]?.filter((s) => s.id !== sectionId) || [],
-      }));
-
-      toast.success('소제목이 삭제되었습니다.');
-    } catch (error) {
-      logger.error('소제목 삭제 오류:', error);
-      toast.error('소제목 삭제 중 오류가 발생했습니다.');
+      const order = state.topics.length + state.custom.length;
+      const id = await addLessonMaterial(uid, title, order);
+      await updateLessonMaterial(id, { userCode: state.code } as Partial<LessonMaterialData>);
+      patch((s) => ({ ...s, custom: [...s.custom, { material: { id, userId: uid, title, order, userCode: s.code }, sections: [] }] }));
+      setTopicTitle('');
+      setAddingTopic(false);
+      toast.success(L('lesson.saved'));
+    } catch (e) {
+      logger.error('주제 추가 실패:', e);
+      toast.error(L('lesson.saveFailed'));
     }
   };
 
-  // 유저 대주제 추가
-  const handleAddUserMaterial = async () => {
-    if (!newMaterialTitle.trim()) {
-      toast.error('대주제 이름을 입력해주세요.');
-      return;
-    }
-
-    if (!selectedMaterialCode) {
-      toast.error('코드를 선택한 후 대주제를 추가해주세요.');
-      return;
-    }
-
+  const removeTopic = async (topicId: string) => {
+    if (!confirm(L('lesson.confirmDeleteTopic'))) return;
     try {
-      const order = materials.length;
-      const materialId = await addLessonMaterial(userData!.userId, newMaterialTitle.trim(), order);
-
-      await updateLessonMaterial(materialId, {
-        title: newMaterialTitle.trim(),
-        userCode: selectedMaterialCode,
-      } as any);
-
-      const newMaterial: LessonMaterialData = {
-        id: materialId,
-        userId: userData!.userId,
-        title: newMaterialTitle.trim(),
-        order,
-        templateId: undefined,
-        userCode: selectedMaterialCode,
-      };
-
-      setMaterials((prev) => [...prev, newMaterial]);
-      setSections((prev) => ({
-        ...prev,
-        [materialId]: [],
-      }));
-
-      invalidateMaterialsCache();
-      setNewMaterialTitle('');
-      setShowAddMaterialForm(false);
-      toast.success(`${selectedMaterialCode}에 대주제가 추가되었습니다.`);
-    } catch (error) {
-      logger.error('대주제 추가 오류:', error);
-      toast.error('대주제 추가 중 오류가 발생했습니다.');
+      await deleteLessonMaterial(topicId);
+      patch((s) => ({ ...s, custom: s.custom.filter((t) => t.material.id !== topicId) }));
+      toast.success(L('lesson.deleted'));
+    } catch (e) {
+      logger.error('주제 삭제 실패:', e);
+      toast.error(L('lesson.saveFailed'));
     }
   };
 
-  // 유저 대주제 삭제
-  const handleDeleteUserMaterial = async (materialId: string) => {
-    const material = materials.find((m) => m.id === materialId);
-    if (!material) return;
+  const progress = useMemo(() => {
+    const list = state?.topics.flatMap((t) => t.sections) ?? [];
+    return lessonProgress(list);
+  }, [state]);
 
-    if (material.templateId) {
-      toast.error('템플릿 기반 대주제는 삭제할 수 없습니다.');
-      return;
-    }
-
-    if (!confirm('정말 삭제하시겠습니까? 모든 소제목도 함께 삭제됩니다.')) return;
-
-    try {
-      await deleteLessonMaterial(materialId);
-
-      setMaterials((prev) => prev.filter((m) => m.id !== materialId));
-      setSections((prev) => {
-        const newSections = { ...prev };
-        delete newSections[materialId];
-        return newSections;
-      });
-
-      invalidateMaterialsCache();
-      toast.success('대주제가 삭제되었습니다.');
-    } catch (error) {
-      logger.error('대주제 삭제 오류:', error);
-      toast.error('대주제 삭제 중 오류가 발생했습니다.');
-    }
-  };
-
-  if (!mounted) {
-    return null;
-  }
-
-  if (authLoading) {
+  // ── 화면 ───────────────────────────────────────────────────────
+  if (authLoading || (loading && !state)) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent"></div>
-        <p className="mt-3 text-sm">로딩 중...</p>
+      <div className="flex flex-col items-center justify-center min-h-[50vh] text-gray-500">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent" />
+        <p className="mt-3 text-sm">{L('lesson.loading')}</p>
       </div>
     );
   }
-
-  if (!userData) {
+  if (!userData) return <EmptyState title={L('lesson.loginRequired')} />;
+  if (!jobCodeId) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
-        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-3">
-          <svg
-            className="w-6 h-6 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-            />
-          </svg>
-        </div>
-        <p className="text-center">로그인 후 이용 가능합니다.</p>
-      </div>
+      <EmptyState title={L('lesson.noActiveCamp')} hint={L('lesson.noActiveCampHint')}>
+        <a href="/profile" className="mt-4 inline-block px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium">{L('lesson.goProfile')}</a>
+      </EmptyState>
     );
   }
-
-  if (!userData.jobExperiences || userData.jobExperiences.length === 0) {
+  if (failed && !state) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
-        <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center mb-3">
-          <svg
-            className="w-6 h-6 text-yellow-500"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"
-            />
-          </svg>
-        </div>
-        <p className="text-center font-medium mb-1">직무 경험이 필요합니다</p>
-        <p className="text-center text-sm text-gray-500">
-          수업 자료를 이용하려면 직무 경험이 등록되어야 합니다.
-        </p>
-        <p className="text-center text-sm text-gray-500">관리자에게 문의해주세요.</p>
-      </div>
+      <EmptyState title={L('lesson.loadFailed')}>
+        <button onClick={() => { setLoading(true); refresh(); }} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium">{L('lesson.retry')}</button>
+      </EmptyState>
     );
   }
+  if (!state) return null;
 
-  if (!lessonJobCodeId) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] text-gray-500">
-        <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-4">
-          <svg
-            className="w-8 h-8 text-amber-600"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
-          </svg>
-        </div>
-        <p className="text-lg font-semibold text-gray-700 mb-2">활성화된 캠프가 없습니다</p>
-        <p className="text-center text-sm text-gray-500 mb-4">
-          프로필 페이지에서 참여 중인 캠프를 활성화해주세요.
-        </p>
-        <a
-          href="/profile"
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-sm font-medium"
-        >
-          프로필 페이지로 이동
-        </a>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-500 border-t-transparent mx-auto"></div>
-        <p className="mt-3 text-gray-500 text-sm">수업 자료를 불러오는 중...</p>
-      </div>
-    );
-  }
+  const { viewer, topics, custom, code } = state;
+  const roleLine = viewer.kind === 'admin'
+    ? L('lesson.adminPreview')
+    : viewer.kind === 'foreign'
+      ? [viewer.groupRole, viewer.group && viewer.group.charAt(0).toUpperCase() + viewer.group.slice(1)].filter(Boolean).join(' · ')
+      : viewer.groupRole ? L('lesson.mentorRole', { role: viewer.groupRole }) : '';
+  const pct = progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
+  const dialogTopic = dialog ? findTopic(dialog.topicId) : undefined;
 
   return (
-    <div className="py-4">
-      {/* 코드별 필터 탭 */}
-      {sortedMaterialCodes.length > 1 && (
-        <div className="mb-4 px-4">
-          <div className="flex flex-wrap gap-2">
-            {sortedMaterialCodes.map((code) => (
-              <button
-                key={code}
-                className={`px-3 py-1.5 text-sm font-medium rounded border transition-all flex items-center gap-1 ${
-                  selectedMaterialCode === code
-                    ? 'bg-blue-500 border-blue-500 text-white'
-                    : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                }`}
-                onClick={() => setSelectedMaterialCode(code)}
-              >
-                {code === '개인 자료' && (
-                  <svg
-                    className="w-3 h-3"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                    />
-                  </svg>
-                )}
-                {code}
-              </button>
+    <div className="py-4 px-3 sm:px-4 space-y-4">
+      {/* 머리 — 누구 기준인지와 진행률 */}
+      <div className="rounded-2xl bg-white ring-1 ring-gray-200 p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-blue-600">{code}</p>
+            <h2 className="text-lg font-bold text-gray-900 leading-tight mt-0.5">{L('lesson.title')}</h2>
+            {roleLine && <p className="text-sm text-gray-500 mt-1">{roleLine}</p>}
+          </div>
+          {progress.total > 0 && (
+            <div className="text-right shrink-0">
+              <p className="text-2xl font-extrabold text-gray-900 leading-none">
+                {progress.done}<span className="text-base font-bold text-gray-400">/{progress.total}</span>
+              </p>
+              <p className="text-[11px] text-gray-400 mt-1">{progress.done === progress.total ? L('lesson.allDone') : L('lesson.uploadedCount')}</p>
+            </div>
+          )}
+        </div>
+        {progress.total > 0 && (
+          <div className="mt-3 h-2 rounded-full bg-gray-100 overflow-hidden">
+            <div className={`h-full rounded-full transition-all ${pct === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`} style={{ width: `${pct}%` }} />
+          </div>
+        )}
+      </div>
+
+      {/* 원어민 — 앱에서 쓰는 레슨플랜 (교재마다) */}
+      {viewer.kind === 'foreign' && jobCodeId && <LessonPlanHub jobCodeId={jobCodeId} />}
+
+      {topics.length === 0 && custom.length === 0 && (
+        <EmptyState title={L('lesson.noTemplates')} hint={L('lesson.noTemplatesHint')} />
+      )}
+
+      {topics.map((t) => (
+        <TopicCard
+          key={t.material.id}
+          topic={t}
+          mode={linkModeOf(t, viewer)}
+          perClassEmpty={!!t.template?.perClass && !state.classes.length}
+          onOpen={(section) => setDialog({ topicId: t.material.id, section })}
+        />
+      ))}
+
+      {/* 직접 추가한 주제 */}
+      {(custom.length > 0 || code) && (
+        <div className="pt-2">
+          <p className="text-xs font-semibold text-gray-400 tracking-wide px-1 mb-2">{L('lesson.myTopics')}</p>
+          <div className="space-y-3">
+            {custom.map((t) => (
+              <TopicCard
+                key={t.material.id}
+                topic={t}
+                mode={linkModeOf(t, viewer)}
+                onOpen={(section) => setDialog({ topicId: t.material.id, section })}
+                onDeleteTopic={() => removeTopic(t.material.id)}
+              />
             ))}
           </div>
-        </div>
-      )}
-
-      {/* 유저 대주제 추가 */}
-      {selectedMaterialCode && selectedMaterialCode !== '개인 자료' && (
-        <>
-          {showAddMaterialForm ? (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mx-4 mb-4">
-              <h3 className="text-sm font-semibold text-blue-800 mb-2">
-                {selectedMaterialCode}에 새 대주제 추가
-              </h3>
-              <p className="text-xs text-blue-600 mb-3">
-                {selectedMaterialCode} 카테고리에 새로운 대주제를 추가합니다.
-              </p>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    대주제 이름
-                  </label>
-                  <input
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
-                    placeholder="예: 개인 프로젝트, 추가 학습 자료"
-                    value={newMaterialTitle}
-                    onChange={(e) => setNewMaterialTitle(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleAddUserMaterial();
-                    }}
-                    aria-label="대주제 이름"
-                    autoFocus
-                  />
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <button
-                    onClick={() => {
-                      setShowAddMaterialForm(false);
-                      setNewMaterialTitle('');
-                    }}
-                    className="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-500 transition-all"
-                  >
-                    취소
-                  </button>
-                  <button
-                    onClick={handleAddUserMaterial}
-                    className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all"
-                  >
-                    추가하기
-                  </button>
-                </div>
-              </div>
+          {addingTopic ? (
+            <div className="mt-3 rounded-xl bg-white ring-1 ring-blue-200 p-3 flex gap-2">
+              <input
+                autoFocus
+                value={topicTitle}
+                onChange={(e) => setTopicTitle(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') addTopic(); if (e.key === 'Escape') setAddingTopic(false); }}
+                placeholder={L('lesson.topicPlaceholder')}
+                className="flex-1 min-w-0 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button onClick={() => setAddingTopic(false)} className="px-3 py-2 text-sm rounded-lg text-gray-600 hover:bg-gray-100">{L('lesson.cancel')}</button>
+              <button onClick={addTopic} disabled={!topicTitle.trim()} className="px-3 py-2 text-sm rounded-lg bg-blue-600 text-white font-medium disabled:opacity-40">{L('lesson.add')}</button>
             </div>
           ) : (
-            <button
-              onClick={() => setShowAddMaterialForm(true)}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 mx-4 mb-4 text-blue-600 bg-blue-50 border border-dashed border-blue-200 rounded-lg hover:bg-blue-100 hover:border-blue-300 transition-all text-sm font-medium"
-              style={{ width: 'calc(100% - 2rem)' }}
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                />
-              </svg>
-              {selectedMaterialCode}에 새 대주제 추가하기
+            <button onClick={() => setAddingTopic(true)} className="mt-3 w-full py-2.5 rounded-xl border border-dashed border-gray-300 text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700">
+              + {L('lesson.addTopic')}
             </button>
           )}
-        </>
-      )}
-
-      {/* 에러 메시지 */}
-      {error && (
-        <div className="mb-4 mx-4 p-3 bg-red-50 border border-red-200 rounded text-sm">
-          <div className="flex items-center">
-            <svg
-              className="w-4 h-4 text-red-500 mr-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <span className="text-red-700">{error}</span>
-          </div>
         </div>
       )}
 
-      {/* 대주제 목록 */}
-      {sortedFilteredMaterials.length === 0 ? (
-        <div className="text-center py-12 mx-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-          <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-3">
-            <svg
-              className="w-6 h-6 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-          </div>
-          <p className="text-gray-500 font-medium">해당 코드에 등록된 수업 자료가 없습니다</p>
-          <p className="text-gray-400 text-sm mt-1">
-            관리자가 템플릿을 추가하면 자동으로 표시됩니다
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3 sm:space-y-2 px-2">
-          {sortedFilteredMaterials.map((material) => {
-            const sectionCount = sections[material.id]?.length || 0;
-            const tpl = material.templateId
-              ? templates.find((t) => t.id === material.templateId)
-              : undefined;
-
-            return (
-              <div
-                key={material.id}
-                className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-all"
-              >
-                {/* 카드 헤더 */}
-                <div className="p-3 sm:p-4 bg-gray-50 border-b border-gray-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 sm:gap-3">
-                      {/* 아이콘 */}
-                      <div className="flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <svg
-                          className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                          />
-                        </svg>
-                      </div>
-                      <div>
-                        <h3 className="text-sm sm:text-base font-medium text-gray-900">{material.title}</h3>
-                        <p className="text-[10px] sm:text-xs text-gray-500">{sectionCount}개 소제목</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 sm:gap-2">
-                      {tpl && tpl.links && tpl.links.length > 0 && (
-                        <div className="flex gap-1 mr-1 sm:mr-2">
-                          {tpl.links.slice(0, 2).map((l, idx) =>
-                            l.label && l.url ? (
-                              <a
-                                key={idx}
-                                href={l.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 transition-all"
-                                aria-label={l.label}
-                              >
-                                {l.label}
-                              </a>
-                            ) : null
-                          )}
-                        </div>
-                      )}
-                      {!material.templateId && (
-                        <button
-                          onClick={() => handleDeleteUserMaterial(material.id)}
-                          className="p-1 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded transition-all"
-                          title="대주제 삭제"
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 카드 본문 - 항상 표시 */}
-                <div className="px-3 sm:px-4 pb-3 sm:pb-4 bg-white">
-                    <div className="space-y-1.5 sm:space-y-2 mt-2 sm:mt-3">
-                      {sections[material.id]?.length === 0 ? (
-                        <div className="text-center py-6 text-gray-400">
-                          <svg
-                            className="w-8 h-8 mx-auto mb-2 text-gray-300"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                            />
-                          </svg>
-                          <p className="text-sm">소제목이 없습니다</p>
-                          <p className="text-xs mt-1">아래 버튼을 클릭하여 소제목을 추가해보세요</p>
-                        </div>
-                      ) : (
-                        sections[material.id]?.map((section) => (
-                          <div
-                            key={section.id}
-                            className="border-b border-gray-200 last:border-b-0 py-2 sm:py-2.5 transition-all group"
-                          >
-                            {editingSection?.materialId === material.id &&
-                            editingSection?.section.id === section.id ? (
-                              <SectionForm
-                                initial={editingSection.section}
-                                onSave={(data) => handleEditSection(material.id, section.id, data)}
-                                onCancel={() => setEditingSection(null)}
-                                isFromTemplate={section.isFromTemplate}
-                              />
-                            ) : (
-                              <>
-                                {/* 소제목 컴팩트 레이아웃 */}
-                                <div className="flex items-center justify-between gap-2 sm:gap-3">
-                                  {/* 왼쪽: 제목, 링크 */}
-                                  <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap flex-1 min-w-0">
-                                    <div className="flex items-center gap-1 sm:gap-1.5">
-                                      {section.isFromTemplate && (
-                                        <span className="text-[10px] sm:text-xs text-gray-400 flex-shrink-0">📌</span>
-                                      )}
-                                      <h4 className={`font-medium text-xs sm:text-sm ${section.isFromTemplate ? 'text-gray-700' : 'text-gray-800'}`}>
-                                        {section.title}
-                                      </h4>
-                                    </div>
-                                    {/* 관리자 링크들 */}
-                                    {section.links && section.links.length > 0 && (
-                                      <>
-                                        {section.links.map((link, idx) => (
-                                          <a
-                                            key={idx}
-                                            href={link.url}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="inline-flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs bg-gray-100 text-gray-700 hover:bg-gray-200 transition-all border border-gray-300"
-                                          >
-                                            <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                            </svg>
-                                            {link.label}
-                                          </a>
-                                        ))}
-                                      </>
-                                    )}
-                                  </div>
-                                  
-                                  {/* 오른쪽: 액션 버튼들 */}
-                                  <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
-                                    {/* 공개보기/원본 버튼 */}
-                                    <a
-                                      href={section.viewUrl || undefined}
-                                      target="_blank"
-                                      rel="noopener"
-                                      className={`inline-flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium transition-all ${
-                                        section.viewUrl
-                                          ? 'bg-blue-500 text-white hover:bg-blue-600'
-                                          : 'bg-gray-200 text-gray-500 cursor-not-allowed pointer-events-none'
-                                      }`}
-                                    >
-                                      <svg
-                                        className="w-2.5 h-2.5 sm:w-3 sm:h-3 hidden sm:block"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={2}
-                                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                                        />
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={2}
-                                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                                        />
-                                      </svg>
-                                      <span className="hidden sm:inline">공개보기</span>
-                                      <span className="sm:hidden">공개</span>
-                                    </a>
-                                    <a
-                                      href={section.originalUrl || undefined}
-                                      target="_blank"
-                                      rel="noopener"
-                                      className={`inline-flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded text-[10px] sm:text-xs font-medium transition-all ${
-                                        section.originalUrl
-                                          ? 'bg-green-500 text-white hover:bg-green-600'
-                                          : 'bg-gray-200 text-gray-500 cursor-not-allowed pointer-events-none'
-                                      }`}
-                                    >
-                                      <svg
-                                        className="w-2.5 h-2.5 sm:w-3 sm:h-3 hidden sm:block"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={2}
-                                          d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                        />
-                                      </svg>
-                                      원본
-                                    </a>
-                                    {/* 수정/삭제 버튼 */}
-                                    <button
-                                      onClick={() =>
-                                        setEditingSection({ materialId: material.id, section })
-                                      }
-                                      className="p-0.5 sm:p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
-                                      title="수정"
-                                    >
-                                      <svg
-                                        className="w-2.5 h-2.5 sm:w-3 sm:h-3"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                      >
-                                        <path
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                          strokeWidth={2}
-                                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                                        />
-                                      </svg>
-                                    </button>
-                                    {!section.isFromTemplate && (
-                                      <button
-                                        onClick={() => handleDeleteSection(material.id, section.id)}
-                                        className="p-0.5 sm:p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded transition-all"
-                                        title="삭제"
-                                      >
-                                        <svg
-                                          className="w-2.5 h-2.5 sm:w-3 sm:h-3"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          viewBox="0 0 24 24"
-                                        >
-                                          <path
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                            strokeWidth={2}
-                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                          />
-                                        </svg>
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        ))
-                      )}
-                    </div>
-
-                    {/* 소제목 추가 섹션 */}
-                    {addingSectionFor === material.id ? (
-                      <SectionForm
-                        onSave={(data) => handleAddSection(material.id, data)}
-                        onCancel={() => setAddingSectionFor(null)}
-                      />
-                    ) : (
-                      <button
-                        onClick={() => setAddingSectionFor(material.id)}
-                        className="w-full flex items-center justify-center gap-1 px-2 py-1 mt-2 text-gray-500 bg-transparent border border-dashed border-gray-300 rounded hover:bg-gray-50 hover:border-gray-400 hover:text-gray-700 transition-all text-xs"
-                      >
-                        <svg
-                          className="w-3 h-3"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                          />
-                        </svg>
-                        소제목 추가
-                      </button>
-                    )}
-                  </div>
-              </div>
-            );
-          })}
-        </div>
+      {dialog && dialogTopic && (
+        <LinkDialog
+          topic={dialogTopic}
+          section={dialog.section}
+          mode={linkModeOf(dialogTopic, viewer)}
+          onClose={() => setDialog(null)}
+          onSave={async (data) => { if (await saveSection(dialog.topicId, dialog.section, data)) setDialog(null); }}
+          onClear={dialog.section?.isFromTemplate && hasLessonLink(dialog.section)
+            ? async () => { if (await clearSection(dialog.topicId, dialog.section!)) setDialog(null); }
+            : undefined}
+          onDelete={dialog.section && !dialog.section.isFromTemplate
+            ? async () => { if (await removeSection(dialog.topicId, dialog.section!)) setDialog(null); }
+            : undefined}
+        />
       )}
     </div>
+  );
+}
+
+function EmptyState({ title, hint, children }: { title: string; hint?: string; children?: React.ReactNode }) {
+  return (
+    <div className="text-center py-14 px-6">
+      <div className="w-12 h-12 rounded-full bg-gray-100 mx-auto mb-3 flex items-center justify-center text-gray-400">
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+      </div>
+      <p className="font-semibold text-gray-700">{title}</p>
+      {hint && <p className="text-sm text-gray-400 mt-1">{hint}</p>}
+      {children}
+    </div>
+  );
+}
+
+/** 주제 하나 — 머리(제목·가이드 링크·진행률)와 칸 목록 */
+function TopicCard({ topic, mode, perClassEmpty, onOpen, onDeleteTopic }: {
+  topic: Topic;
+  mode: LinkMode;
+  perClassEmpty?: boolean;
+  onOpen: (section: LessonSectionView | null) => void;
+  onDeleteTopic?: () => void;
+}) {
+  const p = lessonProgress(topic.sections);
+  const done = p.total > 0 && p.done === p.total;
+  const guide = (topic.template?.links ?? []).map((l) => ({ ...l, url: safeLessonUrl(l.url) })).filter((l) => l.label && l.url);
+  return (
+    <div className="rounded-2xl bg-white ring-1 ring-gray-200 overflow-hidden">
+      <div className="px-4 py-3 flex items-center gap-3 border-b border-gray-100">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 truncate">{topic.material.title}</h3>
+            {p.total > 0 && (
+              <span className={`shrink-0 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${done ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                {done ? '✓ ' : ''}{p.done}/{p.total}
+              </span>
+            )}
+          </div>
+          {guide.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-1.5">
+              {guide.map((l, i) => (
+                <a key={i} href={l.url} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100">
+                  <ExternalIcon /> {l.label}
+                </a>
+              ))}
+            </div>
+          )}
+          {topic.template?.perClass && <p className="text-[11px] text-gray-400 mt-1">{L('lesson.perClassNote')}</p>}
+        </div>
+        {onDeleteTopic && (
+          <button onClick={onDeleteTopic} className="p-1.5 rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50" title={L('lesson.deleteTopic')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+          </button>
+        )}
+      </div>
+
+      {perClassEmpty && <p className="px-4 py-3 text-sm text-amber-700 bg-amber-50">{L('lesson.perClassEmpty')}</p>}
+
+      <ul className="divide-y divide-gray-100">
+        {topic.sections.map((s) => <SectionRow key={s.id} section={s} mode={mode} onOpen={() => onOpen(s)} />)}
+      </ul>
+
+      <button onClick={() => onOpen(null)} className="w-full px-4 py-2 text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 border-t border-gray-100 text-left">
+        + {L('lesson.addItem')}
+      </button>
+    </div>
+  );
+}
+
+function SectionRow({ section, mode, onOpen }: { section: LessonSectionView; mode: LinkMode; onOpen: () => void }) {
+  const has = hasLessonLink(section);
+  const view = safeLessonUrl(section.viewUrl) || safeLessonUrl(section.originalUrl);
+  const original = safeLessonUrl(section.originalUrl);
+  const extra = (section.links ?? []).map((l) => ({ ...l, url: safeLessonUrl(l.url) })).filter((l) => l.url);
+  return (
+    <li className="px-4 py-2.5 flex items-center gap-3">
+      <span className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${has ? 'bg-emerald-500 text-white' : 'ring-2 ring-inset ring-gray-200'}`}>
+        {has ? '✓' : ''}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className={`text-sm font-medium truncate ${has ? 'text-gray-900' : 'text-gray-600'}`}>{section.title}</p>
+        {extra.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1">
+            {extra.map((l, i) => (
+              <a key={i} href={l.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 hover:bg-gray-200">
+                <ExternalIcon /> {l.label || 'Link'}
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+      {has ? (
+        <div className="flex items-center gap-1 shrink-0">
+          {view && (
+            <a href={view} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100">
+              {L('lesson.view')}
+            </a>
+          )}
+          {mode === 'canva' && original && (
+            <a href={original} target="_blank" rel="noopener noreferrer" className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200">
+              {L('lesson.original')}
+            </a>
+          )}
+          <button onClick={onOpen} className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50" title={L('lesson.edit')}>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+          </button>
+        </div>
+      ) : (
+        <button onClick={onOpen} className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700">
+          {L('lesson.addLink')}
+        </button>
+      )}
+    </li>
+  );
+}
+
+const ISSUE_TEXT: Record<LessonLinkIssue, () => string> = {
+  invalid: () => L('lesson.issueInvalid'),
+  canvaEditInView: () => L('lesson.issueEditInView'),
+  canvaViewInOriginal: () => L('lesson.issueViewInOriginal'),
+  sameLink: () => L('lesson.issueSame'),
+};
+
+/** 링크 올리기 창 — Canva(공개보기 + 원본) 또는 링크 한 칸 */
+function LinkDialog({ topic, section, mode, onClose, onSave, onClear, onDelete }: {
+  topic: Topic;
+  section: LessonSectionView | null;
+  mode: LinkMode;
+  onClose: () => void;
+  onSave: (data: { title: string; viewUrl: string; originalUrl: string }) => Promise<void>;
+  onClear?: () => Promise<void>;
+  onDelete?: () => Promise<void>;
+}) {
+  const fixedTitle = !!section?.isFromTemplate;
+  const [title, setTitle] = useState(section?.title ?? '');
+  const [viewUrl, setViewUrl] = useState(section?.viewUrl ?? '');
+  const [originalUrl, setOriginalUrl] = useState(section?.originalUrl ?? '');
+  const [single, setSingle] = useState(section?.viewUrl || section?.originalUrl || '');
+  const [busy, setBusy] = useState(false);
+  const [showHow, setShowHow] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const issues = mode === 'canva' ? checkLessonLinks(viewUrl, originalUrl) : checkLessonLinks(single, '');
+  const blocking = (mode === 'canva' ? [issues.view, issues.original] : [issues.view]).includes('invalid');
+  const empty = mode === 'canva' ? !viewUrl.trim() && !originalUrl.trim() : !single.trim();
+  const canSave = !busy && !blocking && !empty && (fixedTitle || !!title.trim());
+
+  const submit = async () => {
+    if (!canSave) return;
+    setBusy(true);
+    const data = mode === 'canva'
+      ? { title: title.trim(), viewUrl: viewUrl.trim(), originalUrl: originalUrl.trim() }
+      : { title: title.trim(), viewUrl: single.trim(), originalUrl: single.trim() };
+    await onSave(data);
+    setBusy(false);
+  };
+  const run = async (fn?: () => Promise<void>) => { if (!fn) return; setBusy(true); await fn(); setBusy(false); };
+
+  return (
+    <div className="fixed inset-0 z-[80] bg-black/40 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+      <div className="bg-white w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl shadow-xl max-h-[92vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 pt-5 pb-3 border-b border-gray-100">
+          <p className="text-xs font-semibold text-blue-600 truncate">{topic.material.title}</p>
+          {fixedTitle ? (
+            <h3 className="text-lg font-bold text-gray-900 mt-0.5">{section!.title}</h3>
+          ) : (
+            <input
+              autoFocus={!section}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder={L('lesson.itemPlaceholder')}
+              className="mt-1 w-full text-lg font-bold text-gray-900 border-b border-gray-200 focus:border-blue-500 focus:outline-none py-1"
+            />
+          )}
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          {mode === 'canva' ? (
+            <>
+              <LinkField label={L('lesson.viewLink')} help={L('lesson.viewLinkHelp')} value={viewUrl} onChange={setViewUrl}
+                placeholder="https://www.canva.com/design/…/view" issue={issues.view} autoFocus={fixedTitle} onEnter={submit} />
+              <LinkField label={L('lesson.originalLink')} help={L('lesson.originalLinkHelp')} value={originalUrl} onChange={setOriginalUrl}
+                placeholder="https://www.canva.com/design/…/edit" issue={issues.original} onEnter={submit} />
+              <div>
+                <button type="button" onClick={() => setShowHow((v) => !v)} className="text-xs font-semibold text-gray-500 hover:text-gray-700">
+                  {showHow ? '▾' : '▸'} {L('lesson.howTo')}
+                </button>
+                {showHow && (
+                  <ol className="mt-2 text-xs text-gray-600 space-y-1.5 bg-gray-50 rounded-xl p-3 list-decimal pl-7">
+                    <li>{L('lesson.howToView')}</li>
+                    <li>{L('lesson.howToOriginal')}</li>
+                    <li>{L('lesson.howToCheck')}</li>
+                  </ol>
+                )}
+              </div>
+            </>
+          ) : (
+            <LinkField label={L('lesson.singleLink')} help={L('lesson.singleLinkHelp')} value={single} onChange={setSingle}
+              placeholder="https://docs.google.com/document/d/…" issue={issues.view} autoFocus={fixedTitle} onEnter={submit} />
+          )}
+        </div>
+
+        <div className="px-5 pb-5 flex items-center gap-2">
+          {onClear && <button onClick={() => run(onClear)} disabled={busy} className="px-3 py-2 text-sm rounded-lg text-red-600 hover:bg-red-50">{L('lesson.clearLink')}</button>}
+          {onDelete && <button onClick={() => run(onDelete)} disabled={busy} className="px-3 py-2 text-sm rounded-lg text-red-600 hover:bg-red-50">{L('lesson.delete')}</button>}
+          <div className="flex-1" />
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-lg text-gray-600 hover:bg-gray-100">{L('lesson.cancel')}</button>
+          <button onClick={submit} disabled={!canSave} className="px-4 py-2 text-sm rounded-lg bg-blue-600 text-white font-semibold disabled:opacity-40">
+            {busy ? '…' : L('lesson.save')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LinkField({ label, help, value, onChange, placeholder, issue, autoFocus, onEnter }: {
+  label: string; help: string; value: string; onChange: (v: string) => void; placeholder: string;
+  issue?: LessonLinkIssue; autoFocus?: boolean; onEnter: () => void;
+}) {
+  return (
+    <div>
+      <label className="block text-sm font-semibold text-gray-800 mb-1">{label}</label>
+      <input
+        autoFocus={autoFocus}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') onEnter(); }}
+        placeholder={placeholder}
+        inputMode="url"
+        className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 ${issue ? 'border-amber-400 focus:ring-amber-400' : 'border-gray-300 focus:ring-blue-500'}`}
+      />
+      {issue ? <p className="text-xs text-amber-700 mt-1">⚠️ {ISSUE_TEXT[issue]()}</p> : <p className="text-xs text-gray-400 mt-1">{help}</p>}
+    </div>
+  );
+}
+
+function ExternalIcon() {
+  return (
+    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
   );
 }

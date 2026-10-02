@@ -16,6 +16,8 @@ type AdminMenuItem = {
   icon: keyof typeof Ionicons.glyphMap;
   iconColor: string;
   screenName: keyof import('../navigation/types').AdminStackParamList;
+  /** 화면에 넘길 값 (예: 멘토 / 원어민) */
+  params?: Record<string, unknown>;
 };
 
 type AdminSection = {
@@ -55,10 +57,19 @@ const adminSections: AdminSection[] = [
     items: [
       {
         id: '4',
-        title: '캠프별 유저 조회',
-        icon: 'search',
-        iconColor: '#ef4444',
+        title: '한국인 멘토 선생님',
+        icon: 'people',
+        iconColor: '#2E26D3',
         screenName: 'UserCheck',
+        params: { kind: 'mentor' },
+      },
+      {
+        id: '4-1',
+        title: '원어민 선생님',
+        icon: 'globe-outline',
+        iconColor: '#0ea5e9',
+        screenName: 'UserCheck',
+        params: { kind: 'foreign' },
       },
       {
         id: '5',
@@ -118,11 +129,9 @@ const adminSections: AdminSection[] = [
   },
 ];
 
-import { AdminStackParamList } from '../navigation/types';
-
 export function AdminScreen({ navigation }: AdminStackScreenProps<'AdminDashboard'>) {
-  const handleMenuPress = (screenName: keyof AdminStackParamList) => {
-    navigation.navigate(screenName as any);
+  const handleMenuPress = (item: AdminMenuItem) => {
+    navigation.navigate(item.screenName as any, item.params as any);
   };
 
   return (
@@ -140,7 +149,7 @@ export function AdminScreen({ navigation }: AdminStackScreenProps<'AdminDashboar
                 <TouchableOpacity
                   key={item.id}
                   style={styles.menuCard}
-                  onPress={() => handleMenuPress(item.screenName)}
+                  onPress={() => handleMenuPress(item)}
                   activeOpacity={0.7}
                 >
                   <View style={[styles.iconContainer, { backgroundColor: `${item.iconColor}15` }]}>

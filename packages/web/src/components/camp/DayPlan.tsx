@@ -131,7 +131,7 @@ export function ExcitingDayList({ set, groupName, guidedLabels, onOpenGuide, now
             {/* 제목 — 시간표 아래 붙는 인문학 표와 같은 모양 */}
             <div className="mb-2 flex flex-wrap items-baseline gap-x-2">
               <h3 className="text-sm font-semibold text-gray-900">
-                {monthDayLabel(date)} ({weekdayOf(date)}) Exciting Day
+                {monthDayLabel(date)} ({weekdayOf(date)}) {findDayKind(entry.kind)?.short ?? 'Exciting Day'}
               </h3>
               {isToday && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">{L('schedule.today')}</span>}
               {entry.note && <span className="text-xs text-gray-500">{entry.note}</span>}

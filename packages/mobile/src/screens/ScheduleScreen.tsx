@@ -11,6 +11,9 @@ import {
   isSameGroup,
   normalizeGroupKey,
   resolveTimetable,
+  resolveTimetables,
+  timetableVariants,
+  monthDayLabel,
   findGuide,
   guideKeyOf,
   hasGuideContent,
@@ -35,6 +38,11 @@ import { L } from '@smis-mentor/shared';
 
 /** 시간표 탭 줄의 '전체' (일정표) */
 const ALL_TAB = '__all';
+
+const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+/** '2027-01-21' 들 → '1/21 (THU) · 1/28 (THU)' — 익사이팅 데이 제목과 같은 모양 (web 과 같다) */
+const datesLabel = (dates: string[]) =>
+  dates.map((d) => `${monthDayLabel(d)} (${WEEKDAYS[new Date(`${d}T00:00:00`).getDay()]})`).join(' · ');
 
 /** 고른 그룹은 캠프별로 기억한다 — 다른 탭 다녀와도 그대로 */
 const GROUP_KEY = (jobCodeId: string) => `SMIS_TIMETABLE_GROUP_${jobCodeId}`;
@@ -152,12 +160,18 @@ export function ScheduleScreen() {
     if (!cat) return;
     setCategory(cat);
     if (cat === EXCITING_CATEGORY) setFocusDate(date);
-    else scrollRef.current?.scrollTo({ y: 0, animated: false });
+    else {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+      // 날짜별 표가 여러 장이면 그 날짜 표로 — 자리가 잡히면(onLayout) 내려 간다
+      pendingScroll.current = date;
+      setTimeout(tryScroll, 60);
+    }
   };
 
-  const current: CampTimetable | undefined = useMemo(
+  /** 고른 Day·그룹의 표 — 날짜별 표가 있으면 여러 장 (기본 표가 먼저, 그다음 날짜 순) */
+  const currentList: CampTimetable[] = useMemo(
     () =>
-      resolveTimetable({
+      resolveTimetables({
         timetables,
         groups: derived,
         category: tableCategory,
@@ -168,6 +182,45 @@ export function ScheduleScreen() {
       }),
     [timetables, derived, groups, tableCategory, activeGroup, campCode, activeJobCodeId, data?.timetableCommon]
   );
+  const current: CampTimetable | undefined = currentList[0];
+  /** 두 장 이상이면 날짜를 제목으로 달아 위에서부터 쌓는다 (익사이팅 데이 목록과 같은 방식 · web 과 같은 규칙) */
+  const variants = useMemo(
+    () => (currentList.length > 1 ? timetableVariants(currentList, daySet, tableCategory, campCode) : []),
+    [currentList, daySet, tableCategory, campCode]
+  );
+  const todayYmd = localYmd(new Date());
+  const categoryName = categories.find((c) => c.key === tableCategory)?.label ?? '';
+
+  // 날짜 표로 스크롤 — 표마다 자리(y)를 기억해 두고, 가야 할 날짜가 있으면 자리가 잡히는 대로 내려 간다
+  const tablesTop = useRef(0);
+  const variantY = useRef<Record<string, number>>({});
+  const variantsRef = useRef(variants);
+  variantsRef.current = variants;
+  const pendingScroll = useRef<string | null>(null);
+  const tryScroll = () => {
+    const date = pendingScroll.current;
+    if (!date) return;
+    const v = variantsRef.current.find((x) => x.dates.includes(date));
+    if (!v) {
+      pendingScroll.current = null;
+      return;
+    }
+    const y = variantY.current[v.table.id];
+    if (y == null) return;
+    pendingScroll.current = null;
+    scrollRef.current?.scrollTo({ y: Math.max(0, tablesTop.current + y - 12), animated: true });
+  };
+  // 오늘 표가 아래쪽에 쌓여 있으면, 탭을 처음 열 때 한 번 그 표로
+  const autoScrolled = useRef<string | null>(null);
+  useEffect(() => {
+    const key = `${tableCategory}::${activeGroup}`;
+    if (!variants.length || autoScrolled.current === key) return;
+    autoScrolled.current = key;
+    if (variants.findIndex((v) => v.dates.includes(todayYmd)) > 0) {
+      pendingScroll.current = todayYmd;
+      tryScroll();
+    }
+  }, [variants, tableCategory, activeGroup, todayYmd]);
 
   /**
    * 인문학처럼 "하루를 통째로 쓰지 않고 정규 데이 한 시간대에 들어가는" 표.
@@ -353,18 +406,52 @@ export function ScheduleScreen() {
         />
       ) : current ? (
         <>
-          <TimetableView
-            timetable={withClassInfo(current)!}
-            teacherByClassCode={teacherByClassCode}
-            foreignBySubject={groupOf(current.groupName)?.staffByRole ?? {}}
-            myClassCode={myExp?.classCode}
-            isForeign={isForeign}
-            nowMinutes={nowMinutes}
-            linkedLabels={inlineTables.map((x) => x.slot.label)}
-            campStartMs={data?.startMs ?? null}
-            guidedLabels={guidedLabels}
-            onOpenGuide={setGuideLabel}
-          />
+          {variants.length ? (
+            <View onLayout={(e) => { tablesTop.current = e.nativeEvent.layout.y; tryScroll(); }}>
+              {variants.map((v, i) => {
+                const isToday = v.dates.includes(todayYmd);
+                return (
+                  <View
+                    key={v.table.id}
+                    style={i > 0 ? s.inlineSection : undefined}
+                    onLayout={(e) => { variantY.current[v.table.id] = e.nativeEvent.layout.y; tryScroll(); }}
+                  >
+                    <View style={s.inlineHead}>
+                      <Text style={s.inlineTitle}>
+                        {v.dates.length ? datesLabel(v.dates) : L('schedule.otherDays')} {categoryName}
+                      </Text>
+                      {isToday && <Text style={s.todayBadge}>{L('schedule.today')}</Text>}
+                    </View>
+                    <TimetableView
+                      timetable={withClassInfo(v.table)!}
+                      teacherByClassCode={teacherByClassCode}
+                      foreignBySubject={groupOf(v.table.groupName)?.staffByRole ?? {}}
+                      myClassCode={myExp?.classCode}
+                      isForeign={isForeign}
+                      nowMinutes={isToday ? nowMinutes : null}
+                      linkedLabels={inlineTables.map((x) => x.slot.label)}
+                      campStartMs={data?.startMs ?? null}
+                      guidedLabels={guidedLabels}
+                      onOpenGuide={setGuideLabel}
+                    />
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <TimetableView
+              timetable={withClassInfo(current)!}
+              teacherByClassCode={teacherByClassCode}
+              foreignBySubject={groupOf(current.groupName)?.staffByRole ?? {}}
+              myClassCode={myExp?.classCode}
+              isForeign={isForeign}
+              nowMinutes={nowMinutes}
+              linkedLabels={inlineTables.map((x) => x.slot.label)}
+              campStartMs={data?.startMs ?? null}
+              guidedLabels={guidedLabels}
+              onOpenGuide={setGuideLabel}
+            />
+          )}
 
           {inlineTables.map(({ slot, table }) => (
             <View key={slot.category.key} style={s.inlineSection}>
@@ -462,6 +549,7 @@ const s = StyleSheet.create({
   inlineSection: { marginTop: 20 },
   inlineHead: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', marginBottom: 8 },
   inlineTitle: { fontSize: 13, fontWeight: '700', color: '#111827' },
+  todayBadge: { marginLeft: 8, backgroundColor: '#2563eb', color: '#fff', fontSize: 10, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: 'hidden' },
   inlineTime: { marginLeft: 6, fontSize: 11, color: '#6b7280' },
 
   empty: {

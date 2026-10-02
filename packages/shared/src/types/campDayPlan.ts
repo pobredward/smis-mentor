@@ -11,7 +11,7 @@
  */
 import { normalizeGroupKey } from './campTimetable';
 
-export type DayKind = 'orientation' | 'regular' | 'steam' | 'exciting' | 'final' | 'checkout';
+export type DayKind = 'orientation' | 'regular' | 'steam' | 'exciting' | 'outdoor' | 'final' | 'checkout';
 
 export interface DayKindSpec {
   key: DayKind;
@@ -38,12 +38,22 @@ export const DAY_KINDS: DayKindSpec[] = [
     labelByCampPrefix: { S: 'Going-Up Day', F: 'Going-Up Day' }, miniByCampPrefix: { S: 'Going-Up', F: 'Going-Up' },
   },
   { key: 'exciting', label: 'Exciting Day', category: 'exciting', color: '#fefcc4', short: 'Exciting Day', mini: 'Exciting' },
+  /** 캠프 밖 현장 수업 (S캠프 SG Outdoor Class) — 익사이팅처럼 그날 활동표를 일정표에 둔다 */
+  {
+    key: 'outdoor', label: 'Outdoor Class', category: 'exciting', color: '#f9d7d5', short: 'Outdoor Class', mini: 'Outdoor',
+    labelByCampPrefix: { S: 'SG Outdoor Class' },
+  },
   { key: 'final', label: 'Final Test\nFarewell', category: 'departure_d1', color: '#e6d3f5', short: 'Final Test', mini: 'Final' },
   { key: 'checkout', label: 'Check-out', category: 'departure', color: '#f1f1f1', short: 'Check-out', mini: 'Out' },
 ];
 
 /** 익사이팅 데이 탭 키 — 시간표 카테고리와 겹치지 않는 이름 */
 export const EXCITING_CATEGORY = 'exciting';
+
+/** 시간표 대신 그날 활동표(시간 · 활동 · 장소)를 쓰는 날 — 익사이팅 · 야외 수업 */
+export function isActivityDayKind(kind: string | undefined | null): boolean {
+  return kind === 'exciting' || kind === 'outdoor';
+}
 
 export function findDayKind(key: string | undefined | null): DayKindSpec | undefined {
   return DAY_KINDS.find((k) => k.key === key);
@@ -180,10 +190,10 @@ export function dayCategory(set: DayPlanSet | undefined, date: string, campCode?
   return spec.category;
 }
 
-/** 이 세트의 익사이팅 데이 날짜 (오름차순) */
+/** 이 세트의 익사이팅 데이 날짜 (오름차순) — 활동표를 쓰는 야외 수업 날도 함께 */
 export function excitingDates(set: DayPlanSet | undefined): string[] {
   return Object.keys(set?.days ?? {})
-    .filter((d) => set?.days[d]?.kind === 'exciting')
+    .filter((d) => isActivityDayKind(set?.days[d]?.kind))
     .sort();
 }
 
@@ -222,7 +232,7 @@ export function cleanDayPlan(plan: CampDayPlan): CampDayPlan {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !findDayKind(e?.kind)) return;
       const out: DayPlanEntry = { kind: e.kind };
       if (clean(e.note)) out.note = clean(e.note);
-      if (e.kind === 'exciting') {
+      if (isActivityDayKind(e.kind)) {
         const cleanSlots = (list: ExcitingSlot[] | undefined) => (list ?? [])
           .map((x) => ({
             id: x.id || `${date}-${Math.random().toString(36).slice(2, 8)}`,

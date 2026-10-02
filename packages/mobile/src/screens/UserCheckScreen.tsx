@@ -1,1375 +1,694 @@
-import { compareCampCodes } from '@smis-mentor/shared';
-import { CAMP_GROUP_ORDER } from '@smis-mentor/shared';
-import React, { useState, useEffect } from 'react';
-import { logger } from '@smis-mentor/shared';
+/**
+ * 관리자 → 한국인 멘토 선생님 / 원어민 선생님 (웹 /admin/user-check · /admin/foreign-teachers 와 같은 화면)
+ *
+ * - 사람 목록·묶기·소개·수업 자료 불러오기 규칙은 shared (utils/campTeachers · services/campTeachers) — 웹과 같은 코드
+ * - 운영진(매니저 → 부매니저) · 그룹별 (멘토: 담임 반 순서 → 수업 / 원어민: Speaking → Reading → Writing → Mix)
+ * - 카드: 사진(3:4) · 이름 · 나이·성별·학교/학과(멘토) 또는 국적·참여·경력 연수(원어민)
+ *         멘토는 이 캠프에 올린 수업 자료 주제, 운영진은 최근 참여한 캠프
+ * - 카드를 누르면 아래에서 올라오는 창 — 수업 자료(공개보기 · 원본편집, 눌러서 열기) · 경력(원어민) · 참여한 캠프(그때 역할)
+ * - 링크가 빈 주제·칸은 보이지 않는다. 연락처·주민번호 같은 개인정보도 보이지 않는다
+ * - 휴대폰은 한 줄에 한 명, 태블릿(넓은 화면)은 두 명
+ */
+import React, { useEffect, useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  FlatList,
-  TouchableOpacity,
-  Alert,
   ActivityIndicator,
-  Modal,
   Linking,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import {
+  CAMP_TEACHER_TITLE,
+  adminGetAllJobCodes,
+  buildCampTeachers,
+  campTeacherCaption,
+  compareCampCodes,
+  countryFlag,
+  formatTeachingPeriod,
+  getCampRoster,
+  groupCampTeachers,
+  lessonGenNum,
+  loadTeacherLessons,
+  logger,
+  ordinalEn,
+  resolveActiveJobCodeId,
+  safeLessonUrl,
+  uploadedLessonTopics,
+  type CampTeacher,
+  type CampTeacherKind,
+  type JobCodeWithId,
+  type TeacherLesson,
+} from '@smis-mentor/shared';
 import { db } from '../config/firebase';
-import { adminGetAllJobCodes, adminGetUsersByJobCode, getGenerationCodes, filterMaterialsByGeneration, filterSectionsWithLinks } from '@smis-mentor/shared';
-import { getGroupLabel } from '@smis-mentor/shared';
-import { AdminStackScreenProps } from '../navigation/types';
-import { getLessonMaterials, getSections, getLessonMaterialTemplates, LessonMaterialData, SectionData, LessonMaterialTemplate } from '../services/lessonMaterialService';
+import { useAuth } from '../context/AuthContext';
+import { getUsersByJobCodeId } from '../services/userService';
+import type { AdminStackScreenProps } from '../navigation/types';
 
-interface JobCodeWithId {
-  id: string;
-  generation: string;
-  code: string;
-  name: string;
-  location: string;
-  korea: boolean;
-}
+type Person = CampTeacher;
+type Tone = { bar: string; soft: string; text: string };
 
-interface UserWithGroupInfo {
-  userId: string;
-  name: string;
-  email: string;
-  phoneNumber?: string;
-  phone?: string;
-  role: string;
-  status: string;
-  profileImage?: string;
-  jobExperiences?: any[];
-  groupName?: string;
-  groupRole?: string;
-  classCode?: string;
-  gender?: string;
-  age?: number;
-  rrnFront?: string;
-  rrnLast?: string;
-  rrnLastEncrypted?: string;
-  address?: string;
-  addressDetail?: string;
-  university?: string;
-  grade?: number;
-  isOnLeave?: boolean | null;
-  major1?: string;
-  major2?: string;
-}
+const BRAND = '#2E26D3';
+/** 그룹 색 — 웹 화면과 같은 계열 */
+const GROUP_TONE: Record<string, Tone> = {
+  spring: { bar: '#fbbf24', soft: '#fffbeb', text: '#b45309' },
+  summer: { bar: '#10b981', soft: '#ecfdf5', text: '#047857' },
+  autumn: { bar: '#8b5cf6', soft: '#f5f3ff', text: '#6d28d9' },
+  winter: { bar: '#fb7185', soft: '#fff1f2', text: '#be123c' },
+  junior: { bar: '#0ea5e9', soft: '#f0f9ff', text: '#0369a1' },
+  middle: { bar: '#14b8a6', soft: '#f0fdfa', text: '#0f766e' },
+  senior: { bar: '#6366f1', soft: '#eef2ff', text: '#4338ca' },
+};
+const STAFF_TONE: Tone = { bar: BRAND, soft: '#eef2ff', text: BRAND };
+const toneOf = (g: string): Tone => GROUP_TONE[String(g).toLowerCase()] ?? STAFF_TONE;
 
-// 그룹 이름 매핑 - getGroupLabel 함수 사용으로 대체 가능하지만 기존 구조 유지
-const groupLabels: Record<string, string> = {
-  junior: '주니어',
-  middle: '미들',
-  senior: '시니어',
-  spring: '스프링',
-  summer: '서머',
-  autumn: '어텀',
-  winter: '윈터',
-  common: '공통',
-  manager: '매니저',
-  short1: '단기1',
-  short2: '단기2',
-  short3: '단기3',
-  short4: '단기4',
+const toDate = (v: unknown): Date | null => {
+  if (!v) return null;
+  if (typeof (v as { toDate?: () => Date }).toDate === 'function') return (v as { toDate: () => Date }).toDate();
+  const d = new Date(v as string);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+const fmt = (d: Date | null) => (d ? `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}` : '');
+const openUrl = (url?: string) => {
+  const u = safeLessonUrl(url);
+  if (u) Linking.openURL(u).catch(() => undefined);
 };
 
-// 그룹 색상 매핑
-const groupColors: Record<string, { bg: string; text: string }> = {
-  junior: { bg: '#d1fae5', text: '#065f46' },
-  middle: { bg: '#fef3c7', text: '#92400e' },
-  senior: { bg: '#fee2e2', text: '#991b1b' },
-  spring: { bg: '#dbeafe', text: '#1e40af' },
-  summer: { bg: '#e9d5ff', text: '#6b21a8' },
-  autumn: { bg: '#fed7aa', text: '#9a3412' },
-  winter: { bg: '#fce7f3', text: '#9f1239' },
-  common: { bg: '#f3f4f6', text: '#374151' },
-  manager: { bg: '#e5e7eb', text: '#111827' },
-  short1: { bg: '#ccfbf1', text: '#0f766e' },
-  short2: { bg: '#cffafe', text: '#0e7490' },
-  short3: { bg: '#e0e7ff', text: '#3730a3' },
-  short4: { bg: '#ede9fe', text: '#6d28d9' },
-};
+export function UserCheckScreen({ navigation, route }: AdminStackScreenProps<'UserCheck'>) {
+  const { userData } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const [kind, setKind] = useState<CampTeacherKind>(route.params?.kind ?? 'mentor');
+  const [codes, setCodes] = useState<JobCodeWithId[]>([]);
+  const [gen, setGen] = useState('');
+  const [jobCodeId, setJobCodeId] = useState('');
+  const [users, setUsers] = useState<Array<Record<string, any>>>([]);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  /** userId → 이 캠프 수업 자료 (한국인 멘토 화면만) */
+  const [lessons, setLessons] = useState<Record<string, TeacherLesson> | null>(null);
+  const [selected, setSelected] = useState<{ p: Person; staff: boolean; tone: Tone } | null>(null);
 
-// 그룹 순서는 shared 한 곳 (CAMP_GROUP_ORDER) — 이 명단은 매니저를 맨 위로
-const groupOrder: string[] = ['manager', ...CAMP_GROUP_ORDER.filter((g) => g !== 'manager')];
-
-export function UserCheckScreen({ navigation }: AdminStackScreenProps<'UserCheck'>) {
-  const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
-  const [generations, setGenerations] = useState<string[]>([]);
-  const [selectedGeneration, setSelectedGeneration] = useState<string>('');
-  const [codesForGeneration, setCodesForGeneration] = useState<JobCodeWithId[]>([]);
-  const [selectedCode, setSelectedCode] = useState<string>('');
-  const [users, setUsers] = useState<UserWithGroupInfo[]>([]);
-  const [groupedUsers, setGroupedUsers] = useState<Record<string, UserWithGroupInfo[]>>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedUser, setSelectedUser] = useState<UserWithGroupInfo | null>(null);
-  const [selectedRole, setSelectedRole] = useState<string>('mentor');
-  
-  const roleFilters = [
-    { value: 'mentor', label: '멘토' },
-    { value: 'foreign', label: '원어민' }
-  ];
-
-  // 모든 JobCode 및 Generation 로드
   useEffect(() => {
-    const loadJobCodes = async () => {
-      try {
-        setIsLoading(true);
-        const codes = await adminGetAllJobCodes(db);
-        setJobCodes(codes);
+    if (route.params?.kind) setKind(route.params.kind);
+  }, [route.params?.kind]);
 
-        // 기수 목록 추출 (중복 제거)
-        const uniqueGenerations = Array.from(
-          new Set(codes.map((code) => code.generation))
-        ).sort((a, b) => {
-          const numA = parseInt(a.replace(/[^0-9]/g, ''));
-          const numB = parseInt(b.replace(/[^0-9]/g, ''));
-          return numB - numA; // 내림차순
-        });
-
-        setGenerations(uniqueGenerations);
-
-        // 기본 선택: 가장 최근 기수
-        if (uniqueGenerations.length > 0) {
-          setSelectedGeneration(uniqueGenerations[0]);
-        }
-      } catch (error) {
-        logger.error('업무 코드 로드 오류:', error);
-        Alert.alert('오류', '업무 코드를 불러오는 중 오류가 발생했습니다.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadJobCodes();
+  // 캠프 코드 — 최근 기수부터, 처음에는 관리자가 지금 들어가 있는 캠프
+  useEffect(() => {
+    adminGetAllJobCodes(db)
+      .then((list) => {
+        const cs = list
+          .filter((c) => c.code)
+          .sort((a, b) => lessonGenNum(b.generation) - lessonGenNum(a.generation) || compareCampCodes(a.code, b.code));
+        setCodes(cs);
+        const active = resolveActiveJobCodeId(userData as any);
+        const first = cs.find((c) => c.id === active) ?? cs[0];
+        if (first) {
+          setGen(String(first.generation));
+          setJobCodeId(first.id);
+        } else setLoading(false);
+      })
+      .catch((e) => {
+        logger.error('캠프 코드 불러오기 실패:', e);
+        setFailed(true);
+        setLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 선택된 기수에 따라 코드 필터링
+  // 사람 — '선생님 명단 관리' 표(있으면) 또는 캠프 배정
   useEffect(() => {
-    if (!selectedGeneration) {
-      setCodesForGeneration([]);
+    if (!jobCodeId) return;
+    let alive = true;
+    setLoading(true);
+    setFailed(false);
+    Promise.all([getUsersByJobCodeId(jobCodeId), getCampRoster(db, jobCodeId).catch(() => null)])
+      .then(([us, roster]) => {
+        if (!alive) return;
+        setUsers(us as any[]);
+        setPeople(buildCampTeachers(jobCodeId, us as any[], roster));
+      })
+      .catch((e) => {
+        logger.error('캠프 선생님 불러오기 실패:', e);
+        if (alive) {
+          setPeople([]);
+          setFailed(true);
+        }
+      })
+      .finally(() => {
+        if (alive) {
+          setLoading(false);
+          setRefreshing(false);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [jobCodeId, reloadKey]);
+
+  const jc = codes.find((c) => c.id === jobCodeId);
+
+  // 한국인 멘토 — 사람 목록이 뜬 뒤 각자의 이 캠프 수업 자료
+  useEffect(() => {
+    if (kind !== 'mentor' || !jc?.code || !people.length) {
+      setLessons(null);
       return;
     }
-
-    // 커스텀 정렬: J, E, S, F, G, K 순서 우선, 나머지는 알파벳 순서
-    const priorityOrder = ['J', 'E', 'S', 'F', 'G', 'K'];
-    
-    const filteredCodes = jobCodes
-      .filter((code) => code.generation === selectedGeneration)
-      .sort((a, b) => {
-        const aFirstChar = a.code.charAt(0).toUpperCase();
-        const bFirstChar = b.code.charAt(0).toUpperCase();
-        
-        const aPriority = priorityOrder.indexOf(aFirstChar);
-        const bPriority = priorityOrder.indexOf(bFirstChar);
-        
-        // 둘 다 우선순위에 있는 경우
-        if (aPriority !== -1 && bPriority !== -1) {
-          if (aPriority !== bPriority) return aPriority - bPriority;
-          return compareCampCodes(a.code, b.code);
-        }
-        
-        // a만 우선순위에 있는 경우
-        if (aPriority !== -1) return -1;
-        
-        // b만 우선순위에 있는 경우
-        if (bPriority !== -1) return 1;
-        
-        // 둘 다 우선순위에 없는 경우 알파벳 순서
-        return compareCampCodes(a.code, b.code);
-      });
-    setCodesForGeneration(filteredCodes);
-
-    // 기본 선택: 첫번째 코드
-    if (filteredCodes.length > 0) {
-      setSelectedCode(filteredCodes[0].code);
-    } else {
-      setSelectedCode('');
-    }
-  }, [selectedGeneration, jobCodes]);
-
-  // 선택된 기수와 코드에 따라 사용자 로드 및 그룹화
-  useEffect(() => {
-    const loadUsers = async () => {
-      if (!selectedGeneration || !selectedCode) {
-        setUsers([]);
-        setGroupedUsers({});
-        return;
-      }
-
-      try {
-        setIsLoading(true);
-        const usersData = await adminGetUsersByJobCode(db, selectedGeneration, selectedCode);
-
-        // 각 사용자의 그룹 정보 가져오기
-        const enrichedUsers = usersData.map((user: any) => {
-          if (user.jobExperiences && user.jobExperiences.length > 0) {
-            let jobGroup = 'junior'; // 기본값
-            let groupRole = '';
-            let classCode = '';
-
-            // 새 형식 (객체 배열)인 경우
-            if (typeof user.jobExperiences[0] === 'object') {
-              // 선택된 코드와 일치하는 경험 찾기
-              const jobCode = jobCodes.find(
-                (code) => code.generation === selectedGeneration && code.code === selectedCode
-              );
-
-              const relevantExperience = user.jobExperiences.find(
-                (exp: any) => jobCode && exp.id === jobCode.id
-              );
-
-              if (relevantExperience) {
-                // groupRole이 '매니저', '부매니저' 또는 'Manager', 'Sub Manager'인 경우 manager 그룹으로 분류
-                if (
-                  relevantExperience.groupRole === '매니저' || 
-                  relevantExperience.groupRole === '부매니저' ||
-                  relevantExperience.groupRole === 'Manager' || 
-                  relevantExperience.groupRole === 'Sub Manager'
-                ) {
-                  jobGroup = 'manager';
-                } else if ('group' in relevantExperience) {
-                  jobGroup = relevantExperience.group;
-                }
-                if ('groupRole' in relevantExperience) {
-                  groupRole = relevantExperience.groupRole;
-                }
-                if ('classCode' in relevantExperience) {
-                  classCode = relevantExperience.classCode;
-                }
-              }
-            }
-
-            return {
-              ...user,
-              groupName: jobGroup,
-              groupRole,
-              classCode,
-            };
-          }
-
-          return {
-            ...user,
-            groupName: 'junior',
-            groupRole: '',
-            classCode: '',
-          };
-        });
-
-        // role 필터링 적용
-        // mentor 선택 시 mentor_temp, admin도 포함
-        // foreign 선택 시 foreign_temp도 포함
-        const filteredUsers = enrichedUsers.filter((user: UserWithGroupInfo) => {
-          if (selectedRole === 'mentor') {
-            return user.role === 'mentor' || user.role === 'mentor_temp' || user.role === 'admin';
-          } else if (selectedRole === 'foreign') {
-            return user.role === 'foreign' || user.role === 'foreign_temp';
-          }
-          return user.role === selectedRole;
-        });
-
-        setUsers(filteredUsers);
-
-        // 그룹별로 사용자 분류
-        const grouped: Record<string, UserWithGroupInfo[]> = {};
-        filteredUsers.forEach((user: UserWithGroupInfo) => {
-          const group = user.groupName || 'junior';
-          if (!grouped[group]) {
-            grouped[group] = [];
-          }
-          grouped[group].push(user);
-        });
-
-        setGroupedUsers(grouped);
-      } catch (error) {
-        logger.error('사용자 로드 오류:', error);
-        Alert.alert('오류', '사용자를 불러오는 중 오류가 발생했습니다.');
-      } finally {
-        setIsLoading(false);
-      }
+    let alive = true;
+    setLessons(null);
+    const ids = [...new Set(people.filter((p) => p.kind === 'mentor' && p.userId).map((p) => p.userId as string))];
+    loadTeacherLessons(db, { users: users as any, ids, jobCodeId, code: jc.code })
+      .then((r) => { if (alive) setLessons(r); })
+      .catch(() => { if (alive) setLessons({}); });
+    return () => {
+      alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [kind, people, jc?.code]);
 
-    loadUsers();
-  }, [selectedGeneration, selectedCode, jobCodes, selectedRole]);
+  const gens = useMemo(() => [...new Set(codes.map((c) => String(c.generation)))], [codes]);
+  const genCodes = useMemo(() => codes.filter((c) => String(c.generation) === gen), [codes, gen]);
+  const view = useMemo(() => groupCampTeachers(people, kind), [people, kind]);
+  const codeById = useMemo(() => new Map(codes.map((c) => [c.id, c])), [codes]);
+  /** 참여한 캠프 — 최근 기수부터 */
+  const campsOf = (p: Person) =>
+    (p.campIds ?? [])
+      .map((id) => codeById.get(id))
+      .filter((c): c is JobCodeWithId => !!c)
+      .sort((a, b) => lessonGenNum(b.generation) - lessonGenNum(a.generation) || compareCampCodes(a.code, b.code));
 
-  // 전화번호 포맷팅
-  const formatPhoneNumber = (phone?: string): string => {
-    if (!phone) return '-';
-    const cleaned = phone.replace(/\D/g, '');
-    if (cleaned.length === 11) {
-      return `${cleaned.slice(0, 3)}-${cleaned.slice(3, 7)}-${cleaned.slice(7)}`;
-    }
-    return phone;
+  const pickGen = (g: string) => {
+    setGen(g);
+    const first = codes.find((c) => String(c.generation) === g);
+    if (first && first.id !== jobCodeId) setJobCodeId(first.id);
+  };
+  const changeKind = (k: CampTeacherKind) => {
+    setKind(k);
+    navigation.setParams({ kind: k });
   };
 
-  // 수업자료 리스트 컴포넌트
-  const UserLessonMaterials = ({ userId }: { userId: string }) => {
-    const [materials, setMaterials] = useState<LessonMaterialData[]>([]);
-    const [sectionsMap, setSectionsMap] = useState<Record<string, SectionData[]>>({});
-    const [templates, setTemplates] = useState<LessonMaterialTemplate[]>([]);
-    const [selectedGeneration, setSelectedGeneration] = useState<string>('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+  // 넓은 화면(태블릿)은 두 명씩
+  const cols = width >= 720 ? 2 : 1;
+  const contentW = Math.min(width, 1100) - 32;
+  const cardW = cols === 1 ? contentW : (contentW - 12) / 2;
+  const start = toDate((jc as any)?.startDate);
+  const end = toDate((jc as any)?.endDate);
+  const title = CAMP_TEACHER_TITLE[kind];
 
-    useEffect(() => {
-      if (!userId) return;
-      setIsLoading(true);
-      setError(null);
-      
-      Promise.all([
-        getLessonMaterials(userId),
-        getLessonMaterialTemplates()
-      ])
-        .then(async ([fetchedMaterials, fetchedTemplates]) => {
-          setMaterials(fetchedMaterials);
-          setTemplates(fetchedTemplates);
-          
-          // 각 대제목별 소제목(섹션) 동시 조회하고 링크가 있는 것만 필터링
-          const sectionsEntries = await Promise.all(
-            fetchedMaterials.map(async (mat) => {
-              const allSections = await getSections(mat.id);
-              const filteredSections = filterSectionsWithLinks(allSections);
-              return [mat.id, filteredSections];
-            })
-          );
-          
-          const filteredSectionsMap = Object.fromEntries(sectionsEntries);
-          setSectionsMap(filteredSectionsMap);
-          
-          // 링크가 있는 섹션이 있는 자료만 표시하도록 필터링
-          const materialsWithLinks = fetchedMaterials.filter(mat => 
-            filteredSectionsMap[mat.id]?.length > 0
-          );
-          setMaterials(materialsWithLinks);
-          
-          // 기수 코드 추출 및 자동 선택
-          if (materialsWithLinks.length > 0) {
-            const codes = getGenerationCodes(materialsWithLinks, fetchedTemplates);
-            if (codes.length > 0) {
-              setSelectedGeneration(codes[0]); // 가장 최근 기수 선택
-            }
-          }
-        })
-        .catch(() => {
-          setError('수업 자료를 불러오는 중 오류가 발생했습니다.');
-        })
-        .finally(() => setIsLoading(false));
-    }, [userId]);
-
-    // 기수 코드 목록 (내림차순)
-    const generationCodes = getGenerationCodes(materials, templates);
-    
-    // 선택된 기수의 자료만 필터링
-    const filteredMaterials = selectedGeneration 
-      ? filterMaterialsByGeneration(materials, templates, selectedGeneration)
-      : [];
-
-    if (isLoading) {
-      return (
-        <View style={styles.lessonMaterialsContainer}>
-          <ActivityIndicator size="small" color="#3b82f6" />
-          <Text style={styles.lessonMaterialsLoading}>수업 자료 불러오는 중...</Text>
-        </View>
-      );
-    }
-    
-    if (error) {
-      return (
-        <View style={styles.lessonMaterialsContainer}>
-          <Text style={styles.lessonMaterialsError}>{error}</Text>
-        </View>
-      );
-    }
-    
-    if (!materials.length) {
-      return (
-        <View style={styles.lessonMaterialsContainer}>
-          <Text style={styles.lessonMaterialsEmpty}>등록된 수업 자료가 없습니다.</Text>
-        </View>
-      );
-    }
-    
-    return (
-      <View style={styles.lessonMaterialsContainer}>
-        {/* 기수별 토글 (전체 제거, 내림차순) - 녹색 계열로 차별화 */}
-        <View style={styles.lessonGenerationToggles}>
-          {generationCodes.map(code => (
-            <TouchableOpacity
-              key={code}
-              style={[
-                styles.lessonGenerationToggle,
-                selectedGeneration === code && styles.lessonGenerationToggleActive
-              ]}
-              onPress={() => setSelectedGeneration(code)}
-            >
-              <Text
-                style={[
-                  styles.lessonGenerationToggleText,
-                  selectedGeneration === code && styles.lessonGenerationToggleTextActive
-                ]}
-              >
-                {code}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        
-        {/* 수업 자료 목록 */}
-        <View style={styles.lessonMaterialsList}>
-          {filteredMaterials.map((mat) => {
-            const sections = sectionsMap[mat.id] || [];
-            if (sections.length === 0) return null;
-            
-            return (
-              <View key={mat.id} style={styles.lessonMaterialItem}>
-                <Text style={styles.lessonMaterialTitle}>{mat.title}</Text>
-                <View style={styles.lessonSectionsList}>
-                  {sections.map((section) => (
-                    <View key={section.id} style={styles.lessonSectionItem}>
-                      <Text style={styles.lessonSectionTitle}>{section.title}</Text>
-                      <View style={styles.lessonSectionButtons}>
-                        {section.viewUrl && (
-                          <TouchableOpacity
-                            style={styles.lessonSectionButton}
-                            onPress={() => Linking.openURL(section.viewUrl!)}
-                          >
-                            <Text style={styles.lessonSectionButtonText}>공개보기</Text>
-                          </TouchableOpacity>
-                        )}
-                        {section.originalUrl && (
-                          <TouchableOpacity
-                            style={styles.lessonSectionButton}
-                            onPress={() => Linking.openURL(section.originalUrl!)}
-                          >
-                            <Text style={styles.lessonSectionButtonText}>원본</Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
-            );
-          })}
-        </View>
-      </View>
-    );
-  };
-
-  // 그룹별 사용자 렌더링 함수
-  const renderGroupSection = ({ item: group }: { item: string }) => {
-    let usersInGroup = groupedUsers[group] || [];
-    
-    // 정렬 로직
-    usersInGroup = [...usersInGroup].sort((a, b) => {
-      // manager 그룹인 경우: groupRole 순서 우선 (매니저 -> 부매니저 -> Manager -> Sub Manager)
-      if (group === 'manager') {
-        const roleOrder: Record<string, number> = {
-          '매니저': 1,
-          '부매니저': 2,
-          'Manager': 3,
-          'Sub Manager': 4,
-        };
-        const roleA = a.groupRole || '';
-        const roleB = b.groupRole || '';
-        const orderA = roleOrder[roleA] || 999;
-        const orderB = roleOrder[roleB] || 999;
-        
-        if (orderA !== orderB) {
-          return orderA - orderB;
-        }
-        // 같은 역할이면 이름순
-        return (a.name || '').localeCompare(b.name || '');
-      }
-      
-      // 원어민 그룹: groupRole 순서 우선 (Speaking -> Reading -> Writing -> Mix)
-      if (selectedRole === 'foreign') {
-        const foreignRoleOrder: Record<string, number> = {
-          'Speaking': 1,
-          'Reading': 2,
-          'Writing': 3,
-          'Mix': 4,
-        };
-        const roleA = a.groupRole || '';
-        const roleB = b.groupRole || '';
-        const orderA = foreignRoleOrder[roleA] ?? 999;
-        const orderB = foreignRoleOrder[roleB] ?? 999;
-
-        if (orderA !== orderB) {
-          return orderA - orderB;
-        }
-      }
-
-      // 다른 그룹: classCode 오름차순, 없으면 맨 뒤, 이름순 2차
-      const classCodeA = a.classCode;
-      const classCodeB = b.classCode;
-      if (classCodeA && classCodeB) {
-        if (classCodeA < classCodeB) return -1;
-        if (classCodeA > classCodeB) return 1;
-        return (a.name || '').localeCompare(b.name || '');
-      }
-      if (classCodeA && !classCodeB) return -1;
-      if (!classCodeA && classCodeB) return 1;
-      return (a.name || '').localeCompare(b.name || '');
-    });
-    
-    if (!usersInGroup || usersInGroup.length === 0) return null;
-
-    return (
-      <View style={styles.groupSection}>
-        <View
-          style={[
-            styles.groupHeader,
-            { backgroundColor: groupColors[group]?.bg || '#f3f4f6' },
-          ]}
-        >
-          <Text
-            style={[
-              styles.groupHeaderText,
-              { color: groupColors[group]?.text || '#374151' },
-            ]}
-          >
-            {groupLabels[group] || group}
-          </Text>
-          <Text
-            style={[
-              styles.groupCountBadge,
-              { color: groupColors[group]?.text || '#374151' },
-            ]}
-          >
-            {usersInGroup.length}명
-          </Text>
-        </View>
-
-        {/* 그리드 레이아웃: 한 행에 3명씩 */}
-        <View style={styles.userGrid}>
-          {usersInGroup.map((user, index) => (
-            <TouchableOpacity
-              key={user.userId || index}
-              style={styles.userGridItem}
-              onPress={() => setSelectedUser(user)}
-            >
-              {/* 프로필 이미지 */}
-              <View style={styles.profileImageContainer}>
-                {user.profileImage ? (
-                  <Image
-                    source={{ uri: user.profileImage }}
-                    style={styles.profileImage}
-                    contentFit="cover"
-                    transition={200}
-                    cachePolicy="memory-disk"
-                    placeholder={require('../../assets/icon.png')}
-                    placeholderContentFit="contain"
-                  />
-                ) : (
-                  <View style={styles.profilePlaceholder}>
-                    <Text style={styles.profilePlaceholderText}>
-                      {user.name.charAt(0)}
-                    </Text>
-                  </View>
-                )}
-                
-                {/* 배지 (groupRole, classCode) */}
-                <View style={styles.badgeContainer}>
-                  {user.groupRole && (
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>{user.groupRole}</Text>
-                    </View>
-                  )}
-                  {user.classCode && (
-                    <View style={[styles.badge, styles.badgeBlue]}>
-                      <Text style={[styles.badgeText, styles.badgeTextBlue]}>
-                        {user.classCode}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-              
-              {/* 이름 */}
-              <Text style={styles.userGridName}>{user.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-    );
-  };
-
-  // 필터링된 그룹 목록
-  const visibleGroups = groupOrder.filter(group => 
-    groupedUsers[group] && groupedUsers[group].length > 0
+  const grid = (list: Person[], staff: boolean, tone: Tone) => (
+    <View style={styles.grid}>
+      {list.map((p) => (
+        <PersonCard
+          key={p.key}
+          p={p}
+          staff={staff}
+          tone={tone}
+          width={cardW}
+          lesson={p.userId ? lessons?.[p.userId] : undefined}
+          lessonsLoading={kind === 'mentor' && !lessons}
+          camps={staff ? campsOf(p) : []}
+          currentId={jobCodeId}
+          onPress={() => setSelected({ p, staff, tone })}
+        />
+      ))}
+    </View>
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      {/* 헤더 */}
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* 머리 — 뒤로 · 제목(캠프) · 멘토/원어민 */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#111827" />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.back} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="arrow-back" size={22} color="#111827" />
         </TouchableOpacity>
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>사용자 조회</Text>
-          <Text style={styles.headerSubtitle}>
-            캠프에 참여했던 유저를 기수별로 조회합니다
-          </Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
+          <Text style={styles.headerSub} numberOfLines={1}>{jc ? `${jc.generation} ${jc.name}` : 'SMIS CAMP'}</Text>
+        </View>
+        <View style={styles.segment}>
+          {(['mentor', 'foreign'] as const).map((k) => (
+            <TouchableOpacity key={k} onPress={() => changeKind(k)} style={[styles.segmentBtn, kind === k && styles.segmentOn]}>
+              <Text style={[styles.segmentText, kind === k && styles.segmentTextOn]}>{k === 'mentor' ? '멘토' : '원어민'}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
-      {/* 필터 섹션 (고정) */}
-      <View style={styles.stickyFilters}>
-        {/* Role 필터 */}
-        <View style={styles.filterSection}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {roleFilters.map((filter) => (
-              <TouchableOpacity
-                key={filter.value}
-                style={[
-                  styles.filterChip,
-                  selectedRole === filter.value && styles.filterChipActiveRole,
-                ]}
-                onPress={() => setSelectedRole(filter.value)}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    selectedRole === filter.value && styles.filterChipTextActiveRole,
-                  ]}
-                >
-                  {filter.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* 기수 선택 */}
-        <View style={styles.filterSection}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {generations.map((gen) => (
-              <TouchableOpacity
-                key={gen}
-                style={[
-                  styles.filterChip,
-                  selectedGeneration === gen && styles.filterChipActive,
-                ]}
-                onPress={() => setSelectedGeneration(gen)}
-              >
-                <Text
-                  style={[
-                    styles.filterChipText,
-                    selectedGeneration === gen && styles.filterChipTextActive,
-                  ]}
-                >
-                  {gen}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-
-        {/* 코드 선택 */}
-        {codesForGeneration.length > 0 && (
-          <View style={styles.filterSection}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {codesForGeneration.map((code) => (
-                <TouchableOpacity
-                  key={code.id}
-                  style={[
-                    styles.filterChip,
-                    selectedCode === code.code && styles.filterChipActive,
-                  ]}
-                  onPress={() => setSelectedCode(code.code)}
-                >
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      selectedCode === code.code && styles.filterChipTextActive,
-                    ]}
-                  >
-                    {code.code}
-                  </Text>
+      {/* 기수 · 캠프 고르기 */}
+      <View style={styles.filters}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {gens.map((g) => (
+            <TouchableOpacity key={g} onPress={() => pickGen(g)} style={[styles.genChip, g === gen && styles.genChipOn]}>
+              <Text style={[styles.genChipText, g === gen && styles.chipTextOn]}>{g}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+        {genCodes.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {genCodes.map((c) => {
+              const on = c.id === jobCodeId;
+              return (
+                <TouchableOpacity key={c.id} onPress={() => setJobCodeId(c.id)} style={[styles.codeChip, on && styles.codeChipOn]}>
+                  <Text style={[styles.codeChipCode, on && styles.chipTextOn]}>{c.code}</Text>
+                  <Text style={[styles.codeChipName, on && { color: 'rgba(255,255,255,0.75)' }]} numberOfLines={1}>{c.name}</Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
+              );
+            })}
+          </ScrollView>
         )}
       </View>
 
-      {/* 로딩 상태 */}
-      {isLoading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3b82f6" />
-          <Text style={styles.loadingText}>사용자 정보를 불러오는 중...</Text>
-        </View>
-      ) : (
-        <>
-          {/* 사용자 목록 (그룹별) */}
-          {users.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="people-outline" size={48} color="#9ca3af" />
-              <Text style={styles.emptyStateText}>
-                해당 기수 및 코드에 등록된 사용자가 없습니다.
-              </Text>
+      <ScrollView
+        contentContainerStyle={{ paddingTop: 14, paddingBottom: insets.bottom + 32 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setReloadKey((k) => k + 1); }} />}
+      >
+        <View style={{ width: contentW, alignSelf: 'center' }}>
+          <View style={styles.summary}>
+            {!!jc?.code && <View style={styles.codeBadge}><Text style={styles.codeBadgeText}>{jc.code}</Text></View>}
+            {!!start && <Text style={styles.summaryText}>{fmt(start)} – {fmt(end)}</Text>}
+            {view.count > 0 && <Text style={styles.summaryText}><Text style={styles.summaryCount}>{view.count}</Text>명</Text>}
+          </View>
+
+          {loading ? (
+            <View style={styles.center}>
+              <ActivityIndicator color={BRAND} />
+              <Text style={styles.centerText}>불러오는 중…</Text>
+            </View>
+          ) : failed ? (
+            <View style={styles.center}>
+              <Ionicons name="cloud-offline-outline" size={40} color="#d1d5db" />
+              <Text style={styles.centerText}>불러오지 못했습니다. 아래로 당겨 다시 시도하세요.</Text>
+            </View>
+          ) : view.count === 0 ? (
+            <View style={styles.center}>
+              <Ionicons name="people-outline" size={40} color="#d1d5db" />
+              <Text style={styles.centerText}>이 캠프에 배정된 {title}이 없습니다.</Text>
+              <Text style={styles.centerHint}>웹의 '선생님 명단 관리'에서 배정할 수 있습니다.</Text>
             </View>
           ) : (
-            <FlatList
-              data={visibleGroups}
-              renderItem={renderGroupSection}
-              keyExtractor={(item) => item}
-              contentContainerStyle={styles.userListSection}
-            />
+            <>
+              {view.staff.length > 0 && (
+                <View style={styles.section}>
+                  <SectionTitle title="운영진" sub="Camp Managers" tone={STAFF_TONE} />
+                  {grid(view.staff, true, STAFF_TONE)}
+                </View>
+              )}
+              {view.sections.map(({ g, list, grades }) => {
+                const tone = toneOf(g);
+                return (
+                  <View key={g} style={styles.section}>
+                    <SectionTitle title={g} sub={grades.join(' · ')} tone={tone} />
+                    {grid(list, false, tone)}
+                  </View>
+                );
+              })}
+            </>
           )}
-        </>
-      )}
-      
-      {/* 사용자 상세 정보 모달 */}
-      {selectedUser && (
-        <Modal
-          visible={true}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setSelectedUser(null)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <ScrollView showsVerticalScrollIndicator={false}>
-                {/* 헤더 */}
-                <View style={styles.modalHeader}>
-                  <View style={styles.modalHeaderLeft}>
-                    {selectedUser.profileImage ? (
-                      <Image
-                        source={{ uri: selectedUser.profileImage }}
-                        style={styles.modalProfileImage}
-                        contentFit="cover"
-                        transition={200}
-                        cachePolicy="memory-disk"
-                        placeholder={require('../../assets/icon.png')}
-                        placeholderContentFit="contain"
-                      />
-                    ) : (
-                      <View style={styles.modalProfilePlaceholder}>
-                        <Text style={styles.modalProfilePlaceholderText}>
-                          {selectedUser.name.charAt(0)}
-                        </Text>
-                      </View>
-                    )}
-                    <View style={styles.modalUserInfo}>
-                      <Text style={styles.modalUserName}>{selectedUser.name}</Text>
-                      <Text style={styles.modalUserPhone}>
-                        {formatPhoneNumber(selectedUser.phoneNumber || selectedUser.phone)}
-                      </Text>
-                      {selectedUser.groupName && (
-                        <View
-                          style={[
-                            styles.modalGroupBadge,
-                            { backgroundColor: groupColors[selectedUser.groupName]?.bg || '#f3f4f6' },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.modalGroupBadgeText,
-                              { color: groupColors[selectedUser.groupName]?.text || '#374151' },
-                            ]}
-                          >
-                            {groupLabels[selectedUser.groupName] || selectedUser.groupName}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => setSelectedUser(null)}
-                    style={styles.modalCloseButton}
-                  >
-                    <Ionicons name="close" size={28} color="#6B7280" />
-                  </TouchableOpacity>
-                </View>
+        </View>
+      </ScrollView>
 
-                {/* 기본 정보 */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>기본 정보</Text>
-                  <View style={styles.modalInfoCompact}>
-                    <View style={styles.modalInfoRow}>
-                      <Text style={styles.modalInfoText}>
-                        <Text style={styles.modalInfoLabel}>성별: </Text>
-                        <Text style={styles.modalInfoValue}>
-                          {selectedUser.gender === 'M' ? '남성' : selectedUser.gender === 'F' ? '여성' : '-'}
-                        </Text>
-                      </Text>
-                      <Text style={styles.modalInfoText}>
-                        <Text style={styles.modalInfoLabel}>나이: </Text>
-                        <Text style={styles.modalInfoValue}>
-                          {selectedUser.age ? `${selectedUser.age}세` : '-'}
-                        </Text>
-                      </Text>
-                    </View>
-                    <View style={styles.modalInfoRow}>
-                      <Text style={[styles.modalInfoText, { flex: 1 }]}>
-                        <Text style={styles.modalInfoLabel}>주민등록번호: </Text>
-                        <Text style={styles.modalInfoValue}>
-                          {selectedUser.rrnFront
-                            ? `${selectedUser.rrnFront}-${
-                                selectedUser.rrnLastEncrypted
-                                  ? '●●●●●●●'
-                                  : selectedUser.rrnLast
-                                  ? `${selectedUser.rrnLast.charAt(0)}●●●●●●`
-                                  : '●●●●●●●'
-                              }`
-                            : '-'}
-                        </Text>
-                      </Text>
-                    </View>
-                    <View style={styles.modalInfoRow}>
-                      <Text style={[styles.modalInfoText, { flex: 1 }]}>
-                        <Text style={styles.modalInfoLabel}>주소: </Text>
-                        <Text style={styles.modalInfoValue}>
-                          {selectedUser.address
-                            ? `${selectedUser.address} ${selectedUser.addressDetail || ''}`
-                            : '-'}
-                        </Text>
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* 학교 정보 */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>학교 정보</Text>
-                  <View style={styles.modalInfoCompact}>
-                    <View style={styles.modalInfoRow}>
-                      <Text style={styles.modalInfoText}>
-                        <Text style={styles.modalInfoLabel}>학교: </Text>
-                        <Text style={styles.modalInfoValue}>{selectedUser.university || '-'}</Text>
-                      </Text>
-                      <Text style={styles.modalInfoText}>
-                        <Text style={styles.modalInfoLabel}>학년: </Text>
-                        <Text style={styles.modalInfoValue}>
-                          {selectedUser.grade
-                            ? selectedUser.grade === 6
-                              ? '졸업생'
-                              : `${selectedUser.grade}학년`
-                            : '-'}
-                        </Text>
-                      </Text>
-                    </View>
-                    <View style={styles.modalInfoRow}>
-                      <Text style={styles.modalInfoText}>
-                        <Text style={styles.modalInfoLabel}>휴학: </Text>
-                        <Text style={styles.modalInfoValue}>
-                          {selectedUser.grade === 6 || selectedUser.isOnLeave === null
-                            ? '졸업생'
-                            : selectedUser.isOnLeave
-                            ? '휴학 중'
-                            : '재학 중'}
-                        </Text>
-                      </Text>
-                    </View>
-                    <View style={styles.modalInfoRow}>
-                      <Text style={styles.modalInfoText}>
-                        <Text style={styles.modalInfoLabel}>1전공: </Text>
-                        <Text style={styles.modalInfoValue}>{selectedUser.major1 || '-'}</Text>
-                      </Text>
-                    </View>
-                    <View style={styles.modalInfoRow}>
-                      <Text style={[styles.modalInfoText, { flex: 1 }]}>
-                        <Text style={styles.modalInfoLabel}>2전공/부전공: </Text>
-                        <Text style={styles.modalInfoValue}>{selectedUser.major2 || '없음'}</Text>
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-
-                {/* 업무 경력 */}
-                {selectedUser.jobExperiences && selectedUser.jobExperiences.length > 0 && (
-                  <View style={styles.modalSection}>
-                    <Text style={styles.modalSectionTitle}>업무 경력</Text>
-                    <View style={styles.modalJobExperienceBadges}>
-                      {selectedUser.jobExperiences
-                        .slice()
-                        .sort((a: any, b: any) => {
-                          const jobCodeA = jobCodes.find((code) => code.id === a.id);
-                          const jobCodeB = jobCodes.find((code) => code.id === b.id);
-                          const genA = jobCodeA ? parseInt(jobCodeA.generation.replace(/[^0-9]/g, '')) : -1;
-                          const genB = jobCodeB ? parseInt(jobCodeB.generation.replace(/[^0-9]/g, '')) : -1;
-                          return genB - genA;
-                        })
-                        .map((exp: any, idx: number) => {
-                          const jobCode = jobCodes.find((code) => code.id === exp.id);
-                          return (
-                            <View key={idx} style={styles.modalJobCodeBadge}>
-                              <Text style={styles.modalJobCodeBadgeText}>
-                                {jobCode ? jobCode.code : exp.id}
-                              </Text>
-                            </View>
-                          );
-                        })}
-                    </View>
-                  </View>
-                )}
-
-                {/* 수업 자료 */}
-                <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>수업 자료</Text>
-                  <UserLessonMaterials userId={selectedUser.userId} />
-                </View>
-              </ScrollView>
-
-              {/* 닫기 버튼 */}
-              <TouchableOpacity
-                style={styles.modalCloseButtonBottom}
-                onPress={() => setSelectedUser(null)}
-              >
-                <Text style={styles.modalCloseButtonText}>닫기</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
+      {selected && (
+        <DetailSheet
+          p={selected.p}
+          staff={selected.staff}
+          tone={selected.tone}
+          lesson={selected.p.userId ? lessons?.[selected.p.userId] : undefined}
+          lessonsLoading={kind === 'mentor' && !lessons}
+          camps={campsOf(selected.p)}
+          currentId={jobCodeId}
+          onClose={() => setSelected(null)}
+        />
       )}
     </SafeAreaView>
   );
 }
 
+// ── 조각들 ──────────────────────────────────────────────────────
+
+function SectionTitle({ title, sub, tone }: { title: string; sub?: string; tone: Tone }) {
+  return (
+    <View style={styles.sectionTitleRow}>
+      <View style={[styles.sectionBar, { backgroundColor: tone.bar }]} />
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {!!sub && <Text style={[styles.sectionSub, { color: tone.text }]} numberOfLines={1}>{sub}</Text>}
+    </View>
+  );
+}
+
+function Photo({ p, width, radius }: { p: Person; width: number; radius: number }) {
+  const box = { width, height: Math.round((width * 4) / 3), borderRadius: radius };
+  return p.photo ? (
+    <Image source={{ uri: p.photo }} style={[box, { backgroundColor: '#f3f4f6' }]} contentFit="cover" transition={150} cachePolicy="memory-disk" />
+  ) : (
+    <View style={[box, styles.photoEmpty]}>
+      <Text style={[styles.photoInitial, { fontSize: Math.round(width * 0.36) }]}>{p.name.slice(0, 1)}</Text>
+    </View>
+  );
+}
+
+function Pill({ text, tone }: { text: string; tone: Tone }) {
+  return (
+    <View style={[styles.pill, { backgroundColor: tone.soft }]}>
+      <Text style={[styles.pillText, { color: tone.text }]} numberOfLines={1}>{text}</Text>
+    </View>
+  );
+}
+
+/** 소개 줄 — 멘토: 나이·성별·SMIS / 학교·학과·학년, 원어민: 국적 / SMIS·경력 연수 */
+function Meta({ p }: { p: Person }) {
+  if (p.kind === 'foreign') {
+    const second = [p.smisCount ? `SMIS ${ordinalEn(p.smisCount)}` : '', p.teachingYears ? `Teaching ${p.teachingYears}` : ''].filter(Boolean).join(' · ');
+    return (
+      <>
+        {!!p.nationality && <Text style={styles.meta} numberOfLines={1}>{countryFlag(p.nationality)} {p.nationality}</Text>}
+        {!!second && <Text style={styles.metaSub} numberOfLines={1}>{second}</Text>}
+      </>
+    );
+  }
+  const basics = [p.age ? `${p.age}세` : '', p.gender, p.smisCount ? `SMIS ${p.smisCount}회` : ''].filter(Boolean).join(' · ');
+  const school = [[p.school, p.major].filter(Boolean).join(' '), p.schoolYear].filter(Boolean).join(' · ');
+  return (
+    <>
+      {!!basics && <Text style={styles.meta} numberOfLines={1}>{basics}</Text>}
+      {!!school && <Text style={styles.metaSub} numberOfLines={1}>{school}</Text>}
+    </>
+  );
+}
+
+function PersonCard({ p, staff, tone, width, lesson, lessonsLoading, camps, currentId, onPress }: {
+  p: Person; staff: boolean; tone: Tone; width: number;
+  lesson?: TeacherLesson; lessonsLoading: boolean;
+  /** 운영진 — 참여한 캠프 (최근부터) */
+  camps: JobCodeWithId[]; currentId: string;
+  onPress: () => void;
+}) {
+  const caption = campTeacherCaption(p, staff);
+  const topics = uploadedLessonTopics(lesson);
+  return (
+    <TouchableOpacity activeOpacity={0.7} onPress={onPress} style={[styles.card, { width }]}>
+      <Photo p={p} width={76} radius={10} />
+      <View style={styles.cardBody}>
+        {!!caption && <Pill text={caption} tone={tone} />}
+        <View style={styles.nameRow}>
+          <Text style={styles.name} numberOfLines={1}>{p.name}</Text>
+          {!!p.englishName && <Text style={styles.eng} numberOfLines={1}>{p.englishName}</Text>}
+        </View>
+        <Meta p={p} />
+
+        {/* 운영진 — 최근 참여한 캠프 / 한국인 멘토 — 이 캠프에 올린 수업 자료 */}
+        {staff ? (
+          camps.length > 0 && (
+            <View style={styles.footRow}>
+              {camps.slice(0, 4).map((c) => (
+                <View key={c.id} style={[styles.miniCode, c.id === currentId && styles.miniCodeOn]}>
+                  <Text style={[styles.miniCodeText, c.id === currentId && { color: '#fff' }]}>{c.code}</Text>
+                </View>
+              ))}
+              {camps.length > 4 && <Text style={styles.more}>+{camps.length - 4}</Text>}
+            </View>
+          )
+        ) : p.kind === 'mentor' ? (
+          lessonsLoading ? (
+            <Text style={styles.footMuted}>수업 자료 확인 중…</Text>
+          ) : lesson?.failed ? (
+            <Text style={styles.footWarn}>수업 자료를 불러오지 못했습니다</Text>
+          ) : topics.length ? (
+            <View style={styles.footRow}>
+              {topics.map((t, i) => (
+                <View key={i} style={styles.topicChip}>
+                  <Ionicons name="document-text-outline" size={11} color={BRAND} />
+                  <Text style={styles.topicChipText} numberOfLines={1}>{t.title} {t.sections.length}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.footMuted}>아직 올린 수업 자료 없음</Text>
+          )
+        ) : null}
+      </View>
+      <Ionicons name="chevron-forward" size={16} color="#d1d5db" style={{ alignSelf: 'center' }} />
+    </TouchableOpacity>
+  );
+}
+
+// ── 눌렀을 때 — 아래에서 올라오는 창 ─────────────────────────────
+
+function DetailSheet({ p, staff, tone, lesson, lessonsLoading, camps, currentId, onClose }: {
+  p: Person; staff: boolean; tone: Tone;
+  lesson?: TeacherLesson; lessonsLoading: boolean;
+  camps: JobCodeWithId[]; currentId: string;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
+  const caption = p.kind === 'foreign'
+    ? campTeacherCaption(p, staff)
+    : staff
+      ? campTeacherCaption(p, true)
+      : [p.group, p.role === '담임' ? `담임 ${p.classCode}` : p.role, p.className].filter(Boolean).join(' · ');
+  const topics = uploadedLessonTopics(lesson);
+  // 운영진은 올린 자료가 있을 때만 수업 자료 칸
+  const showLessons = p.kind === 'mentor' && (!staff || topics.length > 0);
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.sheetWrap}>
+        <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={onClose} />
+        <View style={[styles.sheet, { maxHeight: height * 0.88, paddingBottom: insets.bottom + 12 }]}>
+          <View style={styles.sheetHandle} />
+          <TouchableOpacity onPress={onClose} style={styles.sheetClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close" size={20} color="#6b7280" />
+          </TouchableOpacity>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 8 }}>
+            <View style={styles.sheetHead}>
+              <Photo p={p} width={96} radius={14} />
+              <View style={{ flex: 1, minWidth: 0, paddingRight: 24 }}>
+                {!!caption && <Pill text={caption} tone={tone} />}
+                <Text style={styles.sheetName}>{p.name}</Text>
+                {!!p.englishName && <Text style={styles.eng}>{p.englishName}</Text>}
+                <View style={{ marginTop: 4 }}>
+                  <Meta p={p} />
+                </View>
+              </View>
+            </View>
+
+            {showLessons && <LessonList lesson={lesson} loading={lessonsLoading} />}
+            {p.kind === 'foreign' && <Experience p={p} />}
+
+            {camps.length > 0 && (
+              <View style={styles.block}>
+                <Text style={styles.blockTitle}>참여한 캠프 · {camps.length}</Text>
+                {camps.map((c) => {
+                  const on = c.id === currentId;
+                  const role = p.campRoles?.[c.id];
+                  return (
+                    <View key={c.id} style={styles.campRow}>
+                      <View style={[styles.campCode, on && styles.campCodeOn]}>
+                        <Text style={[styles.campCodeText, on && { color: '#fff' }]}>{c.code}</Text>
+                      </View>
+                      <Text style={[styles.campName, on && styles.campNameOn]} numberOfLines={1}>{c.generation} {c.name}</Text>
+                      {!!role && (
+                        <View style={[styles.campRole, on && { backgroundColor: '#eef2ff' }]}>
+                          <Text style={[styles.campRoleText, on && { color: BRAND }]} numberOfLines={1}>{role}</Text>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+/** 이 캠프의 수업 자료 — 올린 칸만, 칸마다 공개보기 · 원본편집 (같은 링크면 하나만) */
+function LessonList({ lesson, loading }: { lesson?: TeacherLesson; loading: boolean }) {
+  const topics = uploadedLessonTopics(lesson);
+  return (
+    <View style={styles.block}>
+      <Text style={styles.blockTitle}>수업 자료</Text>
+      {loading ? (
+        <Text style={styles.footMuted}>불러오는 중…</Text>
+      ) : lesson?.failed ? (
+        <Text style={styles.footWarn}>수업 자료를 불러오지 못했습니다</Text>
+      ) : !topics.length ? (
+        <Text style={styles.footMuted}>아직 올린 수업 자료가 없습니다</Text>
+      ) : (
+        topics.map((t, i) => (
+          <View key={i} style={styles.topic}>
+            <Text style={styles.topicTitle}>{t.title}</Text>
+            {t.sections.map((x, j) => (
+              <View key={j} style={styles.item}>
+                <Text style={styles.itemTitle} numberOfLines={2}>{x.title}</Text>
+                {!!x.view && (
+                  <TouchableOpacity onPress={() => openUrl(x.view)} style={styles.viewBtn}>
+                    <Text style={styles.viewBtnText}>공개보기</Text>
+                  </TouchableOpacity>
+                )}
+                {!!x.original && x.original !== x.view && (
+                  <TouchableOpacity onPress={() => openUrl(x.original)} style={styles.editBtn}>
+                    <Text style={styles.editBtnText}>원본편집</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            ))}
+          </View>
+        ))
+      )}
+    </View>
+  );
+}
+
+/** 원어민 경력 — 구조화된 목록(역할·장소·기간·내용)이 있으면 그걸, 없으면 예전 글 */
+function Experience({ p }: { p: Person }) {
+  const items = p.teachingExperiences ?? [];
+  const legacy = items.length
+    ? []
+    : String(p.teachingExperience ?? '').split(/\r?\n/).map((l) => l.replace(/^[-•·@\s]+/, '').trim()).filter(Boolean);
+  if (!items.length && !legacy.length) return null;
+  return (
+    <View style={styles.block}>
+      <Text style={styles.blockTitle}>TEACHING EXPERIENCE</Text>
+      {items.length > 0
+        ? items.map((it, i) => (
+          <View key={i} style={styles.expItem}>
+            <View style={styles.expHead}>
+              <Text style={styles.expRole} numberOfLines={2}>
+                {it.role || it.place}
+                {!!it.role && !!it.place && <Text style={styles.expPlace}> · {it.place}</Text>}
+              </Text>
+              <Text style={styles.expPeriod}>{formatTeachingPeriod(it)}</Text>
+            </View>
+            {!!it.description && <Text style={styles.expDesc}>{it.description}</Text>}
+          </View>
+        ))
+        : legacy.map((l, i) => <Text key={i} style={styles.expLegacy}>• {l}</Text>)}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f9fafb',
-  },
-  scrollView: {
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: '#f9fafb' },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  backButton: {
-    marginRight: 16,
-  },
-  headerTextContainer: {
-    flex: 1,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 4,
-  },
-  stickyFilters: {
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  filterSection: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    backgroundColor: '#fff',
-  },
-  filterSectionFirst: {
-    marginTop: 4,
-  },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: '#f3f4f6',
-    marginRight: 8,
-  },
-  filterChipActive: {
-    backgroundColor: '#3b82f6',
-  },
-  filterChipActiveRole: {
-    backgroundColor: '#14b8a6', // teal 색상
-  },
-  filterChipText: {
-    fontSize: 13,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  filterChipTextActive: {
-    color: '#fff',
-  },
-  filterChipTextActiveRole: {
-    color: '#fff',
-  },
-  filterLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 6,
-    paddingLeft: 4,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#6b7280',
-    marginTop: 12,
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
-  emptyStateText: {
-    fontSize: 16,
-    color: '#9ca3af',
-    marginTop: 12,
-    textAlign: 'center',
-    paddingHorizontal: 20,
-  },
-  userListSection: {
-    padding: 12,
-  },
-  summaryCard: {
-    backgroundColor: '#3b82f6',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    alignItems: 'center',
-  },
-  summaryTitle: {
-    fontSize: 16,
-    color: '#fff',
-    fontWeight: '500',
-  },
-  summaryCount: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginTop: 8,
-  },
-  groupSection: {
-    marginBottom: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  groupHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-    marginBottom: 10,
-  },
-  groupHeaderText: {
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  groupCountBadge: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  userGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  userGridItem: {
-    width: '31.5%',
-    marginBottom: 8,
-  },
-  profileImageContainer: {
-    position: 'relative',
-    width: '100%',
-    aspectRatio: 1,
-    borderRadius: 8,
-    overflow: 'hidden',
-    backgroundColor: '#f3f4f6',
-  },
-  profileImage: {
-    width: '100%',
-    height: '100%',
-  },
-  profilePlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#dbeafe',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profilePlaceholderText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#93c5fd',
-  },
-  badgeContainer: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    gap: 4,
-  },
-  badge: {
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 10,
-    backgroundColor: '#E5E7EB',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-  },
-  badgeBlue: {
-    backgroundColor: '#DBEAFE',
-    borderColor: '#BFDBFE',
-  },
-  badgeText: {
-    fontSize: 8,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  badgeTextBlue: {
-    color: '#1E40AF',
-  },
-  userGridName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  // 모달 스타일
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    width: '100%',
-    maxHeight: '80%',
-    padding: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-  },
-  modalHeaderLeft: {
-    flexDirection: 'row',
-    flex: 1,
-  },
-  modalProfileImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    marginRight: 16,
-  },
-  modalProfilePlaceholder: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#dbeafe',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  modalProfilePlaceholderText: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#93c5fd',
-  },
-  modalUserInfo: {
-    flex: 1,
-  },
-  modalUserName: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  modalUserPhone: {
-    fontSize: 14,
-    color: '#6B7280',
-    marginBottom: 8,
-  },
-  modalGroupBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 10,
-  },
-  modalGroupBadgeText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  modalCloseButton: {
-    padding: 4,
-  },
-  modalSection: {
-    paddingVertical: 10,
-  },
-  modalSectionTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  modalInfoCompact: {
-    gap: 6,
-  },
-  modalInfoRow: {
-    flexDirection: 'row',
-    gap: 12,
-    flexWrap: 'wrap',
-  },
-  modalInfoText: {
-    fontSize: 12,
-    flex: 0.48,
-  },
-  modalInfoLabel: {
-    color: '#6B7280',
-  },
-  modalInfoValue: {
-    color: '#111827',
-    fontWeight: '500',
-  },
-  modalJobExperienceBadges: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  modalJobCodeBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 5,
-    backgroundColor: '#E5E7EB',
-  },
-  modalJobCodeBadgeText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#374151',
-  },
-  modalCloseButtonBottom: {
-    backgroundColor: '#F3F4F6',
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  modalCloseButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  // 수업 자료 스타일
-  lessonMaterialsContainer: {
-    marginTop: 4,
-  },
-  lessonMaterialsLoading: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  lessonMaterialsError: {
-    fontSize: 13,
-    color: '#EF4444',
-    textAlign: 'center',
-  },
-  lessonMaterialsEmpty: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    textAlign: 'center',
-  },
-  lessonGenerationToggles: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    marginBottom: 12,
-  },
-  lessonGenerationToggle: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-    backgroundColor: '#FFFFFF',
-  },
-  lessonGenerationToggleActive: {
-    backgroundColor: '#DBEAFE',
-    borderColor: '#93C5FD',
-  },
-  lessonGenerationToggleText: {
-    fontSize: 10,
-    color: '#374151',
-  },
-  lessonGenerationToggleTextActive: {
-    color: '#1E40AF',
-    fontWeight: '600',
-  },
-  lessonMaterialsList: {
-    gap: 12,
-  },
-  lessonMaterialItem: {
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    padding: 10,
-    backgroundColor: '#F9FAFB',
-    marginBottom: 12,
-  },
-  lessonMaterialTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  lessonSectionsList: {
-    gap: 6,
-  },
-  lessonSectionItem: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 6,
-    padding: 8,
-  },
-  lessonSectionTitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#374151',
-    marginBottom: 6,
-  },
-  lessonSectionButtons: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  lessonSectionButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    backgroundColor: '#DBEAFE',
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-  },
-  lessonSectionButtonText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#1E40AF',
-  },
+    flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 10,
+    backgroundColor: '#fff', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb',
+  },
+  back: { padding: 4 },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: '#111827' },
+  headerSub: { fontSize: 12, fontWeight: '600', color: BRAND, marginTop: 1 },
+  segment: { flexDirection: 'row', backgroundColor: '#f3f4f6', borderRadius: 10, padding: 2 },
+  segmentBtn: { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 8 },
+  segmentOn: { backgroundColor: '#fff', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 1 },
+  segmentText: { fontSize: 13, color: '#6b7280', fontWeight: '600' },
+  segmentTextOn: { color: '#111827', fontWeight: '800' },
+
+  filters: { backgroundColor: '#fff', paddingVertical: 8, gap: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb' },
+  chipRow: { paddingHorizontal: 12, gap: 6, alignItems: 'center' },
+  genChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: '#f3f4f6' },
+  genChipOn: { backgroundColor: '#111827' },
+  genChipText: { fontSize: 13, fontWeight: '600', color: '#4b5563' },
+  chipTextOn: { color: '#fff' },
+  codeChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5, maxWidth: 220, paddingHorizontal: 11, paddingVertical: 7,
+    borderRadius: 10, borderWidth: 1, borderColor: '#e5e7eb', backgroundColor: '#fff',
+  },
+  codeChipOn: { backgroundColor: BRAND, borderColor: BRAND },
+  codeChipCode: { fontSize: 13, fontWeight: '800', color: '#111827' },
+  codeChipName: { fontSize: 12, color: '#6b7280', flexShrink: 1 },
+
+  summary: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 18 },
+  codeBadge: { backgroundColor: BRAND, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  codeBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  summaryText: { fontSize: 13, color: '#6b7280' },
+  summaryCount: { fontWeight: '800', color: '#111827' },
+
+  center: { alignItems: 'center', paddingVertical: 64, gap: 8 },
+  centerText: { fontSize: 14, color: '#6b7280', textAlign: 'center' },
+  centerHint: { fontSize: 12, color: '#9ca3af', textAlign: 'center' },
+
+  section: { marginBottom: 28 },
+  sectionTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  sectionBar: { width: 4, height: 20, borderRadius: 2 },
+  sectionTitle: { fontSize: 19, fontWeight: '800', color: '#111827' },
+  sectionSub: { fontSize: 12, fontWeight: '700', flexShrink: 1 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+
+  card: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 10, backgroundColor: '#fff', borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: '#e5e7eb',
+    shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 1,
+  },
+  cardBody: { flex: 1, minWidth: 0, paddingTop: 2, gap: 2 },
+  photoEmpty: { backgroundColor: '#eef0f3', alignItems: 'center', justifyContent: 'center' },
+  photoInitial: { fontWeight: '800', color: '#9ca3af' },
+  pill: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, marginBottom: 2, maxWidth: '100%' },
+  pillText: { fontSize: 11, fontWeight: '800' },
+  nameRow: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  name: { fontSize: 17, fontWeight: '800', color: '#111827', flexShrink: 1 },
+  eng: { fontSize: 12, color: '#9ca3af', flexShrink: 1 },
+  meta: { fontSize: 13, color: '#4b5563' },
+  metaSub: { fontSize: 12, color: '#6b7280' },
+  footRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 6 },
+  footMuted: { fontSize: 11, color: '#c0c4cc', marginTop: 6 },
+  footWarn: { fontSize: 11, color: '#d97706', marginTop: 6 },
+  topicChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 3, maxWidth: '100%', paddingHorizontal: 7, paddingVertical: 3,
+    borderRadius: 6, backgroundColor: '#eef2ff',
+  },
+  topicChipText: { fontSize: 11, fontWeight: '700', color: BRAND, flexShrink: 1 },
+  miniCode: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: '#f3f4f6' },
+  miniCodeOn: { backgroundColor: BRAND },
+  miniCodeText: { fontSize: 10, fontWeight: '800', color: '#4b5563' },
+  more: { fontSize: 11, color: '#9ca3af', fontWeight: '600' },
+
+  sheetWrap: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
+  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 20, paddingTop: 8 },
+  sheetHandle: { alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: '#e5e7eb', marginBottom: 10 },
+  sheetClose: { position: 'absolute', top: 14, right: 14, zIndex: 2, width: 30, height: 30, borderRadius: 15, backgroundColor: '#f3f4f6', alignItems: 'center', justifyContent: 'center' },
+  sheetHead: { flexDirection: 'row', alignItems: 'flex-start', gap: 14, paddingTop: 6 },
+  sheetName: { fontSize: 24, fontWeight: '800', color: '#111827', marginTop: 2 },
+
+  block: { marginTop: 22 },
+  blockTitle: { fontSize: 11, fontWeight: '700', color: '#9ca3af', letterSpacing: 0.6, marginBottom: 8 },
+  topic: { marginBottom: 12 },
+  topicTitle: { fontSize: 14, fontWeight: '800', color: '#111827', marginBottom: 6 },
+  item: {
+    flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 10, marginBottom: 6,
+    borderRadius: 10, backgroundColor: '#f9fafb', borderWidth: StyleSheet.hairlineWidth, borderColor: '#eef0f3',
+  },
+  itemTitle: { flex: 1, fontSize: 14, color: '#1f2937' },
+  viewBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#eef2ff' },
+  viewBtnText: { fontSize: 12, fontWeight: '800', color: BRAND },
+  editBtn: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: '#ecfdf5' },
+  editBtnText: { fontSize: 12, fontWeight: '800', color: '#047857' },
+
+  expItem: { marginBottom: 10 },
+  expHead: { flexDirection: 'row', justifyContent: 'space-between', gap: 10 },
+  expRole: { flex: 1, fontSize: 13, fontWeight: '700', color: '#111827' },
+  expPlace: { fontWeight: '400', color: '#6b7280' },
+  expPeriod: { fontSize: 12, color: '#9ca3af' },
+  expDesc: { fontSize: 13, color: '#4b5563', marginTop: 2, lineHeight: 18 },
+  expLegacy: { fontSize: 13, color: '#374151', marginBottom: 4, lineHeight: 18 },
+
+  campRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  campCode: { width: 58, alignItems: 'center', paddingVertical: 3, borderRadius: 6, backgroundColor: '#f3f4f6' },
+  campCodeOn: { backgroundColor: BRAND },
+  campCodeText: { fontSize: 11, fontWeight: '800', color: '#374151' },
+  campName: { flex: 1, fontSize: 13, color: '#374151' },
+  campNameOn: { fontWeight: '800', color: '#111827' },
+  campRole: { maxWidth: '40%', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 5, backgroundColor: '#f9fafb' },
+  campRoleText: { fontSize: 11, fontWeight: '700', color: '#6b7280' },
 });

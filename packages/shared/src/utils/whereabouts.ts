@@ -19,6 +19,7 @@ import {
   excitingSlotAt,
   findDayKind,
   hhmmToMinutes,
+  isActivityDayKind,
   localYmd,
   type CampDayPlan,
 } from '../types/campDayPlan';
@@ -79,7 +80,7 @@ export function studentWhereabouts(
   const base = { date, dayLabel, groupName: group.name };
   const line = (...parts: Array<string | undefined>) => parts.filter(Boolean).join(' · ');
 
-  if (entry.kind === 'exciting') {
+  if (isActivityDayKind(entry.kind)) {
     const slot = excitingSlotAt(entry, minutes, group.name);
     if (!slot) return { ...base, text: dayLabel };
     return {
@@ -100,6 +101,7 @@ export function studentWhereabouts(
     campCode: input.campCode,
     jobCodeId: input.jobCodeId,
     common: input.timetableCommon,
+    date,
   });
   if (!table || table.layout === 'date') return { ...base, text: dayLabel };
   const classes = applyClassInfo(table.classes ?? [], input.classInfo);

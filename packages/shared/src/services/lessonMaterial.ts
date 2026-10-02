@@ -7,6 +7,7 @@ import {
   doc,
   getDocs,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   query,
@@ -65,6 +66,50 @@ export function createLessonMaterialService(db: Firestore) {
       batch.delete(sectionDoc.ref);
     });
     batch.delete(doc(db, LESSON_MATERIALS, id));
+    await batch.commit();
+  }
+
+  /**
+   * 템플릿 대주제 — 문서 id 를 '사용자_템플릿' 으로 고정해서 만든다.
+   * 웹·앱이 동시에 처음 열어도 같은 문서 하나만 생긴다 (예전 addDoc 은 같은 템플릿 대주제가 둘 생길 수 있었다)
+   */
+  async function ensureTemplateMaterial(userId: string, templateId: string, title: string, order: number) {
+    const id = `${userId}_${templateId}`;
+    await setDoc(doc(db, LESSON_MATERIALS, id), {
+      userId,
+      title,
+      order,
+      templateId,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+    return id;
+  }
+
+  /**
+   * 템플릿 칸에 링크 넣기 — 같은 칸(templateSectionId) 문서가 이미 있으면 그걸 고친다 (다른 기기에서 먼저 넣었어도 둘이 되지 않게).
+   * 돌려주는 값은 저장된 소제목 문서 id
+   */
+  async function saveTemplateSection(
+    lessonMaterialId: string,
+    templateSectionId: string,
+    data: { title: string; order: number; viewUrl: string; originalUrl: string },
+  ) {
+    const existing = (await getSections(lessonMaterialId)).filter((s) => s.templateSectionId === templateSectionId);
+    const keep = existing.find((s) => s.viewUrl || s.originalUrl) ?? existing[0];
+    if (keep) {
+      await updateSection(lessonMaterialId, keep.id, { ...data, templateSectionId });
+      return keep.id;
+    }
+    return addSection(lessonMaterialId, { ...data, templateSectionId });
+  }
+
+  /** 템플릿 칸 비우기 — 그 칸의 소제목 문서를 모두 지운다 (중복이 남아 있으면 다시 나타나므로) */
+  async function clearTemplateSection(lessonMaterialId: string, templateSectionId: string) {
+    const list = (await getSections(lessonMaterialId)).filter((s) => s.templateSectionId === templateSectionId);
+    if (!list.length) return;
+    const batch = writeBatch(db);
+    list.forEach((s) => batch.delete(doc(db, LESSON_MATERIALS, lessonMaterialId, SECTIONS, s.id)));
     await batch.commit();
   }
 
@@ -131,12 +176,22 @@ export function createLessonMaterialService(db: Firestore) {
       });
   }
 
-  async function addLessonMaterialTemplate(title: string, sections: Omit<LessonMaterialTemplateSection, 'id'>[], code?: string, links?: { label: string; url: string }[]) {
+  async function addLessonMaterialTemplate(
+    title: string,
+    sections: Omit<LessonMaterialTemplateSection, 'id'>[],
+    code?: string,
+    links?: { label: string; url: string }[],
+    /** 누가 올리는지 · 반별로 만들기 (없으면 한국인 멘토 전원) */
+    extra?: Pick<LessonMaterialTemplate, 'audience' | 'perClass' | 'order'>,
+  ) {
     const docRef = await addDoc(collection(db, LESSON_MATERIAL_TEMPLATES), {
       title,
       sections: sections.map((s, idx) => ({ ...s, id: newSectionId(), order: idx, links: s.links || [] })),
       code: code || '',
       links: links || [],
+      ...(extra?.audience ? { audience: extra.audience } : {}),
+      ...(extra?.perClass ? { perClass: true } : {}),
+      ...(typeof extra?.order === 'number' ? { order: extra.order } : {}),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -166,6 +221,9 @@ export function createLessonMaterialService(db: Firestore) {
   return {
     getLessonMaterials,
     addLessonMaterial,
+    ensureTemplateMaterial,
+    saveTemplateSection,
+    clearTemplateSection,
     updateLessonMaterial,
     deleteLessonMaterial,
     reorderLessonMaterials,
