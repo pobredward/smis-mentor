@@ -32,24 +32,29 @@ import {
   campTeacherCaption,
   compareCampCodes,
   countryFlag,
+  driveKindLabel,
   formatTeachingPeriod,
   getCampRoster,
   groupCampTeachers,
   lessonGenNum,
   loadTeacherLessons,
   logger,
+  matchTeacherDriveFolder,
   ordinalEn,
   resolveActiveJobCodeId,
   safeLessonUrl,
   uploadedLessonTopics,
   type CampTeacher,
   type CampTeacherKind,
+  type DriveItem,
   type JobCodeWithId,
+  type LessonPlanDriveRoot,
   type TeacherLesson,
 } from '@smis-mentor/shared';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { getUsersByJobCodeId } from '../services/userService';
+import { mobileAuthenticatedGet } from '../services/apiClient';
 import type { AdminStackScreenProps } from '../navigation/types';
 
 type Person = CampTeacher;
@@ -175,6 +180,24 @@ export function UserCheckScreen({ navigation, route }: AdminStackScreenProps<'Us
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind, people, jc?.code]);
+
+  // 원어민 — 이 캠프 레슨플랜 구글 드라이브 폴더 (연결·폴더 고르기는 웹 관리자 화면에서)
+  const [drive, setDrive] = useState<{ code: string; data: LessonPlanDriveRoot | null; error?: string } | null>(null);
+  useEffect(() => {
+    if (kind !== 'foreign' || !jc?.code) {
+      setDrive(null);
+      return;
+    }
+    let alive = true;
+    const code = jc.code;
+    setDrive({ code, data: null });
+    mobileAuthenticatedGet<LessonPlanDriveRoot>(`/api/admin/lesson-plan-drive?campCode=${encodeURIComponent(code)}`)
+      .then((data) => { if (alive) setDrive({ code, data }); })
+      .catch((e: Error) => { if (alive) setDrive({ code, data: null, error: e.message || '불러오지 못했습니다' }); });
+    return () => {
+      alive = false;
+    };
+  }, [kind, jc?.code, reloadKey]);
 
   const gens = useMemo(() => [...new Set(codes.map((c) => String(c.generation)))], [codes]);
   const genCodes = useMemo(() => codes.filter((c) => String(c.generation) === gen), [codes, gen]);
@@ -326,6 +349,7 @@ export function UserCheckScreen({ navigation, route }: AdminStackScreenProps<'Us
           lessonsLoading={kind === 'mentor' && !lessons}
           camps={campsOf(selected.p)}
           currentId={jobCodeId}
+          drive={drive}
           onClose={() => setSelected(null)}
         />
       )}
@@ -443,10 +467,89 @@ function PersonCard({ p, staff, tone, width, lesson, lessonsLoading, camps, curr
 
 // ── 눌렀을 때 — 아래에서 올라오는 창 ─────────────────────────────
 
-function DetailSheet({ p, staff, tone, lesson, lessonsLoading, camps, currentId, onClose }: {
+/** 원어민 — 이 캠프 레슨플랜 (구글 드라이브의 그 선생님 폴더, 누르면 드라이브로) */
+function DriveLessonPlans({ p, drive }: { p: Person; drive: { code: string; data: LessonPlanDriveRoot | null; error?: string } }) {
+  const root = drive.data;
+  const match = root?.folders ? matchTeacherDriveFolder(root.folders, p, root.teachers) : { folder: null, how: null };
+  const folder = match.folder;
+  const [items, setItems] = useState<DriveItem[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    setItems(null);
+    setErr(null);
+    if (!folder) return;
+    let alive = true;
+    mobileAuthenticatedGet<{ items: DriveItem[] }>(`/api/admin/lesson-plan-drive?campCode=${encodeURIComponent(drive.code)}&folderId=${encodeURIComponent(folder.id)}`)
+      .then((r) => { if (alive) setItems(r.items); })
+      .catch((e: Error) => { if (alive) setErr(e.message); });
+    return () => {
+      alive = false;
+    };
+  }, [drive.code, folder?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const open = (url: string) => Linking.openURL(url).catch(() => undefined);
+  const fmt = (iso?: string) => {
+    const d = iso ? new Date(iso) : null;
+    return d && !Number.isNaN(d.getTime()) ? `${d.getMonth() + 1}/${d.getDate()}` : '';
+  };
+  let body: React.ReactNode;
+  if (drive.error) body = <Text style={styles.footWarn}>{drive.error}</Text>;
+  else if (!root) body = <Text style={styles.footMuted}>불러오는 중…</Text>;
+  else if (!root.configured) body = <Text style={styles.footMuted}>{drive.code} 레슨플랜 폴더가 아직 연결되지 않았습니다 (웹 관리자 → 원어민 화면에서 연결)</Text>;
+  else if (root.error === 'no-access') body = <Text style={styles.footWarn}>레슨플랜 폴더를 읽을 수 없습니다 (공유 설정 확인)</Text>;
+  else if (!folder) {
+    body = (
+      <View>
+        <Text style={styles.footMuted}>{p.englishName || p.name} 선생님 폴더를 찾지 못했습니다 (웹에서 폴더를 골라 둘 수 있습니다)</Text>
+        {!!root.root?.url && (
+          <TouchableOpacity onPress={() => open(root.root!.url)} style={styles.lpFolder}>
+            <Ionicons name="folder-open-outline" size={14} color={BRAND} />
+            <Text style={styles.lpFolderText}>캠프 폴더 열기</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  } else {
+    body = (
+      <View>
+        <TouchableOpacity onPress={() => open(folder.url)} style={styles.lpFolder}>
+          <Ionicons name="folder-open-outline" size={14} color={BRAND} />
+          <Text style={styles.lpFolderText} numberOfLines={1}>{folder.name}</Text>
+          <Ionicons name="open-outline" size={12} color={BRAND} />
+        </TouchableOpacity>
+        {err ? (
+          <Text style={styles.footWarn}>{err}</Text>
+        ) : items === null ? (
+          <ActivityIndicator size="small" color={BRAND} style={{ alignSelf: 'flex-start', marginTop: 8 }} />
+        ) : items.length ? (
+          items.map((f) => (
+            <TouchableOpacity key={f.id} onPress={() => open(f.url)} style={styles.lpRow} activeOpacity={0.6}>
+              <Ionicons name={f.isFolder ? 'folder-outline' : 'document-text-outline'} size={15} color="#6b7280" />
+              <Text style={styles.lpName} numberOfLines={1}>{f.name}</Text>
+              <Text style={styles.lpKind}>{driveKindLabel(f.mimeType, f.name)}</Text>
+              <Text style={styles.lpDate}>{fmt(f.modifiedTime)}</Text>
+            </TouchableOpacity>
+          ))
+        ) : (
+          <Text style={styles.footMuted}>폴더가 비어 있습니다</Text>
+        )}
+      </View>
+    );
+  }
+  return (
+    <View style={styles.block}>
+      <Text style={styles.blockTitle}>레슨플랜 · {drive.code}</Text>
+      {body}
+    </View>
+  );
+}
+
+function DetailSheet({ p, staff, tone, lesson, lessonsLoading, camps, currentId, drive, onClose }: {
   p: Person; staff: boolean; tone: Tone;
   lesson?: TeacherLesson; lessonsLoading: boolean;
   camps: JobCodeWithId[]; currentId: string;
+  /** 원어민 — 이 캠프 레슨플랜 드라이브 */
+  drive?: { code: string; data: LessonPlanDriveRoot | null; error?: string } | null;
   onClose: () => void;
 }) {
   const insets = useSafeAreaInsets();
@@ -483,6 +586,7 @@ function DetailSheet({ p, staff, tone, lesson, lessonsLoading, camps, currentId,
             </View>
 
             {showLessons && <LessonList lesson={lesson} loading={lessonsLoading} />}
+            {p.kind === 'foreign' && drive && <DriveLessonPlans p={p} drive={drive} />}
             {p.kind === 'foreign' && <Experience p={p} />}
 
             {camps.length > 0 && (
@@ -662,6 +766,12 @@ const styles = StyleSheet.create({
   sheetName: { fontSize: 24, fontWeight: '800', color: '#111827', marginTop: 2 },
 
   block: { marginTop: 22 },
+  lpFolder: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', marginTop: 6, marginBottom: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#eef2ff' },
+  lpFolderText: { fontSize: 12, fontWeight: '700', color: BRAND, maxWidth: 240 },
+  lpRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e5e7eb' },
+  lpName: { flex: 1, fontSize: 13, fontWeight: '600', color: '#1f2937' },
+  lpKind: { fontSize: 10, color: '#6b7280', backgroundColor: '#f3f4f6', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, overflow: 'hidden' },
+  lpDate: { width: 34, textAlign: 'right', fontSize: 11, color: '#9ca3af' },
   blockTitle: { fontSize: 11, fontWeight: '700', color: '#9ca3af', letterSpacing: 0.6, marginBottom: 8 },
   topic: { marginBottom: 12 },
   topicTitle: { fontSize: 14, fontWeight: '800', color: '#111827', marginBottom: 6 },

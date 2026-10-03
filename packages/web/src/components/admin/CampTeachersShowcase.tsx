@@ -18,6 +18,7 @@ import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { getAllJobCodes, getUsersByJobCodeId } from '@/lib/firebaseService';
 import type { JobCodeWithId, User } from '@/types';
+import { LessonPlanDriveBar, TeacherLessonPlans, useLessonPlanDrive } from './LessonPlanDrive';
 import {
   CAMP_TEACHER_TITLE,
   buildCampTeachers,
@@ -111,6 +112,8 @@ export default function CampTeachersShowcase({ kind }: { kind: 'mentor' | 'forei
   }, [present]);
 
   const jc = codes.find((c) => c.id === jobCodeId);
+  /** 원어민 — 이 캠프 레슨플랜 구글 드라이브 폴더 */
+  const drive = useLessonPlanDrive(jc?.code, kind === 'foreign');
 
   // 한국인 멘토 — 사람 목록이 뜬 뒤 각자의 수업 자료를 불러온다
   useEffect(() => {
@@ -208,6 +211,11 @@ export default function CampTeachersShowcase({ kind }: { kind: 'mentor' | 'forei
             <Link href="/admin/foreign-teachers" className={`px-3 py-1.5 rounded-md ${kind === 'foreign' ? 'bg-white shadow-sm font-semibold' : 'text-gray-500'}`}>원어민</Link>
           </div>
         </div>
+        {kind === 'foreign' && jc?.code && (
+          <div className="mt-3">
+            <LessonPlanDriveBar key={jc.code} campCode={jc.code} drive={drive} />
+          </div>
+        )}
       </div>
 
       {present ? (
@@ -229,6 +237,12 @@ export default function CampTeachersShowcase({ kind }: { kind: 'mentor' | 'forei
                   <div className="w-24 shrink-0 sm:hidden"><Photo person={zoom} className="aspect-[3/4] object-cover rounded-xl text-3xl" /></div>
                   <ForeignHead p={zoom} big />
                 </div>
+                {/* 이 캠프 레슨플랜 — 구글 드라이브의 그 선생님 폴더 (파일은 새 탭) */}
+                {jc?.code && (
+                  <div className="mt-5">
+                    <TeacherLessonPlans key={`${jc.code}:${zoom.key}`} campCode={jc.code} teacher={zoom} drive={drive} />
+                  </div>
+                )}
                 <CampHistory ids={zoom.campIds ?? []} codes={codes} current={jobCodeId} />
                 <Experience p={zoom} />
               </div>

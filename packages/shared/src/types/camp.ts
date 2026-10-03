@@ -165,6 +165,8 @@ export interface CampSettings {
   timetableGuides?: Record<string, TimetableGuide>;
   /** 숙소 — 방 용도·선생님 배치·장소 용도 (건물 자체는 shared/data/lodging 에 고정) */
   lodging?: CampLodging;
+  /** 원어민 레슨플랜 구글 드라이브 폴더 (utils/lessonPlanDrive.ts) */
+  lessonPlanDrive?: import('../utils/lessonPlanDrive').LessonPlanDriveSetting;
   useTemporaryData?: boolean;
   updatedAt?: string;
 }

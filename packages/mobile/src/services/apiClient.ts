@@ -46,6 +46,20 @@ export async function mobileAuthenticatedPost<T = unknown>(
 }
 
 /**
+ * 모바일 앱에서 웹 API Route 를 인증된 GET 으로 호출합니다.
+ */
+export async function mobileAuthenticatedGet<T = unknown>(path: string): Promise<T> {
+  const baseUrl = getWebApiBaseUrl();
+  const idToken = await getIdToken();
+  const response = await fetch(`${baseUrl}${path}`, { headers: { Authorization: `Bearer ${idToken}` } });
+  if (!response.ok) {
+    const error = (await response.json().catch(() => ({ error: 'API 요청 실패' }))) as { error?: string; message?: string };
+    throw new Error(error.error || error.message || 'API 요청 실패');
+  }
+  return response.json() as Promise<T>;
+}
+
+/**
  * 회원가입 후 주민등록번호를 암호화하여 서버에 저장합니다.
  */
 export async function saveSensitiveInfo(params: {
