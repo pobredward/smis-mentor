@@ -256,13 +256,17 @@ export default function ScheduleContent() {
   );
   const current: CampTimetable | undefined = currentList[0];
   /**
-   * 두 장 이상이면 날짜를 제목으로 달아 위에서부터 쌓는다 (익사이팅 데이 목록과 같은 방식).
-   * 칩으로 바꿔 보는 것보다 한눈에 비교되고, 일정표에서 날짜를 누르면 그 표로 스크롤된다.
+   * 두 장 이상이면 위에서부터 쌓는다 — 기본 표가 맨 위(날짜를 늘어놓지 않음), 커스텀 표는 아래에
+   * '정규 커스텀 표 · 8/8 (SAT)' 처럼 이름과 날짜를 달아서. 일정표에서 날짜를 누르면 그 표로 스크롤된다.
+   * 날짜를 아직 안 고른 커스텀 표(기본 표 말고 날짜 없는 표)는 어느 날에도 쓰이지 않으므로 보이지 않는다.
    */
-  const variants = useMemo(
-    () => (currentList.length > 1 ? timetableVariants(currentList, daySet, tableCategory, campCode) : []),
-    [currentList, daySet, tableCategory, campCode]
-  );
+  const variants = useMemo(() => {
+    if (currentList.length < 2) return [];
+    const all = timetableVariants(currentList, daySet, tableCategory, campCode);
+    const baseId = all.find((v) => v.isBase)?.table.id;
+    const shown = all.filter((v) => !v.isBase || v.table.id === baseId);
+    return shown.length > 1 ? shown : [];
+  }, [currentList, daySet, tableCategory, campCode]);
   const todayYmd = localYmd(new Date());
   const categoryName = categories.find((c) => c.key === tableCategory)?.label ?? '';
 
@@ -492,7 +496,9 @@ export default function ScheduleContent() {
                 <section key={v.table.id} data-dates={v.dates.join(' ')} className="mb-6 scroll-mt-4">
                   <div className="mb-2 flex flex-wrap items-baseline gap-x-2">
                     <h3 className="text-sm font-semibold text-gray-900">
-                      {v.dates.length ? datesLabel(v.dates) : L('schedule.otherDays')} {categoryName}
+                      {v.isBase
+                        ? categoryName
+                        : `${L('schedule.customTable', { v0: categoryName })} · ${datesLabel(v.dates)}`}
                     </h3>
                     {isToday && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">{L('schedule.today')}</span>}
                   </div>

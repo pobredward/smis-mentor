@@ -424,6 +424,8 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
       return;
     }
     const date = nextUnclaimedDate(variantList, daySet, activeCategory, campCode);
+    const backTo = draft.id;
+    const newLabel = customLabel(date ? [date] : []);
     try {
       const created = await campTimetableService.create({
         campCode,
@@ -437,16 +439,55 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
       loadedKey.current = null;
       await refetch();
       queryClient.invalidateQueries({ queryKey: scheduleQueryKey(jobCodeId) });
-      Alert.alert('', L('schedule.variantAdded', { v0: date ? monthDayLabel(date) : L('schedule.otherDays') }));
+      // 잘못 눌렀을 때 바로 되돌릴 수 있게
+      Alert.alert('', L('schedule.variantAdded', { v0: newLabel }), [
+        { text: L('schedule.variantUndo'), style: 'destructive', onPress: () => void undoAddVariant(created.id, backTo) },
+        { text: '확인' },
+      ]);
     } catch (e) {
       Alert.alert('오류', '표를 만들지 못했습니다.');
       console.error(e);
     }
   };
 
+  /** 방금 만든 날짜별 표 되돌리기 — 만든 표를 지우고 전에 보던 표로 */
+  const undoAddVariant = async (createdId: string, backTo: string) => {
+    try {
+      await campTimetableService.remove(createdId);
+      setVariantId(backTo);
+      loadedKey.current = null;
+      await refetch();
+      queryClient.invalidateQueries({ queryKey: scheduleQueryKey(jobCodeId) });
+    } catch (e) {
+      Alert.alert('오류', '되돌리지 못했습니다. 아래 삭제 버튼으로 지워 주세요.');
+      console.error(e);
+    }
+  };
+
+  /**
+   * 날짜별 표 이름. 날짜를 정하지 않은 첫 표가 기본 표(보기 화면이 커스텀 표가 맡지 않은 날에 쓰는 표 —
+   * pickTimetableForDate 와 같은 규칙), 나머지는 '{Day} 커스텀 표 · 날짜' — 이 날만 다르다는 게 보이게.
+   */
+  const baseVariantId = variantList.find((t) => !t.dates?.length)?.id ?? null;
+  const customLabel = (dates: string[] | undefined) =>
+    `${L('schedule.customTable', { v0: draft?.dayTypeLabel ?? '' })} · ${
+      dates?.length ? dates.map(monthDayLabel).join(', ') : L('schedule.noDateYet')
+    }`;
+  const variantLabel = (t: Pick<CampTimetable, 'id' | 'dates'>) =>
+    t.id === baseVariantId ? L('schedule.baseTable') : customLabel(t.dates);
+
   const handleDelete = () => {
     if (!draft || isNew || isCommon) return;
-    Alert.alert('삭제', `"${draft.groupName} · ${draft.dayTypeLabel}" 를 삭제할까요?`, [
+    // 날짜별 표가 여러 장이면 어느 표를 지우는지 함께 보여 준다 — 기본 표를 잘못 지우지 않게
+    const saved = variantList.find((t) => t.id === draft.id) ?? draft;
+    const others = variantList.filter((t) => t.id !== draft.id);
+    const isBase = saved.id === baseVariantId;
+    const which = !others.length ? draft.dayTypeLabel : isBase ? `${draft.dayTypeLabel} ${L('schedule.baseTable')}` : variantLabel(saved);
+    const baseWarn =
+      others.length && isBase
+        ? `\n\n기본 표입니다. 지우면 커스텀 표가 맡지 않은 날에는 남은 표(${variantLabel(others[0])})가 대신 쓰입니다.`
+        : '';
+    Alert.alert('삭제', `"${draft.groupName} · ${which}" 를 삭제할까요?${baseWarn}`, [
       { text: '취소', style: 'cancel' },
       {
         text: '삭제',
@@ -543,7 +584,7 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
                 return (
                   <TouchableOpacity key={t.id} onPress={() => setVariantId(t.id)} style={[s.chip, on && s.chipOn]}>
                     <Text style={[s.chipText, on && s.chipTextOn]}>
-                      {t.dates?.length ? t.dates.map(monthDayLabel).join(', ') : L('schedule.baseTable')}
+                      {variantLabel(t)}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -568,7 +609,7 @@ export function TimetableEditor({ jobCodeId, onClose, initialCategory, initialGr
             })}
           </View>
           <TouchableOpacity onPress={handleAddVariant} style={s.variantAdd}>
-            <Text style={s.variantAddText}>+ {L('schedule.addVariant')}</Text>
+            <Text style={s.variantAddText}>+ {L('schedule.addVariant', { v0: draft.dayTypeLabel })}</Text>
           </TouchableOpacity>
           <Text style={[s.hint, { marginTop: 6, marginBottom: 0 }]}>{L('schedule.variantHint')}</Text>
         </View>

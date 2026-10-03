@@ -189,11 +189,17 @@ export function ScheduleScreen() {
     [timetables, derived, groups, tableCategory, activeGroup, campCode, activeJobCodeId, data?.timetableCommon]
   );
   const current: CampTimetable | undefined = currentList[0];
-  /** 두 장 이상이면 날짜를 제목으로 달아 위에서부터 쌓는다 (익사이팅 데이 목록과 같은 방식 · web 과 같은 규칙) */
-  const variants = useMemo(
-    () => (currentList.length > 1 ? timetableVariants(currentList, daySet, tableCategory, campCode) : []),
-    [currentList, daySet, tableCategory, campCode]
-  );
+  /**
+   * 두 장 이상이면 위에서부터 쌓는다 (web 과 같은 규칙) — 기본 표가 맨 위(날짜를 늘어놓지 않음),
+   * 커스텀 표는 아래에 '정규 커스텀 표 · 8/8 (SAT)' 처럼. 날짜를 아직 안 고른 커스텀 표는 보이지 않는다.
+   */
+  const variants = useMemo(() => {
+    if (currentList.length < 2) return [];
+    const all = timetableVariants(currentList, daySet, tableCategory, campCode);
+    const baseId = all.find((v) => v.isBase)?.table.id;
+    const shown = all.filter((v) => !v.isBase || v.table.id === baseId);
+    return shown.length > 1 ? shown : [];
+  }, [currentList, daySet, tableCategory, campCode]);
   const todayYmd = localYmd(new Date());
   const categoryName = categories.find((c) => c.key === tableCategory)?.label ?? '';
 
@@ -426,7 +432,9 @@ export function ScheduleScreen() {
                   >
                     <View style={s.inlineHead}>
                       <Text style={s.inlineTitle}>
-                        {v.dates.length ? datesLabel(v.dates) : L('schedule.otherDays')} {categoryName}
+                        {v.isBase
+                          ? categoryName
+                          : `${L('schedule.customTable', { v0: categoryName })} · ${datesLabel(v.dates)}`}
                       </Text>
                       {isToday && <Text style={s.todayBadge}>{L('schedule.today')}</Text>}
                     </View>

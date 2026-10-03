@@ -439,15 +439,36 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
       return next;
     });
 
+  /**
+   * 날짜별 표 이름. 날짜를 정하지 않은 첫 표가 기본 표(보기 화면이 커스텀 표가 맡지 않은 날에 쓰는 표 —
+   * pickTimetableForDate 와 같은 규칙), 나머지는 '{Day} 커스텀 표 · 날짜' — 이 날만 다르다는 게 보이게.
+   */
+  const baseVariantId = variantList.find((t) => !t.dates?.length)?.id ?? null;
+  const customLabel = (dates: string[] | undefined) =>
+    `${L('schedule.customTable', { v0: draft?.dayTypeLabel ?? '' })} · ${
+      dates?.length ? dates.map(monthDayLabel).join(', ') : L('schedule.noDateYet')
+    }`;
+  const variantLabel = (t: Pick<CampTimetable, 'id' | 'dates'>) =>
+    t.id === baseVariantId ? L('schedule.baseTable') : customLabel(t.dates);
+
   const handleDelete = async () => {
     if (!draft || isNew || isCommon) return;
-    if (!confirm(`"${draft.groupName} · ${draft.dayTypeLabel}" 를 삭제할까요?`)) return;
+    // 날짜별 표가 여러 장이면 어느 표를 지우는지 함께 보여 준다 — 기본 표를 잘못 지우지 않게
+    const saved = variantList.find((t) => t.id === draft.id) ?? draft;
+    const others = variantList.filter((t) => t.id !== draft.id);
+    const isBase = saved.id === baseVariantId;
+    const which = !others.length ? draft.dayTypeLabel : isBase ? `${draft.dayTypeLabel} ${L('schedule.baseTable')}` : variantLabel(saved);
+    const baseWarn =
+      others.length && isBase
+        ? `\n\n기본 표입니다. 지우면 커스텀 표가 맡지 않은 날에는 남은 표(${variantLabel(others[0])})가 대신 쓰입니다.`
+        : '';
+    if (!confirm(`"${draft.groupName} · ${which}" 를 삭제할까요?${baseWarn}`)) return;
     try {
       await campTimetableService.remove(draft.id);
       setVariantId(null);
       loadedKey.current = null;
       await refetch();
-      toast.success('삭제했습니다. 기본 틀로 돌아갑니다.');
+      toast.success(others.length ? '삭제했습니다.' : '삭제했습니다. 기본 틀로 돌아갑니다.');
     } catch (e) {
       toast.error('삭제에 실패했습니다.');
       console.error(e);
@@ -465,6 +486,8 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
       return;
     }
     const date = nextUnclaimedDate(variantList, daySet, activeCategory, campCode);
+    const backTo = draft.id;
+    const newLabel = customLabel(date ? [date] : []);
     try {
       const created = await campTimetableService.create({
         campCode,
@@ -478,9 +501,41 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
       loadedKey.current = null;
       await refetch();
       queryClient.invalidateQueries({ queryKey: ['campTimetables', jobCodeId] });
-      toast.success(L('schedule.variantAdded', { v0: date ? monthDayLabel(date) : L('schedule.otherDays') }));
+      // 잘못 눌렀을 때 바로 되돌릴 수 있게 — 알림 안에 되돌리기
+      toast.success(
+        (t) => (
+          <span className="flex items-center gap-3">
+            {L('schedule.variantAdded', { v0: newLabel })}
+            <button
+              onClick={() => {
+                toast.dismiss(t.id);
+                void undoAddVariant(created.id, backTo);
+              }}
+              className="shrink-0 rounded-md border border-gray-300 px-2 py-0.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              {L('schedule.variantUndo')}
+            </button>
+          </span>
+        ),
+        { duration: 10000 }
+      );
     } catch (e) {
       toast.error('표를 만들지 못했습니다.');
+      console.error(e);
+    }
+  };
+
+  /** 방금 만든 날짜별 표 되돌리기 — 만든 표를 지우고 전에 보던 표로 */
+  const undoAddVariant = async (createdId: string, backTo: string) => {
+    try {
+      await campTimetableService.remove(createdId);
+      setVariantId(backTo);
+      loadedKey.current = null;
+      await refetch();
+      queryClient.invalidateQueries({ queryKey: ['campTimetables', jobCodeId] });
+      toast.success(L('schedule.variantUndone'));
+    } catch (e) {
+      toast.error('되돌리지 못했습니다. 아래 삭제 버튼으로 지워 주세요.');
       console.error(e);
     }
   };
@@ -718,7 +773,7 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
                       on ? 'bg-gray-900 text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
                     }`}
                   >
-                    {t.dates?.length ? t.dates.map(monthDayLabel).join(', ') : L('schedule.baseTable')}
+                    {variantLabel(t)}
                   </button>
                 );
               })}
@@ -751,7 +806,7 @@ export default function TimetableEditor({ jobCodeId, onClose, initialCategory, i
               onClick={handleAddVariant}
               className="ml-auto rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100"
             >
-              + {L('schedule.addVariant')}
+              + {L('schedule.addVariant', { v0: draft.dayTypeLabel })}
             </button>
           </div>
           <p className="mt-1.5 text-[11px] leading-relaxed text-gray-500">{L('schedule.variantHint')}</p>
