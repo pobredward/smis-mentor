@@ -2449,6 +2449,10 @@ export const en: Messages = {
     variantNeedsSave: "Save this table first",
     backToTimetable: "Back to timetable",
     guideEmpty: "No description yet.",
+    guideMentor: "Mentor",
+    guideForeign: "Foreign",
+    guideEmptyMentor: "No notes for mentors.",
+    guideEmptyForeign: "No notes for foreign teachers.",
     watchVideo: "Watch video",
   },
   settings: {

@@ -532,7 +532,7 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
       timetableGuides: {
         type: 'object',
         description:
-          '칸 설명 — 칸 이름(소문자·한 칸 띄어쓰기로 정리한 값) → { summary?, sections?: [{ title, items: [{ type: "text"|"link"|"image"|"video", text?, url?, storagePath? }] }], foreign?: { summary?, sections? } }. 맨 바깥 summary·sections 는 멘토·부매니저용(한국어), foreign 은 원어민용(영어) — foreign 이 없으면 원어민에게는 그 칸 설명이 안 보인다. text 줄은 text, link·image·video 줄은 url(+ 캡션 text). 사진·동영상은 upload_media 로 올린 url·storagePath 를 쓴다. id·updatedAt·updatedBy 는 서버가 채운다.',
+          '칸 설명 — 칸 이름(소문자·한 칸 띄어쓰기로 정리한 값) → { summary?, sections?: [{ title, items: [{ type: "text"|"link"|"image"|"video", text?, url?, storagePath? }] }], foreign?: { summary?, sections? } }. 맨 바깥 summary·sections 는 멘토·부매니저용(한국어), foreign 은 원어민용(영어). 앱에서는 누구나 Mentor / Foreign 버튼으로 둘 다 볼 수 있고 자기 쪽이 먼저 열린다 — foreign 이 없으면 원어민 선생님에게도 멘토·부매니저용이 열린다. text 줄은 text, link·image·video 줄은 url(+ 캡션 text). 사진·동영상은 upload_media 로 올린 url·storagePath 를 쓴다. id·updatedAt·updatedBy 는 서버가 채운다.',
         writable: true,
         large: true,
         mapEntries: true,

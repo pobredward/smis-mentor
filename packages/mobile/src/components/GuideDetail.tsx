@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,27 +11,34 @@ import {
   type GuideBody,
   type TimetableGuide,
 } from '@smis-mentor/shared';
+import { GuideAudienceTabs } from './GuideAudienceTabs';
 
 interface Props {
   /** 어느 칸을 눌렀는지 — 제목 */
   label: string;
   guide: TimetableGuide | undefined;
-  /** 보는 사람 — 멘토·부매니저는 멘토용, 원어민은 원어민용(foreign)만 본다 */
+  /** 보는 사람 — 처음에 열 쪽 (원어민 → 원어민용, 그 밖 → 멘토·부매니저용) */
   audience?: GuideAudience;
-  /** 관리자면 멘토용 아래에 원어민용도 따로 보여 준다 */
-  isAdmin?: boolean;
   onBack: () => void;
 }
 
 /**
  * 칸을 눌렀을 때 뜨는 세부 화면 (web GuideDetail 과 같은 구성).
  * 관리자가 쓴 것만 보여 준다 — 담당·강의실·교재는 시간표에 이미 있으므로 되풀이하지 않는다.
+ * 누구나 오른쪽 위 Mentor / Foreign 으로 두 벌을 오가며 본다 — 원어민도 멘토 멘트를, 멘토도 원어민용을.
  */
-export function GuideDetail({ label, guide, audience = 'mentor', isAdmin = false, onBack }: Props) {
-  const body = guideBodyFor(guide, audience);
-  const hasMain = hasBodyContent(body);
-  // 관리자에게만 — 원어민에게는 이렇게 보인다
-  const foreign = isAdmin && audience === 'mentor' && hasBodyContent(guide?.foreign) ? guide?.foreign : undefined;
+export function GuideDetail({ label, guide, audience = 'mentor', onBack }: Props) {
+  const filled = {
+    mentor: hasBodyContent(guideBodyFor(guide, 'mentor')),
+    foreign: hasBodyContent(guide?.foreign),
+  };
+  // 처음엔 자기 쪽 — 비어 있고 다른 쪽에 내용이 있으면 그쪽
+  const other: GuideAudience = audience === 'foreign' ? 'mentor' : 'foreign';
+  const firstTab: GuideAudience = filled[audience] || !filled[other] ? audience : other;
+  // 고른 쪽은 그 칸에서만 — 다른 칸을 열면 다시 처음 규칙대로
+  const [pick, setPick] = useState<{ label: string; tab: GuideAudience } | null>(null);
+  const tab = pick?.label === label ? pick.tab : firstTab;
+  const body = guideBodyFor(guide, tab);
 
   return (
     <ScrollView style={s.screen} contentContainerStyle={s.content}>
@@ -40,33 +47,34 @@ export function GuideDetail({ label, guide, audience = 'mentor', isAdmin = false
         <Text style={s.backText}>{L('schedule.backToTimetable')}</Text>
       </TouchableOpacity>
 
-      <Text style={s.title}>{label}</Text>
+      <View style={s.titleRow}>
+        <Text style={[s.title, s.titleText]}>{label}</Text>
+        <GuideAudienceTabs
+          style={{ marginTop: 2 }}
+          value={tab}
+          onChange={(t) => setPick({ label, tab: t })}
+          filled={filled}
+          labels={{ mentor: L('schedule.guideMentor'), foreign: L('schedule.guideForeign') }}
+          emptyHint={false}
+        />
+      </View>
       <GuideBodyView body={body} />
 
-      {!hasMain &&
-        (foreign ? (
-          <Text style={s.mainEmpty}>멘토·부매니저에게 보이는 설명은 없습니다.</Text>
-        ) : (
-          <Text style={s.empty}>{L('schedule.guideEmpty')}</Text>
-        ))}
-
-      {!!foreign && (
-        <View style={s.foreignBox}>
-          <View style={s.foreignHead}>
-            <Text style={s.enBadge}>EN</Text>
-            <Text style={s.foreignTitle}>원어민에게 보이는 설명</Text>
-          </View>
-          <GuideBodyView body={foreign} inset={26} />
-        </View>
+      {!hasBodyContent(body) && (
+        <Text style={s.empty}>
+          {!filled.mentor && !filled.foreign
+            ? L('schedule.guideEmpty')
+            : L(tab === 'foreign' ? 'schedule.guideEmptyForeign' : 'schedule.guideEmptyMentor')}
+        </Text>
       )}
     </ScrollView>
   );
 }
 
-/** 설명 한 벌 — 요약 + 섹션 (inset: 상자 안에 넣을 때 그만큼 사진 폭을 줄인다) */
-function GuideBodyView({ body, inset = 0 }: { body: GuideBody | undefined; inset?: number }) {
+/** 설명 한 벌 — 요약 + 섹션 */
+function GuideBodyView({ body }: { body: GuideBody | undefined }) {
   const { width } = useWindowDimensions();
-  const mediaW = Math.max(200, width - 28 - inset);
+  const mediaW = Math.max(200, width - 28);
   const sections = (body?.sections ?? []).filter((s) => s.items.some(hasItemContent));
 
   return (
@@ -139,6 +147,8 @@ const s = StyleSheet.create({
   backText: { fontSize: 13, color: '#6b7280' },
 
   title: { fontSize: 20, fontWeight: '700', color: '#111827' },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+  titleText: { flex: 1 },
   summary: { marginTop: 4, fontSize: 13, color: '#4b5563', lineHeight: 19 },
 
   section: { marginTop: 18 },
@@ -179,29 +189,6 @@ const s = StyleSheet.create({
   caption: { marginTop: 3, fontSize: 11, color: '#6b7280' },
 
   empty: { marginTop: 24, fontSize: 12, color: '#9ca3af' },
-  mainEmpty: { marginTop: 10, fontSize: 11, color: '#9ca3af' },
-
-  // 관리자에게만 보이는 원어민용 설명
-  foreignBox: {
-    marginTop: 28,
-    borderWidth: 1,
-    borderColor: '#a7f3d0',
-    borderRadius: 10,
-    backgroundColor: '#f0fdf4',
-    padding: 12,
-  },
-  foreignHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  foreignTitle: { fontSize: 12, fontWeight: '700', color: '#065f46' },
-  enBadge: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#047857',
-    backgroundColor: '#d1fae5',
-    borderRadius: 3,
-    overflow: 'hidden',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-  },
 });
 
 export default GuideDetail;

@@ -2447,6 +2447,10 @@ export const ko = {
     variantNeedsSave: "먼저 이 표를 저장해 주세요",
     backToTimetable: "시간표로",
     guideEmpty: "아직 설명이 없습니다. 관리자가 시간표 편집 > 칸 설명에서 쓸 수 있습니다.",
+    guideMentor: "Mentor",
+    guideForeign: "Foreign",
+    guideEmptyMentor: "멘토·부매니저용 설명이 없습니다.",
+    guideEmptyForeign: "원어민용 설명이 없습니다.",
     watchVideo: "동영상 보기",
   },
   settings: {

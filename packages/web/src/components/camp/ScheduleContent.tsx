@@ -300,15 +300,15 @@ export default function ScheduleContent() {
 
   /**
    * 설명이 실제로 들어 있는 칸 이름만 — 빈 칸을 눌러 봐야 허탕이라.
-   * 보는 사람에게 보일 설명 기준 (원어민 → 원어민용, 멘토·부매니저 → 멘토용, 관리자 → 둘 중 하나라도)
+   * 누구나 멘토·부매니저용 / 원어민용을 오가며 볼 수 있으므로 둘 중 하나라도 있으면 연다
    */
   const guidedLabels = useMemo(() => {
     const keys = new Set<string>();
     Object.entries(timetableGuides).forEach(([key, guide]) => {
-      if (hasGuideContent(guide, isAdmin ? undefined : guideAudience)) keys.add(guideKeyOf(key));
+      if (hasGuideContent(guide)) keys.add(guideKeyOf(key));
     });
     return keys;
-  }, [timetableGuides, isAdmin, guideAudience]);
+  }, [timetableGuides]);
 
   /** Day·그룹을 바꾸면 열어 둔 세부페이지는 닫는다 */
   useEffect(() => setGuideLabel(null), [activeCategory, activeGroup]);
@@ -471,7 +471,6 @@ export default function ScheduleContent() {
             label={guideLabel}
             guide={findGuide(guideLabel, timetableGuides)}
             audience={guideAudience}
-            isAdmin={isAdmin}
             onBack={() => setGuideLabel(null)}
           />
         ) : (
@@ -482,7 +481,6 @@ export default function ScheduleContent() {
           label={guideLabel}
           guide={findGuide(guideLabel, timetableGuides)}
           audience={guideAudience}
-          isAdmin={isAdmin}
           onBack={() => setGuideLabel(null)}
         />
       ) : current ? (

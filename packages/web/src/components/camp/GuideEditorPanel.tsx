@@ -4,8 +4,8 @@
  * 칸 설명(세부페이지) 편집기 — 시간표 편집기와 일정표(익사이팅) 편집기가 같이 쓴다.
  * 저장은 부모가 한다 (campSettings.timetableGuides 를 통째로).
  *
- * 한 칸 안에서 위는 멘토·부매니저에게 보이는 설명, 아래는 원어민에게 보이는 설명(foreign).
- * 원어민용은 몇 칸에만 붙이는 게 보통이라 '+ 원어민에게도 보여주기' 를 눌러야 생긴다.
+ * 한 칸 안에 멘토·부매니저용 설명과 원어민용 설명(foreign)이 있고, 탭으로 오가며 같은 편집기로 쓴다.
+ * 원어민용은 몇 칸에만 붙이는 게 보통이라 원어민용 탭에서 '만들기' 를 눌러야 생긴다.
  */
 import { useState } from 'react';
 import toast from 'react-hot-toast';
@@ -26,6 +26,7 @@ import {
   type TimetableGuide,
 } from '@smis-mentor/shared';
 import { storage } from '@/lib/firebase';
+import { GUIDE_AUDIENCE_LABEL, GuideAudienceTabs, GuideBadge } from './GuideAudienceTabs';
 
 export function GuideEditorPanel({
   campCode,
@@ -40,6 +41,8 @@ export function GuideEditorPanel({
   setGuides: (fn: (prev: Record<string, TimetableGuide>) => Record<string, TimetableGuide>) => void;
 }) {
   const [guideLabel, setGuideLabel] = useState<string | null>(null);
+  /** 멘토·부매니저용 / 원어민용 탭 — 칸을 바꿔도 유지 (원어민용만 몰아서 쓸 때 편하게) */
+  const [audTab, setAudTab] = useState<GuideAudience>('mentor');
   const guideTargets = labels;
   // ── 칸 설명 ───────────────────────────────────────────────────────
   const guideOf = (label: string): TimetableGuide => guides[guideKeyOf(label)] ?? {};
@@ -50,7 +53,7 @@ export function GuideEditorPanel({
     });
   /**
    * 설명 한 벌 — 멘토·부매니저용은 칸의 바깥 summary·sections, 원어민용은 foreign.
-   * 아래 편집 함수들은 audience 만 바꿔서 위·아래 두 칸이 같이 쓴다.
+   * 아래 편집 함수들은 audience 만 바꿔서 두 탭이 같이 쓴다.
    */
   const bodyOf = (label: string, aud: GuideAudience): GuideBody =>
     aud === 'foreign' ? guideOf(label).foreign ?? {} : guideOf(label);
@@ -73,26 +76,26 @@ export function GuideEditorPanel({
       }));
     }
   };
-  /** 원어민에게도 보여 주기 — 영어 기본 섹션을 깔아 준다 */
+  /** 원어민용 만들기 — 영어 기본 섹션을 깔아 준다 */
   const startForeign = (label: string) =>
     patchGuide(label, (g) => ({
       ...g,
       foreign: { sections: DEFAULT_FOREIGN_GUIDE_SECTIONS.map((title) => ({ id: newId(), title, items: [] })) },
     }));
   /**
-   * 위(멘토·부매니저용) 내용을 원어민용으로 복사.
+   * 멘토·부매니저용 내용을 원어민용으로 복사 (번역해서 고쳐 쓰기 좋게).
    * 올린 사진·동영상은 주소만 같이 쓰고 storagePath 는 넘기지 않는다 — 한쪽을 지워도 다른 쪽 파일은 남게.
    */
   const copyMentorToForeign = (label: string) => {
     if (
       hasGuideContent(guideOf(label), 'foreign') &&
-      !window.confirm('원어민 설명을 위 내용으로 바꿀까요? 지금 쓴 원어민 설명은 사라집니다.')
+      !window.confirm('원어민용 설명을 멘토·부매니저용 내용으로 바꿀까요? 지금 쓴 원어민용 설명은 사라집니다.')
     )
       return;
     patchGuide(label, (g) => ({ ...g, foreign: copyGuideBody(g, newId) }));
   };
   const removeForeign = (label: string) => {
-    if (!window.confirm(`"${label}" 의 원어민 설명을 지울까요? 저장을 눌러야 반영됩니다.`)) return;
+    if (!window.confirm(`"${label}" 의 원어민용 설명을 지울까요? 저장을 눌러야 반영됩니다.`)) return;
     patchGuide(label, (g) => ({ ...g, foreign: undefined }));
   };
 
@@ -141,7 +144,7 @@ export function GuideEditorPanel({
     }
   };
 
-  /** 설명 한 벌 편집 — 요약 + 섹션(줄: 글·링크·사진·동영상). 위(멘토·부매니저용)·아래(원어민용)가 같이 쓴다 */
+  /** 설명 한 벌 편집 — 요약 + 섹션(줄: 글·링크·사진·동영상). 멘토·부매니저용·원어민용 탭이 같이 쓴다 */
   const renderBodyEditor = (label: string, aud: GuideAudience) => {
     const body = bodyOf(label, aud);
     return (
@@ -303,17 +306,16 @@ export function GuideEditorPanel({
           칸 설명 ({guideTargets.filter((l) => hasGuideContent(guideOf(l))).length}/{guideTargets.length})
         </h3>
         <span className="flex items-center gap-1 text-[11px] text-gray-400">
-          <span className="h-1.5 w-1.5 rounded-full bg-blue-500" /> 멘토·부매니저
-          <EnBadge className="ml-1.5" /> 원어민
+          <GuideBadge audience="mentor" /> {GUIDE_AUDIENCE_LABEL.mentor}
+          <GuideBadge audience="foreign" className="ml-1.5" /> {GUIDE_AUDIENCE_LABEL.foreign}
         </span>
       </div>
 
-      {/* 이 표에 나오는 칸 이름들 — 멘토·부매니저용 설명이 있으면 점, 원어민용이 있으면 EN */}
+      {/* 이 표에 나오는 칸 이름들 — 있는 설명마다 같은 모양의 표시(KO·EN) */}
       <div className="mt-3 flex flex-wrap gap-1.5">
         {guideTargets.map((label) => {
           const on = label === guideLabel;
-          const filled = hasGuideContent(guideOf(label), 'mentor');
-          const forForeign = hasGuideContent(guideOf(label), 'foreign');
+          const g = guideOf(label);
           return (
             <button
               key={label}
@@ -324,11 +326,9 @@ export function GuideEditorPanel({
                   : 'border-gray-300 text-gray-700 hover:bg-gray-50'
               }`}
             >
-              {filled && (
-                <span className={`h-1.5 w-1.5 rounded-full ${on ? 'bg-white' : 'bg-blue-500'}`} />
-              )}
               {label}
-              {forForeign && <EnBadge on={on} />}
+              {hasGuideContent(g, 'mentor') && <GuideBadge audience="mentor" on={on} />}
+              {hasGuideContent(g, 'foreign') && <GuideBadge audience="foreign" on={on} />}
             </button>
           );
         })}
@@ -336,8 +336,16 @@ export function GuideEditorPanel({
 
       {guideLabel && (
         <div className="mt-4 space-y-3 rounded-md border border-gray-200 bg-gray-50 p-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold text-gray-900">{guideLabel}</span>
+            <GuideAudienceTabs
+              value={audTab}
+              onChange={setAudTab}
+              filled={{
+                mentor: hasGuideContent(guideOf(guideLabel), 'mentor'),
+                foreign: hasGuideContent(guideOf(guideLabel), 'foreign'),
+              }}
+            />
             <button
               onClick={() => setGuideLabel(null)}
               className="ml-auto text-xs text-gray-500 hover:text-gray-800"
@@ -346,65 +354,52 @@ export function GuideEditorPanel({
             </button>
           </div>
 
-          {/* 위 — 멘토·부매니저에게 보이는 설명 */}
-          <h4 className="text-xs font-semibold text-gray-700">멘토·부매니저에게 보이는 설명</h4>
-          {renderBodyEditor(guideLabel, 'mentor')}
-
-          {/* 아래 — 원어민에게 보이는 설명. 없으면 원어민에게는 이 칸 설명이 안 보인다 */}
-          <div className="space-y-3 border-t border-dashed border-gray-300 pt-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <h4 className="flex items-center gap-1.5 text-xs font-semibold text-gray-700">
-                <EnBadge />
-                원어민에게 보이는 설명
-              </h4>
-              {guideOf(guideLabel).foreign && (
-                <div className="ml-auto flex gap-3">
-                  <button
-                    onClick={() => copyMentorToForeign(guideLabel)}
-                    className="text-xs text-gray-500 hover:text-gray-800"
-                  >
-                    위 내용 복사
-                  </button>
-                  <button
-                    onClick={() => removeForeign(guideLabel)}
-                    className="text-xs text-red-500 hover:text-red-700"
-                  >
-                    원어민 설명 삭제
-                  </button>
-                </div>
-              )}
-            </div>
-            {guideOf(guideLabel).foreign ? (
-              renderBodyEditor(guideLabel, 'foreign')
-            ) : (
-              <>
+          {audTab === 'mentor' ? (
+            renderBodyEditor(guideLabel, 'mentor')
+          ) : guideOf(guideLabel).foreign ? (
+            <>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => copyMentorToForeign(guideLabel)}
+                  className="text-xs text-gray-500 hover:text-gray-800"
+                >
+                  멘토·부매니저용 내용 복사
+                </button>
+                <button
+                  onClick={() => removeForeign(guideLabel)}
+                  className="text-xs text-red-500 hover:text-red-700"
+                >
+                  원어민용 삭제
+                </button>
+              </div>
+              {renderBodyEditor(guideLabel, 'foreign')}
+            </>
+          ) : (
+            // 원어민용이 없으면 원어민 선생님에게도 멘토·부매니저용이 열린다
+            <div className="rounded-md border border-dashed border-gray-300 bg-white px-3 py-4 text-center">
+              <p className="text-xs text-gray-500">
+                원어민용 설명이 없습니다. 원어민 선생님에게는 멘토·부매니저용 설명이 열립니다.
+              </p>
+              <div className="mt-2.5 flex flex-wrap justify-center gap-2">
                 <button
                   onClick={() => startForeign(guideLabel)}
-                  className="w-full rounded-md border border-dashed border-gray-300 bg-white px-3 py-2 text-xs text-gray-500 hover:bg-gray-50"
+                  className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
                 >
-                  + 원어민에게도 보여주기
+                  + 새로 만들기
                 </button>
-                <p className="text-[11px] text-gray-400">
-                  만들지 않으면 원어민에게는 이 칸 설명이 보이지 않습니다.
-                </p>
-              </>
-            )}
-          </div>
+                {hasGuideContent(guideOf(guideLabel), 'mentor') && (
+                  <button
+                    onClick={() => copyMentorToForeign(guideLabel)}
+                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
+                  >
+                    멘토·부매니저용 내용 복사해서 만들기
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>
-  );
-}
-
-/** 원어민에게 보이는 설명이 있다는 표시 */
-function EnBadge({ on = false, className = '' }: { on?: boolean; className?: string }) {
-  return (
-    <span
-      className={`rounded px-1 text-[9px] font-bold leading-4 ${
-        on ? 'bg-white text-gray-900' : 'bg-emerald-100 text-emerald-700'
-      } ${className}`}
-    >
-      EN
-    </span>
   );
 }

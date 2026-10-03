@@ -331,7 +331,7 @@ export function cleanGuideEntry(key: string, raw: unknown, ctx: CleanCtx, labels
     ctx.errors.push(`${at}: 보여 줄 내용이 없습니다 (요약·줄이 모두 비어 있음). 칸 설명을 지우려면 값으로 null 을 보내세요`);
     return null;
   }
-  if (foreign && !guide.foreign) ctx.warnings.push(`${at}.foreign: 내용이 비어 원어민용은 저장하지 않습니다 (원어민에게는 이 칸 설명이 안 보임)`);
+  if (foreign && !guide.foreign) ctx.warnings.push(`${at}.foreign: 내용이 비어 원어민용은 저장하지 않습니다 (원어민 선생님에게도 멘토·부매니저용이 열림)`);
   if (guide.foreign && /[가-힣]/.test(bodyText(guide.foreign))) ctx.warnings.push(`${at}.foreign: 원어민용에 한글이 있습니다 — 원어민 선생님은 영어로 봅니다`);
   if (labels && !labels.has(nk)) ctx.warnings.push(`${at}: 이 캠프 시간표·일정표에 "${nk}" 칸이 없습니다 — 저장해도 눌러 볼 칸이 없습니다 (칸 이름 오타인지 확인)`);
   return { key: nk, value: { ...guide, updatedAt: ctx.nowIso, updatedBy: ctx.uid } };

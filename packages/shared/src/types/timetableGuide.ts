@@ -13,7 +13,9 @@
  *
  * 보는 사람에 따라 설명이 다르다.
  *  - summary·sections (맨 바깥) = 멘토·부매니저에게 보이는 설명 (원래 있던 값 그대로)
- *  - foreign = 원어민에게 보이는 설명. 없으면 원어민에게는 이 칸 설명이 안 보인다.
+ *  - foreign = 원어민 선생님용 설명.
+ * 누구나 칸 설명 화면의 Mentor / Foreign 버튼으로 두 벌을 오가며 볼 수 있고, 처음에는 자기 쪽
+ * (원어민 → foreign, 그 밖 → 멘토·부매니저용)이 열린다. 자기 쪽이 비어 있으면 다른 쪽이 열린다.
  * 관리자는 둘 다 본다. 원어민용은 몇 칸에만 붙는 게 보통이라 따로 두지 않고 한 칸 안에 둔다.
  */
 
@@ -49,7 +51,7 @@ export interface GuideBody {
 
 /** 맨 바깥 summary·sections 는 멘토·부매니저용 (예전 값과 같은 자리) */
 export interface TimetableGuide extends GuideBody {
-  /** 원어민에게 보이는 설명 — 없으면 원어민에게는 안 보인다 */
+  /** 원어민 선생님용 설명 — 없으면 원어민 선생님에게도 멘토·부매니저용이 열린다 */
   foreign?: GuideBody;
   updatedAt?: string;
   updatedBy?: string;

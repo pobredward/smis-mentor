@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import {
   guideBodyFor,
   hasBodyContent,
@@ -9,27 +10,34 @@ import {
   type GuideBody,
   type TimetableGuide,
 } from '@smis-mentor/shared';
+import { GuideAudienceTabs } from './GuideAudienceTabs';
 
 interface GuideDetailProps {
   /** 어느 칸을 눌렀는지 — 제목 */
   label: string;
   guide: TimetableGuide | undefined;
-  /** 보는 사람 — 멘토·부매니저는 멘토용, 원어민은 원어민용(foreign)만 본다 */
+  /** 보는 사람 — 처음에 열 쪽 (원어민 → 원어민용, 그 밖 → 멘토·부매니저용) */
   audience?: GuideAudience;
-  /** 관리자면 멘토용 아래에 원어민용도 따로 보여 준다 */
-  isAdmin?: boolean;
   onBack: () => void;
 }
 
 /**
  * 칸을 눌렀을 때 뜨는 세부 화면.
  * 관리자가 쓴 것만 보여 준다 — 담당·강의실·교재는 시간표에 이미 있으므로 되풀이하지 않는다.
+ * 누구나 오른쪽 위 Mentor / Foreign 으로 두 벌을 오가며 본다 — 원어민도 멘토 멘트를, 멘토도 원어민용을.
  */
-export default function GuideDetail({ label, guide, audience = 'mentor', isAdmin = false, onBack }: GuideDetailProps) {
-  const body = guideBodyFor(guide, audience);
-  const hasMain = hasBodyContent(body);
-  // 관리자에게만 — 원어민에게는 이렇게 보인다
-  const foreign = isAdmin && audience === 'mentor' && hasBodyContent(guide?.foreign) ? guide?.foreign : undefined;
+export default function GuideDetail({ label, guide, audience = 'mentor', onBack }: GuideDetailProps) {
+  const filled = {
+    mentor: hasBodyContent(guideBodyFor(guide, 'mentor')),
+    foreign: hasBodyContent(guide?.foreign),
+  };
+  // 처음엔 자기 쪽 — 비어 있고 다른 쪽에 내용이 있으면 그쪽
+  const other: GuideAudience = audience === 'foreign' ? 'mentor' : 'foreign';
+  const firstTab: GuideAudience = filled[audience] || !filled[other] ? audience : other;
+  // 고른 쪽은 그 칸에서만 — 다른 칸을 열면 다시 처음 규칙대로
+  const [pick, setPick] = useState<{ label: string; tab: GuideAudience } | null>(null);
+  const tab = pick?.label === label ? pick.tab : firstTab;
+  const body = guideBodyFor(guide, tab);
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -40,24 +48,25 @@ export default function GuideDetail({ label, guide, audience = 'mentor', isAdmin
         ← {L('schedule.backToTimetable')}
       </button>
 
-      <h2 className="text-xl font-bold text-gray-900">{label}</h2>
+      <div className="flex items-start justify-between gap-3">
+        <h2 className="min-w-0 text-xl font-bold text-gray-900">{label}</h2>
+        <GuideAudienceTabs
+          className="mt-0.5 shrink-0"
+          value={tab}
+          onChange={(t) => setPick({ label, tab: t })}
+          filled={filled}
+          labels={{ mentor: L('schedule.guideMentor'), foreign: L('schedule.guideForeign') }}
+          emptyHint={false}
+        />
+      </div>
       <GuideBodyView body={body} />
 
-      {!hasMain &&
-        (foreign ? (
-          <p className="mt-3 text-xs text-gray-400">멘토·부매니저에게 보이는 설명은 없습니다.</p>
-        ) : (
-          <p className="mt-6 text-sm text-gray-400">{L('schedule.guideEmpty')}</p>
-        ))}
-
-      {foreign && (
-        <div className="mt-8 rounded-lg border border-emerald-200 bg-emerald-50/50 p-4">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-800">
-            <span className="rounded bg-emerald-100 px-1 text-[10px] font-bold leading-4 text-emerald-700">EN</span>
-            원어민에게 보이는 설명
-          </div>
-          <GuideBodyView body={foreign} />
-        </div>
+      {!hasBodyContent(body) && (
+        <p className="mt-6 text-sm text-gray-400">
+          {!filled.mentor && !filled.foreign
+            ? L('schedule.guideEmpty')
+            : L(tab === 'foreign' ? 'schedule.guideEmptyForeign' : 'schedule.guideEmptyMentor')}
+        </p>
       )}
     </div>
   );
