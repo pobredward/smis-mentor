@@ -2442,6 +2442,7 @@ export const en: Messages = {
     today: "Today",
     otherDays: "Other days",
     baseTable: "Default",
+    baseShort: "Default",
     customTable: "Custom {{v0}}",
     noDateYet: "no dates yet",
     variantDates: "Used on",

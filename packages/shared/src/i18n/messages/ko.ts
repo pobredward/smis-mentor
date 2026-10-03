@@ -2440,6 +2440,7 @@ export const ko = {
     today: "오늘",
     otherDays: "그 밖의 날",
     baseTable: "기본 표",
+    baseShort: "기본",
     customTable: "{{v0}} 커스텀 표",
     noDateYet: "날짜 미정",
     variantDates: "이 표를 쓰는 날",

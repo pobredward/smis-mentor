@@ -1,7 +1,7 @@
 'use client';
 
 import { resolveActiveJobCodeId } from '@smis-mentor/shared';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   applyClassInfo,
@@ -223,16 +223,23 @@ export default function ScheduleContent() {
   const isPlanTab = activeCategory === ALL_TAB || activeCategory === EXCITING_CATEGORY;
   const tableCategory = isPlanTab ? null : activeCategory;
 
+  /**
+   * 커스텀 표가 있을 때 지금 보는 표 — Day·그룹별로 기억한다 (id = 버튼으로 고른 표, date = 일정표에서 누른 날짜).
+   * 고른 게 없으면 오늘 날짜를 맡은 표, 그것도 없으면 기본 표.
+   */
+  const [variantPick, setVariantPick] = useState<{ key: string; id?: string; date?: string } | null>(null);
+
   const openDate = (date: string) => {
     const cat = dayCategory(daySet, date, campCode);
     if (!cat) return;
     setCategory(cat);
+    if (cat !== EXCITING_CATEGORY) {
+      // 커스텀 표가 있으면 그 날짜를 맡은 표를 연다
+      setVariantPick({ key: `${cat}::${activeGroup}`, date });
+      return;
+    }
     setTimeout(() => {
-      const el = cat === EXCITING_CATEGORY
-        ? document.getElementById(`exciting-${date}`)
-        // 날짜별 표가 여러 장이면 그 날짜 표로 (한 장이면 찾을 것도 없다)
-        : document.querySelector(`[data-dates~="${date}"]`);
-      el?.scrollIntoView({ behavior: 'smooth', block: cat === EXCITING_CATEGORY ? 'center' : 'start' });
+      document.getElementById(`exciting-${date}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 60);
   };
   /** 같은 일정을 쓰는 그룹 이름 (Spring · Summer) */
@@ -256,9 +263,9 @@ export default function ScheduleContent() {
   );
   const current: CampTimetable | undefined = currentList[0];
   /**
-   * 두 장 이상이면 위에서부터 쌓는다 — 기본 표가 맨 위(날짜를 늘어놓지 않음), 커스텀 표는 아래에
-   * '정규 커스텀 표 · 8/8 (SAT)' 처럼 이름과 날짜를 달아서. 일정표에서 날짜를 누르면 그 표로 스크롤된다.
-   * 날짜를 아직 안 고른 커스텀 표(기본 표 말고 날짜 없는 표)는 어느 날에도 쓰이지 않으므로 보이지 않는다.
+   * 커스텀 표가 있으면 한 번에 한 장만 — 오른쪽 위 [기본] [8/8] … 버튼으로 바꿔 본다
+   * (쌓아 두면 아래 인문학 표 등이 너무 내려간다). 일정표에서 날짜를 누르면 그 날짜 표가 열린다.
+   * 날짜를 아직 안 고른 커스텀 표(기본 표 말고 날짜 없는 표)는 어느 날에도 쓰이지 않으므로 버튼도 없다.
    */
   const variants = useMemo(() => {
     if (currentList.length < 2) return [];
@@ -270,15 +277,13 @@ export default function ScheduleContent() {
   const todayYmd = localYmd(new Date());
   const categoryName = categories.find((c) => c.key === tableCategory)?.label ?? '';
 
-  // 오늘 표가 아래쪽에 쌓여 있으면, 탭을 처음 열 때 한 번 그 표로 내려 준다
-  const scrolledFor = useRef<string | null>(null);
-  useEffect(() => {
-    const key = `${tableCategory}::${activeGroup}`;
-    if (!variants.length || scrolledFor.current === key) return;
-    scrolledFor.current = key;
-    const i = variants.findIndex((v) => v.dates.includes(todayYmd));
-    if (i > 0) setTimeout(() => document.querySelector(`[data-dates~="${todayYmd}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
-  }, [variants, tableCategory, activeGroup, todayYmd]);
+  const variantKey = `${tableCategory}::${activeGroup}`;
+  const shownVariant = (() => {
+    if (!variants.length) return null;
+    const pick = variantPick?.key === variantKey ? variantPick : null;
+    const byDate = (d?: string | null) => (d ? variants.find((v) => v.dates.includes(d)) : undefined);
+    return (pick?.id && variants.find((v) => v.table.id === pick.id)) || byDate(pick?.date) || byDate(todayYmd) || variants[0];
+  })();
 
   /**
    * 인문학처럼 "하루를 통째로 쓰지 않고 정규 데이 한 시간대에 들어가는" 표.
@@ -489,34 +494,50 @@ export default function ScheduleContent() {
         />
       ) : current ? (
         <>
-          {variants.length ? (
-            variants.map((v) => {
-              const isToday = v.dates.includes(todayYmd);
-              return (
-                <section key={v.table.id} data-dates={v.dates.join(' ')} className="mb-6 scroll-mt-4">
-                  <div className="mb-2 flex flex-wrap items-baseline gap-x-2">
-                    <h3 className="text-sm font-semibold text-gray-900">
-                      {v.isBase
-                        ? categoryName
-                        : `${L('schedule.customTable', { v0: categoryName })} · ${datesLabel(v.dates)}`}
-                    </h3>
-                    {isToday && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">{L('schedule.today')}</span>}
-                  </div>
-                  <TimetableView
-                    timetable={withClassInfo(v.table)!}
-                    guidedLabels={guidedLabels}
-                    onOpenGuide={setGuideLabel}
-                    teacherByClassCode={teacherByClassCode}
-                    foreignBySubject={groupOf(v.table.groupName)?.staffByRole ?? {}}
-                    myClassCode={myExp?.classCode}
-                    isForeign={isForeign}
-                    nowMinutes={isToday ? nowMinutes : null}
-                    linkedLabels={inlineTables.map((x) => x.slot.label)}
-                    campStart={campStart}
-                  />
-                </section>
-              );
-            })
+          {shownVariant ? (
+            <>
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                {!shownVariant.isBase && (
+                  <p className="text-xs font-medium text-gray-600">
+                    {L('schedule.customTable', { v0: categoryName })} · {datesLabel(shownVariant.dates)}
+                  </p>
+                )}
+                <div role="tablist" className="ml-auto inline-flex flex-wrap rounded-lg bg-gray-100 p-0.5">
+                  {variants.map((v) => {
+                    const on = v.table.id === shownVariant.table.id;
+                    return (
+                      <button
+                        key={v.table.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={on}
+                        onClick={() => setVariantPick({ key: variantKey, id: v.table.id })}
+                        className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium tabular-nums transition-colors ${
+                          on ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'
+                        }`}
+                      >
+                        {v.dates.includes(todayYmd) && (
+                          <span className="h-1.5 w-1.5 rounded-full bg-blue-600" title={L('schedule.today')} />
+                        )}
+                        {v.isBase ? L('schedule.baseShort') : v.dates.map(monthDayLabel).join('·')}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <TimetableView
+                timetable={withClassInfo(shownVariant.table)!}
+                guidedLabels={guidedLabels}
+                onOpenGuide={setGuideLabel}
+                teacherByClassCode={teacherByClassCode}
+                foreignBySubject={groupOf(shownVariant.table.groupName)?.staffByRole ?? {}}
+                myClassCode={myExp?.classCode}
+                isForeign={isForeign}
+                nowMinutes={shownVariant.dates.includes(todayYmd) ? nowMinutes : null}
+                linkedLabels={inlineTables.map((x) => x.slot.label)}
+                campStart={campStart}
+              />
+            </>
           ) : (
             <TimetableView
               timetable={withClassInfo(current)!}

@@ -161,6 +161,11 @@ export function ScheduleScreen() {
   const sharedGroupNames = (daySet?.groups ?? [])
     .map((k) => groups.find((g) => normalizeGroupKey(g) === k) ?? k)
     .join(' · ');
+  /**
+   * 커스텀 표가 있을 때 지금 보는 표 — Day·그룹별로 기억한다 (id = 버튼으로 고른 표, date = 일정표에서 누른 날짜).
+   * 고른 게 없으면 오늘 날짜를 맡은 표, 그것도 없으면 기본 표. (web 과 같은 규칙)
+   */
+  const [variantPick, setVariantPick] = useState<{ key: string; id?: string; date?: string } | null>(null);
   const openDate = (date: string) => {
     const cat = dayCategory(daySet, date, campCode);
     if (!cat) return;
@@ -168,9 +173,8 @@ export function ScheduleScreen() {
     if (cat === EXCITING_CATEGORY) setFocusDate(date);
     else {
       scrollRef.current?.scrollTo({ y: 0, animated: false });
-      // 날짜별 표가 여러 장이면 그 날짜 표로 — 자리가 잡히면(onLayout) 내려 간다
-      pendingScroll.current = date;
-      setTimeout(tryScroll, 60);
+      // 커스텀 표가 있으면 그 날짜를 맡은 표를 연다
+      setVariantPick({ key: `${cat}::${activeGroup}`, date });
     }
   };
 
@@ -190,8 +194,8 @@ export function ScheduleScreen() {
   );
   const current: CampTimetable | undefined = currentList[0];
   /**
-   * 두 장 이상이면 위에서부터 쌓는다 (web 과 같은 규칙) — 기본 표가 맨 위(날짜를 늘어놓지 않음),
-   * 커스텀 표는 아래에 '정규 커스텀 표 · 8/8 (SAT)' 처럼. 날짜를 아직 안 고른 커스텀 표는 보이지 않는다.
+   * 커스텀 표가 있으면 한 번에 한 장만 — 오른쪽 위 [기본] [8/8] … 버튼으로 바꿔 본다 (web 과 같은 규칙).
+   * 날짜를 아직 안 고른 커스텀 표는 어느 날에도 쓰이지 않으므로 버튼도 없다.
    */
   const variants = useMemo(() => {
     if (currentList.length < 2) return [];
@@ -203,36 +207,13 @@ export function ScheduleScreen() {
   const todayYmd = localYmd(new Date());
   const categoryName = categories.find((c) => c.key === tableCategory)?.label ?? '';
 
-  // 날짜 표로 스크롤 — 표마다 자리(y)를 기억해 두고, 가야 할 날짜가 있으면 자리가 잡히는 대로 내려 간다
-  const tablesTop = useRef(0);
-  const variantY = useRef<Record<string, number>>({});
-  const variantsRef = useRef(variants);
-  variantsRef.current = variants;
-  const pendingScroll = useRef<string | null>(null);
-  const tryScroll = () => {
-    const date = pendingScroll.current;
-    if (!date) return;
-    const v = variantsRef.current.find((x) => x.dates.includes(date));
-    if (!v) {
-      pendingScroll.current = null;
-      return;
-    }
-    const y = variantY.current[v.table.id];
-    if (y == null) return;
-    pendingScroll.current = null;
-    scrollRef.current?.scrollTo({ y: Math.max(0, tablesTop.current + y - 12), animated: true });
-  };
-  // 오늘 표가 아래쪽에 쌓여 있으면, 탭을 처음 열 때 한 번 그 표로
-  const autoScrolled = useRef<string | null>(null);
-  useEffect(() => {
-    const key = `${tableCategory}::${activeGroup}`;
-    if (!variants.length || autoScrolled.current === key) return;
-    autoScrolled.current = key;
-    if (variants.findIndex((v) => v.dates.includes(todayYmd)) > 0) {
-      pendingScroll.current = todayYmd;
-      tryScroll();
-    }
-  }, [variants, tableCategory, activeGroup, todayYmd]);
+  const variantKey = `${tableCategory}::${activeGroup}`;
+  const shownVariant = (() => {
+    if (!variants.length) return null;
+    const pick = variantPick?.key === variantKey ? variantPick : null;
+    const byDate = (d?: string | null) => (d ? variants.find((v) => v.dates.includes(d)) : undefined);
+    return (pick?.id && variants.find((v) => v.table.id === pick.id)) || byDate(pick?.date) || byDate(todayYmd) || variants[0];
+  })();
 
   /**
    * 인문학처럼 "하루를 통째로 쓰지 않고 정규 데이 한 시간대에 들어가는" 표.
@@ -420,39 +401,46 @@ export function ScheduleScreen() {
         />
       ) : current ? (
         <>
-          {variants.length ? (
-            <View onLayout={(e) => { tablesTop.current = e.nativeEvent.layout.y; tryScroll(); }}>
-              {variants.map((v, i) => {
-                const isToday = v.dates.includes(todayYmd);
-                return (
-                  <View
-                    key={v.table.id}
-                    style={i > 0 ? s.inlineSection : undefined}
-                    onLayout={(e) => { variantY.current[v.table.id] = e.nativeEvent.layout.y; tryScroll(); }}
-                  >
-                    <View style={s.inlineHead}>
-                      <Text style={s.inlineTitle}>
-                        {v.isBase
-                          ? categoryName
-                          : `${L('schedule.customTable', { v0: categoryName })} · ${datesLabel(v.dates)}`}
-                      </Text>
-                      {isToday && <Text style={s.todayBadge}>{L('schedule.today')}</Text>}
-                    </View>
-                    <TimetableView
-                      timetable={withClassInfo(v.table)!}
-                      teacherByClassCode={teacherByClassCode}
-                      foreignBySubject={groupOf(v.table.groupName)?.staffByRole ?? {}}
-                      myClassCode={myExp?.classCode}
-                      isForeign={isForeign}
-                      nowMinutes={isToday ? nowMinutes : null}
-                      linkedLabels={inlineTables.map((x) => x.slot.label)}
-                      campStartMs={data?.startMs ?? null}
-                      guidedLabels={guidedLabels}
-                      onOpenGuide={setGuideLabel}
-                    />
-                  </View>
-                );
-              })}
+          {shownVariant ? (
+            <View>
+              <View style={s.variantBar}>
+                {!shownVariant.isBase && (
+                  <Text style={s.variantCaption} numberOfLines={1}>
+                    {L('schedule.customTable', { v0: categoryName })} · {datesLabel(shownVariant.dates)}
+                  </Text>
+                )}
+                <View style={s.variantTabs}>
+                  {variants.map((v) => {
+                    const on = v.table.id === shownVariant.table.id;
+                    return (
+                      <TouchableOpacity
+                        key={v.table.id}
+                        onPress={() => setVariantPick({ key: variantKey, id: v.table.id })}
+                        style={[s.variantTab, on && s.variantTabOn]}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: on }}
+                      >
+                        {v.dates.includes(todayYmd) && <View style={s.todayDot} />}
+                        <Text style={[s.variantTabText, on && s.variantTabTextOn]}>
+                          {v.isBase ? L('schedule.baseShort') : v.dates.map(monthDayLabel).join('·')}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+              <TimetableView
+                timetable={withClassInfo(shownVariant.table)!}
+                teacherByClassCode={teacherByClassCode}
+                foreignBySubject={groupOf(shownVariant.table.groupName)?.staffByRole ?? {}}
+                myClassCode={myExp?.classCode}
+                isForeign={isForeign}
+                nowMinutes={shownVariant.dates.includes(todayYmd) ? nowMinutes : null}
+                linkedLabels={inlineTables.map((x) => x.slot.label)}
+                campStartMs={data?.startMs ?? null}
+                guidedLabels={guidedLabels}
+                onOpenGuide={setGuideLabel}
+              />
             </View>
           ) : (
             <TimetableView
@@ -563,9 +551,24 @@ const s = StyleSheet.create({
   segTextOn: { color: '#111827' },
 
   inlineSection: { marginTop: 20 },
+  // 커스텀 표 고르기 — 오른쪽 위 [기본] [8/8] …
+  variantBar: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+  variantCaption: { flexShrink: 1, fontSize: 11, fontWeight: '600', color: '#4b5563' },
+  variantTabs: { marginLeft: 'auto', flexDirection: 'row', flexWrap: 'wrap', backgroundColor: '#f3f4f6', borderRadius: 8, padding: 2 },
+  variantTab: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
+  variantTabOn: {
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  variantTabText: { fontSize: 11, fontWeight: '600', color: '#6b7280' },
+  variantTabTextOn: { color: '#111827' },
+  todayDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: '#2563eb' },
   inlineHead: { flexDirection: 'row', alignItems: 'baseline', flexWrap: 'wrap', marginBottom: 8 },
   inlineTitle: { fontSize: 13, fontWeight: '700', color: '#111827' },
-  todayBadge: { marginLeft: 8, backgroundColor: '#2563eb', color: '#fff', fontSize: 10, fontWeight: '700', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: 'hidden' },
   inlineTime: { marginLeft: 6, fontSize: 11, color: '#6b7280' },
 
   empty: {
