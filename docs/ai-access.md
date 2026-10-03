@@ -54,6 +54,8 @@ AI 에게 URL 을 붙여넣으면 내장 fetch 도구가 그 페이지를 GET �
 | `get_document` (로그인) | 문서 하나 전체 읽기 (large 필드 포함) |
 | `write_documents` (관리자) | 생성·수정·삭제 배치 (≤50). **기본 dry-run** → `previewHash` + `confirm=true` 로 실행, `mcpAuditLogs` 기록. dry-run 내용은 30분 보관되어 confirm 때 operations 재전송 불필요 |
 | `upload_media` (관리자) | 칸 설명·교육 탭 페이지용 사진·동영상을 Storage 에 올리고 `url`·`storagePath` 반환 (공개 https 주소 또는 base64 ≤3MB). 올리기만 하고 연결은 `write_documents` 로 |
+| `get_camp_roster` (관리자) | 캠프 선생님 표(선생님 명단 관리 — 관리시트 동기화 리스트와 같은 칸)와 연결 계정·지금 배정, 이 캠프에 배정된 사람 전체. 민감 칸(주민번호·여권·휴대폰 등)은 돌려주지 않음 |
+| `write_camp_roster` (관리자) | 선생님 캠프 배정 등록·변경·해제. `changes`(줄 단위 add/update/remove) 또는 `mentors`·`foreign`(표 전체, `removeMissing`) → **기본 dry-run**(사람별 배정 전→후·반 정보·숙소 미리보기) → `previewHash` + `confirm=true`. 저장은 관리자 화면과 같은 `saveCampRoster` |
 
 리소스(`resources/list`)로도 레지스트리 페이지가 `https://smis-mentor.com/{path}.md` URI 로 노출됩니다.
 
@@ -71,6 +73,7 @@ AI 에게 URL 을 붙여넣으면 내장 fetch 도구가 그 페이지를 GET �
   - **맵 필드**(`mapEntries`): `timetableGuides`·`classInfo`·`timetableCommon` 은 update 때 보낸 항목(키)만 바뀌고 값 `null` 은 그 항목 삭제입니다. Firestore `FieldPath` 로 항목 단위 update 를 하므로 `p.e` 처럼 점이 들어간 키도 안전합니다. 읽을 때 `fields: ["timetableGuides.칸 이름"]` 으로 항목만 고를 수 있고, 항목 키(칸 이름)는 민감 키 검사에서 빠집니다(항목 안쪽은 검사).
   - **정리·검증**(`clean`): 앱과 같은 `cleanGuide`·`cleanDayPlan` 으로 정리하되, 앱이 조용히 버리는 잘못된 값(알 수 없는 키, 줄 종류, `HH:mm` 아닌 시각, 없는 Day 종류, 한 그룹이 두 세트에 있음, 노션 임시 사진 주소 등)은 오류로 돌려줍니다. 경고: 시간표·일정표에 없는 칸 이름, 원어민용(foreign)에 한글, 저장소 밖 사진 주소, 다른 캠프 `storagePath`(빼고 저장 — 앱이 줄을 지울 때 엉뚱한 파일을 지우지 않게), 항목 교체로 지워지는 값(예: 원어민용), 캠프 기간 밖 날짜·없는 그룹. 내용이 그대로인 항목은 건너뜁니다.
   - 미리보기: 칸 설명은 항목별로 요약(요약·섹션 제목·줄 앞부분), 일정표는 바뀐 경로 목록(diff)만 보여 줍니다. `updatedAt` 은 앱처럼 ISO 문자열, 칸 설명 항목에는 `updatedAt`·`updatedBy` 를 붙입니다.
+- **get_camp_roster / write_camp_roster** (`camp-roster.ts`): 관리자 '선생님 명단 관리'(`campRosters/{jobCodeId}`)와 같은 표를 읽고, 저장은 같은 `saveCampRoster`(캠프 배정·영어 이름·성별·반 정보·숙소 방, 해제)를 그대로 부른다. 이름으로 계정을 찾되 동명이인은 오류로 후보 `userId` 를 돌려주고, 지금 표에서 연결 없이 둔 줄(대표님·'여(1차)' 자리표시 등)은 자동 연결하지 않는다(`userId: null` 로 명시 가능). 민감 칸은 읽기·쓰기 모두 거부. dry-run 계획은 `mcpPendingWrites/roster-{hash}` 에 30분 보관, 실행 직전 표의 `updatedAt` 이 그대로인지 확인하고(그사이 다른 저장이 있으면 거부) `mcpAuditLogs` · `auditLogs`(USER_CAMP_CHANGE) 에 남긴다.
 - **upload_media** (`upload.ts`): 앱 `uploadGuideMedia` 와 같은 경로(`timetableGuides/{캠프}/{칸}/…`, 교육 탭은 `camp-page-images/…`)와 같은 토큰 주소(`firebasestorage.googleapis.com/v0/b/…?alt=media&token=`)로 올립니다. 서버가 남의 주소를 대신 여는 기능이라 https 만, 내부망 주소(DNS 해석 결과 포함)·리디렉트 5회 초과·용량(사진 15MB, 동영상 50MB)을 막고, 파일 종류는 실제 바이트로 판별합니다(JPG·PNG·GIF·WEBP·HEIC·AVIF·MP4·MOV·WEBM — SVG·HTML 거부). 구글 드라이브·드롭박스 공유 링크는 바로 받는 주소로 바꿉니다. 문서는 바꾸지 않으므로 확인 단계 없이 올리고 `mcpAuditLogs` 에 남깁니다. 올린 파일은 지우지 않습니다(칸 설명에서 빼도 파일은 남음).
 - **레시피** (`RECIPES`): 교육 자료 캠프 간 복사, 업무 복사(날짜 이동), 시간표 복사, 서류 전형 평가 초안, 시간표 칸 설명 쓰기, 일정표 고치기, 반 정보·이름 덮어쓰기, 선생님 수업 자료 링크 추출 — `describe_schema` 응답에 포함되어 AI 가 절차를 따릅니다.
 - 새 컬렉션이나 필드를 열고 싶으면 `datamodel.ts` 에 선언만 추가하면 됩니다. 코드 수정은 필요 없습니다.

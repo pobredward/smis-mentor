@@ -356,7 +356,7 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
 
   users: {
     name: 'users',
-    description: '사용자(멘토·원어민·관리자). 연락처·주소·주민번호·생년월일·인증정보는 제거되어 보이지 않는다.',
+    description: '사용자(멘토·원어민·관리자). 연락처·주소·주민번호·생년월일·인증정보는 제거되어 보이지 않는다. 캠프 배정(jobExperiences·jobCodeIds)은 write_documents 가 아니라 get_camp_roster / write_camp_roster 로 바꾼다.',
     read: 'admin',
     scope: { kind: 'none' },
     openRead: true,
@@ -698,6 +698,17 @@ export const RECIPES: { title: string; steps: string[] }[] = [
       '반 정보: data: { classInfo: { "J01": { className, classroom, bookCode, spareBookCode } } } — 항목이 통째로 바뀌므로 바꾸지 않는 값도 같이 보낸다',
       '이름 덮어쓰기: data: { timetableCommon: { "Junior": { classes: [{ classCode, teacherName? }], staffOverrides: { "수업": "Pattern 멘토 이름", "speaking": "원어민 이름" } } } } — 그룹 항목이 통째로 바뀌므로 classes 와 staffOverrides 를 둘 다 보낸다. 이름을 비우면 앱 배정 이름으로 돌아간다',
       'dry-run → 미리보기 확인 → 승인 → confirm',
+    ],
+  },
+  {
+    title: '선생님 캠프 배정 — 등록·변경·해제',
+    steps: [
+      'get_camp_roster(camp) 로 지금 표(멘토·원어민 줄, 연결된 계정과 배정)와 campMembers(이 캠프에 배정된 사람 전체)를 확인',
+      '사용자가 준 명단(관리시트 동기화 리스트 등)과 비교해 바뀐 줄만 changes 로 만든다 — 등록 { action: "add", kind, cells: { role, group, classCode, name, … } } / 변경 { action: "update", kind, target: { name 또는 classCode 또는 userId }, cells: { 바뀐 칸만 } } / 해제 { action: "remove", kind, target }',
+      '사람이 다른 반으로 바뀌면(예: J02 ↔ J05) 두 줄을 update 로 서로 바꾼다 — 영어 이름·반이름처럼 사람·반에 붙은 칸도 같이',
+      '같은 이름이 여럿이라 오류가 나면 돌려준 후보 중 맞는 userId 를 그 change 에 넣어 다시 dry-run (find_users 로 참여 캠프를 확인할 수 있다)',
+      'write_camp_roster dry-run → people(등록·변경·해제 전/후)·classInfo·rooms·unlinkedRows 를 사용자에게 보여 주고 승인 → write_camp_roster({ camp, confirm: true, previewHash })',
+      '대표님·외부 인원처럼 계정 연결이 필요 없는 사람은 표에만 두고 userId 를 넣지 않는다. 주민번호·여권·휴대폰 같은 민감 칸은 MCP 로 다루지 않는다 (관리자 화면)',
     ],
   },
   {

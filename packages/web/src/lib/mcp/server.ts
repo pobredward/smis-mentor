@@ -35,6 +35,7 @@ import { verifyBearer } from '@/lib/mcp-auth/verify';
 import { DataToolError, describeSchema, getDocument, queryDocuments, writeDocuments } from '@/lib/mcp/data-tools';
 import { DATA_TOOL_LIMITS } from '@/lib/mcp/datamodel';
 import { UPLOAD_LIMITS, uploadMedia } from '@/lib/mcp/upload';
+import { getCampRosterForMcp, writeCampRosterForMcp } from '@/lib/mcp/camp-roster';
 
 export type McpMode = 'public' | 'auth';
 
@@ -76,6 +77,7 @@ function instructions(mode: McpMode): string {
           '이 엔드포인트는 로그인 사용자용입니다. whoami 로 현재 계정과 역할을 확인하고, 캠프 페이지는 list_camps 의 캠프 코드(예: S29)를 camp 파라미터에 넣으세요.',
           '데이터 작업: describe_schema 로 컬렉션·필드·권한·작업 레시피를 확인한 뒤 query_documents / get_document 로 읽습니다. 관리자는 write_documents 로 생성·수정·삭제할 수 있는데, 반드시 먼저 confirm 없이 호출해(dry-run) 미리보기를 사용자에게 보여주고 승인을 받은 뒤 previewHash 와 confirm=true 로 실행하세요(operations 재전송 불필요). 사용자 승인 없이 confirm 을 보내지 마세요.',
           '시간표 칸 설명·일정표·반 정보·직접 넣은 담임/원어민 이름은 campSettings(문서 ID = 캠프 코드)에 있습니다 — describe_schema("campSettings") 와 레시피를 먼저 보세요. 사진·동영상은 upload_media 로 올린 뒤 그 주소를 넣습니다.',
+          '선생님 캠프 배정(등록·변경·해제)은 get_camp_roster 로 지금 표를 읽고 write_camp_roster 로 고칩니다 (관리자 \'선생님 명단 관리\'와 같은 표·같은 저장 — 역시 dry-run → 승인 → confirm).',
         ].join('\n')
       : '이 엔드포인트는 공개 페이지 전용입니다. 로그인이 필요한 캠프 운영·관리자 페이지는 /api/mcp (OAuth) 로 연결하세요.',
   ].join('\n');
@@ -478,6 +480,72 @@ function registerTools(server: McpServer, mode: McpMode) {
         const viewer = viewerOf(ctx as ToolCtx);
         if (!viewer) return text('로그인 정보가 없습니다.');
         return dataTool(() => writeDocuments(args, viewer));
+      }
+    );
+
+    server.registerTool(
+      'get_camp_roster',
+      {
+        title: '캠프 선생님 표 읽기 (관리자)',
+        description:
+          '관리자 전용. 캠프의 선생님 표(관리자 \'선생님 명단 관리\' — 관리시트 동기화 리스트와 같은 칸)를 읽습니다. 줄마다 칸 값, 연결된 계정과 지금 배정(그룹·역할·반번호), 그리고 이 캠프에 배정된 사람 전체(campMembers, 표에 있는지 포함)를 돌려줍니다. 민감 칸(주민번호·여권·휴대폰 등)은 돌려주지 않습니다. write_camp_roster 전에 먼저 호출하세요.',
+        inputSchema: z.object({ camp: z.string().min(1).describe('캠프 코드 (예: J29)') }),
+      },
+      async (args, ctx) => {
+        const viewer = viewerOf(ctx as ToolCtx);
+        if (!viewer) return text('로그인 정보가 없습니다.');
+        return dataTool(() => getCampRosterForMcp(args, viewer));
+      }
+    );
+
+    server.registerTool(
+      'write_camp_roster',
+      {
+        title: '캠프 선생님 배정 — 등록·변경·해제 (관리자, dry-run → confirm)',
+        description: [
+          '관리자 전용. 캠프 선생님 표를 고치고 저장합니다 — 저장하면 관리자 화면과 똑같이 캠프 배정(그룹·역할·반번호), 영어 이름·성별, 반 정보(강의실·반이름·교재 → 시간표), 숙소 방이 앱 전체에 반영되고, 해제한 사람은 캠프 배정이 빠집니다.',
+          '두 가지 방식 중 하나: (1) changes — 줄 단위: { action: "add", kind, cells, userId? } 등록 / { action: "update", kind, target, cells, userId? } 변경(칸 값 "" 은 비우기) / { action: "remove", kind, target } 해제(그 사람 캠프 배정도 빠짐). target 은 userId · name(멘토=반멘토, 원어민=영어 이름) · classCode · group+subject · index 로 한 줄을 가리킨다.',
+          '(2) mentors·foreign — 표 전체를 보낸다(관리시트 붙여넣기와 같음). removeMissing=true 면 표에 없는 사람의 배정도 해제한다(기본 false).',
+          '칸 키: 멘토 role(담임 멘토/수업 멘토/매니저/부매니저), group(Junior·Spring·단기1·All…), classCode, name, gender, englishName, classroom, className, textbook, grade, arrAirport·arrBooking·arrSeat·depAirport·depBooking·depSeat, room / 원어민 group, subject(Speaking/Reading/Writing/Mix…), englishName, visa, ticket, arrival, room. 민감 칸은 받지 않는다.',
+          '이름으로 계정을 찾고, 같은 이름이 여럿이면 오류로 후보(userId)를 돌려주므로 userId 를 넣어 다시 보낸다. 사이트 계정이 없는 사람(예: "여(1차)")은 표에만 남는다. 지금 표에서 계정 연결 없이 둔 줄은 계속 연결하지 않으며, 일부러 연결하지 않을 사람(예: 대표님)은 userId: null 로 보낸다.',
+          'confirm 없이 부르면 dry-run — 사람별 배정 전→후, 등록·해제, 반 정보·숙소 변화와 previewHash 를 돌려주고 아무것도 바꾸지 않는다. 반드시 사용자에게 보여 주고 승인받은 뒤 { camp, confirm: true, previewHash } 로 실행한다 (30분 보관, mcpAuditLogs 에 기록).',
+        ].join(' '),
+        inputSchema: z.object({
+          camp: z.string().min(1).describe('캠프 코드 (예: J29)'),
+          changes: z
+            .array(
+              z.object({
+                action: z.enum(['add', 'update', 'remove']),
+                kind: z.enum(['mentor', 'foreign']).optional().describe('멘토 표(기본) / 원어민 표'),
+                target: z
+                  .object({
+                    userId: z.string().optional(),
+                    name: z.string().optional(),
+                    classCode: z.string().optional(),
+                    group: z.string().optional(),
+                    subject: z.string().optional(),
+                    index: z.number().int().min(0).optional(),
+                  })
+                  .optional()
+                  .describe('update/remove 할 줄'),
+                cells: z.record(z.string(), z.union([z.string(), z.number(), z.null()])).optional().describe('add: 새 줄 칸 / update: 바꿀 칸만'),
+                userId: z.string().nullable().optional().describe('이 줄을 이 계정에 연결 (동명이인). update 에서 null = 연결 끊기'),
+              })
+            )
+            .max(100)
+            .optional(),
+          mentors: z.array(z.object({ cells: z.record(z.string(), z.any()), userId: z.string().nullable().optional() })).max(200).optional().describe('표 전체 — 멘토 줄들'),
+          foreign: z.array(z.object({ cells: z.record(z.string(), z.any()), userId: z.string().nullable().optional() })).max(200).optional().describe('표 전체 — 원어민 줄들'),
+          removeMissing: z.boolean().optional().describe('표 전체를 보낼 때 표에 없는 사람의 캠프 배정도 해제 (기본 false)'),
+          note: z.string().optional().describe('감사 로그에 남길 설명'),
+          confirm: z.boolean().optional().describe('true 면 실행 (previewHash 필수)'),
+          previewHash: z.string().optional(),
+        }),
+      },
+      async (args, ctx) => {
+        const viewer = viewerOf(ctx as ToolCtx);
+        if (!viewer) return text('로그인 정보가 없습니다.');
+        return dataTool(() => writeCampRosterForMcp(args as Parameters<typeof writeCampRosterForMcp>[0], viewer));
       }
     );
 

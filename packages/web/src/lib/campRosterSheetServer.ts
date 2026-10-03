@@ -39,9 +39,9 @@ const MENTOR_ROLES = ['mentor', 'mentor_temp', 'admin'];
 const FOREIGN_ROLES = ['foreign', 'foreign_temp', 'admin'];
 /** 표에서 빠지면 배정을 해제하는 역할 (관리자는 캠프 선택으로도 배정되므로 표에 있었던 경우만) */
 const REMOVABLE_ROLES = ['mentor', 'mentor_temp', 'foreign', 'foreign_temp'];
-const MAX_ROWS = 200;
+export const MAX_ROWS = 200;
 
-type UserLite = { id: string; name: string; role: string; status: string; englishNickname: string; university: string; inCamp: boolean; data: Record<string, any> };
+export type UserLite = { id: string; name: string; role: string; status: string; englishNickname: string; university: string; inCamp: boolean; data: Record<string, any> };
 
 export async function getJobCode(jobCodeId: string) {
   const snap = await getAdminFirestore().collection('jobCodes').doc(jobCodeId).get();
@@ -51,9 +51,9 @@ export async function getJobCode(jobCodeId: string) {
   return { id: snap.id, code, name: String(d.name ?? ''), generation: String(d.generation ?? ''), tier: rosterTierOf(code) as CampRosterTier };
 }
 
-const rosterRef = (jobCodeId: string) => getAdminFirestore().collection('campRosters').doc(jobCodeId);
+export const rosterRef = (jobCodeId: string) => getAdminFirestore().collection('campRosters').doc(jobCodeId);
 
-async function loadUsers(jobCodeId: string): Promise<UserLite[]> {
+export async function loadUsers(jobCodeId: string): Promise<UserLite[]> {
   const snap = await getAdminFirestore().collection('users').get();
   return snap.docs
     .filter((d) => !['deleted', 'inactive'].includes(String(d.data().status)))
@@ -68,7 +68,7 @@ async function loadUsers(jobCodeId: string): Promise<UserLite[]> {
 }
 
 /** S캠프 민감 칸 — 개인 저장소 원본 */
-const SENSITIVE_KEYS = ['rrn', 'passportName', 'passportNumber', 'passportExpiry', 'shirtSize', 'phoneNumber', 'phoneModel'] as const;
+export const SENSITIVE_KEYS = ['rrn', 'passportName', 'passportNumber', 'passportExpiry', 'shirtSize', 'phoneNumber', 'phoneModel'] as const;
 async function sensitiveCellsOf(uid: string, jobCodeId: string, code: string): Promise<Record<string, string>> {
   const d = await getAdminFirestore().collection('users').doc(uid).get();
   if (!d.exists) return {};
@@ -93,9 +93,9 @@ export async function loadCampRoster(jobCodeId: string) {
 export type RosterCandidate = { userId: string; name: string; role: string; status: string; englishNickname: string; university: string; inCamp: boolean };
 export type RosterMatch = { index: number; name: string; userId: string | null; status: 'linked' | 'auto' | 'ambiguous' | 'none'; candidates: RosterCandidate[] };
 
-const candOf = (u: UserLite): RosterCandidate => ({ userId: u.id, name: u.name, role: u.role, status: u.status, englishNickname: u.englishNickname, university: u.university, inCamp: u.inCamp });
+export const candOf = (u: UserLite): RosterCandidate => ({ userId: u.id, name: u.name, role: u.role, status: u.status, englishNickname: u.englishNickname, university: u.university, inCamp: u.inCamp });
 
-function candidatesFor(kind: CampRosterKind, raw: string, users: UserLite[]): UserLite[] {
+export function candidatesFor(kind: CampRosterKind, raw: string, users: UserLite[]): UserLite[] {
   const n = normalizeNameForMatch(raw);
   if (!n) return [];
   const pool = users.filter((u) => (kind === 'foreign' ? FOREIGN_ROLES : MENTOR_ROLES).includes(u.role));
@@ -142,7 +142,7 @@ export async function previewCampRoster(jobCodeId: string, input: { mentors: Cam
   return { jobCode: jc, mentors, foreign, removals: removalsOf(jobCodeId, users, keep, prev) };
 }
 
-function removalsOf(jobCodeId: string, users: UserLite[], keep: Set<string>, prev: CampRosterDoc | null) {
+export function removalsOf(jobCodeId: string, users: UserLite[], keep: Set<string>, prev: CampRosterDoc | null) {
   const prevIds = new Set([...(prev?.mentors ?? []), ...(prev?.foreign ?? [])].map((r) => r.userId).filter(Boolean) as string[]);
   return users
     .filter((u) => u.inCamp && !keep.has(u.id) && (REMOVABLE_ROLES.includes(u.role) || prevIds.has(u.id)))
@@ -150,11 +150,77 @@ function removalsOf(jobCodeId: string, users: UserLite[], keep: Set<string>, pre
     .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
 }
 
-const cleanCells = (cells: Record<string, string>, keys: string[]) => {
+export const cleanCells = (cells: Record<string, string>, keys: string[]) => {
   const out: Record<string, string> = {};
   keys.forEach((k) => { const v = rosterBlank(cells?.[k]); if (v) out[k] = v.slice(0, 200); });
   return out;
 };
+
+/** 이 사람이 이 캠프에서 쓸 역할 칸 — 멘토는 반멘토 역할, 원어민은 과목 */
+export const MENTOR_POOL_ROLES = MENTOR_ROLES;
+export const FOREIGN_POOL_ROLES = FOREIGN_ROLES;
+
+/**
+ * 표 한 줄 → 그 사람의 이 캠프 배정(jobExperiences 항목). 저장과 MCP 미리보기가 같은 규칙을 쓴다.
+ * 알 수 없는 역할·과목이면 기존 값을 두고 warnings 에 남긴다.
+ */
+export function nextExperience(
+  kind: CampRosterKind,
+  cells: Record<string, string>,
+  cur: Record<string, any> | undefined,
+  jobCodeId: string,
+  who: string,
+  warnings: string[],
+): Record<string, any> {
+  const next: Record<string, any> = cur ? { ...cur } : { id: jobCodeId };
+  const c = cells;
+  if (kind === 'mentor') {
+    const role = rosterMentorRole(c.role ?? '');
+    if (c.role && !role) warnings.push(`${who}: 역할 '${c.role}'을(를) 알 수 없어 기존 역할을 유지했습니다.`);
+    if (role) next.groupRole = role;
+    const g = rosterGroupKey(c.group ?? '') || (role === '매니저' || role === '부매니저' ? 'manager' : '');
+    if (g) next.group = g;
+    if (c.classCode) next.classCode = c.classCode.toUpperCase(); else delete next.classCode;
+  } else {
+    const role = rosterForeignRole(c.subject ?? '');
+    if (c.subject && !role) warnings.push(`${who}: 과목 '${c.subject}'을(를) 알 수 없어 기존 값을 유지했습니다.`);
+    if (role) next.groupRole = role;
+    const g = rosterGroupKey(c.group ?? '');
+    if (g) next.group = g;
+  }
+  Object.keys(next).forEach((k) => next[k] == null && delete next[k]);
+  return next;
+}
+
+/** 표 한 줄 → 프로필에 반영할 영어 이름·성별 (바뀌는 것만)과 개인 저장소 값 */
+export function profileUpdatesOf(
+  kind: CampRosterKind,
+  cells: Record<string, string>,
+  user: { name: string; englishNickname: string; gender?: unknown },
+  warnings: string[],
+): { englishNickname?: string; gender?: 'M' | 'F'; priv: Record<string, string> } {
+  const out: { englishNickname?: string; gender?: 'M' | 'F'; priv: Record<string, string> } = { priv: {} };
+  const en = (cells.englishName ?? '').trim();
+  if (en && en !== user.englishNickname) {
+    if (ENGLISH_NICKNAME_RE.test(en)) { out.englishNickname = en; out.priv.englishNickname = en; }
+    else if (kind === 'mentor') warnings.push(`${user.name}: 영어 이름 '${en}'은 명찰 형식(첫 글자 대문자·영문 8자 이내)이 아니라 프로필에는 넣지 않았습니다.`);
+  }
+  const g = /^(남|m|male|남자)$/i.test(cells.gender ?? '') ? 'M' : /^(여|f|female|여자)$/i.test(cells.gender ?? '') ? 'F' : '';
+  if (g && g !== user.gender) out.gender = g;
+  if (kind === 'foreign' && cells.visa) out.priv.visaType = cells.visa;
+  return out;
+}
+
+/** 저장 전 정리 — 열에 없는 칸·빈 줄을 빼고 병합 칸(역할·그룹)을 위 줄 값으로 채운다 */
+export function prepRosterRows(rows: CampRosterRow[], kind: CampRosterKind, tier: CampRosterTier): CampRosterRow[] {
+  const cols = rosterColumnsOf(kind, tier);
+  return rosterFillInherited(
+    (rows ?? []).slice(0, MAX_ROWS)
+      .map((r) => ({ cells: cleanCells(r.cells ?? {}, cols.map((c) => c.key)), userId: typeof r.userId === 'string' && r.userId ? r.userId : null }))
+      .filter((r) => !rosterRowEmpty(r)),   // 빈 줄은 이어받기 전에 뺀다
+    cols,
+  );
+}
 
 /**
  * 저장 — 표 전체를 한 번에.
@@ -169,15 +235,8 @@ export async function saveCampRoster(
   const db = getAdminFirestore();
   const colsM = rosterColumnsOf('mentor', jc.tier);
   const colsF = rosterColumnsOf('foreign', jc.tier);
-  const prep = (rows: CampRosterRow[], cols: typeof colsM) =>
-    rosterFillInherited(
-      (rows ?? []).slice(0, MAX_ROWS)
-        .map((r) => ({ cells: cleanCells(r.cells ?? {}, cols.map((c) => c.key)), userId: typeof r.userId === 'string' && r.userId ? r.userId : null }))
-        .filter((r) => !rosterRowEmpty(r)),   // 빈 줄은 이어받기 전에 뺀다
-      cols,
-    );
-  const mentors = prep(input.mentors, colsM);
-  const foreign = prep(input.foreign, colsF);
+  const mentors = prepRosterRows(input.mentors, 'mentor', jc.tier);
+  const foreign = prepRosterRows(input.foreign, 'foreign', jc.tier);
   if ((input.mentors?.length ?? 0) > MAX_ROWS || (input.foreign?.length ?? 0) > MAX_ROWS) throw new CampRosterError(400, `표는 ${MAX_ROWS}줄까지입니다.`);
 
   const users = await loadUsers(jobCodeId);
@@ -201,35 +260,14 @@ export async function saveCampRoster(
     const u = byId.get(r.userId!)!;
     const list: any[] = Array.isArray(u.data.jobExperiences) ? [...u.data.jobExperiences] : [];
     const i = list.findIndex((e) => e?.id === jobCodeId);
-    const cur = i >= 0 ? { ...list[i] } : { id: jobCodeId };
-    const c = r.cells;
-    if (kind === 'mentor') {
-      const role = rosterMentorRole(c.role ?? '');
-      if (c.role && !role) warnings.push(`${u.name}: 역할 '${c.role}'을(를) 알 수 없어 기존 역할을 유지했습니다.`);
-      if (role) cur.groupRole = role;
-      const g = rosterGroupKey(c.group ?? '') || (role === '매니저' || role === '부매니저' ? 'manager' : '');
-      if (g) cur.group = g;
-      if (c.classCode) cur.classCode = c.classCode.toUpperCase(); else delete cur.classCode;
-    } else {
-      const role = rosterForeignRole(c.subject ?? '');
-      if (c.subject && !role) warnings.push(`${u.name}: 과목 '${c.subject}'을(를) 알 수 없어 기존 값을 유지했습니다.`);
-      if (role) cur.groupRole = role;
-      const g = rosterGroupKey(c.group ?? '');
-      if (g) cur.group = g;
-    }
-    Object.keys(cur).forEach((k) => cur[k] == null && delete cur[k]);
+    const cur = nextExperience(kind, r.cells, i >= 0 ? list[i] : undefined, jobCodeId, u.name, warnings);
     if (i >= 0) list[i] = cur; else list.push(cur);
 
     const upd: Record<string, unknown> = { jobExperiences: list, jobCodeIds: adminFieldValue.arrayUnion(jobCodeId), updatedAt: now };
-    const priv: Record<string, unknown> = {};
-    const en = (c.englishName ?? '').trim();
-    if (en && en !== u.englishNickname) {
-      if (ENGLISH_NICKNAME_RE.test(en)) { upd.englishNickname = en; priv.englishNickname = en; }
-      else if (kind === 'mentor') warnings.push(`${u.name}: 영어 이름 '${en}'은 명찰 형식(첫 글자 대문자·영문 8자 이내)이 아니라 프로필에는 넣지 않았습니다.`);
-    }
-    const g = /^(남|m|male|남자)$/i.test(c.gender ?? '') ? 'M' : /^(여|f|female|여자)$/i.test(c.gender ?? '') ? 'F' : '';
-    if (g && g !== u.data.gender) upd.gender = g;
-    if (kind === 'foreign' && c.visa) priv.visaType = c.visa;
+    const prof = profileUpdatesOf(kind, r.cells, { name: u.name, englishNickname: u.englishNickname, gender: u.data.gender }, warnings);
+    if (prof.englishNickname) upd.englishNickname = prof.englishNickname;
+    if (prof.gender) upd.gender = prof.gender;
+    const priv: Record<string, unknown> = { ...prof.priv };
     await db.collection('users').doc(u.id).update(upd);
     if (Object.keys(priv).length) await privateRef(u.id).set({ ...priv, updatedAt: now }, { merge: true });
     assigned++;
