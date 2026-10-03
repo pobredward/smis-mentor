@@ -4,7 +4,7 @@
  * 직접 입력 칸 편집 · 코스 패널(캠프 전체) · 활동 칸 설명.
  * 데이터 도우미는 shared 의 excitingCourses — 쓰기는 모두 W.editDayPlan 안에서, 저장은 편집기의 [저장] 하나로.
  */
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -28,6 +28,14 @@ const WEEK_KO = ['일', '월', '화', '수', '목', '금', '토'];
 const dateLabel = (d: string) => `${monthDayLabel(d)} (${WEEK_KO[new Date(`${d}T00:00:00`).getDay()]})`;
 const HHMM = /^\d{1,2}:\d{2}$/;
 const badTime = (xs: ExcitingSlot[] | undefined) => (xs ?? []).some((x) => (!!x.start && !HHMM.test(x.start)) || (!!x.end && !HHMM.test(x.end)));
+
+/**
+ * 처음 열 때 코스가 하나도 없으면 같은 활동표끼리 자동으로 묶는다 (불러온 상태마다 한 번 — 되돌리면 다시 묶지 않는다).
+ */
+const autoGroupedBases = new WeakSet<object>();
+
+/** 칸에 보일 이름 — 직접 입력 칸도 활동표의 현장 장소로 */
+const placeOf = (slots: ExcitingSlot[]) => EC.courseNameFromSlots(slots) || `활동 ${slots.length}개`;
 
 /** 저장 전에 — 활동표(코스 · 직접 입력 칸) 시각이 HH:MM 이 아닌 곳이 있으면 문구 */
 export function dayPlanTimeError(plan: CampDayPlan | null | undefined): string | null {
@@ -280,6 +288,26 @@ export function ExcitingTab({
     onToast(`코스 ${r.created}개를 만들고 ${r.linked}칸을 이었습니다 — 저장을 눌러야 반영됩니다`);
   };
 
+  // ── 처음 열 때 자동으로 묶기 (코스가 하나도 없을 때만) ─────────────
+  const [autoNote, setAutoNote] = useState<{ created: number; linked: number; cur: W.EditState } | null>(null);
+  useEffect(() => {
+    if (autoGroupedBases.has(ws.base)) return;
+    autoGroupedBases.add(ws.base);
+    if (EC.coursesOf(ws.cur.dayPlan).length) return;
+    if (!EC.suggestCourses(ws.cur.dayPlan, groups).some((x) => !x.variantOf)) return;
+    let r = { created: 0, linked: 0 };
+    let cur: W.EditState | null = null;
+    setWs((w) => {
+      const next = W.editDayPlan(w, (p) => {
+        r = EC.applySuggestions(p, groups);
+      });
+      cur = next.cur;
+      return next;
+    });
+    if (r.created && cur) setAutoNote({ ...r, cur });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── 활동 칸 설명 ────────────────────────────────────────────────
   const activityLabels = useMemo(() => {
     const seen = new Map<string, string>();
@@ -305,7 +333,7 @@ export function ExcitingTab({
     const entry = daySetForGroup(plan, g)?.days[date];
     const cell = { date, group: g };
     const n = st.type === 'own' || st.type === 'common' ? st.slots.length : 0;
-    const label = st.type === 'course' ? st.course.name : st.type === 'own' ? `직접 입력 ${n}` : st.type === 'common' ? `공통 직접 ${n}` : '—';
+    const label = st.type === 'course' ? st.course.name : st.type === 'own' || st.type === 'common' ? placeOf(st.slots) : '코스 고르기';
     return (
       <TouchableOpacity
         key={g}
@@ -326,6 +354,11 @@ export function ExcitingTab({
         {st.type === 'empty' && !!entry?.note && (
           <Text style={s.mNote} numberOfLines={1}>
             {entry.note}
+          </Text>
+        )}
+        {(st.type === 'own' || st.type === 'common') && (
+          <Text style={s.mNote} numberOfLines={1}>
+            {st.type === 'own' ? '직접' : '공통'} · 활동 {n}
           </Text>
         )}
         {entry?.kind === 'outdoor' && <Text style={s.mOutdoor}>야외</Text>}
@@ -358,6 +391,27 @@ export function ExcitingTab({
         {top}
 
         <Notice text="코스(장소별 하루 일정)를 한 번 만들고, 표에서 날짜·그룹마다 코스만 고릅니다. 한 그룹만 그날 다르면 그 칸만 '직접 입력'." />
+
+        {/* 처음 열 때 자동으로 묶은 결과 */}
+        {autoNote && (
+          <View style={[s.banner, { backgroundColor: '#ecfdf5', borderColor: '#a7f3d0' }]}>
+            <Text style={[s.bannerText, { color: '#065f46' }]}>
+              같은 활동표끼리 코스 {autoNote.created}개로 묶었습니다 ({autoNote.linked}칸). 확인한 뒤 [저장]을 누르면 반영됩니다. 몇 줄만 다른 날은 ‘직접’으로 남겨 두었습니다.
+            </Text>
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+              {ws.cur === autoNote.cur && (
+                <Btn
+                  label="묶기 취소"
+                  onPress={() => {
+                    setWs(W.undo);
+                    setAutoNote(null);
+                  }}
+                />
+              )}
+              <Btn label="확인" onPress={() => setAutoNote(null)} />
+            </View>
+          </View>
+        )}
 
         {/* 묶기 배너 */}
         {mainSugs.length > 0 && (

@@ -6,7 +6,7 @@
  * 한 그룹만 그날 다르면 그 칸만 '직접 입력'. 저장은 편집기의 [저장] 한 번 —
  * 코스 활동표는 저장할 때 각 칸(slotsByGroup)에 옮겨 적혀 보기 화면·환자 위치·옛 앱도 그대로 읽는다.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   daySetForGroup,
@@ -20,12 +20,35 @@ import {
   type ExcitingSlot,
 } from '@smis-mentor/shared';
 import { GuidePanel } from './GuidePanel';
-import { FieldLabel, Modal, SectionTitle, btnCls, btnDangerCls, btnPrimaryCls, inputCls, linkBtnCls, weekdayKo, type WsUpdate } from './ui';
+import {
+  FieldLabel,
+  Modal,
+  Popover,
+  SectionTitle,
+  btnCls,
+  btnDangerCls,
+  btnPrimaryCls,
+  inputCls,
+  linkBtnCls,
+  rectOf,
+  weekdayKo,
+  type AnchorRect,
+  type WsUpdate,
+} from './ui';
 
 type CellRef = { date: string; group: string };
 type SlotsEdit = (fn: (xs: ExcitingSlot[]) => ExcitingSlot[], key?: string) => void;
 
 const dateText = (d: string) => `${monthDayLabel(d)} (${weekdayKo(d)})`;
+
+/**
+ * 처음 열 때 코스가 하나도 없으면 같은 활동표끼리 자동으로 묶는다 (한 번만 — 되돌리면 다시 묶지 않는다).
+ * 불러온 상태(ws.base)마다 한 번 — 저장하거나 다시 불러오면 새 base 가 된다.
+ */
+const autoGroupedBases = new WeakSet<object>();
+
+/** 칸에 보일 이름 — 코스면 코스 이름, 직접 입력이면 활동표의 현장 장소 */
+const placeOf = (slots: ExcitingSlot[]) => EC.courseNameFromSlots(slots) || `활동 ${slots.length}개`;
 
 /** 활동 줄 편집 — 코스와 '직접 입력' 칸이 같이 쓴다 */
 function SlotRows({ slots, onChange, keyPrefix }: { slots: ExcitingSlot[]; onChange: SlotsEdit; keyPrefix: string }) {
@@ -185,6 +208,9 @@ export function ExcitingTab({
   const course = EC.courseById(plan, courseId) ?? courses[0] ?? null;
   const [cell, setCell] = useState<CellRef | null>(null);
   const [suggestOpen, setSuggestOpen] = useState(false);
+  const [menu, setMenu] = useState<(CellRef & { anchor: AnchorRect }) | null>(null);
+  /** 자동으로 묶은 결과 — cur 가 그때 그대로면 [묶기 취소] 로 한 번에 되돌린다 */
+  const [autoNote, setAutoNote] = useState<{ created: number; linked: number; cur: W.EditState } | null>(null);
 
   const editPlan = (fn: (p: CampDayPlan) => void, key?: string) =>
     update((w) =>
@@ -206,6 +232,20 @@ export function ExcitingTab({
     });
     return [...seen.values()];
   }, [plan]);
+
+  // 처음 열 때 — 코스가 없으면 같은 활동표끼리 묶어 둔다 (저장 전 · 되돌리기 가능)
+  useEffect(() => {
+    if (autoGroupedBases.has(ws.base)) return;
+    autoGroupedBases.add(ws.base);
+    if (EC.coursesOf(ws.cur.dayPlan).length) return;
+    if (!EC.suggestCourses(ws.cur.dayPlan, groups).some((x) => !x.variantOf)) return;
+    let r = { created: 0, linked: 0 };
+    const next = editPlan((p) => {
+      r = EC.applySuggestions(p, groups);
+    });
+    if (r.created) setAutoNote({ ...r, cur: next.cur });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── 코스 ──────────────────────────────────────────────────────────
   const addCourse = () => {
@@ -234,14 +274,26 @@ export function ExcitingTab({
   };
 
   // ── 칸 ───────────────────────────────────────────────────────────
-  const pickForCell = (date: string, group: string, v: string) => {
-    if (v === '__own') {
-      editPlan((p) => EC.detachCell(p, date, group));
-      setCell({ date, group });
-      return;
-    }
-    editPlan((p) => EC.assignCourse(p, date, group, v || null));
-    if (cell && cell.date === date && normalizeGroupKey(cell.group) === normalizeGroupKey(group)) setCell(null);
+  const sameCell = (a: CellRef | null, b: CellRef) => !!a && a.date === b.date && normalizeGroupKey(a.group) === normalizeGroupKey(b.group);
+  const assign = (c: CellRef, id: string | null) => {
+    const st = EC.cellState(plan, c.date, c.group);
+    if (!(st.type === 'course' && st.course.id === id) && !(st.type === 'empty' && !id)) editPlan((p) => EC.assignCourse(p, c.date, c.group, id));
+    if (sameCell(cell, c)) setCell(null);
+    setMenu(null);
+  };
+  const direct = (c: CellRef) => {
+    if (EC.cellState(plan, c.date, c.group).type === 'course') editPlan((p) => EC.detachCell(p, c.date, c.group));
+    setCell({ date: c.date, group: c.group });
+    setMenu(null);
+  };
+  const newCourseFor = (c: CellRef) => {
+    let id = '';
+    editPlan((p) => {
+      id = EC.addCourse(p);
+      EC.assignCourse(p, c.date, c.group, id);
+    });
+    setCourseId(id);
+    setMenu(null);
   };
   const cellOpen = cell ? EC.cellState(plan, cell.date, cell.group) : null;
   const saveCellAsCourse = () => {
@@ -379,6 +431,29 @@ export function ExcitingTab({
         &lsquo;직접 입력&rsquo;으로 바꾸세요. Day(Exciting·Outdoor) 자체는 [일정표] 탭에서 정합니다.
       </div>
 
+      {autoNote && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+          <p className="text-xs text-emerald-900">
+            같은 활동표끼리 <b>코스 {autoNote.created}개</b>로 묶었습니다 ({autoNote.linked}칸). 확인한 뒤 [저장]을 누르면 반영됩니다. 몇 줄만 다른 날은 &lsquo;직접&rsquo;으로 남겨 두었습니다.
+          </p>
+          {ws.cur === autoNote.cur && (
+            <button
+              type="button"
+              onClick={() => {
+                update((w) => W.undo(w));
+                setAutoNote(null);
+              }}
+              className={`${btnCls} ml-auto`}
+            >
+              묶기 취소
+            </button>
+          )}
+          <button type="button" onClick={() => setAutoNote(null)} className={`${ws.cur === autoNote.cur ? '' : 'ml-auto '}text-xs text-emerald-700 hover:underline`}>
+            확인
+          </button>
+        </div>
+      )}
+
       {actionable.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
           <p className="text-xs text-blue-900">
@@ -437,45 +512,34 @@ export function ExcitingTab({
                               </td>
                             );
                           }
-                          const value = st.type === 'course' ? st.course.id : st.type === 'own' || st.type === 'common' ? '__own' : '';
                           const hot = st.type === 'course' && st.course.id === course?.id;
-                          const open = !!cell && cell.date === d && normalizeGroupKey(cell.group) === normalizeGroupKey(g);
+                          const open = sameCell(cell, { date: d, group: g }) || sameCell(menu, { date: d, group: g });
+                          const label = st.type === 'course' ? st.course.name : st.type === 'own' || st.type === 'common' ? placeOf(st.slots) : '코스 고르기';
                           return (
                             <td key={g} className="border-b border-r border-gray-200 p-1 align-top last:border-r-0">
-                              <div
-                                className={`relative rounded-md border ${open ? 'border-amber-500 ring-2 ring-amber-300' : hot ? 'border-blue-500 ring-2 ring-blue-300' : 'border-black/5'}`}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  const anchor = rectOf(e.currentTarget);
+                                  if (anchor) setMenu({ date: d, group: g, anchor });
+                                }}
+                                data-keep-popover
+                                aria-label={`${dateText(d)} ${g} — ${label}`}
+                                className={`group flex w-full items-center gap-1 rounded-md border px-2 py-2 text-left transition hover:brightness-95 ${
+                                  open ? 'border-amber-500 ring-2 ring-amber-300' : hot ? 'border-blue-500 ring-2 ring-blue-300' : st.type === 'empty' ? 'border-dashed border-gray-300' : 'border-black/10'
+                                }`}
                                 style={{ backgroundColor: st.type === 'course' ? st.course.color ?? '#fff' : st.type === 'empty' ? '#fff' : '#fffef0' }}
                               >
-                                {entry?.kind === 'outdoor' && <span className="absolute left-1 top-0.5 text-[9px] font-semibold text-rose-600">야외</span>}
-                                <select
-                                  value={value}
-                                  onChange={(e) => pickForCell(d, g, e.target.value)}
-                                  aria-label={`${dateText(d)} ${g} 코스`}
-                                  className={`w-full cursor-pointer appearance-none truncate bg-transparent px-2 py-2.5 text-center text-[11px] font-medium focus:outline-none ${
-                                    st.type === 'empty' ? 'text-gray-400' : 'text-gray-900'
-                                  }`}
-                                >
-                                  <option value="">— 비어 있음</option>
-                                  {courses.map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                      {c.name}
-                                    </option>
-                                  ))}
-                                  <option value="__own">
-                                    {st.type === 'own' ? `직접 입력 (${st.slots.length})` : st.type === 'common' ? `공통 직접 입력 (${st.slots.length})` : '직접 입력 (이 칸만)'}
-                                  </option>
-                                </select>
-                                {(st.type === 'own' || st.type === 'common') && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setCell(open ? null : { date: d, group: g })}
-                                    className="absolute right-1 top-1/2 -translate-y-1/2 rounded bg-white/80 px-1 text-[10px] text-amber-700 hover:bg-white"
-                                    title="이 칸 활동 고치기"
-                                  >
-                                    ✎
-                                  </button>
-                                )}
-                              </div>
+                                <span className={`min-w-0 flex-1 truncate text-[11px] font-semibold ${st.type === 'empty' ? 'font-normal text-gray-400' : 'text-gray-900'}`}>
+                                  {label}
+                                </span>
+                                {entry?.kind === 'outdoor' && <span className="shrink-0 rounded bg-rose-100 px-1 text-[9px] font-semibold text-rose-700">야외</span>}
+                                {st.type === 'own' && <span className="shrink-0 rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-800">직접</span>}
+                                {st.type === 'common' && <span className="shrink-0 rounded bg-amber-100 px-1 text-[9px] font-semibold text-amber-800">공통</span>}
+                                <svg className="h-3 w-3 shrink-0 text-gray-400 group-hover:text-gray-600" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                  <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.17l3.71-3.94a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                                </svg>
+                              </button>
                               {st.type === 'empty' && entry?.note && <p className="mt-0.5 truncate px-1 text-[9px] text-gray-400">{entry.note}</p>}
                             </td>
                           );
@@ -519,6 +583,57 @@ export function ExcitingTab({
         </div>
         {coursePanel}
       </div>
+
+      {menu &&
+        (() => {
+          const st = EC.cellState(plan, menu.date, menu.group);
+          if (st.type === 'off') return null;
+          const item = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-gray-50';
+          return (
+            <Popover anchor={menu.anchor} onClose={() => setMenu(null)} width={300} className="!p-1.5">
+              <p className="px-2 pb-1 pt-0.5 text-[11px] font-semibold text-gray-500">
+                {dateText(menu.date)} · {groupName(menu.group)}
+              </p>
+              {courses.length ? (
+                courses.map((c) => {
+                  const on = st.type === 'course' && st.course.id === c.id;
+                  return (
+                    <button key={c.id} type="button" onClick={() => assign(menu, c.id)} className={`${item} ${on ? 'bg-blue-50 font-semibold' : ''}`}>
+                      <span className="h-3.5 w-3.5 shrink-0 rounded-sm border border-black/10" style={{ backgroundColor: c.color ?? '#fff' }} />
+                      <span className="min-w-0 flex-1 truncate text-gray-900">{c.name}</span>
+                      <span className="shrink-0 text-[10px] text-gray-400">활동 {c.slots.length}</span>
+                      {on && <span className="shrink-0 text-blue-600">✓</span>}
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="px-2 py-1.5 text-[11px] text-gray-400">아직 코스가 없습니다.</p>
+              )}
+              <div className="my-1 border-t border-gray-100" />
+              {st.type === 'own' || st.type === 'common' ? (
+                <button type="button" onClick={() => direct(menu)} className={item}>
+                  <span className="w-3.5 shrink-0 text-center">✎</span>
+                  <span className="flex-1">이 칸 활동 고치기 (직접 입력 {st.slots.length})</span>
+                </button>
+              ) : (
+                <button type="button" onClick={() => direct(menu)} className={item}>
+                  <span className="w-3.5 shrink-0 text-center">✎</span>
+                  <span className="flex-1">직접 입력 (이 칸만)</span>
+                </button>
+              )}
+              <button type="button" onClick={() => newCourseFor(menu)} className={item}>
+                <span className="w-3.5 shrink-0 text-center text-blue-600">+</span>
+                <span className="flex-1 text-blue-700">새 코스 만들어 고르기</span>
+              </button>
+              {st.type !== 'empty' && st.type !== 'common' && (
+                <button type="button" onClick={() => assign(menu, null)} className={`${item} text-gray-500`}>
+                  <span className="w-3.5 shrink-0 text-center">—</span>
+                  <span className="flex-1">비우기</span>
+                </button>
+              )}
+            </Popover>
+          );
+        })()}
 
       {suggestOpen && <SuggestDialog suggestions={suggestions} groupName={groupName} onApply={applySuggest} onClose={() => setSuggestOpen(false)} />}
     </div>
