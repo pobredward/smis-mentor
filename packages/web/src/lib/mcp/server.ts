@@ -34,10 +34,11 @@ import { fmtRange } from '@/lib/ai-content/markdown';
 import { verifyBearer } from '@/lib/mcp-auth/verify';
 import { DataToolError, describeSchema, getDocument, queryDocuments, writeDocuments } from '@/lib/mcp/data-tools';
 import { DATA_TOOL_LIMITS } from '@/lib/mcp/datamodel';
+import { UPLOAD_LIMITS, uploadMedia } from '@/lib/mcp/upload';
 
 export type McpMode = 'public' | 'auth';
 
-const SERVER_VERSION = '2.0.0';
+const SERVER_VERSION = '2.1.0';
 
 type ToolCtx = { http?: { authInfo?: { extra?: Record<string, unknown> } } } | undefined;
 
@@ -73,7 +74,8 @@ function instructions(mode: McpMode): string {
     mode === 'auth'
       ? [
           '이 엔드포인트는 로그인 사용자용입니다. whoami 로 현재 계정과 역할을 확인하고, 캠프 페이지는 list_camps 의 캠프 코드(예: S29)를 camp 파라미터에 넣으세요.',
-          '데이터 작업: describe_schema 로 컬렉션·필드·권한·작업 레시피를 확인한 뒤 query_documents / get_document 로 읽습니다. 관리자는 write_documents 로 생성·수정·삭제할 수 있는데, 반드시 먼저 confirm 없이 호출해(dry-run) 미리보기를 사용자에게 보여주고 승인을 받은 뒤 previewHash 와 confirm=true 로 실행하세요. 사용자 승인 없이 confirm 을 보내지 마세요.',
+          '데이터 작업: describe_schema 로 컬렉션·필드·권한·작업 레시피를 확인한 뒤 query_documents / get_document 로 읽습니다. 관리자는 write_documents 로 생성·수정·삭제할 수 있는데, 반드시 먼저 confirm 없이 호출해(dry-run) 미리보기를 사용자에게 보여주고 승인을 받은 뒤 previewHash 와 confirm=true 로 실행하세요(operations 재전송 불필요). 사용자 승인 없이 confirm 을 보내지 마세요.',
+          '시간표 칸 설명·일정표·반 정보·직접 넣은 담임/원어민 이름은 campSettings(문서 ID = 캠프 코드)에 있습니다 — describe_schema("campSettings") 와 레시피를 먼저 보세요. 사진·동영상은 upload_media 로 올린 뒤 그 주소를 넣습니다.',
         ].join('\n')
       : '이 엔드포인트는 공개 페이지 전용입니다. 로그인이 필요한 캠프 운영·관리자 페이지는 /api/mcp (OAuth) 로 연결하세요.',
   ].join('\n');
@@ -459,9 +461,14 @@ function registerTools(server: McpServer, mode: McpMode) {
       {
         title: '문서 생성·수정·삭제 (관리자, dry-run → confirm)',
         description:
-          `관리자 전용. 최대 ${DATA_TOOL_LIMITS.maxWriteOps}개 작업을 한 배치로 처리합니다. confirm 을 주지 않으면 dry-run: 스키마·필수값·참조(캠프 ID/코드, 카테고리 등) 검증과 변경 미리보기, previewHash 를 돌려주고 아무것도 바꾸지 않습니다. 반드시 미리보기를 사용자에게 보여주고 승인을 받은 뒤, 동일한 operations 와 previewHash 에 confirm=true 를 붙여 다시 호출하세요. 실행 내역은 mcpAuditLogs 에 남습니다. 서버 관리 필드(createdAt 등)와 숨김 필드는 지정할 수 없고, 필수 필드는 describe_schema(collection) 으로 확인합니다.`,
+          `관리자 전용. 최대 ${DATA_TOOL_LIMITS.maxWriteOps}개 작업을 한 배치로 처리합니다. confirm 을 주지 않으면 dry-run: 스키마·필수값·참조(캠프 ID/코드, 카테고리 등) 검증과 변경 미리보기, previewHash 를 돌려주고 아무것도 바꾸지 않습니다. 반드시 미리보기를 사용자에게 보여주고 승인을 받은 뒤 { confirm: true, previewHash } 로 다시 호출하세요 — dry-run 내용이 30분 동안 보관되므로 operations 는 다시 보내지 않아도 됩니다(보내면 dry-run 때와 같아야 함). 실행 내역은 mcpAuditLogs 에 남습니다. campSettings 의 맵 필드(timetableGuides·classInfo·timetableCommon)는 보낸 항목만 바뀌고 값 null 은 그 항목 삭제입니다. 서버 관리 필드(createdAt 등)와 숨김 필드는 지정할 수 없고, 필수 필드는 describe_schema(collection) 으로 확인합니다.`,
         inputSchema: z.object({
-          operations: z.array(writeOperationSchema).min(1).max(DATA_TOOL_LIMITS.maxWriteOps),
+          operations: z
+            .array(writeOperationSchema)
+            .min(1)
+            .max(DATA_TOOL_LIMITS.maxWriteOps)
+            .optional()
+            .describe('작업 목록. dry-run 에는 필수. confirm 때는 생략하면 dry-run 때 보관한 것(30분)을 previewHash 로 찾아 실행한다'),
           note: z.string().optional().describe('감사 로그에 남길 작업 설명. 예: "J28 교육 자료 → J29 복사"'),
           confirm: z.boolean().optional().describe('true 면 실행 (previewHash 필수). 기본 false = dry-run'),
           previewHash: z.string().optional().describe('직전 dry-run 이 돌려준 previewHash'),
@@ -471,6 +478,27 @@ function registerTools(server: McpServer, mode: McpMode) {
         const viewer = viewerOf(ctx as ToolCtx);
         if (!viewer) return text('로그인 정보가 없습니다.');
         return dataTool(() => writeDocuments(args, viewer));
+      }
+    );
+
+    server.registerTool(
+      'upload_media',
+      {
+        title: '사진·동영상 올리기 (관리자)',
+        description: `관리자 전용. 시간표 칸 설명(campSettings.timetableGuides)이나 교육 탭 페이지(campPages)에 넣을 사진·동영상을 사이트 저장소에 올리고 url·storagePath 를 돌려줍니다. sourceUrl(로그인 없이 열리는 https 주소 — 노션 첨부 임시 주소, 구글 드라이브 "링크가 있는 모든 사용자" 공유 링크, 캔바 내보내기 주소 등) 또는 base64(${UPLOAD_LIMITS.base64Bytes / 1024 / 1024}MB 이하) 중 하나를 줍니다. 사진 ${UPLOAD_LIMITS.imageBytes / 1024 / 1024}MB·동영상 ${UPLOAD_LIMITS.videoBytes / 1024 / 1024}MB 까지, 형식은 실제 파일로 확인합니다(JPG·PNG·GIF·WEBP·HEIC·AVIF·MP4·MOV·WEBM). 올리기만 하고 화면은 바뀌지 않습니다 — 돌려받은 guideItem 을 write_documents 로 칸 설명에 넣어(dry-run → 승인 → confirm) 연결하세요. 노션 첨부 주소는 1시간 뒤 만료되므로 칸 설명에 직접 넣지 말고 반드시 여기로 먼저 올립니다.`,
+        inputSchema: z.object({
+          campCode: z.string().min(1).describe('캠프 코드 (예: S28)'),
+          target: z.enum(['timetableGuide', 'campPage']).optional().describe('어디에 쓸 파일인지. timetableGuide(기본) = 칸 설명 → timetableGuides/{캠프}/{칸}/ 에 저장, campPage = 교육 탭 페이지 본문'),
+          guideKey: z.string().optional().describe('칸 설명에 쓸 때 그 칸 이름 (저장 폴더 정리용)'),
+          sourceUrl: z.string().url().optional().describe('내려받을 https 주소'),
+          base64: z.string().max(Math.ceil((UPLOAD_LIMITS.base64Bytes * 4) / 3) + 200).optional().describe('파일 내용 base64 (data: 접두어 허용)'),
+          fileName: z.string().max(120).optional().describe('저장할 파일 이름 (확장자는 실제 형식에 맞춰 바뀜)'),
+        }),
+      },
+      async (args, ctx) => {
+        const viewer = viewerOf(ctx as ToolCtx);
+        if (!viewer) return text('로그인 정보가 없습니다.');
+        return dataTool(() => uploadMedia(args, viewer));
       }
     );
   }
@@ -535,7 +563,7 @@ export function mcpInfo(mode: McpMode) {
     auth: mode === 'auth' ? 'OAuth 2.1 (authorization code + PKCE, dynamic client registration 지원)' : 'none',
     description:
       mode === 'auth'
-        ? 'Claude.ai 커넥터 / ChatGPT 커넥터에 이 URL 을 추가하면 SMIS Mentor 로그인 창이 열립니다. 로그인 후 역할에 맞는 페이지를 읽을 수 있고, 관리자는 데이터 도구로 캠프 자료·업무·평가를 조회·수정(dry-run → confirm)할 수 있습니다.'
+        ? 'Claude.ai 커넥터 / ChatGPT 커넥터에 이 URL 을 추가하면 SMIS Mentor 로그인 창이 열립니다. 로그인 후 역할에 맞는 페이지를 읽을 수 있고, 관리자는 데이터 도구로 캠프 자료·업무·평가·시간표 칸 설명·일정표를 조회·수정(dry-run → confirm)하고, 사진·동영상을 올릴 수 있습니다(upload_media).'
         : '인증 없이 공개 페이지(채용 공고, 지원 안내, 후기, 약관)를 읽을 수 있는 엔드포인트입니다.',
     setup: {
       claudeAi: 'Settings → Connectors → Add custom connector → URL 에 endpoint 입력',
@@ -559,6 +587,7 @@ export function mcpInfo(mode: McpMode) {
           'query_documents',
           'get_document',
           'write_documents',
+          'upload_media',
         ]
       : ['get_site_overview', 'list_pages', 'search', 'fetch', 'read_page', 'crawl'],
     alsoSee: { llmsTxt: LLMS_TXT_URL, llmsFullTxt: LLMS_FULL_URL, markdownSuffix: `${SITE_URL}/{path}.md` },

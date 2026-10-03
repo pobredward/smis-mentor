@@ -12,6 +12,7 @@
  * - 쓰기는 관리자만, 기본 dry-run, confirm 시에만 실행, 전부 mcpAuditLogs 에 기록
  */
 import type { Access, Viewer } from '@/lib/ai-content/site';
+import type { CleanerKey } from './camp-settings';
 
 export type FieldType = 'string' | 'number' | 'boolean' | 'timestamp' | 'string[]' | 'object' | 'object[]' | 'html' | 'any';
 
@@ -29,6 +30,13 @@ export interface FieldSpec {
   ref?: { collection: string; by: 'id' | 'code' };
   /** 관리자에게만 보이는 필드 */
   adminOnly?: boolean;
+  /**
+   * 맵 필드 — update 때 통째로 바꾸지 않고 보낸 항목(키)만 바꾼다. 값이 null 인 키는 그 항목을 지운다.
+   * 읽을 때는 fields: ["필드.키"] 로 항목만 고를 수 있다. 항목 키는 칸 이름 같은 값이라 민감 키 검사에서 빠진다.
+   */
+  mapEntries?: boolean;
+  /** 저장 전 정리·검증 방식 (camp-settings.ts) — 앱과 같은 정리 함수를 쓴다 */
+  clean?: CleanerKey;
 }
 
 export type WriteOp = 'create' | 'update' | 'delete';
@@ -62,6 +70,8 @@ export interface CollectionSpec {
   idOnCreate?: 'auto' | 'uuid' | 'required';
   /** 스키마에 없는 필드도 읽기 응답에 포함 (쓰기는 항상 스키마 필드만) */
   openRead?: boolean;
+  /** 서버가 넣는 createdAt/updatedAt 형식 — 앱이 ISO 문자열로 쓰는 문서(campSettings)는 'iso' */
+  timeFormat?: 'timestamp' | 'iso';
   notes?: string[];
 }
 
@@ -508,11 +518,61 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
   },
   campSettings: {
     name: 'campSettings',
-    description: '캠프별 설정(임시 데이터 모드 등). 문서 ID = 캠프 코드.',
+    description:
+      '캠프별 설정. 문서 ID = 캠프 코드(예: S28). 시간표 탭의 칸 설명(timetableGuides)·일정표(dayPlan)·반 정보(classInfo)·그룹 공통값(timetableCommon, 직접 넣은 담임·원어민 이름)과 그룹-반 구성(groups)·숙소(lodging)가 들어 있다.',
     read: 'admin',
+    write: { ops: ['create', 'update'] },
     scope: { kind: 'none' },
+    idOnCreate: 'required',
     openRead: true,
-    fields: { campCode: str('캠프 코드'), useTemporaryData: bool('임시 데이터 표시 모드') },
+    timeFormat: 'iso',
+    fields: {
+      campCode: str('캠프 코드 (문서 ID 와 같아야 함)', { required: true, writable: true, ref: { collection: 'jobCodes', by: 'code' } }),
+      groups: { type: 'object[]', description: '그룹-반 구성 [{ name, classCodes: string[] }] — 읽기 전용(앱 관리자 화면에서 수정). 반코드·그룹명을 맞출 때 참고' },
+      timetableGuides: {
+        type: 'object',
+        description:
+          '칸 설명 — 칸 이름(소문자·한 칸 띄어쓰기로 정리한 값) → { summary?, sections?: [{ title, items: [{ type: "text"|"link"|"image"|"video", text?, url?, storagePath? }] }], foreign?: { summary?, sections? } }. 맨 바깥 summary·sections 는 멘토·부매니저용(한국어), foreign 은 원어민용(영어) — foreign 이 없으면 원어민에게는 그 칸 설명이 안 보인다. text 줄은 text, link·image·video 줄은 url(+ 캡션 text). 사진·동영상은 upload_media 로 올린 url·storagePath 를 쓴다. id·updatedAt·updatedBy 는 서버가 채운다.',
+        writable: true,
+        large: true,
+        mapEntries: true,
+        clean: 'timetableGuide',
+      },
+      dayPlan: {
+        type: 'object',
+        description:
+          '일정표 { sets: [{ id, name, groups: [그룹명], days: { "YYYY-MM-DD": { kind: orientation|regular|steam|exciting|outdoor|final|checkout, note?, slots?: [{ start: "HH:mm", end: "HH:mm", activity, place, note? }], slotsByGroup?: { 그룹: [활동…] } } } }] }. 익사이팅·야외 수업(exciting·outdoor) 날만 slots(활동표)를 쓴다. 통째로 교체된다 — get_document 로 읽어 고친 뒤 전체를 보낸다.',
+        writable: true,
+        large: true,
+        clean: 'dayPlan',
+      },
+      classInfo: {
+        type: 'object',
+        description: '반 정보 — 반코드(예: J01) → { className?, classroom?, bookCode?, spareBookCode? }. 값이 모두 비면 그 반 정보를 지운다.',
+        writable: true,
+        mapEntries: true,
+        clean: 'classInfo',
+      },
+      timetableCommon: {
+        type: 'object',
+        description:
+          '그룹 공통 시간표 값 — 그룹명(시간표 groupName, 예: Junior) → { classes?: [{ classCode, teacherName? }], staffOverrides?: { 역할키: 이름 } }. teacherName 은 앱 배정 대신 직접 넣은 담임 이름, staffOverrides 는 직접 넣은 담당자 이름(역할키: "수업"=Pattern 멘토, 원어민 과목 키 소문자 예: "speaking", "reading", "writing"). 빈 값은 앱 배정 이름을 쓴다.',
+        writable: true,
+        mapEntries: true,
+        clean: 'timetableCommon',
+      },
+      lodging: { type: 'object', description: '숙소 — 방 용도·선생님 배치 (읽기 전용)', large: true },
+      useTemporaryData: bool('임시 데이터 표시 모드 (읽기 전용)'),
+    },
+    serverManaged: ['updatedAt', 'updatedBy'],
+    notes: [
+      'timetableGuides·classInfo·timetableCommon 은 맵 필드다: update 의 data 에 { 필드: { 키: 값 } } 으로 바꿀 항목만 보내면 그 항목만 바뀌고 나머지는 그대로다. 값이 null 이면 그 항목을 지운다. 항목 하나는 통째로 교체되므로 남길 값(예: 원어민용 foreign)도 함께 보낸다 — 빠지면 dry-run 경고가 나온다.',
+      '칸 설명 키는 시간표·일정표 칸에 찍히는 이름이다(대소문자·띄어쓰기는 서버가 정리). 칸이 없는 키는 저장돼도 화면에서 누를 칸이 없으므로 dry-run 경고를 확인한다. 칸 이름 목록은 campTimetables(blocks 의 label·subject·texts)와 dayPlan 의 slots[].activity 에서 나온다.',
+      '읽을 때 get_document(campSettings, 캠프코드, fields: ["timetableGuides.칸 이름"]) 처럼 항목만 골라 읽을 수 있다. 전체를 읽으면 클 수 있다.',
+      '한 번의 update 에 칸 설명은 20칸 안팎으로 나눠 보낸다. dry-run 이 통과하면 confirm 때 operations 를 다시 보낼 필요 없이 previewHash 만 보내면 된다.',
+      '노션 첨부 같은 임시 사진 주소는 1시간 뒤 만료되므로 거부된다 — upload_media 로 먼저 올린다. 다른 캠프 파일의 storagePath 는 빼고 주소만 쓴다(앱이 줄을 지울 때 엉뚱한 파일을 지우지 않게).',
+      'groups·lodging·useTemporaryData 는 읽기 전용이다 (앱 관리자 화면에서 수정).',
+    ],
   },
   smsTemplates: {
     name: 'smsTemplates',
@@ -560,6 +620,7 @@ export const EXCLUDED_COLLECTIONS: Record<string, string> = {
   mcpOAuthClients: 'OAuth 내부 데이터',
   mcpOAuthCodes: 'OAuth 내부 데이터',
   mcpOAuthRefreshTokens: 'OAuth 내부 데이터',
+  mcpPendingWrites: 'MCP 내부 데이터 (dry-run 후 실행 대기 중인 쓰기)',
 };
 
 export const DATA_TOOL_LIMITS = {
@@ -610,6 +671,33 @@ export const RECIPES: { title: string; steps: string[] }[] = [
       '각 지원자 get_document(users, uid, fields=[name, university, major1, grade, selfIntroduction, jobMotivation, partTimeJobs, schoolActivities, jobExperiences])',
       'evaluations 에 같은 refUserId+refJobBoardId+evaluationStage 가 이미 있는지 확인 (있으면 건너뜀)',
       '항목별 점수·근거 작성 → write_documents(create evaluations) dry-run → 관리자 검토 → confirm. 확정(isFinalized)은 관리자가 화면에서.',
+    ],
+  },
+  {
+    title: '시간표 칸 설명 쓰기·고치기 (멘토·부매니저용 한국어 / 원어민용 영어)',
+    steps: [
+      'get_document(campSettings, 캠프코드, fields=["timetableGuides"]) 로 지금 칸 설명 확인 (키 = 칸 이름 소문자). 한 칸만 볼 때는 fields=["timetableGuides.칸 이름"]',
+      'query_documents(campTimetables, where campCode==캠프코드, includeLarge=true) 와 campSettings.dayPlan 의 slots[].activity 로 칸 이름 목록 확인 — 키가 칸 이름과 다르면 화면에 안 보인다',
+      '사진·동영상이 필요하면 upload_media(campCode, guideKey, sourceUrl 또는 base64) 로 먼저 올려 url·storagePath 를 받는다 (노션 첨부 주소는 만료되므로 반드시 올려서 쓴다)',
+      'write_documents([{ op: "update", collection: "campSettings", id: 캠프코드, data: { timetableGuides: { "칸 이름": { summary, sections: [{ title, items: [{ type: "text", text } | { type: "image", url, storagePath, text: 캡션 }] }], foreign: { summary, sections } }, "지울 칸": null } } }]) 를 confirm 없이 호출 → 미리보기(changes)·경고(칸 없음, 원어민용 한글, 원어민용 삭제 등)를 사용자에게 보여 준다',
+      '사용자 승인 후 write_documents({ confirm: true, previewHash }) — operations 는 다시 보내지 않아도 된다 (30분 안). 칸이 많으면 20칸 안팎씩 나눈다',
+    ],
+  },
+  {
+    title: '일정표(날짜별 Day · 익사이팅/야외 활동표) 고치기',
+    steps: [
+      'get_document(campSettings, 캠프코드, fields=["dayPlan"]) 로 일정표 전체를 읽는다',
+      '고칠 날짜의 kind·note 나 slots(start, end, activity, place)를 바꾼다. 활동 이름을 바꾸면 그 활동의 칸 설명 키도 같이 바꿔야 한다 (timetableGuides 에서 옛 키 null + 새 키 추가 — 같은 write_documents 의 같은 update 에 함께 넣어도 된다)',
+      'write_documents(update campSettings, data: { dayPlan: 고친 전체 }) dry-run → changes.dayPlan 의 바뀐 곳 목록과 경고(기간 밖 날짜, 없는 그룹)를 보여 주고 승인 → confirm',
+    ],
+  },
+  {
+    title: '반 이름·강의실·교재 코드, 담임·원어민 이름 덮어쓰기',
+    steps: [
+      'get_document(campSettings, 캠프코드, fields=["groups", "classInfo", "timetableCommon"]) 로 지금 값 확인',
+      '반 정보: data: { classInfo: { "J01": { className, classroom, bookCode, spareBookCode } } } — 항목이 통째로 바뀌므로 바꾸지 않는 값도 같이 보낸다',
+      '이름 덮어쓰기: data: { timetableCommon: { "Junior": { classes: [{ classCode, teacherName? }], staffOverrides: { "수업": "Pattern 멘토 이름", "speaking": "원어민 이름" } } } } — 그룹 항목이 통째로 바뀌므로 classes 와 staffOverrides 를 둘 다 보낸다. 이름을 비우면 앱 배정 이름으로 돌아간다',
+      'dry-run → 미리보기 확인 → 승인 → confirm',
     ],
   },
   {

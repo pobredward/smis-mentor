@@ -6,12 +6,14 @@
  * 새 작업이 생겨도 코드를 바꿀 필요 없이 AI 가 스키마를 읽고 조합한다.
  */
 import { createHash, randomUUID } from 'crypto';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { CollectionReference, DocumentData, Firestore, Query } from 'firebase-admin/firestore';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { ACCESS_LABEL, canAccess, type Viewer } from '@/lib/ai-content/site';
 import { clearAiContentCache, getCamps } from '@/lib/ai-content/data';
+import { guideKeyOf } from '@smis-mentor/shared';
 import { COLLECTIONS, DATA_TOOL_LIMITS, EXCLUDED_COLLECTIONS, RECIPES, type CollectionSpec, type FieldSpec, type WriteOp } from './datamodel';
+import { cleanSettingsFields, patchSummary, type CleanedFields } from './camp-settings';
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────
 
@@ -47,7 +49,8 @@ export interface WriteOperation {
   data?: Record<string, unknown>;
 }
 export interface WriteInput {
-  operations: WriteOperation[];
+  /** confirm 때는 생략 가능 — dry-run 때 보관한 operations 를 previewHash 로 찾아 쓴다 */
+  operations?: WriteOperation[];
   note?: string;
   confirm?: boolean;
   previewHash?: string;
@@ -64,7 +67,7 @@ interface OpResult {
   summary?: string;
   before?: unknown;
   after?: unknown;
-  changes?: Record<string, { before: unknown; after: unknown }>;
+  changes?: Record<string, unknown>;
 }
 
 interface PreparedOp {
@@ -74,6 +77,8 @@ interface PreparedOp {
   payload?: Record<string, unknown>;
   /** update/delete 전 원본 (평가 요약 재계산 대상 파악용) */
   before?: Record<string, unknown>;
+  /** 맵 필드 항목 단위 update — [필드 경로, 값] (값이 FieldValue.delete() 면 그 항목 삭제) */
+  fieldUpdates?: Array<[FieldPath, unknown]>;
 }
 
 // ─── 날짜/직렬화 유틸 ─────────────────────────────────────────────────────
@@ -325,19 +330,48 @@ function stripForRead(raw: DocumentData, spec: CollectionSpec, viewer: Viewer, o
     const allowed = new Set([...Object.keys(spec.fields), ...(spec.serverManaged ?? [])]);
     for (const k of Object.keys(data)) if (!allowed.has(k)) delete data[k];
   }
-  data = scrubSensitive(data) as Record<string, unknown>;
+  // 맵 필드의 항목 키(칸 이름·반코드·그룹명)는 필드 이름이 아니라 값이다 → 민감 키 검사는 항목 안쪽에만
+  const maps: Record<string, unknown> = {};
+  for (const [k, f] of Object.entries(spec.fields)) {
+    if (!f.mapEntries || !isPlainObject(data[k])) continue;
+    maps[k] = Object.fromEntries(Object.entries(data[k] as Record<string, unknown>).map(([ek, ev]) => [ek, scrubSensitive(ev)]));
+    delete data[k];
+  }
+  data = { ...(scrubSensitive(data) as Record<string, unknown>), ...maps };
+
+  // fields: 맵 필드는 "timetableGuides.칸 이름" 처럼 항목만 고를 수 있다
+  const keep = new Set<string>();
+  const picks = new Map<string, string[]>();
+  for (const f of opts.fields ?? []) {
+    const dot = f.indexOf('.');
+    const top = dot > 0 ? f.slice(0, dot) : f;
+    if (dot > 0 && spec.fields[top]?.mapEntries) {
+      picks.set(top, [...(picks.get(top) ?? []), f.slice(dot + 1)]);
+      keep.add(top);
+    } else keep.add(f);
+  }
   const omitted: string[] = [];
   if (!opts.includeLarge) {
     for (const [k, f] of Object.entries(spec.fields)) {
-      if (f.large && k in data && !opts.fields?.includes(k)) {
+      if (f.large && k in data && !keep.has(k)) {
         omitted.push(k);
         delete data[k];
       }
     }
   }
   if (opts.fields?.length) {
-    const keep = new Set(opts.fields);
     for (const k of Object.keys(data)) if (!keep.has(k)) delete data[k];
+    for (const [top, keys] of picks) {
+      if (opts.fields.includes(top) || !isPlainObject(data[top])) continue;
+      const m = data[top] as Record<string, unknown>;
+      const own = (k: string) => Object.prototype.hasOwnProperty.call(m, k);
+      data[top] = Object.fromEntries(
+        keys.map((ek) => {
+          const hit = own(ek) ? ek : own(guideKeyOf(ek)) ? guideKeyOf(ek) : ek;
+          return [hit, own(hit) ? m[hit] : null];
+        })
+      );
+    }
   }
   const out = serialize(data) as Record<string, unknown>;
   if (omitted.length) out._omittedLargeFields = omitted;
@@ -346,6 +380,8 @@ function stripForRead(raw: DocumentData, spec: CollectionSpec, viewer: Viewer, o
 
 function assertQueryableField(spec: CollectionSpec, field: string) {
   const top = field.split('.')[0];
+  // 맵 필드의 항목 키는 칸 이름 같은 값이라 민감 키 검사 대상이 아니다
+  if (field !== top && spec.fields[top]?.mapEntries) return;
   if (isSensitiveKey(field) || spec.hidden?.some((h) => h === field || field.startsWith(`${h}.`) || h.startsWith(`${field}.`))) {
     throw new DataToolError(`"${field}" 는 숨김(민감) 필드라 조건·정렬에 쓸 수 없습니다.`);
   }
@@ -416,6 +452,9 @@ export function describeSchema(viewer: Viewer, collection?: string) {
         '쓰기: write_documents 는 관리자 전용. confirm 없이 호출하면 dry-run — 검증·미리보기·previewHash 만 돌려주고 아무것도 바꾸지 않는다. 사용자에게 미리보기를 보여주고 승인받은 뒤 같은 operations + previewHash + confirm=true 로 재호출하면 한 번의 배치로 실행되고 mcpAuditLogs 에 기록된다.',
         '날짜 입력: "YYYY-MM-DD"(한국시간 자정) 또는 ISO 8601. 객체 안의 start/end/date/…At/…Date 키의 날짜 문자열도 같은 규칙으로 Timestamp 가 된다.',
         'update 는 지정한 최상위 필드만 교체한다(배열·객체는 통째로). 지정하지 않은 필드는 유지. 서버 관리 필드(createdAt 등)와 숨김 필드는 지정할 수 없다.',
+        '맵 필드(필드 상세의 map=true — campSettings 의 timetableGuides·classInfo·timetableCommon)는 예외: update 때 보낸 항목(키)만 바뀌고, 값이 null 인 키는 그 항목을 지운다. 항목 하나는 통째로 교체된다. 읽을 때 fields: ["timetableGuides.칸 이름"] 처럼 항목만 고를 수 있다.',
+        'dry-run 이 통과하면 그 operations 가 30분 동안 서버에 보관된다 → 승인 후 write_documents({ confirm: true, previewHash }) 만 보내면 실행된다 (큰 작업도 다시 보낼 필요 없음).',
+        '사진·동영상: upload_media 로 사이트 저장소에 올리고 받은 url·storagePath 를 칸 설명·페이지에 넣는다 (올리기만 해서는 화면이 바뀌지 않는다).',
         `한 번의 write_documents 에 최대 ${DATA_TOOL_LIMITS.maxWriteOps}개 작업. query 는 기본 ${DATA_TOOL_LIMITS.queryDefaultLimit}건, 최대 ${DATA_TOOL_LIMITS.queryMaxLimit}건, 메모리 필터는 처음 ${DATA_TOOL_LIMITS.scanCap}건까지만 훑는다 (== / in 조건은 Firestore 에서 바로 걸러지므로 우선 사용).`,
       ],
       limits: DATA_TOOL_LIMITS,
@@ -459,6 +498,7 @@ export function describeSchema(viewer: Viewer, collection?: string) {
         writable: isAdmin && !!spec.write && (f.writable ?? false),
         enum: f.enum,
         large: f.large,
+        map: f.mapEntries || undefined,
         ref: f.ref ? `${f.ref.collection}.${f.ref.by}` : undefined,
       })),
   };
@@ -623,7 +663,8 @@ function coerceValue(key: string, raw: unknown, f: FieldSpec, errors: string[]):
       return raw;
     case 'object':
       if (!isPlainObject(raw)) return bad('객체');
-      return convertNestedDates(raw);
+      // 정리 함수가 있는 필드는 날짜 변환 없이 그대로 넘긴다 (형식은 camp-settings 가 검사)
+      return f.clean || f.mapEntries ? raw : convertNestedDates(raw);
     case 'object[]':
       if (!Array.isArray(raw) || !raw.every(isPlainObject)) return bad('객체 배열');
       return convertNestedDates(raw);
@@ -660,7 +701,8 @@ function validateData(spec: CollectionSpec, data: Record<string, unknown>, error
 }
 
 function serverFields(spec: CollectionSpec, mode: 'create' | 'update', viewer: Viewer): Record<string, unknown> {
-  const now = Timestamp.now();
+  // 앱이 ISO 문자열로 쓰는 문서(campSettings)는 같은 형식으로
+  const now = spec.timeFormat === 'iso' ? new Date().toISOString() : Timestamp.now();
   const sm = new Set(spec.serverManaged ?? []);
   const out: Record<string, unknown> = {};
   if (mode === 'create') {
@@ -721,6 +763,14 @@ async function crossChecks(
   if (spec.name === 'campHomeMessages' && mode === 'create' && id) {
     const camp = await db.collection('jobCodes').where('code', '==', id).limit(1).get();
     if (camp.empty) errors.push(`문서 ID 는 캠프 코드여야 합니다 ("${id}" 캠프 없음)`);
+  }
+
+  if (spec.name === 'campSettings' && id) {
+    if (str('campCode') && merged.campCode !== id) errors.push(`campCode(${str('campCode')}) 는 문서 ID(${id}) 와 같아야 합니다`);
+    if (mode === 'create') {
+      const camp = await db.collection('jobCodes').where('code', '==', id).limit(1).get();
+      if (camp.empty) errors.push(`문서 ID 는 캠프 코드여야 합니다 ("${id}" 캠프 없음)`);
+    }
   }
 
   if (spec.name === 'jobBoards' && str('jobCode') && str('refJobCodeId')) {
@@ -814,6 +864,9 @@ async function prepareOp(db: Firestore, op: WriteOperation, index: number, viewe
 
   if (!isPlainObject(op.data) || Object.keys(op.data).length === 0) return fail('data 가 비어 있습니다');
   const coerced = validateData(spec, op.data, errors);
+  // 정리 함수(clean)·맵 필드(mapEntries)는 camp-settings 가 검증·정리한다
+  const isCleanField = (k: string) => !!(spec.fields[k]?.clean || spec.fields[k]?.mapEntries);
+  const cleanInput = () => Object.fromEntries(Object.entries(coerced).filter(([k]) => isCleanField(k)));
 
   if (op.op === 'create') {
     let id: string | null = op.id ?? null;
@@ -827,11 +880,24 @@ async function prepareOp(db: Firestore, op: WriteOperation, index: number, viewe
       else if (f.required && op.data[k] === null && forced[k] === undefined) errors.push(`${k}: 필수 필드는 null 일 수 없습니다`);
     }
     await checkRefs(db, spec, coerced, errors, cache);
+    let cleaned: CleanedFields | null = null;
+    if (id && Object.keys(coerced).some(isCleanField)) {
+      cleaned = await cleanSettingsFields({ db, spec, mode: 'create', id, before: {}, data: cleanInput(), viewer, errors, warnings });
+      for (const k of Object.keys(coerced)) if (isCleanField(k)) delete coerced[k];
+      Object.assign(coerced, cleaned.fields);
+      for (const p of cleaned.patches) {
+        if (p.value === null) continue;
+        const m = (isPlainObject(coerced[p.field]) ? coerced[p.field] : (coerced[p.field] = {})) as Record<string, unknown>;
+        m[p.key] = p.value;
+      }
+    }
     const merged: Record<string, unknown> = { ...coerced, ...forced };
     if (!errors.length) await crossChecks(db, spec, 'create', id, merged, errors, warnings);
     const payload = { ...merged, ...serverFields(spec, 'create', viewer) };
     result.id = id;
-    result.after = previewOf(payload, spec, viewer);
+    // 칸 설명·일정표 같은 큰 필드는 after 대신 changes 에 항목별로 줄여서 보여 준다
+    result.after = previewOf(cleaned ? Object.fromEntries(Object.entries(payload).filter(([k]) => !isCleanField(k))) : payload, spec, viewer);
+    if (cleaned) result.changes = cleaned.changes;
     result.summary = summaryOf('create', payload);
     result.ok = errors.length === 0;
     return { result, spec, id, payload };
@@ -842,23 +908,51 @@ async function prepareOp(db: Firestore, op: WriteOperation, index: number, viewe
   const snap = await ref.doc(op.id).get();
   if (!snap.exists) return fail(`${spec.name}/${op.id} 문서가 없습니다`);
   const before = snap.data() ?? {};
-  if (!errors.length && Object.keys(coerced).length === 0) errors.push('변경할 필드가 없습니다');
+  let cleaned: CleanedFields | null = null;
+  if (Object.keys(coerced).some(isCleanField)) {
+    cleaned = await cleanSettingsFields({ db, spec, mode: 'update', id: op.id, before, data: cleanInput(), viewer, errors, warnings });
+    for (const k of Object.keys(coerced)) if (isCleanField(k)) delete coerced[k];
+    Object.assign(coerced, cleaned.fields);
+  }
+  const patches = cleaned?.patches ?? [];
+  if (!errors.length && Object.keys(coerced).length === 0 && patches.length === 0) {
+    errors.push(cleaned?.hadMapInput ? '바뀌는 항목이 없습니다 (보낸 항목이 지금 저장된 내용과 같음)' : '변경할 필드가 없습니다');
+  }
   if (spec.name === 'evaluations' && before.evaluatorId !== viewer.uid) errors.push('다른 평가자가 쓴 평가는 수정할 수 없습니다 (내가 쓴 평가만 가능)');
   await checkRefs(db, spec, coerced, errors, cache);
   const merged: Record<string, unknown> = { ...before, ...coerced };
+  for (const p of patches) {
+    const m = { ...(isPlainObject(merged[p.field]) ? (merged[p.field] as Record<string, unknown>) : {}) };
+    if (p.value === null) delete m[p.key];
+    else m[p.key] = p.value;
+    merged[p.field] = m;
+  }
   if (!errors.length) await crossChecks(db, spec, 'update', op.id, merged, errors, warnings);
-  const payload: Record<string, unknown> = { ...coerced, ...serverFields(spec, 'update', viewer) };
+  const server = serverFields(spec, 'update', viewer);
+  const payload: Record<string, unknown> = { ...coerced, ...server };
   if (spec.name === 'evaluations') {
     if ('scores' in coerced) for (const k of ['scores', 'totalScore', 'maxTotalScore', 'percentage']) payload[k] = merged[k];
   }
+  // 맵 필드가 있으면 필드 경로 단위로 쓴다 — 항목 키에 점(.)이 있어도(예: "p.e") 안전하게
+  const fieldUpdates: Array<[FieldPath, unknown]> | undefined = cleaned
+    ? [
+        ...Object.entries(coerced).map(([k, v]) => [new FieldPath(k), v] as [FieldPath, unknown]),
+        ...patches.map((p) => [new FieldPath(p.field, p.key), p.value === null ? FieldValue.delete() : p.value] as [FieldPath, unknown]),
+        ...Object.entries(server).map(([k, v]) => [new FieldPath(k), v] as [FieldPath, unknown]),
+      ]
+    : undefined;
+  const regular = Object.keys(coerced).filter((k) => !isCleanField(k));
   const beforeView = previewOf(before, spec, viewer) as Record<string, unknown>;
   const afterView = previewOf(merged, spec, viewer) as Record<string, unknown>;
-  const changed = Object.keys(coerced).filter((k) => JSON.stringify(beforeView[k] ?? null) !== JSON.stringify(afterView[k] ?? null));
-  result.changes = Object.fromEntries(changed.map((k) => [k, { before: beforeView[k] ?? null, after: afterView[k] ?? null }]));
-  if (!changed.length && !errors.length) warnings.push('실제로 바뀌는 값이 없습니다');
-  result.summary = summaryOf('update', before, changed);
+  const changed = regular.filter((k) => JSON.stringify(beforeView[k] ?? null) !== JSON.stringify(afterView[k] ?? null));
+  result.changes = {
+    ...Object.fromEntries(changed.map((k) => [k, { before: beforeView[k] ?? null, after: afterView[k] ?? null }])),
+    ...(cleaned?.changes ?? {}),
+  };
+  if (!changed.length && !cleaned && !errors.length) warnings.push('실제로 바뀌는 값이 없습니다');
+  result.summary = summaryOf('update', before, [...changed, ...Object.keys(cleaned?.fields ?? {}), ...patchSummary(patches)]);
   result.ok = errors.length === 0;
-  return { result, spec, id: op.id, payload, before };
+  return { result, spec, id: op.id, payload, before, fieldUpdates };
 }
 
 function canonical(v: unknown): string {
@@ -872,13 +966,57 @@ function previewHashOf(ops: WriteOperation[], viewer: Viewer): string {
   return createHash('sha256').update(canonical({ uid: viewer.uid, ops: normalized })).digest('hex').slice(0, 24);
 }
 
+// ─── dry-run 보관 (confirm 때 operations 를 다시 보내지 않아도 되게) ─────────────
+
+const PENDING_COLLECTION = 'mcpPendingWrites';
+const PENDING_TTL_MS = 30 * 60 * 1000;
+/** Firestore 문서 한도(1MB) 안쪽 — 넘으면 보관하지 않고 operations 를 다시 받는다 */
+const PENDING_MAX_CHARS = 900_000;
+
+async function savePending(db: Firestore, previewHash: string, ops: WriteOperation[], note: string | undefined, viewer: Viewer): Promise<string | null> {
+  const json = JSON.stringify(ops);
+  if (json.length > PENDING_MAX_CHARS) return null;
+  const expiresAt = Timestamp.fromMillis(Date.now() + PENDING_TTL_MS);
+  await db.collection(PENDING_COLLECTION).doc(previewHash).set({ uid: viewer.uid, operations: json, note: note ?? '', createdAt: Timestamp.now(), expiresAt });
+  // 같은 사람의 지난 보관분 정리 (실패해도 무시)
+  try {
+    const mine = await db.collection(PENDING_COLLECTION).where('uid', '==', viewer.uid).get();
+    const now = Date.now();
+    await Promise.all(mine.docs.filter((d) => (d.data().expiresAt?.toMillis?.() ?? 0) < now).map((d) => d.ref.delete()));
+  } catch {
+    // ignore
+  }
+  return toKstIso(expiresAt.toDate());
+}
+
+async function loadPending(db: Firestore, previewHash: string, viewer: Viewer): Promise<{ operations: WriteOperation[]; note: string }> {
+  const snap = await db.collection(PENDING_COLLECTION).doc(previewHash).get();
+  const d = snap.data();
+  if (!snap.exists || !d || d.uid !== viewer.uid) {
+    throw new DataToolError('이 previewHash 로 보관된 dry-run 이 없습니다 (이미 실행했거나, 다른 계정이거나, 너무 커서 보관하지 않음). operations 와 함께 confirm 하거나 dry-run 부터 다시 하세요.');
+  }
+  if ((d.expiresAt?.toMillis?.() ?? 0) < Date.now()) {
+    await snap.ref.delete().catch(() => undefined);
+    throw new DataToolError('보관 시간(30분)이 지났습니다. confirm 없이 다시 호출해 새 미리보기를 받으세요.');
+  }
+  return { operations: JSON.parse(String(d.operations)) as WriteOperation[], note: String(d.note ?? '') };
+}
+
 export async function writeDocuments(input: WriteInput, viewer: Viewer) {
   if (!canAccess('admin', viewer)) throw new DataToolError('write_documents 는 관리자 계정만 사용할 수 있습니다.');
-  const ops = input.operations;
+  const db = getAdminFirestore();
+  let ops = input.operations;
+  let note = input.note;
+  let fromPending = false;
+  if ((!Array.isArray(ops) || ops.length === 0) && input.confirm && input.previewHash) {
+    const pending = await loadPending(db, input.previewHash, viewer);
+    ops = pending.operations;
+    note = note ?? (pending.note || undefined);
+    fromPending = true;
+  }
   if (!Array.isArray(ops) || ops.length === 0) throw new DataToolError('operations 가 비어 있습니다.');
   if (ops.length > DATA_TOOL_LIMITS.maxWriteOps) throw new DataToolError(`한 번에 최대 ${DATA_TOOL_LIMITS.maxWriteOps}개 작업까지 가능합니다 (요청: ${ops.length}).`);
 
-  const db = getAdminFirestore();
   const cache: RefCache = new Map();
   const prepared: PreparedOp[] = [];
   for (let i = 0; i < ops.length; i++) prepared.push(await prepareOp(db, ops[i], i, viewer, cache));
@@ -900,11 +1038,15 @@ export async function writeDocuments(input: WriteInput, viewer: Viewer) {
   }
 
   if (!input.confirm) {
+    const keptUntil = await savePending(db, previewHash, ops, note, viewer).catch(() => null);
     return {
       mode: 'dry-run' as const,
       ok: true,
-      message: '아무것도 변경되지 않았습니다. 아래 미리보기를 사용자에게 보여주고 승인받은 뒤, 같은 operations 와 previewHash 로 confirm=true 를 붙여 다시 호출하세요.',
+      message: keptUntil
+        ? `아무것도 변경되지 않았습니다. 아래 미리보기를 사용자에게 보여주고 승인받은 뒤 { confirm: true, previewHash } 만 보내면 실행됩니다 (${keptUntil} 까지 보관 — operations 를 다시 보낼 필요 없음).`
+        : '아무것도 변경되지 않았습니다. 아래 미리보기를 사용자에게 보여주고 승인받은 뒤, 같은 operations 와 previewHash 로 confirm=true 를 붙여 다시 호출하세요.',
       previewHash,
+      ...(keptUntil ? { keptUntil } : {}),
       counts,
       results,
     };
@@ -924,7 +1066,11 @@ export async function writeDocuments(input: WriteInput, viewer: Viewer) {
       batch.create(docRef, p.payload ?? {});
       executed.push({ op: 'create', collection: p.spec.name, id: docRef.id, summary: p.result.summary });
     } else if (p.result.op === 'update') {
-      batch.update(col.doc(p.id as string), p.payload ?? {});
+      const docRef = col.doc(p.id as string);
+      if (p.fieldUpdates?.length) {
+        const [[firstPath, firstValue], ...rest] = p.fieldUpdates;
+        batch.update(docRef, firstPath, firstValue, ...rest.flat());
+      } else batch.update(docRef, p.payload ?? {});
       executed.push({ op: 'update', collection: p.spec.name, id: p.id as string, summary: p.result.summary });
     } else {
       batch.delete(col.doc(p.id as string));
@@ -936,11 +1082,13 @@ export async function writeDocuments(input: WriteInput, viewer: Viewer) {
     uid: viewer.uid,
     name: viewer.name,
     role: viewer.role,
-    note: input.note ?? '',
+    note: note ?? '',
     previewHash,
+    fromPending,
     operations: executed,
     at: Timestamp.now(),
   });
+  batch.delete(db.collection(PENDING_COLLECTION).doc(previewHash));
   await batch.commit();
   clearAiContentCache();
 

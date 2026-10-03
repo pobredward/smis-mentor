@@ -52,7 +52,8 @@ AI 에게 URL 을 붙여넣으면 내장 fetch 도구가 그 페이지를 GET �
 | `describe_schema` (로그인) | 데이터 도구가 다루는 컬렉션·필드·권한·쓰기 규칙 + 작업 레시피 (`collection` 지정 시 필드 상세) |
 | `query_documents` (로그인) | 컬렉션 조건 조회 (`where`/`orderBy`/`limit`/`offset`/`fields`/`includeLarge`, 서브컬렉션은 `parentId`) |
 | `get_document` (로그인) | 문서 하나 전체 읽기 (large 필드 포함) |
-| `write_documents` (관리자) | 생성·수정·삭제 배치 (≤50). **기본 dry-run** → `previewHash` + `confirm=true` 로 실행, `mcpAuditLogs` 기록 |
+| `write_documents` (관리자) | 생성·수정·삭제 배치 (≤50). **기본 dry-run** → `previewHash` + `confirm=true` 로 실행, `mcpAuditLogs` 기록. dry-run 내용은 30분 보관되어 confirm 때 operations 재전송 불필요 |
+| `upload_media` (관리자) | 칸 설명·교육 탭 페이지용 사진·동영상을 Storage 에 올리고 `url`·`storagePath` 반환 (공개 https 주소 또는 base64 ≤3MB). 올리기만 하고 연결은 `write_documents` 로 |
 
 리소스(`resources/list`)로도 레지스트리 페이지가 `https://smis-mentor.com/{path}.md` URI 로 노출됩니다.
 
@@ -61,11 +62,17 @@ AI 에게 URL 을 붙여넣으면 내장 fetch 도구가 그 페이지를 GET �
 작업(예: "J28 교육 자료를 J29 로 복사")마다 전용 도구를 만들지 않고, AI 가 스키마를 읽고 원시 도구를 조합하도록 했습니다. 규칙은 전부 `datamodel.ts` 한 곳에 선언되어 있습니다.
 
 - **컬렉션 선언** (`COLLECTIONS`): 읽기 권한(`read`), 허용 쓰기(`write.ops`), 멘토 범위 제한(`scope` — 참여 캠프 ID/코드 또는 본인 uid), 필드별 타입·필수·`writable`·`enum`·`ref`(참조 무결성: `jobCodes.id`, `jobCodes.code`, `taskCategories.id` …)·`large`(query 기본 생략)·`adminOnly`, `hidden`(응답 제거 + 쓰기 거부), `serverManaged`(createdAt/updatedAt/createdBy/updatedBy 등 서버가 채움), `forcedOnCreate`(예: `campTasks.completions=[]`, `evaluations` 의 `isFinalized=false / isVisible=false / aiDraft=true / evaluatorName="이름 (AI 초안)"`), `idOnCreate`(auto / uuid / required).
-- **차단 컬렉션** (`EXCLUDED_COLLECTIONS`): 환자 기록, ST시트 원본(학생 연락처·주민번호), 토큰, OAuth 내부 데이터 등은 이름조차 조회되지 않습니다.
+- **차단 컬렉션** (`EXCLUDED_COLLECTIONS`): 환자 기록, ST시트 원본(학생 연락처·주민번호), 토큰, OAuth 내부 데이터, dry-run 보관분(`mcpPendingWrites`) 등은 이름조차 조회되지 않습니다.
 - **개인정보 방어선**: `hidden` 목록과 별개로 `email / phone / address / rrn / passport / birth / bank / account / password / token …` 이 들어간 키는 모든 깊이에서 항상 제거되고, 조건·정렬 필드로도 쓸 수 없습니다 (`isSensitiveKey`).
 - **query**: `==` 전부와 `in` 하나는 Firestore 에 내려보내고(복합 색인 불필요) 나머지 연산자(`!= < <= > >= not-in array-contains contains exists`)·정렬·offset 은 메모리에서 처리합니다 (최대 1,000건 스캔, 넘으면 `warning`). 타임스탬프는 한국시간 ISO(`+09:00`)로 반환, 입력은 `YYYY-MM-DD`(KST 자정) 또는 ISO 8601.
 - **write**: 관리자만. `confirm` 없이 호출하면 검증(스키마·필수·enum·타입·참조·컬렉션별 정합성: 카테고리 캠프 일치, 공고 코드/ID 일치, 평가 점수 범위·중복 초안 등)과 미리보기(`after` / `changes` / `before`)만 돌려주고 아무것도 쓰지 않습니다. 같은 operations + `previewHash` + `confirm=true` 로 재호출하면 재검증 후 한 배치로 실행하고, 같은 배치에 `mcpAuditLogs` 문서(실행자, 메모, 작업 목록)를 남깁니다. 평가(`evaluations`)는 앱과 같은 방식으로 `totalScore`(평균)/`maxTotalScore`(10)/`percentage` 를 서버가 계산합니다.
-- **레시피** (`RECIPES`): 교육 자료 캠프 간 복사, 업무 복사(날짜 이동), 서류 전형 평가 초안, 선생님 수업 자료 링크 추출 — `describe_schema` 응답에 포함되어 AI 가 절차를 따릅니다.
+- **dry-run 보관** (`mcpPendingWrites`): dry-run 이 통과하면 operations 를 `previewHash` 문서로 30분 보관합니다. 승인 후 `{ confirm: true, previewHash }` 만 보내면 같은 계정일 때만 꺼내 재검증 후 실행하고, 실행 배치에서 보관분을 지웁니다(재실행 불가). 900KB 가 넘으면 보관하지 않고 예전처럼 operations 를 다시 받습니다. operations 를 함께 보내면 예전과 같이 해시가 일치해야 합니다.
+- **campSettings 쓰기** (`camp-settings.ts`): 칸 설명(`timetableGuides`)·일정표(`dayPlan`)·반 정보(`classInfo`)·그룹 공통값(`timetableCommon` — 직접 넣은 담임·원어민 이름)을 관리자가 create/update 할 수 있습니다(delete 불가, `groups`·`lodging` 은 읽기 전용).
+  - **맵 필드**(`mapEntries`): `timetableGuides`·`classInfo`·`timetableCommon` 은 update 때 보낸 항목(키)만 바뀌고 값 `null` 은 그 항목 삭제입니다. Firestore `FieldPath` 로 항목 단위 update 를 하므로 `p.e` 처럼 점이 들어간 키도 안전합니다. 읽을 때 `fields: ["timetableGuides.칸 이름"]` 으로 항목만 고를 수 있고, 항목 키(칸 이름)는 민감 키 검사에서 빠집니다(항목 안쪽은 검사).
+  - **정리·검증**(`clean`): 앱과 같은 `cleanGuide`·`cleanDayPlan` 으로 정리하되, 앱이 조용히 버리는 잘못된 값(알 수 없는 키, 줄 종류, `HH:mm` 아닌 시각, 없는 Day 종류, 한 그룹이 두 세트에 있음, 노션 임시 사진 주소 등)은 오류로 돌려줍니다. 경고: 시간표·일정표에 없는 칸 이름, 원어민용(foreign)에 한글, 저장소 밖 사진 주소, 다른 캠프 `storagePath`(빼고 저장 — 앱이 줄을 지울 때 엉뚱한 파일을 지우지 않게), 항목 교체로 지워지는 값(예: 원어민용), 캠프 기간 밖 날짜·없는 그룹. 내용이 그대로인 항목은 건너뜁니다.
+  - 미리보기: 칸 설명은 항목별로 요약(요약·섹션 제목·줄 앞부분), 일정표는 바뀐 경로 목록(diff)만 보여 줍니다. `updatedAt` 은 앱처럼 ISO 문자열, 칸 설명 항목에는 `updatedAt`·`updatedBy` 를 붙입니다.
+- **upload_media** (`upload.ts`): 앱 `uploadGuideMedia` 와 같은 경로(`timetableGuides/{캠프}/{칸}/…`, 교육 탭은 `camp-page-images/…`)와 같은 토큰 주소(`firebasestorage.googleapis.com/v0/b/…?alt=media&token=`)로 올립니다. 서버가 남의 주소를 대신 여는 기능이라 https 만, 내부망 주소(DNS 해석 결과 포함)·리디렉트 5회 초과·용량(사진 15MB, 동영상 50MB)을 막고, 파일 종류는 실제 바이트로 판별합니다(JPG·PNG·GIF·WEBP·HEIC·AVIF·MP4·MOV·WEBM — SVG·HTML 거부). 구글 드라이브·드롭박스 공유 링크는 바로 받는 주소로 바꿉니다. 문서는 바꾸지 않으므로 확인 단계 없이 올리고 `mcpAuditLogs` 에 남깁니다. 올린 파일은 지우지 않습니다(칸 설명에서 빼도 파일은 남음).
+- **레시피** (`RECIPES`): 교육 자료 캠프 간 복사, 업무 복사(날짜 이동), 시간표 복사, 서류 전형 평가 초안, 시간표 칸 설명 쓰기, 일정표 고치기, 반 정보·이름 덮어쓰기, 선생님 수업 자료 링크 추출 — `describe_schema` 응답에 포함되어 AI 가 절차를 따릅니다.
 - 새 컬렉션이나 필드를 열고 싶으면 `datamodel.ts` 에 선언만 추가하면 됩니다. 코드 수정은 필요 없습니다.
 
 ### 접근 권한
