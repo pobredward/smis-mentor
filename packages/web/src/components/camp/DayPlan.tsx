@@ -1,36 +1,27 @@
 'use client';
 
 /**
- * 시간표 탭의 '전체'(일정표)·'익사이팅' 화면과 관리자 일정표 편집기.
+ * 시간표 탭의 '전체'(일정표)·'익사이팅' 화면.
+ * (관리자 일정표 편집은 통합 편집기 timetable-editor/DayPlanTab 으로 옮겼다)
  * 데이터: campSettings/{campCode}.dayPlan (shared/types/campDayPlan.ts)
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
-  DAY_KINDS,
   L,
   calendarWeeks,
   dayKindLabel,
   dayKindMini,
   excitingDates,
+  excitingCourseFor,
   excitingSlotsFor,
   findDayKind,
-  getCampTimetableGuides,
   guideKeyOf,
   hhmmToMinutes,
-  updateCampTimetableGuides,
-  type TimetableGuide,
   localYmd,
   monthDayLabel,
-  normalizeGroupKey,
-  saveCampDayPlan,
-  type CampDayPlan,
-  type DayKind,
-  type DayPlanEntry,
   type DayPlanSet,
-  type ExcitingSlot,
+  type ExcitingCourse,
 } from '@smis-mentor/shared';
-import { db } from '@/lib/firebase';
-import { GuideEditorPanel } from './GuideEditorPanel';
 
 const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
@@ -107,9 +98,11 @@ export function excitingSlotColor(s: { activity: string; place: string }): strin
   return '#fefcc4';
 }
 
-export function ExcitingDayList({ set, groupName, guidedLabels, onOpenGuide, nowMinutes }: {
+export function ExcitingDayList({ set, groupName, courses, guidedLabels, onOpenGuide, nowMinutes }: {
   set: DayPlanSet | undefined;
   groupName?: string | null;
+  /** 일정표의 코스 (장소별 하루 일정) — 그 그룹이 고른 코스 이름을 제목 옆에 */
+  courses?: ExcitingCourse[] | null;
   /** 세부페이지(칸 설명)가 있는 활동 이름 (guideKeyOf 값) — 누르면 세부페이지로 */
   guidedLabels?: Set<string>;
   onOpenGuide?: (label: string) => void;
@@ -124,7 +117,8 @@ export function ExcitingDayList({ set, groupName, guidedLabels, onOpenGuide, now
     <div className="space-y-6">
       {dates.map((date) => {
         const entry = set!.days[date];
-        const slots = excitingSlotsFor(entry, groupName);
+        const slots = excitingSlotsFor(entry, groupName, courses);
+        const course = excitingCourseFor(entry, groupName, courses);
         const isToday = date === today;
         return (
           <section key={date} id={`exciting-${date}`} className="scroll-mt-4">
@@ -134,7 +128,8 @@ export function ExcitingDayList({ set, groupName, guidedLabels, onOpenGuide, now
                 {monthDayLabel(date)} ({weekdayOf(date)}) {findDayKind(entry.kind)?.short ?? 'Exciting Day'}
               </h3>
               {isToday && <span className="rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-bold text-white">{L('schedule.today')}</span>}
-              {entry.note && <span className="text-xs text-gray-500">{entry.note}</span>}
+              {course && <span className="text-xs font-semibold text-amber-700">{course.name}</span>}
+              {entry.note && entry.note !== course?.name && <span className="text-xs text-gray-500">{entry.note}</span>}
             </div>
             <div className="overflow-x-auto rounded-lg border border-gray-200">
               <table className="w-full table-fixed border-collapse bg-white text-[11px] leading-tight">
@@ -195,354 +190,6 @@ export function ExcitingDayList({ set, groupName, guidedLabels, onOpenGuide, now
           </section>
         );
       })}
-    </div>
-  );
-}
-
-
-// ─── 편집 (관리자) ─────────────────────────────────────────────────────
-
-const newId = () => Math.random().toString(36).slice(2, 10);
-
-export function DayPlanEditor({
-  campCode,
-  plan: initial,
-  groups,
-  start,
-  end,
-  initialGroup,
-  actorName,
-  onClose,
-  onSaved,
-}: {
-  campCode: string;
-  plan: CampDayPlan | null;
-  groups: string[];
-  start: Date | null;
-  end: Date | null;
-  initialGroup?: string | null;
-  actorName: string;
-  onClose: () => void;
-  onSaved: (plan: CampDayPlan) => void;
-}) {
-  const [plan, setPlan] = useState<CampDayPlan>(() =>
-    initial?.sets?.length
-      ? JSON.parse(JSON.stringify({ sets: initial.sets }))
-      : { sets: [{ id: newId(), name: groups.join(' · '), groups: groups.map(normalizeGroupKey), days: {} }] }
-  );
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // 익사이팅 활동의 세부페이지 — 시간표 칸 설명과 같은 곳(campSettings.timetableGuides)에 활동 이름으로 저장
-  const [guides, setGuidesRaw] = useState<Record<string, TimetableGuide> | null>(null);
-  useEffect(() => {
-    getCampTimetableGuides(db, campCode).then(setGuidesRaw).catch(() => setGuidesRaw({}));
-  }, [campCode]);
-  const setGuides = (fn: (prev: Record<string, TimetableGuide>) => Record<string, TimetableGuide>) => {
-    setGuidesRaw((prev) => fn(prev ?? {}));
-    setDirty(true);
-  };
-  const [idx, setIdx] = useState(() => {
-    const key = normalizeGroupKey(initialGroup);
-    const i = plan.sets.findIndex((s) => s.groups.includes(key));
-    return i >= 0 ? i : 0;
-  });
-  const set = plan.sets[idx];
-  const weeks = useMemo(() => calendarWeeks(start, end), [start, end]);
-
-  const update = (fn: (p: CampDayPlan) => void) => {
-    setPlan((prev) => {
-      const next: CampDayPlan = JSON.parse(JSON.stringify(prev));
-      fn(next);
-      return next;
-    });
-    setDirty(true);
-  };
-
-  const setDay = (date: string, kind: DayKind | '') =>
-    update((p) => {
-      const days = p.sets[idx].days;
-      if (!kind) delete days[date];
-      else days[date] = { ...(days[date] ?? {}), kind } as DayPlanEntry;
-    });
-
-  const toggleGroup = (g: string) =>
-    update((p) => {
-      const key = normalizeGroupKey(g);
-      const mine = p.sets[idx];
-      if (mine.groups.includes(key)) mine.groups = mine.groups.filter((x) => x !== key);
-      else {
-        p.sets.forEach((s) => (s.groups = s.groups.filter((x) => x !== key)));
-        mine.groups.push(key);
-      }
-    });
-
-  const addSet = () => {
-    update((p) => {
-      p.sets.push({ id: newId(), name: '', groups: [], days: JSON.parse(JSON.stringify(set?.days ?? {})) });
-    });
-    setIdx(plan.sets.length);
-  };
-
-  const removeSet = () => {
-    if (!set || plan.sets.length <= 1) return;
-    if (!window.confirm(L('schedule.deletePlanSetConfirm', { v0: set.name || `#${idx + 1}` }))) return;
-    update((p) => p.sets.splice(idx, 1));
-    setIdx(0);
-  };
-
-  /** 날짜별로 지금 편집 중인 그룹 ('' = 세트 공통) — 같은 날 그룹마다 가는 곳이 다를 수 있다 */
-  const [slotGroup, setSlotGroup] = useState<Record<string, string>>({});
-  const slotsOf = (e: DayPlanEntry | undefined, g: string) => (g ? e?.slotsByGroup?.[g] ?? [] : e?.slots ?? []);
-  const setSlots = (date: string, fn: (slots: ExcitingSlot[]) => ExcitingSlot[]) =>
-    update((p) => {
-      const e = p.sets[idx].days[date];
-      if (!e) return;
-      const g = slotGroup[date] ?? '';
-      if (!g) e.slots = fn(e.slots ?? []);
-      else {
-        const next = fn(e.slotsByGroup?.[g] ?? []);
-        e.slotsByGroup = { ...(e.slotsByGroup ?? {}) };
-        if (next.length) e.slotsByGroup[g] = next;
-        else delete e.slotsByGroup[g];
-      }
-    });
-  const groupName = (key: string) => groups.find((g) => normalizeGroupKey(g) === key) ?? key;
-
-  const save = async () => {
-    setSaving(true);
-    setError(null);
-    try {
-      const saved = await saveCampDayPlan(db, campCode, plan, actorName);
-      if (guides) await updateCampTimetableGuides(db, campCode, guides, actorName);
-      setDirty(false);
-      onSaved(saved);
-    } catch (e) {
-      setError((e as Error)?.message || L('common.saveFailed'));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const close = () => {
-    if (dirty && !window.confirm(L('schedule.discardChanges'))) return;
-    onClose();
-  };
-
-  const exciting = excitingDates(set);
-  /** 이 세트의 익사이팅 활동 이름 (공통·그룹별 모두) — 세부페이지를 붙일 대상 */
-  const activityLabels = useMemo(() => {
-    const seen = new Map<string, string>();
-    excitingDates(set).forEach((d) => {
-      const e = set?.days[d];
-      [...(e?.slots ?? []), ...Object.values(e?.slotsByGroup ?? {}).flat()].forEach((x) => {
-        const k = guideKeyOf(x.activity);
-        if (k && !seen.has(k)) seen.set(k, x.activity.trim());
-      });
-    });
-    return [...seen.values()];
-  }, [set]);
-
-  return (
-    <div className="pb-24 pt-2">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-base font-bold text-gray-900">{L('schedule.editDayPlan')}</h2>
-        <div className="flex gap-2">
-          <button onClick={close} className="rounded-md border border-gray-300 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50">
-            {L('common.cancel')}
-          </button>
-          <button
-            onClick={save}
-            disabled={saving}
-            className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {saving ? L('common.saving') : L('common.save')}
-          </button>
-        </div>
-      </div>
-      {error && <p className="mb-2 rounded-md bg-red-50 px-3 py-2 text-xs text-red-600">{error}</p>}
-
-      {/* 세트 */}
-      <div className="mb-3 flex flex-wrap items-center gap-1">
-        {plan.sets.map((s, i) => (
-          <button
-            key={s.id}
-            onClick={() => setIdx(i)}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium ${i === idx ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-          >
-            {s.name || `#${i + 1}`}
-          </button>
-        ))}
-        <button onClick={addSet} className="rounded-full border border-dashed border-gray-300 px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-50">
-          + {L('schedule.addPlanSet')}
-        </button>
-      </div>
-
-      {set && (
-        <div className="space-y-4">
-          <div className="space-y-2 rounded-xl border border-gray-200 p-3">
-            <label className="block text-[11px] font-semibold text-gray-500">{L('schedule.planSetName')}</label>
-            <input
-              value={set.name}
-              onChange={(e) => update((p) => (p.sets[idx].name = e.target.value))}
-              className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400"
-            />
-            <label className="block pt-1 text-[11px] font-semibold text-gray-500">{L('schedule.planSetGroups')}</label>
-            <div className="flex flex-wrap gap-1">
-              {groups.map((g) => {
-                const on = set.groups.includes(normalizeGroupKey(g));
-                return (
-                  <button
-                    key={g}
-                    onClick={() => toggleGroup(g)}
-                    className={`rounded-lg border px-2.5 py-1 text-xs font-semibold ${on ? 'border-blue-600 bg-blue-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300'}`}
-                  >
-                    {g}
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-[10px] text-gray-400">{L('schedule.planSetGroupsHint')}</p>
-            {plan.sets.length > 1 && (
-              <button onClick={removeSet} className="text-[11px] text-red-500 hover:underline">
-                {L('schedule.deletePlanSet')}
-              </button>
-            )}
-          </div>
-
-          {/* 날짜별 Day */}
-          <div>
-            <p className="mb-1.5 text-[11px] text-gray-500">{L('schedule.dayPlanCalendarHint')}</p>
-            {weeks.length ? (
-              <div className="grid grid-cols-7 gap-1">
-                {WEEKDAYS.map((w) => (
-                  <div key={w} className="rounded-md bg-amber-200/80 py-1 text-center text-[10px] font-semibold text-gray-800">{w}</div>
-                ))}
-                {weeks.flat().map((date, i) => {
-                  if (!date) return <div key={`x${i}`} />;
-                  const kind = set.days[date]?.kind ?? '';
-                  return (
-                    <div key={date} className="overflow-hidden rounded-md border border-gray-200">
-                      <div className="bg-white py-0.5 text-center text-[10px] tabular-nums text-gray-600">{monthDayLabel(date)}</div>
-                      <select
-                        value={kind}
-                        onChange={(e) => setDay(date, e.target.value as DayKind | '')}
-                        className="w-full border-0 px-0.5 py-1.5 text-[10px] outline-none sm:text-xs"
-                        style={{ backgroundColor: findDayKind(kind)?.color ?? '#fff' }}
-                      >
-                        <option value="">—</option>
-                        {DAY_KINDS.map((k) => (
-                          <option key={k.key} value={k.key}>{dayKindMini(k.key, campCode)}</option>
-                        ))}
-                      </select>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400">{L('schedule.campDatesMissing')}</p>
-            )}
-          </div>
-
-          {/* 익사이팅 활동 */}
-          <div className="space-y-2">
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">{L('schedule.excitingSlots')}</h3>
-              <p className="text-[11px] text-gray-500">{L('schedule.excitingSlotsHint')}</p>
-            </div>
-            {!exciting.length && <p className="text-xs text-gray-400">{L('schedule.noExcitingDays')}</p>}
-            {exciting.map((date) => {
-              const entry = set.days[date];
-              const g = slotGroup[date] ?? '';
-              const current = slotsOf(entry, g);
-              // 복사해 올 수 있는 활동표 — 다른 날·다른 그룹 것까지
-              const sources = exciting.flatMap((d) => [
-                ...(set.days[d]?.slots?.length ? [{ value: `${d}|`, label: `${monthDayLabel(d)} · ${L('schedule.slotsCommon')}` }] : []),
-                ...Object.keys(set.days[d]?.slotsByGroup ?? {}).map((k) => ({ value: `${d}|${k}`, label: `${monthDayLabel(d)} · ${groupName(k)}` })),
-              ]).filter((x) => x.value !== `${date}|${g}`);
-              return (
-                <div key={date} className="rounded-xl border border-amber-200 bg-[#fffef0] p-2.5">
-                  <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-bold tabular-nums">{monthDayLabel(date)}</span>
-                    <span className="text-xs text-gray-500">{weekdayOf(date)}</span>
-                    {sources.length > 0 && (
-                      <select
-                        value=""
-                        onChange={(e) => {
-                          const [d, k] = e.target.value.split('|');
-                          const from = slotsOf(set.days[d], k ?? '');
-                          setSlots(date, () => from.map((s) => ({ ...s, id: newId() })));
-                        }}
-                        className="ml-auto rounded border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-600"
-                      >
-                        <option value="">{L('schedule.copySlotsFrom')}</option>
-                        {sources.map((x) => <option key={x.value} value={x.value}>{x.label}</option>)}
-                      </select>
-                    )}
-                  </div>
-                  {/* 그룹별 활동표 — 공통 하나로 충분하면 공통만, 그룹마다 가는 곳이 다르면 그룹을 골라 따로 */}
-                  {set.groups.length > 1 && (
-                    <div className="mb-2 flex flex-wrap items-center gap-1">
-                      {['', ...set.groups].map((k) => {
-                        const on = k === g;
-                        const own = k ? !!entry.slotsByGroup?.[k]?.length : !!entry.slots?.length;
-                        return (
-                          <button key={k || 'common'} type="button" onClick={() => setSlotGroup((m) => ({ ...m, [date]: k }))}
-                            className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold ${on ? 'border-amber-500 bg-amber-500 text-white' : 'border-amber-200 bg-white text-gray-600'}`}>
-                            {k ? groupName(k) : L('schedule.slotsCommon')}{own ? ' •' : ''}
-                          </button>
-                        );
-                      })}
-                      <span className="text-[10px] text-gray-400">{g ? L('schedule.slotsGroupHint', { v0: groupName(g) }) : L('schedule.slotsCommonHint')}</span>
-                    </div>
-                  )}
-                  <input
-                    value={entry.note ?? ''}
-                    onChange={(e) => update((p) => (p.sets[idx].days[date].note = e.target.value))}
-                    placeholder={L('schedule.memo')}
-                    className="mb-2 w-full rounded border border-gray-200 bg-white px-2 py-1 text-xs outline-none focus:border-blue-400"
-                  />
-                  <div className="space-y-1.5">
-                    {current.map((s, si) => (
-                      <div key={s.id} className="grid grid-cols-[auto_auto_1fr_1fr_auto] items-center gap-1 max-sm:grid-cols-[auto_auto_1fr_auto]">
-                        <input type="time" value={s.start} onChange={(e) => setSlots(date, (xs) => xs.map((x, j) => (j === si ? { ...x, start: e.target.value } : x)))}
-                          className="rounded border border-gray-200 bg-white px-1 py-1 text-xs tabular-nums" />
-                        <input type="time" value={s.end} onChange={(e) => setSlots(date, (xs) => xs.map((x, j) => (j === si ? { ...x, end: e.target.value } : x)))}
-                          className="rounded border border-gray-200 bg-white px-1 py-1 text-xs tabular-nums" />
-                        <input value={s.activity} placeholder={L('schedule.excitingPlaceholderActivity')}
-                          onChange={(e) => setSlots(date, (xs) => xs.map((x, j) => (j === si ? { ...x, activity: e.target.value } : x)))}
-                          className="min-w-0 rounded border border-gray-200 bg-white px-2 py-1 text-xs" />
-                        <input value={s.place} placeholder={L('schedule.excitingPlaceholderPlace')}
-                          onChange={(e) => setSlots(date, (xs) => xs.map((x, j) => (j === si ? { ...x, place: e.target.value } : x)))}
-                          className="min-w-0 rounded border border-gray-200 bg-white px-2 py-1 text-xs max-sm:col-span-3 max-sm:col-start-1" />
-                        <button onClick={() => setSlots(date, (xs) => xs.filter((_, j) => j !== si))}
-                          className="px-1 text-sm text-gray-400 hover:text-red-500" aria-label={L('common.delete')}>✕</button>
-                      </div>
-                    ))}
-                  </div>
-                  <button
-                    onClick={() => setSlots(date, (xs) => {
-                      const last = xs[xs.length - 1];
-                      return [...xs, { id: newId(), start: last?.end ?? '09:00', end: '', activity: '', place: last?.place ?? '' }];
-                    })}
-                    className="mt-2 text-xs font-semibold text-blue-600 hover:underline"
-                  >
-                    + {L('schedule.addSlot')}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* 활동 세부페이지 — 익사이팅 탭에서 활동을 누르면 뜬다 */}
-          {activityLabels.length > 0 && guides && (
-            <div>
-              <p className="mb-1.5 text-[11px] text-gray-500">{L('schedule.excitingGuideHint')}</p>
-              <GuideEditorPanel campCode={campCode} labels={activityLabels} guides={guides} setGuides={setGuides} />
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

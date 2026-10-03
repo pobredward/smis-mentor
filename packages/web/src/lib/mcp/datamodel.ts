@@ -541,7 +541,7 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
       dayPlan: {
         type: 'object',
         description:
-          '일정표 { sets: [{ id, name, groups: [그룹명], days: { "YYYY-MM-DD": { kind: orientation|regular|steam|exciting|outdoor|final|checkout, note?, slots?: [{ start: "HH:mm", end: "HH:mm", activity, place, note? }], slotsByGroup?: { 그룹: [활동…] } } } }] }. 익사이팅·야외 수업(exciting·outdoor) 날만 slots(활동표)를 쓴다. 통째로 교체된다 — get_document 로 읽어 고친 뒤 전체를 보낸다.',
+          '일정표 { sets: [{ id, name, groups: [그룹명], days: { "YYYY-MM-DD": { kind: orientation|regular|steam|exciting|outdoor|final|checkout, note?, slots?: [{ start: "HH:mm", end: "HH:mm", activity, place, note? }], slotsByGroup?: { 그룹: [활동…] }, courseByGroup?: { 그룹: 코스id } } } }], courses?: [{ id, name, color?, slots: [활동…] }] }. 익사이팅·야외 수업(exciting·outdoor) 날만 활동표를 쓴다. 장소별 하루 일정은 courses(코스)로 한 번만 만들고, 날짜·그룹마다 courseByGroup 으로 코스를 고른다 — 저장할 때 코스 활동표가 slotsByGroup 에 자동으로 옮겨 적힌다(직접 넣은 slotsByGroup 보다 코스가 우선). 통째로 교체된다 — get_document 로 읽어 고친 뒤 전체를 보낸다.',
         writable: true,
         large: true,
         clean: 'dayPlan',

@@ -12,6 +12,7 @@ import {
   sortBlocks,
   type CampTimetable,
   type TimetableBlock,
+  type TimetableExtraColumn,
   type TimetableOwn,
   type TimetableClassColumn,
   type TimetableSubject,
@@ -394,4 +395,182 @@ export function pasteClassGrid(
     });
   });
   return rows.length;
+}
+
+// ── 표 위에서 바로 고치기 (통합 편집기) ──────────────────────────────────
+
+const toHHMM = (m: number) => `${String(Math.floor(Math.max(0, Math.min(1439, m)) / 60)).padStart(2, '0')}:${String(Math.max(0, Math.min(1439, m)) % 60).padStart(2, '0')}`;
+const minutesOf = (hhmm: string | undefined) => {
+  const [h, m] = (hhmm ?? '').split(':').map((v) => parseInt(v, 10));
+  return Number.isNaN(h) || Number.isNaN(m) ? null : h * 60 + m;
+};
+
+/**
+ * 줄을 원하는 자리에 끼운다 — ref 줄의 위(before) 또는 아래(after).
+ * 시간은 옆 줄 사이 빈 시간을 쓰고, 빈 시간이 없으면 ref 줄 끝(또는 시작)에 길이 0 으로 붙인다(관리자가 고친다).
+ * 날짜 표는 그 자리에 빈 날짜 줄을 넣는다.
+ * @returns 새 줄 id
+ */
+export function insertBlock(
+  d: CampTimetable,
+  refId: string | null,
+  where: 'before' | 'after',
+  kind: 'shared' | 'class'
+): string {
+  const id = newBlockId();
+  if ((d.layout ?? 'time') === 'date') {
+    const block: TimetableBlock = {
+      id,
+      kind,
+      dateLabel: '',
+      lines: kind === 'class' ? 2 : 1,
+      ...(kind === 'class' ? { cells: {} } : { label: '' }),
+    };
+    const i = refId ? d.blocks.findIndex((b) => b.id === refId) : -1;
+    if (i < 0) d.blocks.push(block);
+    else d.blocks.splice(where === 'before' ? i : i + 1, 0, block);
+    return id;
+  }
+  const sorted = sortBlocks(d.blocks, d.layout);
+  const i = refId ? sorted.findIndex((b) => b.id === refId) : sorted.length - 1;
+  const ref = sorted[i];
+  const prev = where === 'before' ? sorted[i - 1] : ref;
+  const next = where === 'before' ? ref : sorted[i + 1];
+  const prevEnd = minutesOf(prev?.times?.[(prev.times?.length ?? 1) - 1]?.end);
+  const nextStart = minutesOf(next?.times?.[0]?.start);
+  let start: number;
+  let end: number;
+  if (prevEnd !== null && nextStart !== null && nextStart > prevEnd) {
+    start = prevEnd;
+    end = nextStart;
+  } else if (where === 'before' && nextStart !== null) {
+    start = end = nextStart;
+  } else {
+    start = end = prevEnd ?? 9 * 60;
+  }
+  const one = { start: toHHMM(start), end: toHHMM(end) };
+  if (kind === 'shared') {
+    d.blocks.push({ id, kind, times: [one], label: '' });
+  } else {
+    const mid = start + Math.floor((end - start) / 2);
+    d.blocks.push({
+      id,
+      kind,
+      times: end > start ? [{ start: toHHMM(start), end: toHHMM(mid) }, { start: toHHMM(mid), end: toHHMM(end) }] : [one, { ...one }],
+      cells: {},
+    });
+  }
+  return id;
+}
+
+/** 줄 복제 — 바로 아래에 같은 내용 (시간은 원본 끝에서 같은 길이로) */
+export function duplicateBlock(d: CampTimetable, id: string): string | null {
+  const src = d.blocks.find((b) => b.id === id);
+  if (!src) return null;
+  const copy: TimetableBlock = JSON.parse(JSON.stringify(src));
+  copy.id = newBlockId();
+  if ((d.layout ?? 'time') === 'date') {
+    const i = d.blocks.indexOf(src);
+    d.blocks.splice(i + 1, 0, copy);
+    return copy.id;
+  }
+  const s = minutesOf(src.times?.[0]?.start);
+  const e = minutesOf(src.times?.[(src.times?.length ?? 1) - 1]?.end);
+  if (s !== null && e !== null && copy.times) {
+    const len = e - s;
+    copy.times = copy.times.map((t) => {
+      const ts = minutesOf(t.start) ?? s;
+      const te = minutesOf(t.end) ?? e;
+      return { start: toHHMM(ts + len), end: toHHMM(te + len) };
+    });
+  }
+  d.blocks.push(copy);
+  return copy.id;
+}
+
+/** 칸에 직접 쓰는 글 (입소·퇴소처럼 규칙이 없는 칸) — 쓰면 과목은 비운다. 빈 줄만 남으면 칸을 비운다 */
+export function setCellTexts(d: CampTimetable, blockId: string, colKey: string, texts: string[]): void {
+  const b = d.blocks.find((x) => x.id === blockId);
+  if (!b) return;
+  b.cells ??= {};
+  const prev = b.cells[colKey];
+  const has = texts.some((t) => t.trim());
+  if (!has) {
+    if (prev) {
+      const { texts: _t, ...rest } = prev;
+      if (rest.subject || rest.note || rest.room) b.cells[colKey] = rest;
+      else delete b.cells[colKey];
+    }
+    return;
+  }
+  b.cells[colKey] = { ...(prev ?? {}), texts, subject: undefined, partnerRole: undefined };
+}
+
+/** 칸 하나의 보조 값 (메모 · 짝 원어민 역할 · 강의실) — 빈 값이면 지운다 */
+export function setCellField(
+  d: CampTimetable,
+  blockId: string,
+  colKey: string,
+  field: 'note' | 'partnerRole' | 'room' | 'partnerRoom',
+  value: string
+): void {
+  const b = d.blocks.find((x) => x.id === blockId);
+  if (!b) return;
+  b.cells ??= {};
+  const cell = { ...(b.cells[colKey] ?? {}) };
+  if (value.trim()) cell[field] = value;
+  else delete cell[field];
+  if (Object.values(cell).some((v) => v !== undefined && v !== '' && !(Array.isArray(v) && !v.length))) b.cells[colKey] = cell;
+  else delete b.cells[colKey];
+}
+
+/** 한 줄의 반 칸 전부에 같은 과목 */
+export function fillRow(d: CampTimetable, blockId: string, subject: string): void {
+  const b = d.blocks.find((x) => x.id === blockId);
+  if (!b || b.kind !== 'class') return;
+  d.classes.forEach((c) => setCellSubject(d, blockId, c.classCode, subject));
+}
+
+/** 한 열(반)의 반별 줄 전부에 같은 과목 */
+export function fillColumn(d: CampTimetable, colKey: string, subject: string): void {
+  d.blocks.forEach((b) => {
+    if (b.kind === 'class') setCellSubject(d, b.id, colKey, subject);
+  });
+}
+
+// ── 전담 열 ──────────────────────────────────────────────────────────
+
+export type ExtraColumnKind = 'duty' | 'staffRole' | 'staticText' | 'teacher';
+
+/** 전담 열 추가 — duty: 반이 돌아가며 맡는 당번, staffRole: 한 역할이 내내, staticText: 고정 글, teacher: 고정 교사 이름 */
+export function addExtraColumn(d: CampTimetable, kind: ExtraColumnKind, label = ''): string {
+  const key = `x-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`;
+  const base: TimetableExtraColumn = { key, label: label || '전담' };
+  const col: TimetableExtraColumn =
+    kind === 'duty'
+      ? { ...base, dutyRotation: d.classes.map((c) => c.classCode) }
+      : kind === 'staffRole'
+        ? { ...base, staffRole: '수업' }
+        : kind === 'staticText'
+          ? { ...base, staticText: '-' }
+          : { ...base, teacherName: '' };
+  d.extraColumns = [...(d.extraColumns ?? []), col];
+  return key;
+}
+
+export function updateExtraColumn(d: CampTimetable, key: string, patch: Partial<TimetableExtraColumn>): void {
+  d.extraColumns = (d.extraColumns ?? []).map((e) => (e.key === key ? { ...e, ...patch } : e));
+}
+
+export function removeExtraColumn(d: CampTimetable, key: string): void {
+  d.extraColumns = (d.extraColumns ?? []).filter((e) => e.key !== key);
+  d.blocks.forEach((b) => b.cells && delete b.cells[key]);
+}
+
+/** 전담 열의 종류 (화면 표시용) */
+export function extraColumnKindOf(e: TimetableExtraColumn): ExtraColumnKind {
+  if (e.dutyRotation) return 'duty';
+  if (e.staffRole) return 'staffRole';
+  if (e.staticText !== undefined) return 'staticText';
+  return 'teacher';
 }

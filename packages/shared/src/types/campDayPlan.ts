@@ -94,6 +94,24 @@ export interface DayPlanEntry {
    * normalizeGroupKey 값 → 그 그룹의 활동표. 있으면 공통(slots)보다 먼저 쓴다.
    */
   slotsByGroup?: Record<string, ExcitingSlot[]>;
+  /**
+   * 그룹마다 그날 가는 코스 (normalizeGroupKey 값 → ExcitingCourse.id).
+   * 저장할 때 cleanDayPlan 이 코스의 활동표를 slotsByGroup 에 그대로 옮겨 적는다 —
+   * 그래서 보기 화면·환자 위치·옛 앱은 slotsByGroup 만 읽어도 된다.
+   */
+  courseByGroup?: Record<string, string>;
+}
+
+/**
+ * 코스 — 장소별 하루 일정 (예: "박물관은 살아있다 · 런닝맨").
+ * 캠프 전체 공용으로 한 번만 만들고, 날짜·그룹마다 어느 코스인지만 고른다.
+ */
+export interface ExcitingCourse {
+  id: string;
+  name: string;
+  /** 배정표 칸 색 */
+  color?: string;
+  slots: ExcitingSlot[];
 }
 
 export interface DayPlanSet {
@@ -108,6 +126,8 @@ export interface DayPlanSet {
 
 export interface CampDayPlan {
   sets: DayPlanSet[];
+  /** 익사이팅·야외 코스 (캠프 전체 공용) */
+  courses?: ExcitingCourse[];
   updatedAt?: string;
   updatedBy?: string;
 }
@@ -197,17 +217,39 @@ export function excitingDates(set: DayPlanSet | undefined): string[] {
     .sort();
 }
 
-/** 이 그룹의 그날 활동표 — 그룹 전용이 있으면 그것, 없으면 공통 */
-export function excitingSlotsFor(entry: DayPlanEntry | undefined, groupName?: string | null): ExcitingSlot[] {
+/** 이 그룹이 그날 가는 코스 (courses 를 넘겼을 때만) */
+export function excitingCourseFor(
+  entry: DayPlanEntry | undefined,
+  groupName?: string | null,
+  courses?: ExcitingCourse[] | null
+): ExcitingCourse | undefined {
+  const key = normalizeGroupKey(groupName);
+  const id = key ? entry?.courseByGroup?.[key] : undefined;
+  return id ? courses?.find((c) => c.id === id) : undefined;
+}
+
+/** 이 그룹의 그날 활동표 — 코스 → 그룹 전용 → 공통 순 */
+export function excitingSlotsFor(
+  entry: DayPlanEntry | undefined,
+  groupName?: string | null,
+  courses?: ExcitingCourse[] | null
+): ExcitingSlot[] {
   if (!entry) return [];
+  const course = excitingCourseFor(entry, groupName, courses);
+  if (course) return course.slots;
   const key = normalizeGroupKey(groupName);
   const own = key ? entry.slotsByGroup?.[key] : undefined;
   return own?.length ? own : entry.slots ?? [];
 }
 
 /** 지금 시각에 해당하는 익사이팅 칸 */
-export function excitingSlotAt(entry: DayPlanEntry | undefined, minutes: number, groupName?: string | null): ExcitingSlot | undefined {
-  return excitingSlotsFor(entry, groupName).find((s) => {
+export function excitingSlotAt(
+  entry: DayPlanEntry | undefined,
+  minutes: number,
+  groupName?: string | null,
+  courses?: ExcitingCourse[] | null
+): ExcitingSlot | undefined {
+  return excitingSlotsFor(entry, groupName, courses).find((s) => {
     const a = hhmmToMinutes(s.start);
     const b = hhmmToMinutes(s.end);
     return a !== null && b !== null && a <= minutes && minutes < b;
@@ -218,8 +260,41 @@ export function excitingSlotAt(entry: DayPlanEntry | undefined, minutes: number,
 
 const clean = (s: string | undefined) => (s ?? '').trim();
 
-/** 빈 값·중복 그룹을 걸러 Firestore 에 넣을 모양으로 */
+/** 활동표 한 벌 정리 — 빈 줄 빼고 시작 시각 순 */
+export function cleanSlotList(list: ExcitingSlot[] | undefined, idPrefix = 's'): ExcitingSlot[] {
+  return (list ?? [])
+    .map((x, i) => ({
+      id: x.id || `${idPrefix}-n${i}`,
+      start: clean(x.start), end: clean(x.end), activity: clean(x.activity), place: clean(x.place),
+      ...(clean(x.note) ? { note: clean(x.note) } : {}),
+    }))
+    .filter((x) => x.activity || x.place)
+    .sort((a, b) => (hhmmToMinutes(a.start) ?? 0) - (hhmmToMinutes(b.start) ?? 0));
+}
+
+/** 코스 목록 정리 — id 중복·빈 이름 정리 */
+export function cleanCourses(list: ExcitingCourse[] | undefined): ExcitingCourse[] {
+  const seen = new Set<string>();
+  return (list ?? []).flatMap((c, i) => {
+    let id = clean(c?.id) || `c${i + 1}`;
+    while (seen.has(id)) id = `${id}x`;
+    seen.add(id);
+    return [{
+      id,
+      name: clean(c?.name) || `코스 ${i + 1}`,
+      ...(clean(c?.color) ? { color: clean(c.color) } : {}),
+      slots: cleanSlotList(c?.slots, id),
+    }];
+  });
+}
+
+/**
+ * 빈 값·중복 그룹을 걸러 Firestore 에 넣을 모양으로.
+ * 코스를 고른 칸(courseByGroup)은 코스 활동표를 slotsByGroup 에 옮겨 적는다 (읽는 쪽은 slotsByGroup 만 봐도 된다).
+ */
 export function cleanDayPlan(plan: CampDayPlan): CampDayPlan {
+  const courses = cleanCourses(plan.courses);
+  const courseById = new Map(courses.map((c) => [c.id, c]));
   const taken = new Set<string>();
   const sets = plan.sets.map((s, i) => {
     const groups = s.groups.map(normalizeGroupKey).filter((g) => {
@@ -233,27 +308,29 @@ export function cleanDayPlan(plan: CampDayPlan): CampDayPlan {
       const out: DayPlanEntry = { kind: e.kind };
       if (clean(e.note)) out.note = clean(e.note);
       if (isActivityDayKind(e.kind)) {
-        const cleanSlots = (list: ExcitingSlot[] | undefined) => (list ?? [])
-          .map((x) => ({
-            id: x.id || `${date}-${Math.random().toString(36).slice(2, 8)}`,
-            start: clean(x.start), end: clean(x.end), activity: clean(x.activity), place: clean(x.place),
-            ...(clean(x.note) ? { note: clean(x.note) } : {}),
-          }))
-          .filter((x) => x.activity || x.place)
-          .sort((a, b) => (hhmmToMinutes(a.start) ?? 0) - (hhmmToMinutes(b.start) ?? 0));
-        const slots = cleanSlots(e.slots);
+        const slots = cleanSlotList(e.slots, date);
         if (slots.length) out.slots = slots;
         const byGroup: Record<string, ExcitingSlot[]> = {};
         Object.entries(e.slotsByGroup ?? {}).forEach(([g, list]) => {
           const key = normalizeGroupKey(g);
-          const cleaned = cleanSlots(list);
+          const cleaned = cleanSlotList(list, date);
           if (key && cleaned.length) byGroup[key] = cleaned;
         });
+        const courseByGroup: Record<string, string> = {};
+        Object.entries(e.courseByGroup ?? {}).forEach(([g, id]) => {
+          const key = normalizeGroupKey(g);
+          const course = courseById.get(id);
+          if (!key || !course) return;
+          courseByGroup[key] = id;
+          if (course.slots.length) byGroup[key] = course.slots.map((x) => ({ ...x }));
+          else delete byGroup[key];
+        });
         if (Object.keys(byGroup).length) out.slotsByGroup = byGroup;
+        if (Object.keys(courseByGroup).length) out.courseByGroup = courseByGroup;
       }
       days[date] = out;
     });
     return { id: s.id || `set${i + 1}`, name: clean(s.name) || `일정 ${i + 1}`, groups, days };
   });
-  return { sets };
+  return { sets, ...(courses.length ? { courses } : {}) };
 }

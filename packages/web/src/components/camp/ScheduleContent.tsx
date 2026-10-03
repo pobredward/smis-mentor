@@ -27,6 +27,7 @@ import {
   timetableCategories,
   timetableGroupNames,
   getCampDayPlan,
+  isUnsaved,
   daySetForGroup,
   dayCategory,
   excitingDates,
@@ -38,11 +39,11 @@ import {
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import { campTimetableService } from '@/lib/campTimetableService';
-import { DayPlanCalendar, DayPlanEditor, ExcitingDayList } from './DayPlan';
+import { DayPlanCalendar, ExcitingDayList } from './DayPlan';
 import GuideDetail from './GuideDetail';
 import { getJobCodeById, getUsersByJobCodeId } from '@/lib/firebaseService';
 import TimetableView from './TimetableView';
-import TimetableEditor from './TimetableEditor';
+import TimetableWorkspaceEditor, { EXCITING_TAB, PLAN_TAB } from './timetable-editor/TimetableWorkspaceEditor';
 import BookTable from './BookTable';
 import { L } from '@smis-mentor/shared';
 
@@ -97,7 +98,6 @@ export default function ScheduleContent() {
   const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
 
   const [editing, setEditing] = useState(false);
-  const [dayPlanEditing, setDayPlanEditing] = useState(false);
   const [category, setCategory] = useState<string | null>(null);
   const [groupName, setGroupName] = useState<string | null>(null);
 
@@ -154,7 +154,7 @@ export default function ScheduleContent() {
   });
 
   /** 일정표 — 날짜별 Day · 익사이팅 활동 (캠프당 한 벌) */
-  const { data: dayPlan = null, refetch: refetchDayPlan } = useQuery({
+  const { data: dayPlan = null } = useQuery({
     queryKey: ['campDayPlan', campCode],
     queryFn: () => getCampDayPlan(db, campCode),
     enabled: !!campCode,
@@ -162,7 +162,7 @@ export default function ScheduleContent() {
   });
 
   /** 칸 설명 — 캠프당 한 벌 */
-  const { data: timetableGuides = {}, refetch: refetchGuides } = useQuery({
+  const { data: timetableGuides = {} } = useQuery({
     queryKey: ['campTimetableGuides', campCode],
     queryFn: () => getCampTimetableGuides(db, campCode),
     enabled: !!campCode,
@@ -340,32 +340,15 @@ export default function ScheduleContent() {
     );
   }
 
-  if (dayPlanEditing && isAdmin) {
-    return (
-      <DayPlanEditor
-        campCode={campCode}
-        plan={dayPlan}
-        groups={groups}
-        start={campStart}
-        end={jobCode?.endDate?.toDate?.() ?? null}
-        initialGroup={activeGroup}
-        actorName={userData?.name ?? ''}
-        onClose={() => setDayPlanEditing(false)}
-        onSaved={() => {
-          setDayPlanEditing(false);
-          refetchDayPlan();
-          refetchGuides();
-        }}
-      />
-    );
-  }
-
   if (editing && isAdmin) {
+    // 통합 편집기 — '전체'·'익사이팅' 에서 열면 일정표 탭, Day 탭이면 그 Day·그룹·보던 표로
+    const shownTable = shownVariant?.table ?? current;
     return (
-      <TimetableEditor
+      <TimetableWorkspaceEditor
         jobCodeId={activeJobCodeId}
-        initialCategory={activeCategory}
+        initialTab={activeCategory === EXCITING_CATEGORY ? EXCITING_TAB : isPlanTab ? PLAN_TAB : activeCategory}
         initialGroup={activeGroup}
+        initialTableId={!isPlanTab && shownTable && !isUnsaved(shownTable) ? shownTable.id : null}
         onClose={() => setEditing(false)}
       />
     );
@@ -418,7 +401,7 @@ export default function ScheduleContent() {
         </div>
         {isAdmin && (
           <button
-            onClick={() => (isPlanTab ? setDayPlanEditing(true) : setEditing(true))}
+            onClick={() => setEditing(true)}
             className="shrink-0 rounded-md border border-gray-300 px-2.5 py-1.5 text-xs text-gray-700 hover:bg-gray-50"
           >
             {L('common.edit')}
@@ -483,7 +466,7 @@ export default function ScheduleContent() {
             onBack={() => setGuideLabel(null)}
           />
         ) : (
-          <ExcitingDayList set={daySet} groupName={activeGroup} guidedLabels={guidedLabels} onOpenGuide={setGuideLabel} nowMinutes={nowMinutes} />
+          <ExcitingDayList set={daySet} groupName={activeGroup} courses={dayPlan?.courses} guidedLabels={guidedLabels} onOpenGuide={setGuideLabel} nowMinutes={nowMinutes} />
         )
       ) : current && guideLabel ? (
         <GuideDetail

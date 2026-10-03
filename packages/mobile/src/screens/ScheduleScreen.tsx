@@ -32,9 +32,9 @@ import { useAuth } from '../context/AuthContext';
 import { loadScheduleBundle, scheduleQueryKey } from '../services/scheduleBundle';
 import { TimetableView } from '../components/TimetableView';
 import { GuideDetail } from '../components/GuideDetail';
-import { TimetableEditor } from '../components/TimetableEditor';
+import { TimetableWorkspaceEditor, PLAN_TAB } from '../components/timetable-editor/TimetableWorkspaceEditor';
 import { BookTable } from '../components/BookTable';
-import { DayPlanCalendar, DayPlanEditor, ExcitingDayList } from '../components/DayPlan';
+import { DayPlanCalendar, ExcitingDayList } from '../components/DayPlan';
 import { L } from '@smis-mentor/shared';
 
 /** 시간표 탭 줄의 '전체' (일정표) */
@@ -77,7 +77,6 @@ export function ScheduleScreen() {
   const [category, setCategory] = useState<string | null>(null);
   const [groupName, setGroupName] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [dayPlanEditing, setDayPlanEditing] = useState(false);
   const [focusDate, setFocusDate] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const excitingTop = useRef(0);
@@ -254,31 +253,17 @@ export function ScheduleScreen() {
     );
   }
 
-  if (dayPlanEditing && isAdmin) {
+  if (editing && isAdmin) {
+    // 통합 편집기 — '전체' 면 일정표 탭, '익사이팅' 이면 익사이팅(코스 배정) 탭, Day 탭이면 그 Day · 그룹 · 보던 커스텀 표로 연다
     return (
-      <DayPlanEditor
+      <TimetableWorkspaceEditor
+        jobCodeId={activeJobCodeId}
         campCode={campCode}
-        plan={dayPlan}
-        groups={groups}
         startMs={data?.startMs ?? null}
         endMs={data?.endMs ?? null}
+        initialTab={activeCategory === EXCITING_CATEGORY ? EXCITING_CATEGORY : isPlanTab ? PLAN_TAB : activeCategory}
         initialGroup={activeGroup}
-        actorName={userData?.name ?? ''}
-        onClose={() => setDayPlanEditing(false)}
-        onSaved={() => {
-          setDayPlanEditing(false);
-          refetch();
-        }}
-      />
-    );
-  }
-
-  if (editing && isAdmin) {
-    return (
-      <TimetableEditor
-        jobCodeId={activeJobCodeId}
-        initialCategory={activeCategory}
-        initialGroup={activeGroup}
+        initialTableId={shownVariant?.table.id ?? null}
         onClose={() => {
           setEditing(false);
           refetch();
@@ -326,7 +311,7 @@ export function ScheduleScreen() {
         })}
         </ScrollView>
         {isAdmin && (
-          <TouchableOpacity style={s.editBtn} onPress={() => (isPlanTab ? setDayPlanEditing(true) : setEditing(true))}>
+          <TouchableOpacity style={s.editBtn} onPress={() => setEditing(true)}>
             <Text style={s.editBtnText}>편집</Text>
           </TouchableOpacity>
         )}
@@ -384,6 +369,7 @@ export function ScheduleScreen() {
         <View onLayout={(e) => { excitingTop.current = e.nativeEvent.layout.y; }}>
           <ExcitingDayList
             set={daySet}
+            courses={dayPlan?.courses}
             groupName={activeGroup}
             guidedLabels={guidedLabels}
             onOpenGuide={(label) => { setGuideLabel(label); scrollRef.current?.scrollTo({ y: 0, animated: false }); }}

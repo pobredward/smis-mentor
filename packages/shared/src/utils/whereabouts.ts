@@ -81,7 +81,7 @@ export function studentWhereabouts(
   const line = (...parts: Array<string | undefined>) => parts.filter(Boolean).join(' · ');
 
   if (isActivityDayKind(entry.kind)) {
-    const slot = excitingSlotAt(entry, minutes, group.name);
+    const slot = excitingSlotAt(entry, minutes, group.name, input.dayPlan?.courses);
     if (!slot) return { ...base, text: dayLabel };
     return {
       ...base,

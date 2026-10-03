@@ -25,6 +25,7 @@ import {
   type DayKind,
   type DayPlanEntry,
   type DayPlanSet,
+  type ExcitingCourse,
   type ExcitingSlot,
   type GuideBody,
   type GuideItem,
@@ -151,6 +152,7 @@ export interface CleanCtx {
 /** 일정표 활동표(익사이팅·야외 수업)에 찍히는 활동 이름 — 이것도 칸 설명이 붙는 칸이다 */
 export function dayPlanActivityLabels(plan: CampDayPlan | null | undefined): string[] {
   const out: string[] = [];
+  (plan?.courses ?? []).forEach((c) => (c.slots ?? []).forEach((x) => x?.activity && out.push(x.activity)));
   (plan?.sets ?? []).forEach((s) =>
     Object.values(s.days ?? {}).forEach((e) => {
       if (!isActivityDayKind(e?.kind)) return;
@@ -451,12 +453,37 @@ export async function cleanDayPlanField(raw: unknown, ctx: CleanCtx): Promise<Ca
     ctx.errors.push(`${at}: { sets: [...] } 객체여야 합니다`);
     return undefined;
   }
-  checkUnknownKeys(raw, ['sets', 'updatedAt', 'updatedBy'], at, ctx);
+  checkUnknownKeys(raw, ['sets', 'courses', 'updatedAt', 'updatedBy'], at, ctx);
   if (!Array.isArray(raw.sets)) {
     ctx.errors.push(`${at}.sets: 배열이어야 합니다`);
     return undefined;
   }
   const errCount = ctx.errors.length;
+  // 코스 — 장소별 하루 일정 (캠프 전체 공용). 칸은 days[날짜].courseByGroup 으로 고른다
+  const courses: ExcitingCourse[] = [];
+  if (raw.courses !== undefined && raw.courses !== null) {
+    if (!Array.isArray(raw.courses)) ctx.errors.push(`${at}.courses: [{ id, name, color?, slots }] 배열이어야 합니다`);
+    else
+      raw.courses.forEach((c, ci) => {
+        const cp = `${at}.courses[${ci}]`;
+        if (!isObj(c)) {
+          ctx.errors.push(`${cp}: { id, name, color?, slots } 객체여야 합니다`);
+          return;
+        }
+        checkUnknownKeys(c, ['id', 'name', 'color', 'slots'], cp, ctx);
+        if (typeof c.id !== 'string' || !c.id.trim()) ctx.errors.push(`${cp}.id: 코스 id 문자열이 필요합니다 (courseByGroup 이 이 id 를 가리킵니다)`);
+        if (typeof c.name !== 'string' || !c.name.trim()) ctx.errors.push(`${cp}.name: 코스 이름이 필요합니다`);
+        if (c.color !== undefined && c.color !== null && typeof c.color !== 'string') ctx.errors.push(`${cp}.color: 문자열이어야 합니다`);
+        if (c.slots !== undefined && c.slots !== null) checkSlots(c.slots, `${cp}.slots`, ctx);
+        courses.push({
+          id: String(c.id ?? ''),
+          name: String(c.name ?? ''),
+          ...(typeof c.color === 'string' ? { color: c.color } : {}),
+          slots: Array.isArray(c.slots) ? (c.slots as ExcitingSlot[]) : [],
+        });
+      });
+  }
+  const courseIds = new Set(courses.map((c) => c.id));
   const groupOwner = new Map<string, number>();
   const kinds = DAY_KINDS.map((k) => k.key).join(' | ');
   const sets: DayPlanSet[] = [];
@@ -492,13 +519,20 @@ export async function cleanDayPlanField(raw: unknown, ctx: CleanCtx): Promise<Ca
         ctx.errors.push(`${dp}: { kind, note?, slots?, slotsByGroup? } 객체여야 합니다`);
         return;
       }
-      checkUnknownKeys(e, ['kind', 'note', 'slots', 'slotsByGroup'], dp, ctx);
+      checkUnknownKeys(e, ['kind', 'note', 'slots', 'slotsByGroup', 'courseByGroup'], dp, ctx);
       if (!findDayKind(e.kind as string)) ctx.errors.push(`${dp}.kind: ${kinds} 중 하나여야 합니다 (받은 값: ${JSON.stringify(e.kind)})`);
       if (e.note !== undefined && e.note !== null && typeof e.note !== 'string') ctx.errors.push(`${dp}.note: 문자열이어야 합니다`);
       if (e.slots !== undefined && e.slots !== null) checkSlots(e.slots, `${dp}.slots`, ctx);
       if (e.slotsByGroup !== undefined && e.slotsByGroup !== null) {
         if (!isObj(e.slotsByGroup)) ctx.errors.push(`${dp}.slotsByGroup: { 그룹: [활동…] } 객체여야 합니다`);
         else Object.entries(e.slotsByGroup).forEach(([g, list]) => checkSlots(list, `${dp}.slotsByGroup["${g}"]`, ctx));
+      }
+      if (e.courseByGroup !== undefined && e.courseByGroup !== null) {
+        if (!isObj(e.courseByGroup)) ctx.errors.push(`${dp}.courseByGroup: { 그룹: 코스 id } 객체여야 합니다`);
+        else
+          Object.entries(e.courseByGroup).forEach(([g, id]) => {
+            if (typeof id !== 'string' || !courseIds.has(id)) ctx.errors.push(`${dp}.courseByGroup["${g}"]: dayPlan.courses 에 있는 코스 id 여야 합니다 (받은 값: ${JSON.stringify(id)})`);
+          });
       }
       const hasSlots = (Array.isArray(e.slots) && e.slots.length > 0) || (isObj(e.slotsByGroup) && Object.keys(e.slotsByGroup).length > 0);
       if (hasSlots && findDayKind(e.kind as string) && !isActivityDayKind(e.kind as string)) {
@@ -509,13 +543,14 @@ export async function cleanDayPlanField(raw: unknown, ctx: CleanCtx): Promise<Ca
         ...(typeof e.note === 'string' ? { note: e.note } : {}),
         ...(Array.isArray(e.slots) ? { slots: e.slots as ExcitingSlot[] } : {}),
         ...(isObj(e.slotsByGroup) ? { slotsByGroup: e.slotsByGroup as Record<string, ExcitingSlot[]> } : {}),
+        ...(isObj(e.courseByGroup) ? { courseByGroup: e.courseByGroup as Record<string, string> } : {}),
       };
     });
     sets.push({ id: typeof s.id === 'string' ? s.id : '', name: typeof s.name === 'string' ? s.name : '', groups: s.groups as string[], days });
   });
   if (ctx.errors.length > errCount) return undefined;
 
-  const cleaned = cleanDayPlan({ sets });
+  const cleaned = cleanDayPlan({ sets, ...(courses.length ? { courses } : {}) });
 
   // 저장은 되지만 확인이 필요한 것들
   if (ctx.ref.groups.length) {

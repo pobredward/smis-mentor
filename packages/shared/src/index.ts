@@ -4,6 +4,8 @@ export * from './data/timetablePresets';
 export * from './data/lodging';
 export * from './data/inventoryDefaultItems';
 export * as timetableDraft from './utils/timetableDraft';
+export * as timetableWorkspace from './utils/timetableWorkspace';
+export * as excitingCourses from './utils/excitingCourses';
 export * from './services';
 export * from './utils';
 export * from './constants';
