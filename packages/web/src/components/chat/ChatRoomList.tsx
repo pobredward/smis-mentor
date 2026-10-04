@@ -2,11 +2,12 @@
 
 /**
  * 채팅방 목록 (화면만 — 데이터는 props)
- * 1) 지금 기수의 캠프 방·그룹방 (늘 고정) — 캠프가 2개 이상이면 위에 [All][J29][E29]… 버튼으로 골라 본다
+ * 1) 지금 기수의 캠프 방·그룹방 (늘 고정) — 위 [All][1:1][J29][E29]… 버튼으로 골라 본다 ([1:1] = 1:1 대화만)
+ *    [All] 에서는 캠프 제목을 눌러 그 캠프 방들을 접는다 (접은 캠프는 이 브라우저에 기억, 접힌 제목에 안 읽은 수 · 최근 시각)
  * 2) 고정한 대화  3) 1:1 대화 (최근 순)  4) 지난 기수 (접힘 — 기수별 · 캠프별 소제목)  5) 숨긴 채팅방 n개
  * 행 메뉴(길게 누르기 · 우클릭 · ⋯): 위에 고정/해제 · 채팅방 숨기기 (기본 방은 안내만)
  */
-import { useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { FiAlertCircle, FiBellOff, FiChevronDown, FiChevronRight, FiEdit, FiEyeOff, FiMoreHorizontal } from 'react-icons/fi';
 import { BsPin, BsPinAngle, BsPinAngleFill } from 'react-icons/bs';
 import {
@@ -14,13 +15,17 @@ import {
   chatListTimeLabel,
   chatPreviewText,
   chatRoomTitle,
+  chatCampSummary,
+  chatListChips,
+  chatListView,
   dmPeerOf,
-  filterCampGroups,
   isRoomMuted,
+  parseFoldedCamps,
   totalUnread,
   unreadBadgeText,
   unreadOf,
   type ChatCampGroup,
+  type ChatListChip,
   type ChatRoom,
   type ChatRoomGroups,
   type ChatUserState,
@@ -30,8 +35,35 @@ import { ChatActionMenu, ChatDialog, type ChatMenuAction, type ChatMenuAnchor } 
 import { RoomAvatar, UnreadBadge } from './chatUi';
 import { useLongPress } from './useLongPress';
 
-/** 캠프 버튼 — 'all' 또는 jobCodeId */
+/** 목록 버튼 — 'all' · jobCodeId · 'dm'(1:1 대화만) */
 export type ChatCampFilter = string;
+
+const FOLDED_KEY = 'smis_chat_folded_camps';
+
+/** 접은 캠프 (이 브라우저에 기억) */
+function useFoldedCamps(): [ReadonlySet<string>, (jobCodeId: string) => void] {
+  const [folded, setFolded] = useState<ReadonlySet<string>>(() => {
+    try {
+      return new Set(parseFoldedCamps(window.localStorage.getItem(FOLDED_KEY)));
+    } catch {
+      return new Set();
+    }
+  });
+  const toggle = useCallback((jobCodeId: string) => {
+    setFolded((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobCodeId)) next.delete(jobCodeId);
+      else next.add(jobCodeId);
+      try {
+        window.localStorage.setItem(FOLDED_KEY, JSON.stringify([...next]));
+      } catch {
+        /* 저장소를 못 쓰면 이번만 */
+      }
+      return next;
+    });
+  }, []);
+  return [folded, toggle];
+}
 
 export interface ChatRoomListProps {
   groups: ChatRoomGroups;
@@ -122,6 +154,41 @@ function RoomRow({ room, state, myUid, lang, active, onOpen, now, pinned, onMenu
   );
 }
 
+/** [All] 의 캠프 묶음 — 제목을 누르면 접고 펼친다. 접히면 제목 줄에 최근 시각 · 안 읽은 수 합 */
+function FoldableCamp({ camp, state, lang, now, folded, onToggle, children }: {
+  camp: ChatCampGroup;
+  state: ChatUserState | null;
+  lang: Locale;
+  now?: Date;
+  folded: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const sum = folded ? chatCampSummary(camp, state) : null;
+  return (
+    <section>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={!folded}
+        aria-label={L(folded ? 'chat.unfoldCamp' : 'chat.foldCamp', { camp: camp.campCode })}
+        className={`w-full flex items-center gap-1.5 px-4 pt-4 pb-1.5 text-left hover:bg-gray-50 ${folded ? 'pb-3 border-b border-gray-100' : ''}`}
+      >
+        {folded ? <FiChevronRight size={14} className="shrink-0 text-gray-400" /> : <FiChevronDown size={14} className="shrink-0 text-gray-400" />}
+        <h3 className="text-xs font-semibold text-gray-500">{L('chat.campRooms', { camp: camp.campCode })}</h3>
+        <span className="text-xs text-gray-400">{camp.rooms.length}</span>
+        {sum && (
+          <span className="ml-auto flex items-center gap-2">
+            {sum.lastAt && <span className="text-[11px] text-gray-400">{chatListTimeLabel(sum.lastAt, lang, now)}</span>}
+            {sum.unread > 0 && <UnreadBadge text={unreadBadgeText(sum.unread)} />}
+          </span>
+        )}
+      </button>
+      {!folded && children}
+    </section>
+  );
+}
+
 function SectionTitle({ children }: { children: ReactNode }) {
   return (
     <div className="px-4 pt-4 pb-1.5">
@@ -130,12 +197,8 @@ function SectionTitle({ children }: { children: ReactNode }) {
   );
 }
 
-/** [All][J29][E29]… — 좁은 화면에서는 옆으로 밀어 본다 */
-function CampChips({ camps, filter, state, onChange }: { camps: ChatCampGroup[]; filter: ChatCampFilter; state: ChatUserState | null; onChange: (f: ChatCampFilter) => void }) {
-  const chips = [
-    { key: 'all', label: L('chat.filterAll'), unread: totalUnread(state, camps.flatMap((c) => c.rooms)) },
-    ...camps.map((c) => ({ key: c.jobCodeId, label: c.campCode || '—', unread: totalUnread(state, c.rooms) })),
-  ];
+/** [All][1:1][J29][E29]… — 좁은 화면에서는 옆으로 밀어 본다 */
+function ListChips({ chips, filter, onChange }: { chips: ChatListChip[]; filter: ChatCampFilter; onChange: (f: ChatCampFilter) => void }) {
   return (
     <div className="flex gap-1.5 overflow-x-auto px-4 pt-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
       {chips.map((c) => {
@@ -168,11 +231,14 @@ export default function ChatRoomList({ groups, state, myUid, lang, activeRoomId,
   const [pastOpen, setPastOpen] = useState(false);
   const [rowMenu, setRowMenu] = useState<RowMenu | null>(null);
   const [hiddenOpen, setHiddenOpen] = useState(false);
-  const { camps, pinned, dms, otherGenerations, hiddenCount } = groups;
-  const shownCamps = filterCampGroups(camps, filter);
-  // 고른 캠프가 사라졌으면 All 로 본다
-  const selected = camps.length >= 2 && camps.some((c) => c.jobCodeId === filter) ? filter : 'all';
-  const empty = !camps.length && !pinned.length && !dms.length && !otherGenerations.length;
+  const [folded, toggleFold] = useFoldedCamps();
+  const { camps, hiddenCount } = groups;
+  const chips = chatListChips(groups, state, lang);
+  // 고른 캠프가 사라졌거나 1:1 대화가 없으면 All 로 본다
+  const view = chatListView(groups, filter);
+  const { pinned, dms, otherGenerations } = view;
+  const dmOnly = view.filter === 'dm';
+  const empty = !camps.length && !groups.pinned.length && !groups.dms.length && !groups.otherGenerations.length;
   const pastUnread = totalUnread(state, otherGenerations.flatMap((g) => g.camps.flatMap((c) => c.rooms)));
   const pastCamps = otherGenerations.reduce((s, g) => s + g.camps.length, 0);
   const presetIds = new Set(camps.flatMap((c) => c.rooms.map((r) => r.id)));
@@ -231,13 +297,19 @@ export default function ChatRoomList({ groups, state, myUid, lang, activeRoomId,
         </div>
       ) : (
         <div className="pb-4">
-          {camps.length >= 2 && <CampChips camps={camps} filter={selected} state={state} onChange={onFilterChange} />}
-          {shownCamps.map((c) => (
-            <section key={c.jobCodeId}>
-              <SectionTitle>{L('chat.campRooms', { camp: c.campCode })}</SectionTitle>
-              {c.rooms.map(row)}
-            </section>
-          ))}
+          {chips.length > 0 && <ListChips chips={chips} filter={view.filter} onChange={onFilterChange} />}
+          {view.camps.map((c) =>
+            view.foldable ? (
+              <FoldableCamp key={c.jobCodeId} camp={c} state={state} lang={lang} now={now} folded={folded.has(c.jobCodeId)} onToggle={() => toggleFold(c.jobCodeId)}>
+                {c.rooms.map(row)}
+              </FoldableCamp>
+            ) : (
+              <section key={c.jobCodeId}>
+                <SectionTitle>{L('chat.campRooms', { camp: c.campCode })}</SectionTitle>
+                {c.rooms.map(row)}
+              </section>
+            ),
+          )}
           {pinned.length > 0 && (
             <section>
               <SectionTitle>{L('chat.pinnedSection')}</SectionTitle>
@@ -249,6 +321,15 @@ export default function ChatRoomList({ groups, state, myUid, lang, activeRoomId,
               <SectionTitle>{L('chat.sectionDms')}</SectionTitle>
               {dms.map(row)}
             </section>
+          )}
+          {dmOnly && !pinned.length && !dms.length && (
+            <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
+              <p className="text-sm text-gray-500">{L('chat.noDms')}</p>
+              <button type="button" onClick={onNewDm} className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                <FiEdit size={15} />
+                {L('chat.newDm')}
+              </button>
+            </div>
           )}
           {otherGenerations.length > 0 && (
             <section className="mt-2 border-t border-gray-100">

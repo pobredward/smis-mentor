@@ -1,6 +1,7 @@
 /**
  * 채팅 탭 — 방 목록 (기수별)
- *  1) 지금 기수의 캠프 방·그룹방 (늘 위에 고정) — 캠프가 2개 이상이면 위에 [All][J29][E29][S29]… 버튼으로 골라 본다
+ *  1) 지금 기수의 캠프 방·그룹방 (늘 위에 고정) — 위 [All][1:1][J29][E29][S29]… 버튼으로 골라 본다 ([1:1] = 1:1 대화만)
+ *     [All] 에서는 캠프 제목을 눌러 그 캠프 방들을 접는다 (접은 캠프는 이 기기에 기억, 접힌 제목에 안 읽은 수 · 최근 시각)
  *  2) 고정한 대화  3) 1:1 대화 (최근 순)  4) 지난 기수 (접힘, 기수 › 캠프별)  5) 숨긴 채팅방 n개
  * 길게 누르면 고정 · 숨기기 (1:1 · 지난 기수 방만 — 지금 기수 캠프 방은 늘 고정)
  * 방 목록·안 읽은 수는 MainTabs 가 구독해 둔 것(useChatStore)을 읽는다.
@@ -18,10 +19,16 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   L,
+  CHAT_FILTER_ALL,
+  CHAT_FILTER_DM,
+  chatCampSummary,
+  chatListChips,
+  chatListTimeLabel,
+  chatListView,
   chatRoomGroups,
-  filterCampGroups,
   getCurrentLocale,
   isRoomHidden,
   isRoomMuted,
@@ -30,6 +37,7 @@ import {
   setChatRoomPinned,
   chatRoomTitle,
   logger,
+  parseFoldedCamps,
   resolveActiveJobCodeId,
   totalUnread,
   unreadBadgeText,
@@ -47,17 +55,21 @@ import { CHAT_COLORS } from '../components/chat/chatTheme';
 import type { MainTabScreenProps } from '../navigation/types';
 
 type ListItem =
-  | { type: 'header'; key: string; title: string; collapsible?: boolean; open?: boolean; unread?: number }
+  /** foldId: 접을 수 있는 캠프 묶음 (없으면 '지난 기수') · time: 접힌 캠프의 최근 메시지 시각 */
+  | { type: 'header'; key: string; title: string; collapsible?: boolean; open?: boolean; unread?: number; count?: number; foldId?: string; campCode?: string; time?: string }
   /** 지난 기수 안의 기수 이름 ('28기') */
   | { type: 'generation'; key: string; title: string }
   /** 지난 기수 안의 캠프 코드 */
   | { type: 'sub'; key: string; title: string }
   | { type: 'room'; key: string; room: ChatRoom }
   /** 맨 아래 '숨긴 채팅방 n개' */
-  | { type: 'hidden'; key: string; count: number };
+  | { type: 'hidden'; key: string; count: number }
+  /** [1:1] 에서 대화가 하나도 없을 때 */
+  | { type: 'noDms'; key: string };
 
-/** 캠프 버튼 — 'all' 또는 jobCodeId */
-const FILTER_ALL = 'all';
+/** 목록 버튼 — 'all' · jobCodeId · 'dm' */
+const FILTER_ALL = CHAT_FILTER_ALL;
+const FOLDED_KEY = 'chat.foldedCamps';
 
 export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
   const { userData } = useAuth();
@@ -68,8 +80,30 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
 
   const [keepEmptyDmId, setKeepEmptyDmId] = useState<string | null>(null);
   const [otherOpen, setOtherOpen] = useState(false);
-  // 지금 기수에서 볼 캠프 (이 화면이 살아 있는 동안 기억)
+  // 지금 기수에서 볼 캠프 · [1:1] (이 화면이 살아 있는 동안 기억)
   const [campFilter, setCampFilter] = useState<string>(FILTER_ALL);
+  // [All] 에서 접은 캠프 (이 기기에 기억)
+  const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set());
+  useEffect(() => {
+    let alive = true;
+    AsyncStorage.getItem(FOLDED_KEY)
+      .then((v) => {
+        if (alive) setFolded(new Set(parseFoldedCamps(v)));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const toggleFold = useCallback((jobCodeId: string) => {
+    setFolded((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobCodeId)) next.delete(jobCodeId);
+      else next.add(jobCodeId);
+      AsyncStorage.setItem(FOLDED_KEY, JSON.stringify([...next])).catch(() => {});
+      return next;
+    });
+  }, []);
   // 길게 누른 방 (고정 · 숨기기 메뉴) · 숨긴 방 목록
   const [menuRoom, setMenuRoom] = useState<ChatRoom | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -118,9 +152,9 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
   );
   /** 지금 기수의 캠프 방 · 그룹방 — 늘 고정 (고정 해제 · 숨기기 불가) */
   const presetIds = useMemo(() => new Set(groups.camps.flatMap((c) => c.rooms.map((r) => r.id))), [groups]);
-  const showCampChips = groups.camps.length >= 2;
-  // 고른 캠프가 목록에서 사라지면(배정 해제 등) 전체로
-  const selectedFilter = groups.camps.some((c) => c.jobCodeId === campFilter) ? campFilter : FILTER_ALL;
+  // 고른 캠프가 목록에서 사라지거나(배정 해제 등) 1:1 대화가 없으면 전체로
+  const view = useMemo(() => chatListView(groups, campFilter), [groups, campFilter]);
+  const selectedFilter = view.filter;
   useEffect(() => {
     if (roomsReady && campFilter !== FILTER_ALL && selectedFilter === FILTER_ALL) setCampFilter(FILTER_ALL);
   }, [roomsReady, campFilter, selectedFilter]);
@@ -132,24 +166,44 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
   const items = useMemo<ListItem[]>(() => {
     const out: ListItem[] = [];
     const pushRooms = (list: ChatRoom[]) => list.forEach((room) => out.push({ type: 'room', key: room.id, room }));
-    // 1) 지금 기수의 캠프 방 (버튼으로 고른 캠프만, 또는 전부)
-    filterCampGroups(groups.camps, showCampChips ? selectedFilter : FILTER_ALL).forEach((camp) => {
-      out.push({ type: 'header', key: `h_camp_${camp.jobCodeId}`, title: L('chat.campRooms', { camp: camp.campCode || camp.jobCodeId }) });
-      pushRooms(camp.rooms);
+    // 1) 지금 기수의 캠프 방 (버튼으로 고른 캠프만, 또는 전부 — 전부일 때는 캠프마다 접을 수 있다)
+    view.camps.forEach((camp) => {
+      const title = L('chat.campRooms', { camp: camp.campCode || camp.jobCodeId });
+      if (!view.foldable) {
+        out.push({ type: 'header', key: `h_camp_${camp.jobCodeId}`, title });
+        pushRooms(camp.rooms);
+        return;
+      }
+      const open = !folded.has(camp.jobCodeId);
+      const sum = open ? null : chatCampSummary(camp, state);
+      out.push({
+        type: 'header',
+        key: `h_camp_${camp.jobCodeId}`,
+        title,
+        collapsible: true,
+        open,
+        count: camp.rooms.length,
+        foldId: camp.jobCodeId,
+        campCode: camp.campCode || camp.jobCodeId,
+        unread: sum?.unread,
+        time: sum?.lastAt ? chatListTimeLabel(sum.lastAt, lang) : undefined,
+      });
+      if (open) pushRooms(camp.rooms);
     });
-    // 2) 고정한 대화
-    if (groups.pinned.length) {
+    // 2) 고정한 대화 ([1:1] 이면 고정한 1:1 만)
+    if (view.pinned.length) {
       out.push({ type: 'header', key: 'h_pinned', title: L('chat.pinnedSection') });
-      pushRooms(groups.pinned);
+      pushRooms(view.pinned);
     }
     // 3) 1:1 대화
-    if (groups.dms.length) {
+    if (view.dms.length) {
       out.push({ type: 'header', key: 'h_dms', title: L('chat.sectionDms') });
-      pushRooms(groups.dms);
+      pushRooms(view.dms);
     }
+    if (view.filter === CHAT_FILTER_DM && !view.pinned.length && !view.dms.length) out.push({ type: 'noDms', key: 'noDms' });
     // 4) 지난 기수 (접힘)
-    if (groups.otherGenerations.length) {
-      const pastRooms = groups.otherGenerations.flatMap((g) => g.camps.flatMap((c) => c.rooms));
+    if (view.otherGenerations.length) {
+      const pastRooms = view.otherGenerations.flatMap((g) => g.camps.flatMap((c) => c.rooms));
       out.push({
         type: 'header',
         key: 'h_past',
@@ -159,7 +213,7 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
         unread: totalUnread(state, pastRooms),
       });
       if (otherOpen) {
-        groups.otherGenerations.forEach((g) => {
+        view.otherGenerations.forEach((g) => {
           out.push({ type: 'generation', key: `g_${g.generation}`, title: g.generation });
           g.camps.forEach((camp) => {
             out.push({ type: 'sub', key: `s_${camp.jobCodeId}`, title: camp.campCode || camp.jobCodeId });
@@ -171,21 +225,12 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
     // 5) 숨긴 채팅방
     if (groups.hiddenCount > 0) out.push({ type: 'hidden', key: 'hidden', count: groups.hiddenCount });
     return out;
-    // lang: 화면 언어가 바뀌면 머리글도 다시
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups, showCampChips, selectedFilter, otherOpen, state, lang]);
+  }, [groups, view, folded, otherOpen, state, lang]);
 
-  // [All][J29][E29]… — 캠프마다 안 읽은 수
-  const chips = useMemo(() => {
-    if (!showCampChips) return [];
-    return [
-      { id: FILTER_ALL, label: L('chat.filterAll'), unread: totalUnread(state, groups.camps.flatMap((c) => c.rooms)) },
-      ...groups.camps.map((c) => ({ id: c.jobCodeId, label: c.campCode || c.jobCodeId, unread: totalUnread(state, c.rooms) })),
-    ];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showCampChips, groups, state, lang]);
+  // [All][1:1][J29][E29]… — 버튼마다 안 읽은 수
+  const chips = useMemo(() => chatListChips(groups, state, lang), [groups, state, lang]);
 
-  const chipRow = showCampChips ? (
+  const chipRow = chips.length ? (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
@@ -193,12 +238,12 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
       style={styles.chipBar}
     >
       {chips.map((chip) => {
-        const on = chip.id === selectedFilter;
+        const on = chip.key === selectedFilter;
         return (
           <TouchableOpacity
-            key={chip.id}
+            key={chip.key}
             style={[styles.chip, on && styles.chipOn]}
-            onPress={() => setCampFilter(chip.id)}
+            onPress={() => setCampFilter(chip.key)}
             activeOpacity={0.7}
             accessibilityState={{ selected: on }}
           >
@@ -268,9 +313,13 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
       if (item.type === 'header') {
         const content = (
           <>
-            <Text style={styles.headerText}>{item.title}</Text>
+            <Text style={styles.headerText} numberOfLines={1}>
+              {item.title}
+              {item.count ? <Text style={styles.headerCount}>{`  ${item.count}`}</Text> : null}
+            </Text>
             {item.collapsible ? (
               <View style={styles.headerRight}>
+                {!item.open && item.time ? <Text style={styles.headerTime}>{item.time}</Text> : null}
                 {!item.open && item.unread ? (
                   <View style={styles.headerBadge}>
                     <Text style={styles.headerBadgeText}>{unreadBadgeText(item.unread)}</Text>
@@ -281,8 +330,16 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
             ) : null}
           </>
         );
+        const foldId = item.foldId;
         return item.collapsible ? (
-          <TouchableOpacity style={styles.header} onPress={() => setOtherOpen((v) => !v)} activeOpacity={0.6}>
+          <TouchableOpacity
+            style={[styles.header, foldId && !item.open && styles.headerFolded]}
+            onPress={() => (foldId ? toggleFold(foldId) : setOtherOpen((v) => !v))}
+            activeOpacity={0.6}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: !!item.open }}
+            accessibilityLabel={foldId ? L(item.open ? 'chat.foldCamp' : 'chat.unfoldCamp', { camp: item.campCode ?? '' }) : item.title}
+          >
             {content}
           </TouchableOpacity>
         ) : (
@@ -294,6 +351,16 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
       }
       if (item.type === 'sub') {
         return <Text style={styles.sub}>{item.title}</Text>;
+      }
+      if (item.type === 'noDms') {
+        return (
+          <View style={styles.noDms}>
+            <Text style={styles.emptyHint}>{L('chat.noDms')}</Text>
+            <TouchableOpacity style={styles.unhideBtn} onPress={() => setDmSheetOpen(true)}>
+              <Text style={styles.unhideText}>{L('chat.newDm')}</Text>
+            </TouchableOpacity>
+          </View>
+        );
       }
       if (item.type === 'hidden') {
         return (
@@ -319,7 +386,7 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
         />
       );
     },
-    [uid, lang, state, openRoom, presetIds, openRowMenu],
+    [uid, lang, state, openRoom, presetIds, openRowMenu, toggleFold],
   );
 
   if (!roomsReady) {
@@ -416,6 +483,10 @@ const styles = StyleSheet.create({
   },
   headerText: { flex: 1, fontSize: 13, fontWeight: '700', color: CHAT_COLORS.sub },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  headerFolded: { paddingBottom: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: CHAT_COLORS.border },
+  headerCount: { fontSize: 12, fontWeight: '400', color: CHAT_COLORS.muted },
+  headerTime: { fontSize: 11.5, color: CHAT_COLORS.muted },
+  noDms: { alignItems: 'center', gap: 12, paddingVertical: 48 },
   headerBadge: {
     minWidth: 18,
     height: 18,

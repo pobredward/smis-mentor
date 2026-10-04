@@ -141,6 +141,52 @@ describe('chat — 방 이름 · 목록', () => {
     expect(C.chatRoomGeneration({ campCode: 'F25_1' })).toBe('25기');
   });
 
+  it('목록 버튼 [All][1:1][J29]… · 1:1 만 보기 · 캠프 묶음 접기', () => {
+    const rooms = [
+      room('dm_1', 'dm', 500), room('dm_2', 'dm', 900), room('dm_pin', 'dm', 300),
+      room('a_camp_all', 'camp_all', 100, { jobCodeId: 'a', campCode: 'J29', generation: '29기' }),
+      room('a_camp_mentor', 'camp_mentor', 700, { jobCodeId: 'a', campCode: 'J29', generation: '29기' }),
+      room('b_camp_all', 'camp_all', 0, { jobCodeId: 'b', campCode: 'E29', generation: '29기' }),
+      room('c_camp_all', 'camp_all', 800, { jobCodeId: 'c', campCode: 'S28', generation: '28기' }),
+    ];
+    const state = { unread: { a_camp_all: 2, a_camp_mentor: 1, b_camp_all: 4, dm_1: 3, dm_pin: 1, c_camp_all: 9 }, pinned: { dm_pin: 1 } };
+    const g = C.chatRoomGroups(rooms, { activeJobCodeId: 'a', state });
+    expect(C.chatListChips(g, state, 'ko').map((c) => [c.key, c.label, c.unread])).toEqual([
+      ['all', 'All', 7], ['dm', '1:1', 4], ['a', 'J29', 3], ['b', 'E29', 4],
+    ]);
+    // [1:1] — 1:1 대화만 (고정한 1:1 은 위에), 캠프 방 · 지난 기수는 안 보임
+    const dm = C.chatListView(g, 'dm');
+    expect(dm.filter).toBe('dm');
+    expect(dm.camps).toEqual([]);
+    expect(dm.otherGenerations).toEqual([]);
+    expect(dm.pinned.map((r) => r.id)).toEqual(['dm_pin']);
+    expect(dm.dms.map((r) => r.id)).toEqual(['dm_2', 'dm_1']);
+    expect(dm.foldable).toBe(false);
+    // 캠프 하나 — 늘 펼침 · All — 접을 수 있음 · 없는 캠프는 All
+    expect([C.chatListView(g, 'b').filter, C.chatListView(g, 'b').foldable]).toEqual(['b', false]);
+    expect(C.chatListView(g, 'b').camps.map((c) => c.campCode)).toEqual(['E29']);
+    expect([C.chatListView(g, 'all').filter, C.chatListView(g, 'all').foldable]).toEqual(['all', true]);
+    expect(C.chatListView(g, 'gone').filter).toBe('all');
+    expect(C.chatListView(g, null).camps.length).toBe(2);
+    // 캠프 하나뿐인 멘토 — [All][1:1], 1:1 이 없으면 버튼 줄 없음
+    const one = C.chatRoomGroups(rooms.filter((r) => r.jobCodeId !== 'b'), { activeJobCodeId: 'a', state });
+    expect(C.chatListChips(one, state, 'en').map((c) => c.key)).toEqual(['all', 'dm']);
+    const noDm = C.chatRoomGroups(rooms.filter((r) => r.type !== 'dm' && r.jobCodeId !== 'b'), { activeJobCodeId: 'a' });
+    expect(C.chatListChips(noDm, null, 'ko')).toEqual([]);
+    expect(C.chatListView(noDm, 'dm').filter).toBe('all');
+    // 접힌 머리글 — 안 읽은 수 합 · 가장 최근 메시지
+    const sum = C.chatCampSummary(g.camps[0], state);
+    expect(sum.unread).toBe(3);
+    expect(sum.lastAt?.getTime()).toBe(700);
+    expect(C.chatCampSummary({ rooms: [room('x', 'camp_all', 0)] }, null)).toEqual({ unread: 0, lastAt: null });
+    // 기기에 저장한 접은 캠프
+    expect(C.parseFoldedCamps('["a","b"]')).toEqual(['a', 'b']);
+    expect(C.parseFoldedCamps('{"a":1}')).toEqual([]);
+    expect(C.parseFoldedCamps('not json')).toEqual([]);
+    expect(C.parseFoldedCamps(null)).toEqual([]);
+    expect(C.parseFoldedCamps('["a", 3, "", null]')).toEqual(['a']);
+  });
+
   it('안 읽은 수 합은 지금 들어가 있는 방만', () => {
     const state = { unread: { a: 3, b: 2, left: 9 } };
     expect(C.totalUnread(state, [{ id: 'a' }, { id: 'b' }])).toBe(5);
