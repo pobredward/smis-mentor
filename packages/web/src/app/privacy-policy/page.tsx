@@ -5,9 +5,9 @@ export const metadata: Metadata = {
   description: 'SMIS Mentor 개인정보처리방침',
 };
 
-/** 개정 시 두 값만 바꾼다. 시행일은 공지일로부터 7일 이후 (제10조) */
-const LAST_UPDATED = '2026년 9월 26일';
-const EFFECTIVE_DATE = '2026년 10월 6일';
+/** 개정 시 두 값만 바꾼다. 시행일은 공지일로부터 7일 이후 (제12조) */
+const LAST_UPDATED = '2026년 10월 4일';
+const EFFECTIVE_DATE = '2026년 10월 11일';
 
 export default function PrivacyPolicyPage() {
   return (
@@ -40,7 +40,8 @@ export default function PrivacyPolicyPage() {
                 <li>서비스 제공: 멘토링 서비스 제공, 업무 관리, 알림 서비스 제공</li>
                 <li>캠프 운영: 급여 지급 및 원천징수 신고, 해외 송금, 항공권 발권·여행자보험 가입, 명찰·단체복 제작, 로밍 준비</li>
                 <li>안전 관리: 캠프 참가 학생의 병원 내원 등 응급 상황 대응, 스태프 위치 공유</li>
-                <li>커뮤니티 운영: 게시판 운영, 신고 처리 및 이용 제한</li>
+                <li>채팅·통화: 캠프 스태프 간 채팅(메시지·사진·동영상·음성 메시지)과 음성·영상 통화, 새 메시지·걸려 오는 통화 알림</li>
+                <li>커뮤니티·채팅 운영: 게시판·채팅방 운영, 신고 처리 및 이용 제한</li>
                 <li>마케팅 및 광고: 신규 서비스 개발, 맞춤 서비스 제공, 이벤트 정보 제공</li>
               </ul>
             </section>
@@ -107,10 +108,20 @@ export default function PrivacyPolicyPage() {
                   </p>
                 </div>
 
+                <div className="bg-indigo-50 border-l-4 border-indigo-500 p-4 rounded-r-lg">
+                  <h3 className="font-semibold text-gray-900 mb-2">채팅·통화 이용 시 (자세한 내용은 제11조)</h3>
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    • 채팅: 보낸 메시지, 사진·동영상·음성 메시지 파일, 공감·투표·읽은 시각, 채팅방 알림·고정·숨김 설정, 차단 목록, 신고 내역<br/>
+                    • 통화: 통화 기록(통화 종류, 건 사람, 참여자, 시작·연결·종료 시각, 통화 시간, 받지 않음·거절 여부)<br/>
+                    &nbsp;&nbsp;— 통화 음성·영상은 실시간으로 전달만 하며 녹음하거나 저장하지 않습니다.
+                  </p>
+                </div>
+
                 <div className="bg-gray-50 border-l-4 border-gray-600 p-4 rounded-r-lg">
                   <h3 className="font-semibold text-gray-900 mb-2">자동 수집 항목</h3>
                   <p className="text-gray-700 text-sm leading-relaxed">
                     • 서비스 이용 기록, 접속 로그, 쿠키, 접속 IP 정보, 기기 정보<br/>
+                    • 알림 수신용 기기 토큰: 앱 푸시 토큰, 웹 알림 토큰, iOS 통화 수신용 VoIP 토큰 (로그아웃하면 삭제)<br/>
                     • 위치 공유 기능 이용 시: GPS 기반 위도·경도 좌표 (사용자가 직접 활성화한 경우에 한함)<br/>
                     • 커뮤니티 이용 시: 게시글·댓글, 신고 및 차단 내역. 익명으로 작성한 글도 신고 처리와 법적 대응을 위해 작성자 계정은 내부적으로 기록되며, 다른 이용자에게는 공개되지 않습니다.<br/>
                     • 개인정보 조회·변경 기록(감사 로그): 관리자의 개인정보 조회, 회원 정보 변경, 민감 정보 열람 시 처리자·시각·대상
@@ -134,6 +145,7 @@ export default function PrivacyPolicyPage() {
                 <li>소비자의 불만 또는 분쟁처리에 관한 기록: 3년</li>
                 <li>표시·광고에 관한 기록: 6개월</li>
                 <li>위치 기록: 마지막 갱신 후 14일이 지나면 자동 삭제</li>
+                <li>채팅 메시지·첨부 파일·통화 기록: 채팅방이 유지되는 동안 보관. 보낸 사람이 메시지를 삭제하면 내용과 첨부 파일을 즉시 지웁니다.</li>
                 <li>캠프 참가 정보(계좌·여권 등): 회원 탈퇴 시 파기. 단, 급여 지급·원천징수 관련 기록은 국세기본법 등 관계 법령이 정한 기간 동안 보관</li>
                 <li>개인정보 조회·변경 기록(감사 로그): 「개인정보의 안전성 확보조치 기준」에 따라 2년 이상 보관</li>
               </ul>
@@ -159,10 +171,64 @@ export default function PrivacyPolicyPage() {
               </div>
             </section>
 
+            {/* Section 5 - 처리 위탁 · 국외 이전 */}
+            <section>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b-2 border-blue-600">
+                5. 개인정보 처리업무의 위탁 및 국외 이전
+              </h2>
+              <p className="text-gray-700 leading-relaxed mb-4">
+                회사는 서비스 제공을 위해 아래와 같이 개인정보 처리업무를 위탁하고 있으며, 일부는 국외에서 처리됩니다.
+                정보는 서비스 이용 시 네트워크를 통해 전송되며, 위탁 계약 종료 또는 회원 탈퇴 시까지(별도 기재가 있으면 그 기간) 보관됩니다.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-gray-700 border border-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="text-left p-3 border-b border-gray-200">수탁자 (국가)</th>
+                      <th className="text-left p-3 border-b border-gray-200">위탁 업무 · 이전 항목</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="p-3 border-b border-gray-100 align-top">Google LLC — Firebase (대한민국 서울 · 미국)</td>
+                      <td className="p-3 border-b border-gray-100">회원 인증, 회원·채팅 데이터 저장(서울), 사진·동영상·음성 파일 저장(미국), 서버 기능 실행(서울), 앱·웹 알림 전달</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 border-b border-gray-100 align-top">Agora Lab, Inc. (미국 · 통화 중계 서버는 이용자와 가까운 지역)</td>
+                      <td className="p-3 border-b border-gray-100">음성·영상 통화 실시간 중계 — 통화 음성·영상(저장하지 않음), 통화 참여자 식별 번호, 접속 IP</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 border-b border-gray-100 align-top">Apple Inc. (미국)</td>
+                      <td className="p-3 border-b border-gray-100">iOS 앱 알림 및 걸려 오는 통화 알림 전달 — 기기 토큰, 알림 내용</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 border-b border-gray-100 align-top">650 Industries, Inc. — Expo (미국)</td>
+                      <td className="p-3 border-b border-gray-100">앱 알림 전달, 앱 업데이트 배포 — 기기 토큰, 알림 내용</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 border-b border-gray-100 align-top">Vercel Inc. (미국)</td>
+                      <td className="p-3 border-b border-gray-100">웹사이트 및 서버 API 운영 — 서비스 이용 중 전송되는 정보, 접속 로그</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 border-b border-gray-100 align-top">Functional Software, Inc. — Sentry (미국)</td>
+                      <td className="p-3 border-b border-gray-100">오류 기록 및 분석 — 오류 발생 시 기기·브라우저·앱 정보, 접속 IP</td>
+                    </tr>
+                    <tr>
+                      <td className="p-3 align-top">(주)네이버클라우드 (대한민국)</td>
+                      <td className="p-3">문자 메시지 발송 — 전화번호, 발송 내용</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-gray-700 text-sm leading-relaxed mt-3">
+                국외 이전을 원하지 않으시면 회원 탈퇴 또는 해당 기능(채팅·통화 등)을 이용하지 않는 방법으로 거부할 수 있으나, 이 경우 해당 서비스 이용이 제한될 수 있습니다.
+              </p>
+            </section>
+
             {/* Section 5 */}
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b-2 border-blue-600">
-                5. 개인정보의 파기 절차 및 방법
+                6. 개인정보의 파기 절차 및 방법
               </h2>
               <p className="text-gray-700 leading-relaxed mb-4">
                 회사는 개인정보 보유기간의 경과, 처리목적 달성 등 개인정보가 불필요하게 되었을 때에는 지체없이 해당 개인정보를 파기합니다.
@@ -189,7 +255,7 @@ export default function PrivacyPolicyPage() {
             {/* Section 6 */}
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b-2 border-blue-600">
-                6. 정보주체의 권리·의무 및 행사방법
+                7. 정보주체의 권리·의무 및 행사방법
               </h2>
               <p className="text-gray-700 leading-relaxed mb-4">
                 정보주체는 회사에 대해 언제든지 다음 각 호의 개인정보 보호 관련 권리를 행사할 수 있습니다.
@@ -208,7 +274,7 @@ export default function PrivacyPolicyPage() {
             {/* Section 7 */}
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b-2 border-blue-600">
-                7. 개인정보의 안전성 확보 조치
+                8. 개인정보의 안전성 확보 조치
               </h2>
               <p className="text-gray-700 leading-relaxed mb-4">
                 회사는 개인정보의 안전성 확보를 위해 다음과 같은 조치를 취하고 있습니다.
@@ -236,7 +302,7 @@ export default function PrivacyPolicyPage() {
             {/* Section 8 */}
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b-2 border-blue-600">
-                8. 개인정보 보호책임자
+                9. 개인정보 보호책임자
               </h2>
               <p className="text-gray-700 leading-relaxed mb-4">
                 회사는 개인정보 처리에 관한 업무를 총괄해서 책임지고, 개인정보 처리와 관련한 정보주체의 불만처리 및 피해구제 등을 위하여 아래와 같이 개인정보 보호책임자를 지정하고 있습니다.
@@ -254,7 +320,7 @@ export default function PrivacyPolicyPage() {
             {/* Section 9 - 위치 정보 처리 */}
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b-2 border-blue-600">
-                9. 위치 정보의 수집·이용
+                10. 위치 정보의 수집·이용
               </h2>
               <p className="text-gray-700 leading-relaxed mb-4">
                 회사는 캠프 운영 스태프 간 실시간 위치 공유 서비스 제공을 위해 아래와 같이 위치 정보를 처리합니다.
@@ -307,17 +373,64 @@ export default function PrivacyPolicyPage() {
               </div>
             </section>
 
+            {/* Section 11 - 채팅·통화 */}
+            <section>
+              <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b-2 border-blue-600">
+                11. 채팅·통화 정보의 처리
+              </h2>
+              <p className="text-gray-700 leading-relaxed mb-4">
+                회사는 캠프 운영 스태프 간 소통을 위해 채팅과 음성·영상 통화 기능을 제공하며, 이에 필요한 정보를 아래와 같이 처리합니다.
+              </p>
+              <div className="space-y-4">
+                <div className="bg-blue-50 border-l-4 border-blue-600 p-4 rounded-r-lg">
+                  <h3 className="font-semibold text-gray-900 mb-2">이용 대상 및 공개 범위</h3>
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    채팅은 캠프에 배정된 스태프(멘토, 원어민 교사, 관리자)만 이용할 수 있습니다. 메시지와 파일은 그 채팅방에 들어 있는 사람에게만 보이며,
+                    캠프 배정에 따라 채팅방에 자동으로 들어가고 나옵니다. 나중에 배정된 스태프는 그 채팅방의 지난 대화도 볼 수 있습니다.
+                  </p>
+                </div>
+                <div className="bg-green-50 border-l-4 border-green-600 p-4 rounded-r-lg">
+                  <h3 className="font-semibold text-gray-900 mb-2">통화</h3>
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    음성·영상 통화는 통화 중계 서비스(Agora)를 통해 실시간으로 전달되며, 회사와 수탁자 모두 통화 내용을 녹음하거나 저장하지 않습니다.
+                    채팅방에는 통화 기록(통화 종류, 통화 시간, 받지 않음·거절 여부)만 남습니다.
+                    1:1 통화가 걸려 오면 휴대폰의 통화 화면(iOS CallKit, Android 통화 화면)으로 알려 드리며, 이를 위해 기기 알림 토큰을 사용합니다.
+                  </p>
+                </div>
+                <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded-r-lg">
+                  <h3 className="font-semibold text-gray-900 mb-2">기기 권한</h3>
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    • 마이크: 통화, 음성 메시지 녹음 — 사용할 때만<br/>
+                    • 카메라: 영상 통화, 사진·동영상 촬영 — 사용할 때만<br/>
+                    • 사진 저장: 채팅방의 사진·동영상을 기기에 저장할 때<br/>
+                    • 전화(Android): 걸려 오는 통화를 시스템 통화 화면으로 보여 주기 위해 — 전화번호나 통화 기록을 읽지 않습니다<br/>
+                    • 연락처: 학부모 연락처를 기기 주소록에 저장할 때 — 주소록은 기기 안에서만 사용하며 서버로 보내지 않습니다<br/>
+                    권한은 기기 설정에서 언제든지 철회할 수 있으며, 철회하면 해당 기능만 이용할 수 없습니다.
+                  </p>
+                </div>
+                <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
+                  <h3 className="font-semibold text-gray-900 mb-2">보관 · 삭제 · 신고</h3>
+                  <p className="text-gray-700 text-sm leading-relaxed">
+                    메시지·첨부 파일·통화 기록은 채팅방이 유지되는 동안 보관합니다. 보낸 사람은 자신의 메시지를 삭제할 수 있으며, 삭제하면 내용과 첨부 파일을 즉시 지웁니다.
+                    회원 탈퇴 후에도 이미 보낸 메시지는 다른 참여자의 대화 기록으로 남을 수 있습니다.
+                    이용자는 부적절한 메시지를 신고하거나 상대를 차단할 수 있으며, 신고된 메시지는 관리자가 확인하여 삭제 등 필요한 조치를 합니다.
+                  </p>
+                </div>
+              </div>
+            </section>
+
             {/* Section 10 */}
             <section>
               <h2 className="text-2xl font-bold text-gray-900 mb-4 pb-2 border-b-2 border-blue-600">
-                10. 개인정보 처리방침 변경
+                12. 개인정보 처리방침 변경
               </h2>
               <p className="text-gray-700 leading-relaxed">
                 이 개인정보처리방침은 시행일로부터 적용되며, 법령 및 방침에 따른 변경내용의 추가, 삭제 및 정정이 있는 경우에는 변경사항의 시행 7일 전부터 공지사항을 통하여 고지할 것입니다.
               </p>
               <ul className="list-disc list-inside space-y-1 text-gray-700 ml-4 mt-4 text-sm">
                 <li>시행일: {EFFECTIVE_DATE}</li>
-                <li>{EFFECTIVE_DATE} 개정: 캠프 배정 시 수집 항목(계좌·여권 등), 원어민 해외 송금 정보, 캠프 참가 학생 정보 처리, 제3자 제공, 위치 기록 자동 삭제, 커뮤니티 신고·익명글 처리, 감사 로그 보관 내용 추가</li>
+                <li>{EFFECTIVE_DATE} 개정: 채팅·통화 정보 처리(제11조), 개인정보 처리업무의 위탁 및 국외 이전(제5조), 알림 수신용 기기 토큰, 채팅·통화 보유 기간 추가</li>
+                <li>2026년 10월 6일 개정: 캠프 배정 시 수집 항목(계좌·여권 등), 원어민 해외 송금 정보, 캠프 참가 학생 정보 처리, 제3자 제공, 위치 기록 자동 삭제, 커뮤니티 신고·익명글 처리, 감사 로그 보관 내용 추가</li>
                 <li>2026년 6월 14일: 이전 방침</li>
               </ul>
             </section>

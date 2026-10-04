@@ -118,5 +118,16 @@
     "globals": "^14.0.0",
     "typescript": "~6.0.3"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-callkeep",
+          "react-native-voip-push-notification",
+          "react-native-render-html"
+        ]
+      }
+    }
+  }
 }
