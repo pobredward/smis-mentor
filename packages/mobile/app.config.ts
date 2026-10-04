@@ -1,6 +1,6 @@
 import { ConfigContext, ExpoConfig } from '@expo/config';
 import type { ConfigPlugin } from 'expo/config-plugins';
-import { withProjectBuildGradle, withDangerousMod, withAppDelegate, withAndroidManifest, AndroidConfig } from 'expo/config-plugins';
+import { withProjectBuildGradle, withAppBuildGradle, withDangerousMod, withAppDelegate, withAndroidManifest, AndroidConfig } from 'expo/config-plugins';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
@@ -196,6 +196,15 @@ const withSmisCallKit: ConfigPlugin = (cfg) => {
     }
     return c;
   });
+  // react-native-agora 가 함께 넣는 화면 공유 모듈(io.agora.rtc:full-screen-sharing) — 화면 공유를 쓰지 않으므로 뺀다.
+  // 이 모듈의 매니페스트가 FOREGROUND_SERVICE_MEDIA_PROJECTION(화면 녹화 포그라운드 서비스)을 넣어 Play 신고 대상이 된다.
+  cfg = withAppBuildGradle(cfg, (c) => {
+    const MARK = '// smis-agora-no-screen-sharing';
+    if (c.modResults.language === 'groovy' && !c.modResults.contents.includes(MARK)) {
+      c.modResults.contents += `\n${MARK}\nconfigurations.all {\n    exclude group: 'io.agora.rtc', module: 'full-screen-sharing'\n}\n`;
+    }
+    return c;
+  });
   return cfg;
 };
 
@@ -348,7 +357,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         },
       ],
       // expo-media-library 플러그인이 넣는 '선택한 사진만 읽기' 권한 — 채팅은 저장(쓰기)만 하므로 막는다 (Google Play 사진 권한 정책)
-      blockedPermissions: ['android.permission.READ_MEDIA_VISUAL_USER_SELECTED'],
+      // FOREGROUND_SERVICE_MEDIA_PROJECTION — Agora 화면 공유용(쓰지 않음, 위 withSmisCallKit 에서 모듈도 뺀다)
+      blockedPermissions: ['android.permission.READ_MEDIA_VISUAL_USER_SELECTED', 'android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION'],
       permissions: [
         // Android 13+ (API 33+)에서는 Photo Picker가 자동으로 사용되어 READ_MEDIA_IMAGES 권한 불필요
         // Android 12 이하에서는 READ_EXTERNAL_STORAGE로 충분
