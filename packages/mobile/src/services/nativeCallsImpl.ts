@@ -18,7 +18,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { deleteField, doc, getDoc, setDoc } from 'firebase/firestore';
+import { deleteField, doc, getDoc, updateDoc } from 'firebase/firestore';
 import {
   CHAT_CALL_LIMITS,
   L,
@@ -537,7 +537,9 @@ let voipToken = '';
 async function saveVoipToken(uid: string, token: string) {
   const key = `${uid}:${token}`;
   if ((await AsyncStorage.getItem(VOIP_SAVED_KEY).catch(() => null)) === key) return;
-  await setDoc(doc(db, 'users', uid), { voipTokens: { [token]: { platform: 'ios', addedAt: new Date() } } }, { merge: true });
+  // updateDoc(문서가 있어야 함)으로 — setDoc(merge) 는 내 문서를 아직 못 받은 앱 시작 직후에 쓰면, 기기 안에서 잠깐
+  // { voipTokens } 만 있는 문서로 보여 사용자 정보 구독이 이름 없는 userData 를 받는다 (1.8.0 (70) 시작 직후 꺼짐의 원인)
+  await updateDoc(doc(db, 'users', uid), { [`voipTokens.${token}`]: { platform: 'ios', addedAt: new Date() } });
   await AsyncStorage.setItem(VOIP_SAVED_KEY, key).catch(() => undefined);
 }
 function onVoipToken(token: unknown) {
@@ -550,7 +552,7 @@ function onVoipToken(token: unknown) {
 /** 로그아웃 — 이 기기의 VoIP 토큰을 지운다 (다른 사람 통화가 이 폰에 울리지 않게) */
 export async function removeMyVoipToken(uid: string): Promise<void> {
   if (!voipToken) return;
-  await setDoc(doc(db, 'users', uid), { voipTokens: { [voipToken]: deleteField() } }, { merge: true });
+  await updateDoc(doc(db, 'users', uid), { [`voipTokens.${voipToken}`]: deleteField() });
   await AsyncStorage.removeItem(VOIP_SAVED_KEY).catch(() => undefined);
 }
 

@@ -579,7 +579,7 @@ export function ProfileEditScreen() {
                   <Image source={{ uri: profileImageUrl }} style={styles.profileImage} />
                 ) : (
                   <View style={styles.profileImagePlaceholder}>
-                    <Text style={styles.profileImagePlaceholderText}>{userData.name.charAt(0)}</Text>
+                    <Text style={styles.profileImagePlaceholderText}>{(userData.name ?? "").charAt(0)}</Text>
                   </View>
                 )}
                 {isUploading && (

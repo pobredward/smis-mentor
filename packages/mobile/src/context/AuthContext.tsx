@@ -123,7 +123,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           return;
         }
 
-        const updatedData = { ...snapshot.data(), userId: uid } as User;
+        // 기기 안 쓰기가 아직 서버에 닿기 전, 내 문서를 아직 못 받은 상태면 쓴 칸만 있는 반쪽 문서가 올 수 있다 — 무시하고 서버 값을 기다린다
+        const raw = snapshot.data() as Partial<User>;
+        if (snapshot.metadata.hasPendingWrites && !raw.name && !raw.role) {
+          logger.warn('⚠️ users 문서 일부만 보임 (서버 응답 대기):', uid);
+          return;
+        }
+        const updatedData = { ...raw, userId: uid } as User;
 
         // AsyncStorage 캐시 무효화 — 다음 getUserById 호출 시 최신 데이터를 읽도록
         await removeCache(CACHE_STORE.USERS, uid);

@@ -597,7 +597,7 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
             ) : (
               <View style={styles.profilePlaceholder}>
                 <Text style={styles.profilePlaceholderText}>
-                  {userData.name.charAt(0)}
+                  {(userData.name ?? '').charAt(0)}
                 </Text>
               </View>
             )}
