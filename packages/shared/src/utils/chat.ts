@@ -379,7 +379,7 @@ export function isRoomHidden(state: ChatUserState | null | undefined, room: Chat
 /**
  * 목록 나누기 — 지금 기수의 캠프 방(위, 늘 고정) · 내가 고정한 방 · 1:1 대화 · 지난 기수.
  * @param activeJobCodeId 지금 보고 있는 캠프 — 이 캠프의 기수가 '지금 기수'
- * @param keepEmptyDmId 메시지가 아직 없어도 보여 줄 DM (방금 만든 대화) — 숨겼어도 보인다
+ * @param keepEmptyDmId 메시지가 아직 없어도 보여 줄 DM (방금 만든 대화) — 숨기면 숨긴다
  * @param state 고정 · 숨김 (지금 기수 캠프 방에는 적용하지 않는다)
  */
 export function chatRoomGroups(
@@ -414,7 +414,8 @@ export function chatRoomGroups(
   });
   const st = opts.state;
   const keep = (r: ChatRoom) => r.id === opts.keepEmptyDmId;
-  const visible = (r: ChatRoom) => keep(r) || !isRoomHidden(st, r);
+  // 숨긴 방은 방금 만든 DM 이어도 숨긴다 (새 대화를 다시 시작하면 숨김을 푼다 — 화면에서)
+  const visible = (r: ChatRoom) => !isRoomHidden(st, r);
   const pinnedAt = (r: ChatRoom) => Number(st?.pinned?.[r.id] ?? 0);
   const currentIds = new Set(camps.filter((c) => c.generation === generation).flatMap((c) => c.rooms.map((r) => r.id)));
   let hiddenCount = 0;
@@ -1018,11 +1019,24 @@ export function canEditChatMessage(m: Pick<ChatMessage, 'senderId' | 'kind' | 'd
 
 // ── 투표 ─────────────────────────────────────────────────────────────
 
+/** 투표 마감 알림 — 마감 몇 분 전 (아직 투표하지 않은 사람에게 푸시) */
+export const CHAT_POLL_REMIND_MINUTES = [5, 10, 30, 60, 180, 1440] as const;
+
+/** '10분 전' · '1시간 전' · '하루 전' / '10 min before' … */
+export function pollRemindLabel(min: number, lang: Locale): string {
+  return t(lang, 'chat.pollRemindBefore', { time: chatDurationWords(min * 60_000, lang) });
+}
+
+/** 이 마감 알림을 고를 수 있나 — 알림 시각이 지금부터 1분 뒤 이후 */
+export function canPollRemind(closesAtMs: number, min: number, now: number = Date.now()): boolean {
+  return closesAtMs - min * 60_000 >= now + 60_000;
+}
+
 /** 투표 만들기 — 빈 항목·같은 항목은 빼고, 2개 이상이어야 한다 (아니면 null) */
 export function makeChatPoll(
   question: string,
   options: string[],
-  opts: { multi?: boolean; anonymous?: boolean; closesAt?: ChatPoll['closesAt'] } = {},
+  opts: { multi?: boolean; anonymous?: boolean; closesAt?: ChatPoll['closesAt']; remindMin?: number | null } = {},
 ): ChatPoll | null {
   const q = String(question ?? '').replace(/\s+/g, ' ').trim().slice(0, CHAT_LIMITS.pollQuestionMax);
   const seen = new Set<string>();
@@ -1032,7 +1046,10 @@ export function makeChatPoll(
     .slice(0, CHAT_LIMITS.pollOptionsMax);
   if (!q || list.length < CHAT_LIMITS.pollOptionsMin) return null;
   const poll: ChatPoll = { question: q, options: list.map((text, i) => ({ id: `o${i + 1}`, text })), multi: !!opts.multi, anonymous: !!opts.anonymous };
-  if (opts.closesAt) poll.closesAt = opts.closesAt;
+  if (opts.closesAt) {
+    poll.closesAt = opts.closesAt;
+    if (opts.remindMin && (CHAT_POLL_REMIND_MINUTES as readonly number[]).includes(opts.remindMin)) poll.remindMin = opts.remindMin;
+  }
   return poll;
 }
 
@@ -1132,6 +1149,27 @@ export function firstUnreadIndex(
 }
 
 // ── 예약 메시지 ───────────────────────────────────────────────────────
+
+/**
+ * 시간 길이를 말로 — '2일 3시간 5분' · '45분' · '하루' / '2 days 3 hr 5 min' · '45 min' · '1 day' (분 단위 올림, 최소 1분)
+ */
+export function chatDurationWords(ms: number, lang: Locale): string {
+  const total = Math.max(1, Math.ceil(ms / 60_000));
+  const d = Math.floor(total / 1440);
+  const h = Math.floor((total % 1440) / 60);
+  const m = total % 60;
+  if (lang === 'en') {
+    return [d ? `${d} day${d > 1 ? 's' : ''}` : '', h ? `${h} hr` : '', m ? `${m} min` : ''].filter(Boolean).join(' ');
+  }
+  if (d === 1 && !h && !m) return '하루';
+  return [d ? `${d}일` : '', h ? `${h}시간` : '', m ? `${m}분` : ''].filter(Boolean).join(' ');
+}
+
+/** 예약 시각까지 남은 시간 — '3일 2시간 5분 뒤에 보내요' (지났으면 '') */
+export function scheduleLeftText(at: Date | null | undefined, lang: Locale, now: number = Date.now()): string {
+  if (!at || Number.isNaN(at.getTime()) || at.getTime() <= now) return '';
+  return t(lang, 'chat.scheduleLeft', { left: chatDurationWords(at.getTime() - now, lang) });
+}
 
 /** 예약할 수 있는 시각인가 — 1분 뒤 ~ 30일 안 */
 export function scheduleTimeError(at: Date | null | undefined, now: Date = new Date()): 'past' | 'tooFar' | null {

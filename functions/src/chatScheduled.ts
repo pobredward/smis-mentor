@@ -7,9 +7,13 @@
  * chatScheduled/{id} 중 보낼 시각이 된 것을 그 방에 메시지로 쓰고 예약을 지운다.
  * 보내는 사람이 그 방에서 빠졌으면 보내지 않고 지운다. 같은 예약을 두 번 보내지 않게 트랜잭션으로 지우며 쓴다.
  * 쓰인 메시지는 chatOnMessageCreated 가 방 미리보기 · 안 읽은 수 · 푸시를 처리한다.
+ *
+ * 투표 마감 알림(chatPollReminders/{방__메시지}) — 알림 시각이 된 것을 지우고(트랜잭션 — 한 번만)
+ * 아직 투표하지 않은 사람에게 푸시 (chat.ts sendPollReminder).
  */
 import * as admin from 'firebase-admin';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { POLL_REMINDERS, sendPollReminder } from './chat';
 
 interface ScheduledDoc {
   roomId?: string;
@@ -60,9 +64,34 @@ export const chatSendScheduled = onSchedule(
         console.error('예약 메시지 보내기 실패', d.id, e);
       }
     }
+    await sendPollReminders(db).catch((e) => console.error('투표 마감 알림 실패', e));
     await sweepCalls(db).catch((e) => console.error('통화 정리 실패', e));
   },
 );
+
+// ── 투표 마감 알림 ─────────────────────────────────────────────────
+async function sendPollReminders(db: admin.firestore.Firestore): Promise<void> {
+  const due = await db.collection(POLL_REMINDERS)
+    .where('at', '<=', admin.firestore.Timestamp.now())
+    .orderBy('at')
+    .limit(50)
+    .get();
+  for (const d of due.docs) {
+    try {
+      // 먼저 지우고(한 번만) 보낸다 — 같은 알림이 두 번 가지 않게
+      const claimed = await db.runTransaction(async (tx) => {
+        const cur = await tx.get(d.ref);
+        if (!cur.exists) return null;
+        tx.delete(d.ref);
+        return cur.data() as { roomId?: string; messageId?: string };
+      });
+      if (!claimed?.roomId || !claimed.messageId) continue;
+      await sendPollReminder(claimed.roomId, claimed.messageId);
+    } catch (e) {
+      console.error('투표 마감 알림 보내기 실패', d.id, e);
+    }
+  }
+}
 
 // ── 멈춘 통화 정리 (shared CHAT_CALL_LIMITS 와 같은 값) ─────────────────
 const RING_MS = 40_000;

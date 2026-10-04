@@ -10,8 +10,13 @@ import { FiBarChart2, FiCheck, FiPlus, FiX } from 'react-icons/fi';
 import {
   CHAT_LIMITS,
   L,
+  getCurrentLocale,
   isPollClosed,
   makeChatPoll,
+  chatDurationWords,
+  CHAT_POLL_REMIND_MINUTES,
+  canPollRemind,
+  pollRemindLabel,
   pollResults,
   type ChatMessageView,
   type ChatPoll,
@@ -67,7 +72,12 @@ export function ChatPollBubble({ m, myUid, lang, onVote, onClose, onVoters }: {
           {closed && <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] font-semibold text-gray-600">{L('chat.pollClosed')}</span>}
         </div>
         <p className="mt-1 text-[11px] text-gray-500">
-          {[poll.multi ? L('chat.pollMulti') : '', poll.anonymous ? L('chat.pollAnonymous') : '', closesAt ? L('chat.pollEndsAt', { at: shortDateTime(closesAt, lang) }) : ''].filter(Boolean).join(' · ')}
+          {[
+            poll.multi ? L('chat.pollMulti') : '',
+            poll.anonymous ? L('chat.pollAnonymous') : '',
+            closesAt ? L('chat.pollEndsAt', { at: shortDateTime(closesAt, lang) }) : '',
+            closesAt && !closed && poll.remindMin ? L('chat.pollRemindSet', { time: chatDurationWords(poll.remindMin * 60_000, lang) }) : '',
+          ].filter(Boolean).join(' · ')}
         </p>
       </div>
       <ul className="px-2.5 space-y-1.5">
@@ -164,8 +174,13 @@ export function ChatPollCreateDialog({ onCreate, onClose }: { onCreate: (poll: C
   const [multi, setMulti] = useState(false);
   const [anonymous, setAnonymous] = useState(false);
   const [deadline, setDeadline] = useState('');
+  /** 마감 몇 분 전 알림 (0 = 안 함) */
+  const [remindMin, setRemindMin] = useState(0);
   const [busy, setBusy] = useState(false);
   const now = new Date();
+  const deadlineMs = deadline ? new Date(deadline).getTime() : 0;
+  const remindOk = (min: number) => !min || (!!deadlineMs && canPollRemind(deadlineMs, min));
+  const lang = getCurrentLocale();
 
   const submit = async () => {
     if (busy) return;
@@ -180,6 +195,7 @@ export function ChatPollCreateDialog({ onCreate, onClose }: { onCreate: (poll: C
       toast.error(L('chat.pollNeedOptions'));
       return;
     }
+    if (closesAt && remindMin && canPollRemind(closesAt.getTime(), remindMin)) poll.remindMin = remindMin;
     setBusy(true);
     try {
       await onCreate(poll, closesAt);
@@ -258,6 +274,30 @@ export function ChatPollCreateDialog({ onCreate, onClose }: { onCreate: (poll: C
               <span className="text-xs text-gray-500">{L('chat.pollNoDeadline')}</span>
             )}
           </div>
+          {deadline && (
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-1.5 text-sm text-gray-800">
+                <span className="mr-1">{L('chat.pollRemind')}</span>
+                {[0, ...CHAT_POLL_REMIND_MINUTES].map((min) => {
+                  const ok = remindOk(min);
+                  const on = (remindOk(remindMin) ? remindMin : 0) === min;
+                  return (
+                    <button
+                      key={min}
+                      type="button"
+                      onClick={() => setRemindMin(min)}
+                      disabled={!ok}
+                      aria-pressed={on}
+                      className={`h-8 rounded-full border px-3 text-xs font-semibold ${on ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'} disabled:opacity-35 disabled:hover:bg-white`}
+                    >
+                      {min ? pollRemindLabel(min, lang) : L('chat.pollRemindNone')}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-500">{L('chat.pollRemindHint')}</p>
+            </div>
+          )}
         </div>
       </div>
     </ChatDialog>

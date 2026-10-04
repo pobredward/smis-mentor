@@ -24,7 +24,7 @@ import {
   type NativeSyntheticEvent,
 } from 'react-native';
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as Sharing from 'expo-sharing';
@@ -147,6 +147,8 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
   const myName = userData?.name ?? '';
   const lang = getCurrentLocale();
   const insets = useSafeAreaInsets();
+  // 머리글 위 여백 — 시트·모달이 열리는 동안 잠깐 작게 오는 값으로 머리글이 들썩이지 않게 (세로 고정 앱)
+  const topInset = Math.max(insets.top, initialWindowMetrics?.insets.top ?? 0);
   const { width } = useWindowDimensions();
   const isFocused = useIsFocused();
   const appActive = useAppActive();
@@ -860,7 +862,7 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
   const memberCount = room?.memberIds?.length ?? 0;
 
   const header = (
-    <View style={[styles.header, { paddingTop: insets.top }]}>
+    <View style={[styles.header, { paddingTop: topInset, height: topInset + HEADER_HEIGHT }]}>
       <TouchableOpacity onPress={goBack} style={styles.headerBtn} hitSlop={8} accessibilityLabel={L('common.back')}>
         <Ionicons name="chevron-back" size={26} color={CHAT_COLORS.text} />
       </TouchableOpacity>
@@ -1272,28 +1274,31 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
   );
 }
 
+/** 채팅방 머리글 높이 (상태 표시줄 아래) */
+const HEADER_HEIGHT = 50;
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#ffffff' },
   flex: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: CHAT_COLORS.roomBg, paddingHorizontal: 32 },
   notInRoom: { marginTop: 10, fontSize: 15, color: CHAT_COLORS.sub, textAlign: 'center' },
 
+  // 높이 고정 (HEADER_HEIGHT) — 방 설명 줄 · 버튼에 따라 머리글 높이가 바뀌지 않게
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 4,
-    paddingBottom: 6,
     backgroundColor: '#ffffff',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: CHAT_COLORS.border,
   },
-  headerBtn: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headerBtn: { width: 40, height: HEADER_HEIGHT, alignItems: 'center', justifyContent: 'center' },
   headerTitleWrap: { flex: 1, paddingHorizontal: 2 },
   headerTitleLine: { flexDirection: 'row', alignItems: 'center' },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: CHAT_COLORS.text, flexShrink: 1 },
+  headerTitle: { fontSize: 17, lineHeight: 22, fontWeight: '700', color: CHAT_COLORS.text, flexShrink: 1 },
   headerCount: { fontSize: 14, color: CHAT_COLORS.muted, marginLeft: 6 },
   headerMuted: { marginLeft: 4 },
-  headerDesc: { fontSize: 12, color: CHAT_COLORS.sub, marginTop: 1 },
+  headerDesc: { fontSize: 12, lineHeight: 16, color: CHAT_COLORS.sub, marginTop: 1 },
   presetNote: { fontSize: 13, color: CHAT_COLORS.sub, paddingHorizontal: 20, paddingVertical: 12 },
 
   listWrap: { flex: 1, backgroundColor: CHAT_COLORS.roomBg },

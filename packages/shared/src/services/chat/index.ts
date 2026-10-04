@@ -236,7 +236,10 @@ function cleanPoll(p: ChatPoll): ChatPoll {
     multi: !!p.multi,
     anonymous: !!p.anonymous,
   };
-  if (p.closesAt) out.closesAt = p.closesAt;
+  if (p.closesAt) {
+    out.closesAt = p.closesAt;
+    if (typeof p.remindMin === 'number' && p.remindMin > 0) out.remindMin = Math.round(p.remindMin);
+  }
   return out;
 }
 

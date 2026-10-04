@@ -148,13 +148,15 @@ function ChatScreen({ uid, user }: { uid: string; user: User }) {
     try {
       const { roomId: dmId } = await authenticatedPost<{ roomId: string }>('/api/chat/dm', { userId });
       if (!dmId) throw new Error('no room');
+      // 예전에 숨긴 대화를 다시 시작하면 숨김을 푼다 (숨긴 방은 방금 만든 대화여도 목록에서 빠진다)
+      if (inbox.state?.hidden?.[dmId]) setChatRoomHidden(db, uid, dmId, false).catch(() => undefined);
       setKeepDm(dmId);
       setNewDmOpen(false);
       openRoom(dmId);
     } catch (e) {
       toast.error(e instanceof Error && e.message ? e.message : L('chat.webActionFailed'));
     }
-  }, [openRoom]);
+  }, [openRoom, uid, inbox.state]);
 
   return (
     <div className="md:flex md:h-[calc(100dvh-4rem)] bg-white">

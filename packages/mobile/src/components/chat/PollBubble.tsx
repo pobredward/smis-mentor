@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   L,
   chatDayLabel,
+  chatDurationWords,
   chatTimeLabel,
   isPollClosed,
   pollResults,
@@ -85,7 +86,10 @@ function PollBubbleImpl({ message, myUid, lang, onVote, onClose, onShowVoters, o
         return (
           <TouchableOpacity key={o.id} style={styles.option} onPress={() => toggle(o.id)} disabled={!selecting} activeOpacity={0.7}>
             {showResults ? (
-              <View style={[styles.fill, top && styles.fillTop, { width: `${Math.round(o.ratio * 100)}%` }]} />
+              // 퍼센트 너비는 부모의 안쪽(여백 뺀) 너비 기준이라, 여백 없는 전체 칸을 하나 깔고 그 안에서 채운다
+              <View style={styles.fillTrack} pointerEvents="none">
+                <View style={[styles.fill, top && styles.fillTop, { width: `${Math.round(o.ratio * 100)}%` }]} />
+              </View>
             ) : null}
             <Ionicons
               name={poll.multi ? (on ? 'checkbox' : 'square-outline') : on ? 'radio-button-on' : 'radio-button-off'}
@@ -113,6 +117,7 @@ function PollBubbleImpl({ message, myUid, lang, onVote, onClose, onShowVoters, o
         {[
           L('chat.pollVoters', { n: results.voters }),
           closesAt && !message.pollClosed ? L('chat.pollEndsAt', { at: `${chatDayLabel(new Date(closesAt), lang)} ${chatTimeLabel(new Date(closesAt), lang)}` }) : '',
+          closesAt && !closed && poll.remindMin ? L('chat.pollRemindSet', { time: chatDurationWords(poll.remindMin * 60_000, lang) }) : '',
         ].filter(Boolean).join(' · ')}
       </Text>
       {poll.anonymous ? <Text style={styles.note}>{L('chat.pollAnonymousNote')}</Text> : null}
@@ -163,6 +168,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     overflow: 'hidden',
   },
+  fillTrack: { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 },
   fill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: '#eff6ff' },
   fillTop: { backgroundColor: '#dbeafe' },
   optionText: { flex: 1, fontSize: 14, color: CHAT_COLORS.text },

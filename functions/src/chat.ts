@@ -46,7 +46,9 @@ interface MessageDoc {
   mentions?: string[];
   mentionAll?: boolean;
   silent?: boolean;
-  poll?: { question?: string } | null;
+  poll?: { question?: string; closesAt?: admin.firestore.Timestamp | null; remindMin?: number } | null;
+  pollVotes?: Record<string, string[]>;
+  pollClosed?: boolean;
   systemType?: string;
   /** 통화 기록 (systemType 'call') — 보낸 사람 = 건 사람 */
   call?: { callId?: string; media?: string; status?: string; durationMs?: number } | null;
@@ -183,6 +185,131 @@ async function removeWebToken(uid: string, token: string) {
   }
 }
 
+// ── 투표 마감 알림 ─────────────────────────────────────────────────
+/** shared CHAT_POLL_REMIND_MINUTES 와 같게 */
+const POLL_REMIND_MINUTES = [5, 10, 30, 60, 180, 1440];
+export const POLL_REMINDERS = 'chatPollReminders';
+
+/** shared chatDurationWords 와 같게 — '2일 3시간 5분' · '하루' / '2 days 3 hr 5 min' */
+function durationWords(ms: number, lang: Lang): string {
+  const total = Math.max(1, Math.ceil(ms / 60_000));
+  const d = Math.floor(total / 1440);
+  const h = Math.floor((total % 1440) / 60);
+  const mm = total % 60;
+  if (lang === 'en') return [d ? `${d} day${d > 1 ? 's' : ''}` : '', h ? `${h} hr` : '', mm ? `${mm} min` : ''].filter(Boolean).join(' ');
+  if (d === 1 && !h && !mm) return '하루';
+  return [d ? `${d}일` : '', h ? `${h}시간` : '', mm ? `${mm}분` : ''].filter(Boolean).join(' ');
+}
+
+/** 투표를 만들 때 — 마감 몇 분 전 알림을 chatPollReminders/{방__메시지} 에 적어 둔다 */
+async function schedulePollReminder(roomId: string, messageId: string, m: MessageDoc): Promise<void> {
+  const closes = m.poll?.closesAt?.toMillis?.() ?? 0;
+  const min = Number(m.poll?.remindMin ?? 0);
+  if (!closes || !POLL_REMIND_MINUTES.includes(min)) return;
+  const at = closes - min * 60_000;
+  if (at <= Date.now()) return;
+  await fdb().collection(POLL_REMINDERS).doc(`${roomId}__${messageId}`).set({
+    roomId,
+    messageId,
+    at: admin.firestore.Timestamp.fromMillis(at),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+/**
+ * 투표 마감 알림 보내기 (chatSendScheduled) — 아직 투표하지 않은 방 사람에게만.
+ * 방 알림을 꺼 둔 방도 보낸다(멘션처럼). 전체 알림 · '채팅' 알림을 껐거나 만든 사람을 차단했으면 보내지 않는다.
+ * 지워졌거나 · 먼저 마감됐거나 · 마감이 지난 투표면 보내지 않는다. 보낸 사람 수를 돌려준다.
+ */
+export async function sendPollReminder(roomId: string, messageId: string): Promise<number> {
+  const roomRef = fdb().collection('chatRooms').doc(roomId);
+  const [roomSnap, msgSnap] = await Promise.all([roomRef.get(), roomRef.collection('messages').doc(messageId).get()]);
+  if (!roomSnap.exists || !msgSnap.exists) return 0;
+  const room = roomSnap.data() as RoomDoc;
+  const m = msgSnap.data() as MessageDoc;
+  const closes = m.poll?.closesAt?.toMillis?.() ?? 0;
+  if (m.deleted || m.kind !== 'poll' || m.pollClosed || !closes || closes <= Date.now()) return 0;
+  const creator = String(m.senderId ?? '');
+  const voted = new Set(Object.keys(m.pollVotes ?? {}));
+  const targets = [...new Set(room.memberIds ?? [])].filter((uid) => uid && !voted.has(uid));
+  if (!targets.length) return 0;
+  const [users, states] = await Promise.all([loadUsers(targets), loadStates(targets)]);
+  const question = String(m.poll?.question ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  const isDm = room.type === 'dm';
+  const left = closes - Date.now();
+
+  const expoMessages: ExpoPushMessage[] = [];
+  const expoOwner: string[] = [];
+  const web = new Map<string, { tokens: string[]; owners: string[]; title: string; body: string }>();
+  let sent = 0;
+  for (const uid of targets) {
+    const u = users.get(uid);
+    const s = states.get(uid) ?? {};
+    if (!u || !STAFF.includes(String(u.role)) || ['inactive', 'deleted', 'temp'].includes(String(u.status ?? 'active'))) continue;
+    if (creator && s.blocked?.[creator]) continue;
+    const ns = u.notificationSettings ?? {};
+    if (ns.generalNotifications === false || ns.chat === false) continue;
+    const lang = langOf(u);
+    const title = isDm ? String(m.senderName ?? '') : roomTitle(room, lang);
+    const body = lang === 'en'
+      ? `📊 Poll closes in ${durationWords(left, lang)} — ${question}`
+      : `📊 투표가 ${durationWords(left, lang)} 뒤 마감돼요 — ${question}`;
+    let any = false;
+    Object.keys(u.pushTokens ?? {}).filter((tk) => Expo.isExpoPushToken(tk)).forEach((tk) => {
+      expoMessages.push({ to: tk, title, body, priority: 'high', sound: 'default', channelId: 'default', data: { type: 'chat', roomId, messageId, pollReminder: true } });
+      expoOwner.push(uid);
+      any = true;
+    });
+    const webTokens = Object.keys(u.webPushTokens ?? {});
+    if (webTokens.length) {
+      const key = `${title}\u0000${body}`;
+      const g = web.get(key) ?? { tokens: [], owners: [], title, body };
+      webTokens.forEach((tk) => { g.tokens.push(tk); g.owners.push(uid); });
+      web.set(key, g);
+      any = true;
+    }
+    if (any) sent += 1;
+  }
+
+  let idx = 0;
+  for (const chunk of expo().chunkPushNotifications(expoMessages)) {
+    const start = idx;
+    idx += chunk.length;
+    try {
+      const tickets = await expo().sendPushNotificationsAsync(chunk);
+      await Promise.all(tickets.map(async (tk, k) => {
+        if (tk.status === 'error' && tk.details?.error === 'DeviceNotRegistered') await removeExpoToken(expoOwner[start + k], String(chunk[k].to));
+      }));
+    } catch (e) {
+      console.error('투표 마감 알림(앱) 실패', e);
+    }
+  }
+  for (const g of web.values()) {
+    for (let i = 0; i < g.tokens.length; i += 500) {
+      const tokens = g.tokens.slice(i, i + 500);
+      const owners = g.owners.slice(i, i + 500);
+      try {
+        const res = await admin.messaging().sendEachForMulticast({
+          tokens,
+          notification: { title: g.title, body: g.body },
+          data: { type: 'chat', roomId, messageId },
+          webpush: {
+            notification: { icon: `${SITE}/android-icon-192x192.png`, tag: `poll-${messageId}` },
+            fcmOptions: { link: `${SITE}/chat?room=${encodeURIComponent(roomId)}` },
+          },
+        });
+        await Promise.all(res.responses.map(async (r, k) => {
+          const code = r.error?.code ?? '';
+          if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token') await removeWebToken(owners[k], tokens[k]);
+        }));
+      } catch (e) {
+        console.error('투표 마감 알림(웹) 실패', e);
+      }
+    }
+  }
+  return sent;
+}
+
 export const chatOnMessageCreated = onDocumentCreated(
   { document: 'chatRooms/{roomId}/messages/{messageId}', region: REGION, serviceAccount: 'smis-mentor@appspot.gserviceaccount.com', memory: '256MiB', timeoutSeconds: 60 },
   async (event) => {
@@ -233,6 +360,9 @@ export const chatOnMessageCreated = onDocumentCreated(
       return cur;
     });
     if (!room) return;
+
+    // 투표 마감 알림 예약 — chatSendScheduled 가 1분마다 보낸다
+    if (!gone && m.kind === 'poll') await schedulePollReminder(roomId, messageId, m).catch((e) => console.error('투표 마감 알림 예약 실패', e));
 
     const senderId = String(m.senderId ?? '');
     const recipients = [...new Set(room.memberIds ?? [])].filter((uid) => uid && uid !== senderId);

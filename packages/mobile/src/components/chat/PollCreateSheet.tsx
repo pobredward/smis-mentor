@@ -1,5 +1,5 @@
 /**
- * 투표 만들기 — 제목 · 항목(처음 2개, 10개까지) · 여러 개 선택 · 익명 · 마감(없음/날짜·시각)
+ * 투표 만들기 — 제목 · 항목(처음 2개, 10개까지) · 여러 개 선택 · 익명 · 마감(없음/날짜·시각) · 마감 알림(몇 분 전)
  */
 import React, { useEffect, useState } from 'react';
 import {
@@ -19,7 +19,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Timestamp } from 'firebase/firestore';
-import { CHAT_LIMITS, L, makeChatPoll, type ChatPoll } from '@smis-mentor/shared';
+import { CHAT_LIMITS, CHAT_POLL_REMIND_MINUTES, L, canPollRemind, getCurrentLocale, makeChatPoll, pollRemindLabel, type ChatPoll } from '@smis-mentor/shared';
 import { DateTimeField, roundUpTo10Min } from './DateTimeField';
 import { CHAT_COLORS } from './chatTheme';
 
@@ -39,7 +39,14 @@ export function PollCreateSheet({ visible, onClose, onCreate }: PollCreateSheetP
   const [anonymous, setAnonymous] = useState(false);
   const [hasDeadline, setHasDeadline] = useState(false);
   const [deadline, setDeadline] = useState<Date>(defaultDeadline);
+  /** 마감 몇 분 전 알림 (0 = 안 함) */
+  const [remindMin, setRemindMin] = useState(0);
   const [busy, setBusy] = useState(false);
+  const lang = getCurrentLocale();
+  // 마감을 당겨서 알림 시각이 지나 버리면 '안 함'으로
+  useEffect(() => {
+    if (remindMin && !canPollRemind(deadline.getTime(), remindMin)) setRemindMin(0);
+  }, [deadline, remindMin]);
 
   useEffect(() => {
     if (!visible) return;
@@ -49,6 +56,7 @@ export function PollCreateSheet({ visible, onClose, onCreate }: PollCreateSheetP
     setAnonymous(false);
     setHasDeadline(false);
     setDeadline(defaultDeadline());
+    setRemindMin(0);
     setBusy(false);
   }, [visible]);
 
@@ -62,6 +70,7 @@ export function PollCreateSheet({ visible, onClose, onCreate }: PollCreateSheetP
       multi,
       anonymous,
       closesAt: hasDeadline ? Timestamp.fromDate(deadline) : null,
+      remindMin: hasDeadline && remindMin && canPollRemind(deadline.getTime(), remindMin) ? remindMin : null,
     });
     if (!poll) {
       Alert.alert(L('chat.pollNeedOptions'));
@@ -139,12 +148,35 @@ export function PollCreateSheet({ visible, onClose, onCreate }: PollCreateSheetP
             <Switch value={hasDeadline} onValueChange={setHasDeadline} trackColor={{ true: CHAT_COLORS.primary, false: '#cbd5e1' }} />
           </View>
           {hasDeadline ? (
-            <DateTimeField
-              value={deadline}
-              onChange={setDeadline}
-              minimumDate={new Date()}
-              maximumDate={new Date(Date.now() + CHAT_LIMITS.scheduleMaxDays * 86400000)}
-            />
+            <>
+              <DateTimeField
+                value={deadline}
+                onChange={setDeadline}
+                minimumDate={new Date()}
+                maximumDate={new Date(Date.now() + CHAT_LIMITS.scheduleMaxDays * 86400000)}
+                minuteInterval={5}
+              />
+              <Text style={[styles.label, styles.remindLabel]}>{L('chat.pollRemind')}</Text>
+              <View style={styles.remindRow}>
+                {[0, ...CHAT_POLL_REMIND_MINUTES].map((min) => {
+                  const ok = !min || canPollRemind(deadline.getTime(), min);
+                  const on = remindMin === min;
+                  return (
+                    <TouchableOpacity
+                      key={min}
+                      style={[styles.remindChip, on && styles.remindChipOn, !ok && styles.remindChipOff]}
+                      onPress={() => setRemindMin(min)}
+                      disabled={!ok}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: on, disabled: !ok }}
+                    >
+                      <Text style={[styles.remindText, on && styles.remindTextOn]}>{min ? pollRemindLabel(min, lang) : L('chat.pollRemindNone')}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={styles.hint}>{L('chat.pollRemindHint')}</Text>
+            </>
           ) : (
             <Text style={styles.hint}>{L('chat.pollNoDeadline')}</Text>
           )}
@@ -187,4 +219,11 @@ const styles = StyleSheet.create({
   switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 8 },
   label: { fontSize: 15, color: CHAT_COLORS.text },
   hint: { fontSize: 12, color: CHAT_COLORS.sub, marginTop: 2 },
+  remindLabel: { marginTop: 6 },
+  remindRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  remindChip: { height: 34, paddingHorizontal: 12, borderRadius: 17, borderWidth: 1, borderColor: CHAT_COLORS.border, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff' },
+  remindChipOn: { backgroundColor: CHAT_COLORS.primary, borderColor: CHAT_COLORS.primary },
+  remindChipOff: { opacity: 0.35 },
+  remindText: { fontSize: 13.5, color: CHAT_COLORS.text, fontWeight: '600' },
+  remindTextOn: { color: '#ffffff' },
 });

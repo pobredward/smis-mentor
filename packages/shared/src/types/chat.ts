@@ -145,6 +145,8 @@ export interface ChatPoll {
   anonymous: boolean;
   /** 마감 시각 (없으면 만든 사람이 닫을 때까지) */
   closesAt?: Timestamp | null;
+  /** 마감 몇 분 전에 아직 투표하지 않은 사람에게 알림 (CHAT_POLL_REMIND_MINUTES 중 하나 · 마감 시각이 있을 때만) */
+  remindMin?: number;
 }
 
 /** 방 공지 — 방 문서에 하나 (서버 /api/chat/notice 가 쓴다) */

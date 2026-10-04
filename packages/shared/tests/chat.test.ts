@@ -306,6 +306,23 @@ describe('chat — 대화 내용 검색', () => {
     expect(C.chatFirstMessageAt(list)?.getTime()).toBe(d(2026, 10, 1, 9));
     expect(C.chatFirstMessageAt([])).toBe(null);
   });
+  it('남은 시간 · 예약까지 · 투표 마감 알림', () => {
+    expect(C.chatDurationWords(3 * 86400000 + 2 * 3600000 + 5 * 60000, 'ko')).toBe('3일 2시간 5분');
+    expect(C.chatDurationWords(45 * 60000 - 1000, 'ko')).toBe('45분');
+    expect(C.chatDurationWords(86400000, 'ko')).toBe('하루');
+    expect(C.chatDurationWords(10, 'ko')).toBe('1분');
+    expect(C.chatDurationWords(2 * 86400000 + 3600000, 'en')).toBe('2 days 1 hr');
+    expect(C.scheduleLeftText(new Date(1_000 + 90 * 60000), 'ko', 1_000)).toBe('1시간 30분 뒤에 보내요');
+    expect(C.scheduleLeftText(new Date(1_000), 'ko', 2_000)).toBe('');
+    expect(C.pollRemindLabel(60, 'ko')).toBe('1시간 전');
+    expect(C.pollRemindLabel(10, 'en')).toBe('10 min before');
+    expect(C.canPollRemind(60 * 60000, 30, 0)).toBe(true);
+    expect(C.canPollRemind(30 * 60000, 30, 0)).toBe(false);
+    const closesAt = at(999);
+    expect(C.makeChatPoll('q', ['a', 'b'], { closesAt, remindMin: 30 })?.remindMin).toBe(30);
+    expect(C.makeChatPoll('q', ['a', 'b'], { closesAt, remindMin: 7 })?.remindMin).toBe(undefined);
+    expect(C.makeChatPoll('q', ['a', 'b'], { remindMin: 30 })?.remindMin).toBe(undefined);
+  });
   it('강조 표시 나누기', () => {
     expect(C.splitByQuery('Bus at 9 and bus at 10', 'bus')).toEqual([
       { text: 'Bus', hit: true }, { text: ' at 9 and ', hit: false }, { text: 'bus', hit: true }, { text: ' at 10', hit: false },
@@ -359,7 +376,11 @@ describe('chat 2차 — 그룹방 · 고정 · 숨김', () => {
     expect(g.dms.map((x) => x.id)).toEqual(['dm_3']);
     expect(g.hiddenCount).toBe(1);
     expect(g.otherGenerations.length).toBe(1);
-    expect(C.chatRoomGroups(rooms, { activeJobCodeId: 'a', state, keepEmptyDmId: 'dm_2' }).dms.map((x) => x.id)).toEqual(['dm_3', 'dm_2']);
+    // 방금 만든 DM 이어도 숨기면 숨긴다 (메시지가 없는 새 방 포함)
+    expect(C.chatRoomGroups(rooms, { activeJobCodeId: 'a', state, keepEmptyDmId: 'dm_2' }).dms.map((x) => x.id)).toEqual(['dm_3']);
+    const empty = { id: 'dm_new', type: 'dm', memberIds: ['me', 'x'], createdAt: ts(40), lastMessageAt: null, lastMessage: null } as unknown as ChatRoom;
+    expect(C.chatRoomGroups([...rooms, empty], { activeJobCodeId: 'a', keepEmptyDmId: 'dm_new' }).dms.map((x) => x.id)).toEqual(['dm_new', 'dm_3', 'dm_2', 'dm_1']);
+    expect(C.chatRoomGroups([...rooms, empty], { activeJobCodeId: 'a', keepEmptyDmId: 'dm_new', state: { ...state, hidden: { ...state.hidden, dm_new: 41 } } }).dms.map((x) => x.id)).toEqual(['dm_3']);
   });
 });
 

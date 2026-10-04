@@ -9,6 +9,7 @@ import {
   chatDayLabel,
   chatTimeLabel,
   getCurrentLocale,
+  scheduleLeftText,
   type ChatScheduledMessage,
 } from '@smis-mentor/shared';
 import { ChatSheet } from './ChatSheet';
@@ -19,6 +20,18 @@ export const scheduleLabel = (d: Date) => {
   const lang = getCurrentLocale();
   return `${chatDayLabel(d, lang)} ${chatTimeLabel(d, lang)}`;
 };
+
+/** 30초마다 지금 시각 — 남은 시간 표시용 */
+function useNowTick(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, [active]);
+  return now;
+}
 
 interface ScheduleCreateSheetProps {
   visible: boolean;
@@ -34,6 +47,9 @@ export function ScheduleCreateSheet({ visible, composerText, hasMedia, onClose, 
   const [at, setAt] = useState(() => roundUpTo10Min(new Date(Date.now() + 60 * 60 * 1000)));
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const now = useNowTick(visible);
+  // 오전/오후를 헷갈리지 않게 '며칠 몇 시간 몇 분 뒤'도 함께
+  const left = scheduleLeftText(at, getCurrentLocale(), now);
   useEffect(() => {
     if (!visible) return;
     setAt(roundUpTo10Min(new Date(Date.now() + 60 * 60 * 1000)));
@@ -62,6 +78,14 @@ export function ScheduleCreateSheet({ visible, composerText, hasMedia, onClose, 
           maximumDate={new Date(Date.now() + CHAT_LIMITS.scheduleMaxDays * 86400000)}
           minuteInterval={1}
         />
+        {left ? (
+          <View style={styles.leftRow}>
+            <Text style={styles.leftAt}>{scheduleLabel(at)}</Text>
+            <Text style={styles.leftText}>{left}</Text>
+          </View>
+        ) : (
+          <Text style={styles.note}>{L('chat.schedulePast')}</Text>
+        )}
         {hasMedia ? <Text style={styles.note}>{L('chat.scheduleTextOnly')}</Text> : null}
         {useComposer ? (
           <Text style={styles.preview} numberOfLines={4}>{composerText}</Text>
@@ -92,6 +116,8 @@ interface ScheduledListSheetProps {
 }
 
 export function ScheduledListSheet({ visible, items, onClose, onCancelItem }: ScheduledListSheetProps) {
+  const now = useNowTick(visible);
+  const lang = getCurrentLocale();
   return (
     <ChatSheet visible={visible} onClose={onClose} title={L('chat.scheduledN', { n: items.length })} heightRatio={0.6}>
       <FlatList
@@ -102,6 +128,9 @@ export function ScheduledListSheet({ visible, items, onClose, onCancelItem }: Sc
           <View style={styles.row}>
             <View style={styles.rowTexts}>
               <Text style={styles.rowAt}>{scheduleLabel(item.sendAt.toDate())}</Text>
+              {scheduleLeftText(item.sendAt.toDate(), lang, now) ? (
+                <Text style={styles.rowLeft}>{scheduleLeftText(item.sendAt.toDate(), lang, now)}</Text>
+              ) : null}
               <Text style={styles.rowText} numberOfLines={3}>{item.text}</Text>
             </View>
             <TouchableOpacity style={styles.cancel} onPress={() => onCancelItem(item)}>
@@ -118,6 +147,10 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: 16, paddingBottom: 8, gap: 10 },
   label: { fontSize: 13, color: CHAT_COLORS.sub },
   note: { fontSize: 12.5, color: '#b45309' },
+  leftRow: { backgroundColor: '#eff6ff', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 9, gap: 2 },
+  leftAt: { fontSize: 14, fontWeight: '700', color: CHAT_COLORS.text },
+  leftText: { fontSize: 13, color: CHAT_COLORS.primary, fontWeight: '600' },
+  rowLeft: { fontSize: 12, color: CHAT_COLORS.primary, marginTop: 1 },
   preview: {
     fontSize: 14.5,
     color: CHAT_COLORS.text,

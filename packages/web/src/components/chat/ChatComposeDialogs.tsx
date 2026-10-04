@@ -3,19 +3,30 @@
 /**
  * 입력창에서 여는 창들 — 예약 메시지 만들기 · 예약 목록 · 대화 내보내기
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import { FiClock, FiTrash2 } from 'react-icons/fi';
 import {
   CHAT_LIMITS,
   L,
   scheduleTimeError,
+  scheduleLeftText,
   type ChatScheduledMessage,
   type Locale,
 } from '@smis-mentor/shared';
 import { ChatDialog } from './ChatMenus';
 import { toLocalInput } from './ChatPoll';
 import { shortDateTime } from './chatUi';
+
+/** 30초마다 지금 시각 — 남은 시간 표시용 */
+function useClock(): number {
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setClock(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+  return clock;
+}
 
 /** 기본 예약 시각 — 지금 + 1시간, 10분 단위 */
 function defaultScheduleTime(): Date {
@@ -37,6 +48,7 @@ export function ChatScheduleDialog({ initialText, lang, onSchedule, onClose }: {
   const [busy, setBusy] = useState(false);
   /** 창을 연 시각 — 고를 수 있는 범위 */
   const [now] = useState(() => Date.now());
+  const clock = useClock();
   const at = when ? new Date(when) : null;
 
   const submit = async () => {
@@ -80,7 +92,13 @@ export function ChatScheduleDialog({ initialText, lang, onSchedule, onClose }: {
             onChange={(e) => setWhen(e.target.value)}
             className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-[15px] focus:outline-none focus:border-blue-400"
           />
-          {at && !scheduleTimeError(at) && <span className="mt-1 block text-xs text-blue-600">{L('chat.scheduleSet', { at: shortDateTime(at, lang) })}</span>}
+          {at && !scheduleTimeError(at) && (
+            // 오전/오후를 헷갈리지 않게 '며칠 몇 시간 몇 분 뒤'도 함께
+            <span className="mt-1.5 block rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+              <span className="font-semibold">{L('chat.scheduleSet', { at: shortDateTime(at, lang) })}</span>
+              <span className="block mt-0.5">{scheduleLeftText(at, lang, clock)}</span>
+            </span>
+          )}
         </label>
         <textarea
           value={text}
@@ -102,6 +120,7 @@ export function ChatScheduledListDialog({ list, lang, onCancel, onClose }: {
   onCancel: (id: string) => Promise<void>;
   onClose: () => void;
 }) {
+  const clock = useClock();
   return (
     <ChatDialog title={L('chat.scheduledN', { n: list.length })} onClose={onClose} wide>
       <ul className="divide-y divide-gray-100">
@@ -109,7 +128,12 @@ export function ChatScheduledListDialog({ list, lang, onCancel, onClose }: {
           <li key={s.id} className="flex items-start gap-3 px-4 py-3">
             <FiClock className="mt-0.5 shrink-0 text-blue-500" size={16} />
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-semibold text-blue-600">{s.sendAt?.toDate ? shortDateTime(s.sendAt.toDate(), lang) : ''}</div>
+              <div className="text-xs font-semibold text-blue-600">
+                {s.sendAt?.toDate ? shortDateTime(s.sendAt.toDate(), lang) : ''}
+                {s.sendAt?.toDate && scheduleLeftText(s.sendAt.toDate(), lang, clock) ? (
+                  <span className="ml-1.5 font-normal text-blue-500">· {scheduleLeftText(s.sendAt.toDate(), lang, clock)}</span>
+                ) : null}
+              </div>
               <p className="mt-0.5 text-sm text-gray-800 whitespace-pre-wrap break-words line-clamp-4">{s.text}</p>
             </div>
             <button

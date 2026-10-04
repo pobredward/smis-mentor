@@ -277,6 +277,8 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
       setBusyUid(userId);
       try {
         const r = await mobileAuthenticatedPost<{ roomId: string }>('/api/chat/dm', { userId });
+        // 예전에 숨긴 대화를 다시 시작하면 숨김을 푼다 (숨긴 방은 방금 만든 대화여도 목록에서 빠진다)
+        if (uid && state.hidden?.[r.roomId]) void setChatRoomHidden(db, uid, r.roomId, false).catch(() => undefined);
         setKeepEmptyDmId(r.roomId);
         setDmSheetOpen(false);
         // 시트가 닫힌 뒤에 연다 (iOS 는 모달이 닫히는 중에 화면을 바꾸면 어긋날 수 있다)
@@ -287,7 +289,7 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
         setBusyUid(null);
       }
     },
-    [busyUid, navigation],
+    [busyUid, navigation, uid, state],
   );
 
   // 새 1:1 대화 후보 — 지금 기수 캠프 먼저 (같은 사람이면 지금 캠프의 역할 표시가 쓰인다)
@@ -536,20 +538,21 @@ const styles = StyleSheet.create({
     borderBottomColor: CHAT_COLORS.border,
     backgroundColor: '#ffffff',
   },
-  chips: { paddingHorizontal: 12, paddingVertical: 10, gap: 8 },
+  chips: { paddingHorizontal: 12, paddingVertical: 10, gap: 8, alignItems: 'center' },
+  // 높이를 고정 — 글자(한글/영문) · 안 읽은 수 배지에 따라 버튼 높이가 달라 줄이 들썩이지 않게
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
+    height: 34,
     paddingHorizontal: 14,
-    paddingVertical: 7,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: CHAT_COLORS.border,
     backgroundColor: '#ffffff',
   },
   chipOn: { backgroundColor: CHAT_COLORS.primary, borderColor: CHAT_COLORS.primary },
-  chipText: { fontSize: 14, fontWeight: '600', color: CHAT_COLORS.text },
+  chipText: { fontSize: 14, lineHeight: 18, fontWeight: '600', color: CHAT_COLORS.text },
   chipTextOn: { color: '#ffffff' },
   chipBadge: {
     minWidth: 18,
@@ -561,7 +564,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipBadgeOn: { backgroundColor: '#ffffff' },
-  chipBadgeText: { color: '#ffffff', fontSize: 10.5, fontWeight: '700' },
+  chipBadgeText: { color: '#ffffff', fontSize: 10.5, lineHeight: 13, fontWeight: '700' },
   chipBadgeTextOn: { color: CHAT_COLORS.badge },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   emptyTitle: { marginTop: 12, fontSize: 16, fontWeight: '600', color: CHAT_COLORS.text },
