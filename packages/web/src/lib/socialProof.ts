@@ -23,6 +23,12 @@ export interface VerifiedIdentity {
   /** firebase proof 인 경우 토큰의 uid */
   firebaseUid?: string;
   name?: string;
+  /**
+   * 이 이메일로 기존 계정을 열어 줘도 되나 — 제공자가 확인했고 '우리 앱에 발급된' 증명인 경우만.
+   * 구글·애플·비밀번호(Firebase ID 토큰) · 카카오(app_id 확인) = true, 네이버 = false
+   * (네이버 토큰은 어느 앱에 발급됐는지 확인할 방법이 없어, 다른 서비스가 받은 토큰으로 그 이메일 계정을 열 수 있다)
+   */
+  emailTrusted: boolean;
 }
 
 export class ProofError extends Error {
@@ -73,9 +79,24 @@ export async function verifySocialProof(proof: SocialProof): Promise<VerifiedIde
         email: lower(r.email),
         emailVerified: !!r.email,
         name: r.name || r.nickname,
+        emailTrusted: false,
       };
     }
     case 'kakao': {
+      // 우리 앱에 발급된 토큰인지 먼저 확인 (다른 앱이 받은 사용자 토큰으로 들어오는 것 막기)
+      const appId = String(process.env.KAKAO_APP_ID || '').trim();
+      if (!appId) {
+        throw new ProofError(503, 'KAKAO_DISABLED', '카카오 로그인은 아직 준비 중입니다.');
+      }
+      const infoRes = await fetch('https://kapi.kakao.com/v1/user/access_token_info', {
+        headers: { Authorization: `Bearer ${proof.accessToken}` },
+        cache: 'no-store',
+      });
+      const info = await infoRes.json().catch(() => null);
+      if (!infoRes.ok || String(info?.app_id ?? '') !== appId) {
+        logger.warn('카카오 토큰 앱 확인 실패:', { status: infoRes.status, sameApp: String(info?.app_id ?? '') === appId });
+        throw new ProofError(401, 'INVALID_PROOF', '카카오 인증이 만료되었거나 유효하지 않습니다. 다시 로그인해주세요.');
+      }
       const res = await fetch('https://kapi.kakao.com/v2/user/me', {
         headers: { Authorization: `Bearer ${proof.accessToken}` },
         cache: 'no-store',
@@ -86,12 +107,17 @@ export async function verifySocialProof(proof: SocialProof): Promise<VerifiedIde
         throw new ProofError(401, 'INVALID_PROOF', '카카오 인증이 만료되었거나 유효하지 않습니다. 다시 로그인해주세요.');
       }
       const acct = json.kakao_account || {};
+      if (info?.id != null && String(info.id) !== String(json.id)) {
+        throw new ProofError(401, 'INVALID_PROOF', '카카오 인증 정보가 일치하지 않습니다. 다시 로그인해주세요.');
+      }
+      const verified = !!acct.email && acct.is_email_valid !== false && acct.is_email_verified === true;
       return {
         provider: 'kakao',
         providerUid: String(json.id),
         email: lower(acct.email),
-        emailVerified: !!acct.email && acct.is_email_verified !== false,
+        emailVerified: verified,
         name: acct.profile?.nickname,
+        emailTrusted: verified,
       };
     }
     case 'firebase': {
@@ -112,6 +138,8 @@ export async function verifySocialProof(proof: SocialProof): Promise<VerifiedIde
         emailVerified: !!decoded.email_verified,
         firebaseUid: decoded.uid,
         name: typeof decoded.name === 'string' ? decoded.name : undefined,
+        // 구글·애플·비밀번호 세션의 이메일은 우리 Firebase 프로젝트가 확인한 것
+        emailTrusted: !!decoded.email_verified && ['google.com', 'apple.com', 'password'].includes(signInProvider),
       };
     }
   }
@@ -121,7 +149,7 @@ export async function verifySocialProof(proof: SocialProof): Promise<VerifiedIde
  * 검증된 신원이 users/{userId} 문서의 주인인지 판정
  *  - self     : 토큰의 uid == userId (자기 세션 복원)
  *  - provider : authProviders 에 같은 제공자 + 같은 제공자 uid
- *  - email    : 제공자가 검증한 이메일 == 문서 이메일 (또는 해당 제공자 연동 이메일)
+ *  - email    : 제공자가 검증한 이메일 == 문서 이메일 (또는 해당 제공자 연동 이메일) — emailTrusted 인 증명만
  */
 export function identityAuthorizesUser(
   identity: VerifiedIdentity,
@@ -142,7 +170,8 @@ export function identityAuthorizesUser(
     if (hit) return 'provider';
   }
 
-  if (identity.email && identity.emailVerified) {
+  // 이메일로 여는 것은 '우리 앱에 발급됐고 제공자가 확인한' 이메일만 (네이버 X)
+  if (identity.email && identity.emailVerified && identity.emailTrusted) {
     const docEmail = lower(userData.email);
     if (docEmail && docEmail === identity.email) return 'email';
     const linkedEmailHit = providers.some(

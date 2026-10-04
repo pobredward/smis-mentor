@@ -108,7 +108,8 @@ export async function POST(request: NextRequest) {
 
     const customToken = await adminAuth.createCustomToken(targetUid, {
       provider: identity.provider,
-      ...(mode === 'signup' && { signup: true }),
+      // 가입: 서버가 확인한 제공자 id 를 토큰에 실어 보낸다 → complete-signup 이 클라이언트 값 대신 이것을 쓴다
+      ...(mode === 'signup' && { signup: true, ...(identity.providerUid && { providerUid: identity.providerUid }) }),
     });
 
     // 팝업 로그인으로 생긴 임시 Auth 계정 정리 — 그 계정의 ID token 으로만 삭제 가능

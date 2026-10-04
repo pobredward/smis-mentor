@@ -1,5 +1,6 @@
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { normalizeProviderId } from '@/lib/socialProof';
+import crypto from 'crypto';
 import { logger } from '@smis-mentor/shared';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -8,9 +9,9 @@ import { NextRequest, NextResponse } from 'next/server';
  *
  * Firestore 규칙에서 users 컬렉션의 비인증 list 를 막는 대신, 가입·로그인 화면이 필요로 하던
  * 이메일/전화/원어민 이름/소셜 제공자 조회를 이 라우트가 Admin SDK로 대신한다.
- *  - 반환 필드는 화이트리스트로 제한 (민감정보·평가·토큰 등 제외)
- *  - temp 문서(가입 완료 전 임시 계정)에만 가입 이관에 필요한 추가 필드 포함
- *  - 간단한 IP 기반 속도 제한
+ *  - 반환 필드는 화이트리스트로 제한 — 흐름이 실제로 쓰는 값만 (sanitize 주석 참고)
+ *  - IP 기반 속도 제한 (메모리) + 전화번호 · 원어민 이름 조회는 Firestore 공용 제한
+ *  - 새 로그인 흐름(/api/auth/social)은 이 API 를 쓰지 않는다 — 옛 앱 버전이 사라지면 전화 · 이름 조회만 남긴다
  */
 const WINDOW_MS = 60_000;
 const LIMIT = 40;
@@ -27,16 +28,12 @@ function rateLimited(ip: string): boolean {
   return cur.n > LIMIT;
 }
 
-const BASE_FIELDS = [
-  'userId', 'id', 'email', 'name', 'phoneNumber', 'phone', 'role', 'status',
-  'primaryAuthMethod', 'profileImage', 'createdAt', 'updatedAt',
-];
-// temp 문서 → 새 uid 문서로 이관할 때 복사하는 필드
-const TEMP_EXTRA_FIELDS = [
-  'jobExperiences', 'selfIntroduction', 'jobMotivation', 'feedback', 'university', 'grade',
-  'major1', 'major2', 'isOnLeave', 'address', 'addressDetail', 'partTimeJobs', 'foreignTeacher',
-  'dateOfBirth', 'gender', 'age',
-];
+// 로그인 · 가입 흐름이 실제로 쓰는 것만 (2026-10-05 줄임 — 웹 · 앱 코드에서 확인)
+//  - 상태 · 역할 · 이름(이름 대조) · 이메일(비밀번호 확인 창) · 연동 제공자(이미 연결됐는지) · 원어민 이름 · 탈퇴 복구 이름
+//  - 전화번호는 전화번호로 찾은 경우만 (이미 아는 값), 캠프 배정은 temp 계정의 캠프 표시용 id 만
+//  - 예전에 나가던 생년월일 · 주소 · 학교 · 자기소개 · 프로필 사진 · 원어민 서류 링크 등은 내보내지 않는다
+//    (temp 계정 이관은 /api/auth/complete-signup 이 서버에서 temp 문서를 직접 읽어 처리한다)
+const BASE_FIELDS = ['userId', 'id', 'email', 'name', 'role', 'status', 'primaryAuthMethod'];
 
 function encodeValue(v: unknown): unknown {
   if (v === null || v === undefined) return v;
@@ -51,29 +48,62 @@ function encodeValue(v: unknown): unknown {
   return v;
 }
 
-function sanitize(id: string, data: Record<string, unknown>) {
-  const isTemp = data.status === 'temp';
+/**
+ * @param by 조회 방법 — phone 이면 전화번호를 함께, social 이면 그 제공자의 연동 이메일 · 이름을 함께 (애플 재로그인 복원용)
+ */
+function sanitize(id: string, data: Record<string, unknown>, by: string, socialProvider?: string) {
   const out: Record<string, unknown> = { userId: id, id };
   for (const f of BASE_FIELDS) if (f in data) out[f] = encodeValue(data[f]);
-  if (Array.isArray(data.authProviders)) {
-    out.authProviders = (data.authProviders as Array<Record<string, unknown>>).map((p) => ({
-      providerId: p.providerId,
-      uid: p.uid,
-      ...(p.email ? { email: p.email } : {}),
-      ...(p.displayName ? { displayName: p.displayName } : {}),
-    }));
+  if (by === 'phone') {
+    if (typeof data.phoneNumber === 'string') out.phoneNumber = data.phoneNumber;
+    if (typeof data.phone === 'string') out.phone = data.phone;
   }
-  if (data.foreignTeacher && typeof data.foreignTeacher === 'object' && !isTemp) {
+  if (Array.isArray(data.authProviders)) {
+    out.authProviders = (data.authProviders as Array<Record<string, unknown>>).map((p) => {
+      const same = by === 'social' && socialProvider && normalizeProviderId(p.providerId) === socialProvider;
+      return {
+        providerId: p.providerId,
+        uid: p.uid,
+        ...(same && p.email ? { email: p.email } : {}),
+        ...(same && p.displayName ? { displayName: p.displayName } : {}),
+      };
+    });
+  }
+  if (data.foreignTeacher && typeof data.foreignTeacher === 'object') {
     const ft = data.foreignTeacher as Record<string, unknown>;
     out.foreignTeacher = { firstName: ft.firstName, lastName: ft.lastName, middleName: ft.middleName, countryCode: ft.countryCode };
   }
-  if (isTemp) for (const f of TEMP_EXTRA_FIELDS) if (f in data) out[f] = encodeValue(data[f]);
+  if (data.status === 'temp' && Array.isArray(data.jobExperiences)) {
+    out.jobExperiences = (data.jobExperiences as Array<Record<string, unknown>>).map((e) => ({ id: e?.id }));
+  }
   // 탈퇴·삭제 계정: 복구 화면에서 본인 이름 확인용 (이메일은 가린다)
   if (data.status === 'inactive' || data.status === 'deleted') {
     if (typeof data.originalName === 'string') out.originalName = data.originalName;
     delete out.email;
   }
   return out;
+}
+
+/**
+ * 전화번호 · 원어민 이름 조회 속도 제한 — 서버 인스턴스마다 따로 세는 메모리 제한은 쉽게 우회되므로
+ * Firestore 에 IP(해시)별 10분 묶음으로 센다. (저장소 문제로 실패하면 막지 않는다)
+ */
+const SHARED_LIMIT = 30;
+async function sharedLimited(ip: string, by: string): Promise<boolean> {
+  try {
+    const bucket = Math.floor(Date.now() / 600_000);
+    const key = crypto.createHash('sha256').update(`${ip}|lookup`).digest('hex').slice(0, 24);
+    const ref = getAdminFirestore().collection('rateLimits').doc(`lookup_${key}_${bucket}`);
+    const n = await getAdminFirestore().runTransaction(async (tx) => {
+      const cur = await tx.get(ref);
+      const next = Number(cur.data()?.n ?? 0) + 1;
+      tx.set(ref, { n: next, by, expiresAt: new Date((bucket + 2) * 600_000) }, { merge: true });
+      return next;
+    });
+    return n > SHARED_LIMIT;
+  } catch {
+    return false;
+  }
 }
 
 type Doc = FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot;
@@ -93,6 +123,9 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => ({}));
     const by = body?.by;
+    if ((by === 'phone' || by === 'foreignName') && await sharedLimited(ip, by)) {
+      return NextResponse.json({ error: { status: 'RESOURCE_EXHAUSTED', message: '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.' } }, { status: 429 });
+    }
     const db = getAdminFirestore();
     const users = db.collection('users');
     let found: Doc | undefined;
@@ -153,7 +186,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!found || !found.exists) return NextResponse.json({ user: null });
-    return NextResponse.json({ user: sanitize(found.id, found.data() as Record<string, unknown>) });
+    return NextResponse.json({ user: sanitize(found.id, found.data() as Record<string, unknown>, String(by), by === 'social' ? normalizeProviderId(body.providerId) : undefined) });
   } catch (error) {
     logger.error('❌ 사용자 조회(lookup) 실패:', error);
     return NextResponse.json({ error: { status: 'INTERNAL', message: '사용자 조회에 실패했습니다.' } }, { status: 500 });
