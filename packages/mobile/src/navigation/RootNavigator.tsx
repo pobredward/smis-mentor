@@ -181,6 +181,8 @@ function AppStack() {
           headerShown: false,
           presentation: 'card',
           animation: 'slide_from_right',
+          // iOS — 화면 어디서든 오른쪽으로 밀면 채팅 목록으로 (말풍선 답장은 왼쪽으로 밀기, MessageRow SwipeReply)
+          fullScreenGestureEnabled: true,
         }}
       />
       <Stack.Screen

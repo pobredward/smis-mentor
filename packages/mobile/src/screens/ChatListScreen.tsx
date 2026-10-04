@@ -24,9 +24,11 @@ import {
   L,
   CHAT_FILTER_ALL,
   CHAT_FILTER_DM,
+  CHAT_FILTER_UNREAD,
   chatCampSummary,
   chatListChips,
   chatListTimeLabel,
+  chatListToggle,
   chatListView,
   chatRoomGroups,
   getCurrentLocale,
@@ -65,9 +67,11 @@ type ListItem =
   /** 맨 아래 '숨긴 채팅방 n개' */
   | { type: 'hidden'; key: string; count: number }
   /** [1:1] 에서 대화가 하나도 없을 때 */
-  | { type: 'noDms'; key: string };
+  | { type: 'noDms'; key: string }
+  /** [안 읽음] 에서 안 읽은 대화가 없을 때 */
+  | { type: 'noUnread'; key: string };
 
-/** 목록 버튼 — 'all' · jobCodeId · 'dm' */
+/** 목록 버튼 — 'all'(아무 버튼도 안 고름) · 'unread' · 'dm' · jobCodeId */
 const FILTER_ALL = CHAT_FILTER_ALL;
 const FOLDED_KEY = 'chat.foldedCamps';
 
@@ -80,9 +84,9 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
 
   const [keepEmptyDmId, setKeepEmptyDmId] = useState<string | null>(null);
   const [otherOpen, setOtherOpen] = useState(false);
-  // 지금 기수에서 볼 캠프 · [1:1] (이 화면이 살아 있는 동안 기억)
+  // 고른 목록 버튼 — [안 읽음] · [1:1] · 캠프 (이 화면이 살아 있는 동안 기억, 'all' = 아무것도 안 고름)
   const [campFilter, setCampFilter] = useState<string>(FILTER_ALL);
-  // [All] 에서 접은 캠프 (이 기기에 기억)
+  // 전체 보기에서 접은 캠프 (이 기기에 기억)
   const [folded, setFolded] = useState<ReadonlySet<string>>(() => new Set());
   useEffect(() => {
     let alive = true;
@@ -153,7 +157,7 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
   /** 지금 기수의 캠프 방 · 그룹방 — 늘 고정 (고정 해제 · 숨기기 불가) */
   const presetIds = useMemo(() => new Set(groups.camps.flatMap((c) => c.rooms.map((r) => r.id))), [groups]);
   // 고른 캠프가 목록에서 사라지거나(배정 해제 등) 1:1 대화가 없으면 전체로
-  const view = useMemo(() => chatListView(groups, campFilter), [groups, campFilter]);
+  const view = useMemo(() => chatListView(groups, campFilter, state), [groups, campFilter, state]);
   const selectedFilter = view.filter;
   useEffect(() => {
     if (roomsReady && campFilter !== FILTER_ALL && selectedFilter === FILTER_ALL) setCampFilter(FILTER_ALL);
@@ -166,6 +170,12 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
   const items = useMemo<ListItem[]>(() => {
     const out: ListItem[] = [];
     const pushRooms = (list: ChatRoom[]) => list.forEach((room) => out.push({ type: 'room', key: room.id, room }));
+    // [안 읽음] — 안 읽은 대화만 한 줄로 (최근 순)
+    if (view.filter === CHAT_FILTER_UNREAD) {
+      pushRooms(view.unread);
+      if (!view.unread.length) out.push({ type: 'noUnread', key: 'noUnread' });
+      return out;
+    }
     // 1) 지금 기수의 캠프 방 (버튼으로 고른 캠프만, 또는 전부 — 전부일 때는 캠프마다 접을 수 있다)
     view.camps.forEach((camp) => {
       const title = L('chat.campRooms', { camp: camp.campCode || camp.jobCodeId });
@@ -227,7 +237,7 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
     return out;
   }, [groups, view, folded, otherOpen, state, lang]);
 
-  // [All][1:1][J29][E29]… — 버튼마다 안 읽은 수
+  // [안 읽음][1:1][J29][E29]… — 버튼마다 안 읽은 수, 고른 버튼을 다시 누르면 전체
   const chips = useMemo(() => chatListChips(groups, state, lang), [groups, state, lang]);
 
   const chipRow = chips.length ? (
@@ -243,7 +253,7 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
           <TouchableOpacity
             key={chip.key}
             style={[styles.chip, on && styles.chipOn]}
-            onPress={() => setCampFilter(chip.key)}
+            onPress={() => setCampFilter((cur) => chatListToggle(cur, chip.key))}
             activeOpacity={0.7}
             accessibilityState={{ selected: on }}
           >
@@ -359,6 +369,13 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
             <TouchableOpacity style={styles.unhideBtn} onPress={() => setDmSheetOpen(true)}>
               <Text style={styles.unhideText}>{L('chat.newDm')}</Text>
             </TouchableOpacity>
+          </View>
+        );
+      }
+      if (item.type === 'noUnread') {
+        return (
+          <View style={styles.noDms}>
+            <Text style={styles.emptyHint}>{L('chat.noUnread')}</Text>
           </View>
         );
       }

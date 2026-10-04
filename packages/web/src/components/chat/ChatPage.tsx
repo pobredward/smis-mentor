@@ -80,7 +80,7 @@ function ChatScreen({ uid, user }: { uid: string; user: User }) {
   const lang = getCurrentLocale();
   const [keepDm, setKeepDm] = useState<string | null>(null);
   const [newDmOpen, setNewDmOpen] = useState(false);
-  // 지금 기수에서 고른 캠프 버튼 ('all' · jobCodeId) — 이 브라우저에 기억 (없어진 캠프면 목록이 All 로 보인다)
+  // 고른 목록 버튼 ('all' · 'unread' · 'dm' · jobCodeId) — 이 브라우저에 기억 (없어진 캠프면 전체로 보인다)
   const [filter, setFilter] = useState<ChatCampFilter>(readFilter);
   const changeFilter = useCallback((f: ChatCampFilter) => {
     setFilter(f);

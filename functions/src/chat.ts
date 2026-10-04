@@ -15,6 +15,7 @@ import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/fire
 import { Expo, ExpoPushMessage } from 'expo-server-sdk';
 
 const REGION = 'asia-northeast3';
+// 함수 실행 계정 — 이 프로젝트에는 기본 Compute 계정(…-compute@developer)이 없어 v2 함수는 appspot 계정을 꼭 적는다 (index.ts 와 같음)
 const BUCKET = 'smis-mentor.firebasestorage.app';
 const SITE = 'https://smis-mentor.com';
 const STAFF = ['admin', 'mentor', 'foreign'];
@@ -182,7 +183,7 @@ async function removeWebToken(uid: string, token: string) {
 }
 
 export const chatOnMessageCreated = onDocumentCreated(
-  { document: 'chatRooms/{roomId}/messages/{messageId}', region: REGION, memory: '256MiB', timeoutSeconds: 60 },
+  { document: 'chatRooms/{roomId}/messages/{messageId}', region: REGION, serviceAccount: 'smis-mentor@appspot.gserviceaccount.com', memory: '256MiB', timeoutSeconds: 60 },
   async (event) => {
     const m = event.data?.data() as MessageDoc | undefined;
     if (!m) return;
@@ -350,7 +351,7 @@ export const chatOnMessageCreated = onDocumentCreated(
 );
 
 export const chatOnMessageUpdated = onDocumentUpdated(
-  { document: 'chatRooms/{roomId}/messages/{messageId}', region: REGION, memory: '256MiB' },
+  { document: 'chatRooms/{roomId}/messages/{messageId}', region: REGION, serviceAccount: 'smis-mentor@appspot.gserviceaccount.com', memory: '256MiB' },
   async (event) => {
     const before = event.data?.before.data() as MessageDoc | undefined;
     const after = event.data?.after.data() as MessageDoc | undefined;

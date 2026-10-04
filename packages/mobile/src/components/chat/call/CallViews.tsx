@@ -11,7 +11,7 @@ import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacit
 import { SafeAreaInsetsContext, initialWindowMetrics } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { RenderModeType, RtcSurfaceView, VideoMirrorModeType } from 'react-native-agora';
+import { loadAgora } from '../../../services/agoraNative';
 import {
   CHAT_CALL_LIMITS,
   L,
@@ -66,17 +66,19 @@ export function CallTile({ p, video, real, frontCamera, compact, style }: {
   style?: object;
 }) {
   const poor = p.connection === 'poor' || p.connection === 'reconnecting';
+  // 실제 연결일 때만 Agora 를 불러온다 (가짜 연결 · Expo Go 에서는 자리표시만)
+  const agora = real && video && p.agoraUid != null ? loadAgora() : null;
   return (
     <View style={[styles.tile, p.speaking && styles.tileSpeaking, style]} accessibilityLabel={p.isMe ? L('chat.callYou') : p.name}>
       {video ? (
-        real && p.agoraUid != null ? (
-          <RtcSurfaceView
+        agora && p.agoraUid != null ? (
+          <agora.RtcSurfaceView
             style={StyleSheet.absoluteFill}
             zOrderMediaOverlay={!!compact}
             canvas={{
               uid: p.isMe ? 0 : p.agoraUid,
-              renderMode: RenderModeType.RenderModeHidden,
-              mirrorMode: p.isMe && frontCamera ? VideoMirrorModeType.VideoMirrorModeEnabled : VideoMirrorModeType.VideoMirrorModeAuto,
+              renderMode: agora.RenderModeType.RenderModeHidden,
+              mirrorMode: p.isMe && frontCamera ? agora.VideoMirrorModeType.VideoMirrorModeEnabled : agora.VideoMirrorModeType.VideoMirrorModeAuto,
             }}
           />
         ) : (

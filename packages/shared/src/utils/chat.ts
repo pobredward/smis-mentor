@@ -458,11 +458,15 @@ export function filterCampGroups(camps: ChatCampGroup[], filter: string | null |
   return one.length ? one : camps;
 }
 
-// ── 목록 위 버튼 [All][1:1][J29][E29]… · 캠프 묶음 접기 ─────────────────
+// ── 목록 위 버튼 [안 읽음][1:1][J29][E29]… · 캠프 묶음 접기 ─────────────────
 
-/** 목록 버튼 — 'all' · 캠프 jobCodeId · 'dm'(1:1 대화만) */
+/**
+ * 목록 버튼 — 'unread'(안 읽은 대화만) · 'dm'(1:1 대화만) · 캠프 jobCodeId.
+ * 'all' 은 버튼이 아니라 '아무것도 안 고름' (2026-10-04 [All] 버튼을 뺐다 — 고른 버튼을 다시 누르면 전체로).
+ */
 export const CHAT_FILTER_ALL = 'all';
 export const CHAT_FILTER_DM = 'dm';
+export const CHAT_FILTER_UNREAD = 'unread';
 
 export interface ChatListChip {
   key: string;
@@ -473,34 +477,54 @@ export interface ChatListChip {
 /** 1:1 대화 전부 (내가 위에 고정한 것 포함, 숨긴 것 제외) */
 const dmRoomsOf = (g: Pick<ChatRoomGroups, 'pinned' | 'dms'>): ChatRoom[] => [...g.pinned.filter((r) => r.type === 'dm'), ...g.dms];
 
-/**
- * 지금 보일 목록 버튼 — [All] [1:1] [J29] [E29] … ([1:1] 은 캠프가 많아도 밀지 않고 보이게 두 번째).
- * 캠프 버튼은 지금 기수 캠프가 2개 이상일 때, [1:1] 은 1:1 대화가 있을 때. 하나뿐이면 [].
- */
-function chatListChipKeys(g: Pick<ChatRoomGroups, 'camps' | 'pinned' | 'dms'>): string[] {
-  if (!g.camps.length) return [];
-  const keys = [CHAT_FILTER_ALL];
-  if (dmRoomsOf(g).length) keys.push(CHAT_FILTER_DM);
-  if (g.camps.length >= 2) keys.push(...g.camps.map((c) => c.jobCodeId));
-  return keys.length >= 2 ? keys : [];
+/** 목록에 보이는 방 전부 (지금 기수 캠프 · 고정 · 1:1 · 지난 기수 — 숨긴 방 제외) */
+const listedRoomsOf = (g: ChatRoomGroups): ChatRoom[] => [
+  ...g.camps.flatMap((c) => c.rooms),
+  ...g.pinned,
+  ...g.dms,
+  ...g.otherGenerations.flatMap((x) => x.camps.flatMap((c) => c.rooms)),
+];
+
+/** 안 읽은 대화 — 최근 메시지 순 */
+export function chatUnreadRooms(g: ChatRoomGroups, state: ChatUserState | null | undefined): ChatRoom[] {
+  return listedRoomsOf(g)
+    .filter((r) => unreadOf(state, r.id) > 0)
+    .sort((a, b) => roomTime(b) - roomTime(a));
 }
 
 /**
- * 목록 위 버튼 — [All] [1:1] [J29] [E29] …. 버튼이 하나뿐이면 빈 배열 (줄을 그리지 않는다).
- * All 의 안 읽은 수는 지금 기수 캠프 방만 (1:1 은 [1:1] 버튼에).
+ * 지금 보일 목록 버튼 — [안 읽음] [1:1] [J29] [E29] … ([안 읽음] · [1:1] 은 캠프가 많아도 밀리지 않게 앞에).
+ * [안 읽음] 은 방이 하나라도 있으면 늘, [1:1] 은 1:1 대화가 있을 때, 캠프 버튼은 지금 기수 캠프가 2개 이상일 때.
+ */
+function chatListChipKeys(g: ChatRoomGroups): string[] {
+  if (!listedRoomsOf(g).length) return [];
+  const keys = [CHAT_FILTER_UNREAD];
+  if (dmRoomsOf(g).length) keys.push(CHAT_FILTER_DM);
+  if (g.camps.length >= 2) keys.push(...g.camps.map((c) => c.jobCodeId));
+  return keys;
+}
+
+/**
+ * 목록 위 버튼 — [안 읽음] [1:1] [J29] [E29] …. 방이 하나도 없으면 빈 배열 (줄을 그리지 않는다).
+ * 고른 버튼을 다시 누르면 전체(CHAT_FILTER_ALL)로 — chatListToggle.
  */
 export function chatListChips(g: ChatRoomGroups, state: ChatUserState | null | undefined, lang: Locale): ChatListChip[] {
   return chatListChipKeys(g).map((key) => {
-    if (key === CHAT_FILTER_ALL) return { key, label: t(lang, 'chat.filterAll'), unread: totalUnread(state, g.camps.flatMap((c) => c.rooms)) };
+    if (key === CHAT_FILTER_UNREAD) return { key, label: t(lang, 'chat.filterUnread'), unread: totalUnread(state, chatUnreadRooms(g, state)) };
     if (key === CHAT_FILTER_DM) return { key, label: t(lang, 'chat.filterDm'), unread: totalUnread(state, dmRoomsOf(g)) };
     const c = g.camps.find((x) => x.jobCodeId === key)!;
     return { key, label: c.campCode || c.jobCodeId, unread: totalUnread(state, c.rooms) };
   });
 }
 
+/** 버튼을 눌렀을 때 다음 필터 — 고른 버튼을 다시 누르면 전체 */
+export const chatListToggle = (current: string | null | undefined, key: string): string => (current === key ? CHAT_FILTER_ALL : key);
+
 export interface ChatListView {
-  /** 실제로 고른 버튼 — 없어진 캠프 · 1:1 이 없으면 'all' */
+  /** 실제로 고른 버튼 — 없어진 캠프 · 1:1 이 없으면 'all'(아무 버튼도 안 고름) */
   filter: string;
+  /** [안 읽음] — 안 읽은 대화만 한 줄로 (최근 순). 다른 필터에서는 빈 배열 */
+  unread: ChatRoom[];
   /** 보이는 지금 기수 캠프 묶음 */
   camps: ChatCampGroup[];
   pinned: ChatRoom[];
@@ -510,15 +534,22 @@ export interface ChatListView {
   foldable: boolean;
 }
 
-/** 고른 버튼대로 목록 나누기 — [1:1] 이면 1:1 대화만 (고정한 1:1 은 '고정한 대화'로 위에) */
-export function chatListView(g: ChatRoomGroups, filter: string | null | undefined): ChatListView {
+/**
+ * 고른 버튼대로 목록 나누기 — [안 읽음] 이면 안 읽은 대화만 한 줄로, [1:1] 이면 1:1 대화만 (고정한 1:1 은 '고정한 대화'로 위에).
+ * 정렬은 그대로 (안 읽은 방을 고정 방 위로 올리지 않는다 — 자리가 계속 바뀌지 않게, 안 읽은 것만 보려면 [안 읽음]).
+ */
+export function chatListView(g: ChatRoomGroups, filter: string | null | undefined, state?: ChatUserState | null): ChatListView {
   const keys = chatListChipKeys(g);
   const f = filter && keys.includes(filter) ? filter : CHAT_FILTER_ALL;
+  if (f === CHAT_FILTER_UNREAD) {
+    return { filter: f, unread: chatUnreadRooms(g, state), camps: [], pinned: [], dms: [], otherGenerations: [], foldable: false };
+  }
   if (f === CHAT_FILTER_DM) {
-    return { filter: f, camps: [], pinned: g.pinned.filter((r) => r.type === 'dm'), dms: g.dms, otherGenerations: [], foldable: false };
+    return { filter: f, unread: [], camps: [], pinned: g.pinned.filter((r) => r.type === 'dm'), dms: g.dms, otherGenerations: [], foldable: false };
   }
   return {
     filter: f,
+    unread: [],
     camps: f === CHAT_FILTER_ALL ? g.camps : g.camps.filter((c) => c.jobCodeId === f),
     pinned: g.pinned,
     dms: g.dms,

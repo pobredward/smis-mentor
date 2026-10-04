@@ -181,6 +181,8 @@ export const en: Messages = {
     searchPeople: "Search by name",
     sectionDms: "Direct messages",
     filterDm: "1:1",
+    filterUnread: "Unread",
+    noUnread: "No unread chats",
     foldCamp: "Collapse {{camp}} chats",
     unfoldCamp: "Expand {{camp}} chats",
     noDms: "No direct messages yet",

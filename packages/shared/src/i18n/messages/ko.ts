@@ -179,6 +179,8 @@ export const ko = {
     searchPeople: "이름으로 찾기",
     sectionDms: "1:1 대화",
     filterDm: "1:1",
+    filterUnread: "안 읽음",
+    noUnread: "안 읽은 대화가 없어요",
     foldCamp: "{{camp}} 채팅방 접기",
     unfoldCamp: "{{camp}} 채팅방 펼치기",
     noDms: "1:1 대화가 없어요",

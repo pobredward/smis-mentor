@@ -30,14 +30,15 @@ import { useAuth } from '../context/AuthContext';
 import { chatStoreRoom } from '../hooks/useChatUnread';
 import { mobileAuthenticatedPost } from './apiClient';
 import { createAgoraNativeEngine, CallPermissionError } from './agoraNativeEngine';
+import { agoraLinked } from './agoraNative';
 import { nativeCalls } from './nativeCalls';
 
 /** 화면용 통화 상태 — 끝난 시각을 붙인다 */
 export type ChatCallView = ChatCallState & { endedAt?: number };
 export const isCallActive = (s: Pick<ChatCallState, 'phase'>) => s.phase !== 'idle' && s.phase !== 'ended';
 
-/** 실제 통화(Agora)가 설정돼 있는가 */
-export const chatCallsReal = (): boolean => !!process.env.EXPO_PUBLIC_AGORA_APP_ID;
+/** 실제 통화(Agora)가 설정돼 있는가 — 키가 있고, 앱에 Agora 네이티브 모듈이 들어 있을 때 (Expo Go 는 가짜 연결) */
+export const chatCallsReal = (): boolean => !!process.env.EXPO_PUBLIC_AGORA_APP_ID && agoraLinked();
 /** 통화 버튼 · 화면을 보여 줄까 */
 export function chatCallsEnabled(): boolean {
   return chatCallsReal() || __DEV__ || process.env.EXPO_PUBLIC_CHAT_CALLS === '1';

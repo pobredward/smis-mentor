@@ -9,19 +9,9 @@
  * - Android 는 들어가기 전에 마이크(영상이면 카메라) 권한을 묻는다. iOS 는 처음 쓸 때 시스템이 묻는다.
  */
 import { PermissionsAndroid, Platform } from 'react-native';
-import {
-  AudioScenarioType,
-  ChannelProfileType,
-  ClientRoleType,
-  ConnectionStateType,
-  QualityType,
-  RemoteAudioState,
-  RemoteVideoState,
-  createAgoraRtcEngine,
-  type IRtcEngine,
-  type IRtcEngineEventHandler,
-} from 'react-native-agora';
+import type { IRtcEngine, IRtcEngineEventHandler } from 'react-native-agora';
 import type { CallEngine, CallEngineEvents } from '@smis-mentor/shared';
+import { loadAgora } from './agoraNative';
 
 export class CallPermissionError extends Error {
   constructor() {
@@ -46,6 +36,17 @@ export interface AgoraNativeEngine extends CallEngine {
 }
 
 export function createAgoraNativeEngine(): AgoraNativeEngine {
+  // 네이티브 모듈이 있을 때만 불린다 (chatCallsReal) — Expo Go 에서 import 만으로 멈추지 않게 여기서 불러온다
+  const {
+    AudioScenarioType,
+    ChannelProfileType,
+    ClientRoleType,
+    ConnectionStateType,
+    QualityType,
+    RemoteAudioState,
+    RemoteVideoState,
+    createAgoraRtcEngine,
+  } = loadAgora();
   let engine: IRtcEngine | null = null;
   let appIdUsed = '';
   let handler: IRtcEngineEventHandler | null = null;

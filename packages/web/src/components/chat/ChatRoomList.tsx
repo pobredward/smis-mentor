@@ -17,6 +17,7 @@ import {
   chatRoomTitle,
   chatCampSummary,
   chatListChips,
+  chatListToggle,
   chatListView,
   dmPeerOf,
   isRoomMuted,
@@ -35,7 +36,7 @@ import { ChatActionMenu, ChatDialog, type ChatMenuAction, type ChatMenuAnchor } 
 import { RoomAvatar, UnreadBadge } from './chatUi';
 import { useLongPress } from './useLongPress';
 
-/** 목록 버튼 — 'all' · jobCodeId · 'dm'(1:1 대화만) */
+/** 목록 버튼 — 'all'(아무 버튼도 안 고름) · 'unread'(안 읽은 대화만) · 'dm'(1:1 대화만) · jobCodeId */
 export type ChatCampFilter = string;
 
 const FOLDED_KEY = 'smis_chat_folded_camps';
@@ -75,7 +76,7 @@ export interface ChatRoomListProps {
   ready: boolean;
   /** 방 목록을 불러오지 못함 (규칙 거절 등) */
   loadFailed?: boolean;
-  /** 지금 기수에서 고른 캠프 ('all' · jobCodeId) */
+  /** 고른 버튼 ('all' · 'unread' · 'dm' · jobCodeId) */
   filter: ChatCampFilter;
   onFilterChange: (filter: ChatCampFilter) => void;
   onOpenRoom: (roomId: string) => void;
@@ -197,7 +198,7 @@ function SectionTitle({ children }: { children: ReactNode }) {
   );
 }
 
-/** [All][1:1][J29][E29]… — 좁은 화면에서는 옆으로 밀어 본다 */
+/** [안 읽음][1:1][J29][E29]… — 고른 버튼을 다시 누르면 전체. 좁은 화면에서는 옆으로 밀어 본다 */
 function ListChips({ chips, filter, onChange }: { chips: ChatListChip[]; filter: ChatCampFilter; onChange: (f: ChatCampFilter) => void }) {
   return (
     <div className="flex gap-1.5 overflow-x-auto px-4 pt-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
@@ -209,7 +210,7 @@ function ListChips({ chips, filter, onChange }: { chips: ChatListChip[]; filter:
             type="button"
             role="tab"
             aria-selected={on}
-            onClick={() => onChange(c.key)}
+            onClick={() => onChange(chatListToggle(filter, c.key))}
             className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
               on ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
@@ -234,10 +235,11 @@ export default function ChatRoomList({ groups, state, myUid, lang, activeRoomId,
   const [folded, toggleFold] = useFoldedCamps();
   const { camps, hiddenCount } = groups;
   const chips = chatListChips(groups, state, lang);
-  // 고른 캠프가 사라졌거나 1:1 대화가 없으면 All 로 본다
-  const view = chatListView(groups, filter);
+  // 고른 캠프가 사라졌거나 1:1 대화가 없으면 전체로 본다
+  const view = chatListView(groups, filter, state);
   const { pinned, dms, otherGenerations } = view;
   const dmOnly = view.filter === 'dm';
+  const unreadOnly = view.filter === 'unread';
   const empty = !camps.length && !groups.pinned.length && !groups.dms.length && !groups.otherGenerations.length;
   const pastUnread = totalUnread(state, otherGenerations.flatMap((g) => g.camps.flatMap((c) => c.rooms)));
   const pastCamps = otherGenerations.reduce((s, g) => s + g.camps.length, 0);
@@ -298,6 +300,10 @@ export default function ChatRoomList({ groups, state, myUid, lang, activeRoomId,
       ) : (
         <div className="pb-4">
           {chips.length > 0 && <ListChips chips={chips} filter={view.filter} onChange={onFilterChange} />}
+          {unreadOnly && view.unread.map(row)}
+          {unreadOnly && !view.unread.length && (
+            <div className="px-6 py-14 text-center text-sm text-gray-500">{L('chat.noUnread')}</div>
+          )}
           {view.camps.map((c) =>
             view.foldable ? (
               <FoldableCamp key={c.jobCodeId} camp={c} state={state} lang={lang} now={now} folded={folded.has(c.jobCodeId)} onToggle={() => toggleFold(c.jobCodeId)}>

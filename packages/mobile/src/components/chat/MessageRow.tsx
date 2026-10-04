@@ -124,7 +124,10 @@ function Meta({
   );
 }
 
-/** 오른쪽으로 밀면 답장 */
+/**
+ * 왼쪽으로 밀면 답장 — 오른쪽으로 미는 건 뒤로가기(채팅 목록)에 양보한다.
+ * dragOffsetFromLeftEdge 를 크게 두어 오른쪽으로 미는 손가락은 아예 잡지 않는다 (iOS 화면 전체 뒤로가기 제스처가 받는다).
+ */
 function SwipeReply({ enabled, onReply, children }: { enabled: boolean; onReply: () => void; children: React.ReactNode }) {
   const ref = useRef<SwipeableMethods>(null);
   return (
@@ -132,9 +135,10 @@ function SwipeReply({ enabled, onReply, children }: { enabled: boolean; onReply:
       ref={ref}
       enabled={enabled}
       friction={2}
-      leftThreshold={56}
-      overshootLeft={false}
-      renderLeftActions={() => (
+      rightThreshold={56}
+      overshootRight={false}
+      dragOffsetFromLeftEdge={10_000}
+      renderRightActions={() => (
         <View style={styles.swipeAction}>
           <Ionicons name="arrow-undo" size={20} color={CHAT_COLORS.sub} />
         </View>

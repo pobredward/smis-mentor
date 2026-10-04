@@ -141,7 +141,7 @@ describe('chat — 방 이름 · 목록', () => {
     expect(C.chatRoomGeneration({ campCode: 'F25_1' })).toBe('25기');
   });
 
-  it('목록 버튼 [All][1:1][J29]… · 1:1 만 보기 · 캠프 묶음 접기', () => {
+  it('목록 버튼 [안 읽음][1:1][J29]… · 안 읽은 것만 · 1:1 만 보기 · 캠프 묶음 접기', () => {
     const rooms = [
       room('dm_1', 'dm', 500), room('dm_2', 'dm', 900), room('dm_pin', 'dm', 300),
       room('a_camp_all', 'camp_all', 100, { jobCodeId: 'a', campCode: 'J29', generation: '29기' }),
@@ -152,8 +152,18 @@ describe('chat — 방 이름 · 목록', () => {
     const state = { unread: { a_camp_all: 2, a_camp_mentor: 1, b_camp_all: 4, dm_1: 3, dm_pin: 1, c_camp_all: 9 }, pinned: { dm_pin: 1 } };
     const g = C.chatRoomGroups(rooms, { activeJobCodeId: 'a', state });
     expect(C.chatListChips(g, state, 'ko').map((c) => [c.key, c.label, c.unread])).toEqual([
-      ['all', 'All', 7], ['dm', '1:1', 4], ['a', 'J29', 3], ['b', 'E29', 4],
+      ['unread', '안 읽음', 20], ['dm', '1:1', 4], ['a', 'J29', 3], ['b', 'E29', 4],
     ]);
+    // [안 읽음] — 지난 기수 · 고정 · 1:1 · 캠프 방 가리지 않고 안 읽은 대화만 최근 순 (b_camp_all 은 메시지 시각 0 → 맨 끝)
+    const un = C.chatListView(g, 'unread', state);
+    expect(un.filter).toBe('unread');
+    expect(un.unread.map((r) => r.id)).toEqual(['c_camp_all', 'a_camp_mentor', 'dm_1', 'dm_pin', 'a_camp_all', 'b_camp_all']);
+    expect([un.camps, un.pinned, un.dms, un.otherGenerations, un.foldable]).toEqual([[], [], [], [], false]);
+    expect(C.chatListView(g, 'unread', { unread: {} }).unread).toEqual([]);
+    // 고른 버튼을 다시 누르면 전체
+    expect(C.chatListToggle('unread', 'unread')).toBe('all');
+    expect(C.chatListToggle('all', 'dm')).toBe('dm');
+    expect(C.chatListToggle('dm', 'a')).toBe('a');
     // [1:1] — 1:1 대화만 (고정한 1:1 은 위에), 캠프 방 · 지난 기수는 안 보임
     const dm = C.chatListView(g, 'dm');
     expect(dm.filter).toBe('dm');
@@ -168,12 +178,13 @@ describe('chat — 방 이름 · 목록', () => {
     expect([C.chatListView(g, 'all').filter, C.chatListView(g, 'all').foldable]).toEqual(['all', true]);
     expect(C.chatListView(g, 'gone').filter).toBe('all');
     expect(C.chatListView(g, null).camps.length).toBe(2);
-    // 캠프 하나뿐인 멘토 — [All][1:1], 1:1 이 없으면 버튼 줄 없음
+    // 캠프 하나뿐인 멘토 — [안 읽음][1:1], 1:1 이 없으면 [안 읽음] 만, 방이 없으면 버튼 줄 없음
     const one = C.chatRoomGroups(rooms.filter((r) => r.jobCodeId !== 'b'), { activeJobCodeId: 'a', state });
-    expect(C.chatListChips(one, state, 'en').map((c) => c.key)).toEqual(['all', 'dm']);
+    expect(C.chatListChips(one, state, 'en').map((c) => [c.key, c.label])).toEqual([['unread', 'Unread'], ['dm', '1:1']]);
     const noDm = C.chatRoomGroups(rooms.filter((r) => r.type !== 'dm' && r.jobCodeId !== 'b'), { activeJobCodeId: 'a' });
-    expect(C.chatListChips(noDm, null, 'ko')).toEqual([]);
+    expect(C.chatListChips(noDm, null, 'ko').map((c) => [c.key, c.unread])).toEqual([['unread', 0]]);
     expect(C.chatListView(noDm, 'dm').filter).toBe('all');
+    expect(C.chatListChips(C.chatRoomGroups([], {}), null, 'ko')).toEqual([]);
     // 접힌 머리글 — 안 읽은 수 합 · 가장 최근 메시지
     const sum = C.chatCampSummary(g.camps[0], state);
     expect(sum.unread).toBe(3);
