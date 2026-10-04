@@ -6,6 +6,7 @@ import React, { ReactNode } from 'react';
 import Header from './Header';
 import Footer from './Footer';
 import BottomNavigation from './BottomNavigation';
+import ChatCallOverlay from '@/components/chat/ChatCallOverlay';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter, usePathname } from 'next/navigation';
 import Button from './Button';
@@ -94,6 +95,8 @@ export default function Layout({ children, requireAuth, requireAdmin, noPadding 
       </main>
       {!shouldHideFooter && <Footer />}
       <BottomNavigation />
+      {/* 채팅 통화 (개발·미리보기에서만 — 운영에서는 아무것도 그리지 않는다) */}
+      <ChatCallOverlay />
       <EmailVerifyGate />
       <CampProfileGate />
     </div>

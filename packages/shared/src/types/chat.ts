@@ -102,8 +102,10 @@ export interface ChatMessage {
   acks?: Record<string, Timestamp>;
   /** 예약해서 보낸 메시지 */
   scheduled?: boolean;
-  /** system 메시지의 종류 */
-  systemType?: 'notice';
+  /** system 메시지의 종류 — notice 공지 등록 · call 통화 기록(통화 연결 후 서버가 쓴다) */
+  systemType?: 'notice' | 'call';
+  /** 통화 기록 (systemType 'call') */
+  call?: ChatCallLog | null;
   /** 공지 등록 알림이 가리키는 메시지 */
   noticeOf?: string;
 }
@@ -206,6 +208,8 @@ export interface ChatRoom {
   messageCount?: number;
   /** 공지 (하나) */
   notice?: ChatNotice | null;
+  /** 지금 이 방에서 하고 있는 통화 (통화 연결 후 서버가 쓴다 — 지금은 화면만) */
+  activeCall?: ChatCallInfo | null;
   createdAt?: Timestamp | null;
   updatedAt?: Timestamp | null;
   syncedAt?: Timestamp | null;
@@ -231,3 +235,95 @@ export interface ChatUserState {
 }
 
 export type ChatReportReason = 'spam' | 'abuse' | 'sexual' | 'privacy' | 'other';
+
+// ── 통화 (Agora 예정 — 지금은 화면만) ───────────────────────────────
+
+/** 음성 · 영상 */
+export type ChatCallMedia = 'voice' | 'video';
+
+/** 방에서 진행 중인 통화 — room.activeCall */
+export interface ChatCallInfo {
+  callId: string;
+  media: ChatCallMedia;
+  startedBy: string;
+  startedByName: string;
+  /** ms */
+  startedAt: number;
+  participantIds: string[];
+}
+
+/** 채팅에 남는 통화 기록 */
+export interface ChatCallLog {
+  callId: string;
+  media: ChatCallMedia;
+  status: 'started' | 'ended' | 'missed' | 'declined';
+  /** 끝난 통화의 길이 (ms) */
+  durationMs?: number;
+}
+
+export interface ChatCallParticipant {
+  uid: string;
+  name: string;
+  photo?: string;
+  micOn: boolean;
+  camOn: boolean;
+  /** 지금 말하는 중 (소리 크기로 판단) */
+  speaking?: boolean;
+  isMe?: boolean;
+  /** ms */
+  joinedAt: number;
+  connection?: 'good' | 'poor' | 'reconnecting';
+}
+
+/**
+ * 통화 화면 상태
+ *  idle 없음 · outgoing 1:1 거는 중(상대 벨) · incoming 1:1 받는 중 · connecting 연결 중 · inCall 통화 중 · ended 끝남(잠깐 보여 주고 idle)
+ */
+export type ChatCallPhase = 'idle' | 'outgoing' | 'incoming' | 'connecting' | 'inCall' | 'ended';
+
+export interface ChatCallState {
+  phase: ChatCallPhase;
+  callId?: string;
+  roomId?: string;
+  /** 1:1(DM) 인가 — 1:1 은 벨이 울리고, 단체는 '참여' 방식 */
+  direct?: boolean;
+  media: ChatCallMedia;
+  /** 나 포함 */
+  participants: ChatCallParticipant[];
+  micOn: boolean;
+  camOn: boolean;
+  speakerOn: boolean;
+  frontCamera: boolean;
+  /** 통화가 연결된 시각 (ms) */
+  startedAt?: number;
+  /** 1:1 받는 중 · 거는 중일 때 상대 */
+  peer?: { uid: string; name: string; photo?: string };
+  endedReason?: 'left' | 'ended' | 'declined' | 'missed' | 'failed';
+  /** 작게 보기 (채팅을 보면서 통화) */
+  minimized: boolean;
+  /** 미리보기용 가짜 연결인가 */
+  mock?: boolean;
+}
+
+/**
+ * 통화 연결 — 화면은 이 모양만 쓴다. 지금은 createMockCallAdapter(가짜), 나중에 Agora 로 같은 모양을 구현해 바꿔 끼운다.
+ */
+export interface ChatCallAdapter {
+  getState(): ChatCallState;
+  subscribe(cb: (s: ChatCallState) => void): () => void;
+  /** 방에서 통화 시작 (단체방: 바로 연결, 1:1: 상대에게 벨) */
+  start(args: { roomId: string; media: ChatCallMedia; direct: boolean; peer?: { uid: string; name: string; photo?: string } }): Promise<void>;
+  /** 진행 중인 통화에 참여 */
+  join(args: { roomId: string; callId: string; media: ChatCallMedia }): Promise<void>;
+  /** 1:1 걸려 온 통화 받기 · 거절 */
+  accept(opts?: { media?: ChatCallMedia }): Promise<void>;
+  decline(): Promise<void>;
+  /** 나가기 (1:1 은 끊기) */
+  leave(): Promise<void>;
+  setMic(on: boolean): void;
+  setCamera(on: boolean): void;
+  switchCamera(): void;
+  setSpeaker(on: boolean): void;
+  setMinimized(on: boolean): void;
+}
+

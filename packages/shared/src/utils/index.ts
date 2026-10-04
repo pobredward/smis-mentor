@@ -28,3 +28,4 @@ export * from './whereabouts';
 export * from './timetableVariants';
 export * from './lastLogin';
 export * from './chat';
+export * from './chatCall';

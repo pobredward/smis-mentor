@@ -9,9 +9,11 @@
  * - 길게 누르기 · 우클릭 · [⋯] 버튼 → 메시지 메뉴
  */
 import { memo, type ReactNode } from 'react';
-import { FiAlertCircle, FiBellOff, FiClock, FiCornerUpLeft, FiMoreHorizontal, FiRefreshCw, FiTrash2 } from 'react-icons/fi';
+import { FiAlertCircle, FiBellOff, FiClock, FiCornerUpLeft, FiMoreHorizontal, FiPhone, FiPhoneMissed, FiRefreshCw, FiTrash2, FiVideo } from 'react-icons/fi';
 import {
   L,
+  callMediaLabel,
+  formatCallDuration,
   chatReplyPreview,
   chatTimeLabel,
   type ChatMemberInfo,
@@ -132,6 +134,8 @@ export interface ChatRowActions {
   onVote: (m: ChatMessageView, ids: string[]) => Promise<void>;
   onClosePoll: (m: ChatMessageView) => void;
   onPollVoters: (m: ChatMessageView, optionId: string) => void;
+  /** 통화 기록의 [참여] */
+  onJoinCall?: (m: ChatMessageView) => void;
 }
 
 export interface ChatMessageRowProps {
@@ -153,14 +157,43 @@ export interface ChatMessageRowProps {
   current?: boolean;
   /** 옮겨 왔을 때 잠깐 테두리 */
   flash?: boolean;
+  /** 통화 기록 — 1:1 방인가 · 아직 진행 중인 통화라 [참여] 를 보일까 */
+  callDirect?: boolean;
+  callJoinable?: boolean;
 }
 
-export const ChatMessageRow = memo(function ChatMessageRow({ m, lay, firstInRun, sender, unread, lang, blocked, revealed, myUid, memberInfo, actions, highlight, current, flash }: ChatMessageRowProps) {
+export const ChatMessageRow = memo(function ChatMessageRow({ m, lay, firstInRun, sender, unread, lang, blocked, revealed, myUid, memberInfo, actions, highlight, current, flash, callDirect, callJoinable }: ChatMessageRowProps) {
   const openMenu = (a: ChatMenuAnchor) => actions.onMenu(m, a);
   const press = useLongPress(openMenu);
   const mine = lay.mine;
   const at = m.createdAt?.toDate?.() ?? null;
   const time = lay.showTime && at ? chatTimeLabel(at, lang) : null;
+
+  if (m.kind === 'system' && m.systemType === 'call' && m.call) {
+    const c = m.call;
+    const media = callMediaLabel(c.media, !!callDirect, lang);
+    const missed = c.status === 'missed' || c.status === 'declined';
+    const text = c.status === 'started'
+      ? L('chat.callStartedBy', { name: memberInfo[m.senderId]?.name ?? m.senderName, media })
+      : c.status === 'ended'
+        ? L('chat.callLogEnded', { media, t: formatCallDuration(c.durationMs) })
+        : c.status === 'missed'
+          ? L('chat.callMissed')
+          : L('chat.callDeclined');
+    return (
+      <div data-mid={m.id} className="flex justify-center px-6 my-2">
+        <span className={`inline-flex max-w-full items-center gap-1.5 rounded-full px-3 py-1 text-xs ${missed ? 'bg-red-50 text-red-600' : 'bg-black/10 text-gray-700'}`}>
+          {missed ? <FiPhoneMissed size={12} className="shrink-0" /> : c.media === 'video' ? <FiVideo size={12} className="shrink-0" /> : <FiPhone size={12} className="shrink-0" />}
+          <span className="truncate">{text}</span>
+          {callJoinable && actions.onJoinCall && (
+            <button type="button" onClick={() => actions.onJoinCall?.(m)} className="ml-1 shrink-0 rounded-full bg-green-500 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-green-600">
+              {L('chat.callJoin')}
+            </button>
+          )}
+        </span>
+      </div>
+    );
+  }
 
   if (m.kind === 'system') {
     const notice = m.systemType === 'notice';

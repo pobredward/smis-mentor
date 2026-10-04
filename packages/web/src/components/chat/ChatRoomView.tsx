@@ -23,6 +23,8 @@ import {
   FiGrid,
   FiImage,
   FiMoreVertical,
+  FiPhone,
+  FiPhoneIncoming,
   FiSearch,
   FiSlash,
   FiTrash2,
@@ -47,6 +49,7 @@ import {
   normalizeChatSearch,
   searchChatMessages,
   unreadReaders,
+  type ChatCallMedia,
   type ChatMessageView,
   type ChatPoll,
   type ChatReactionKey,
@@ -56,6 +59,7 @@ import {
   type ChatUserState,
   type Locale,
 } from '@smis-mentor/shared';
+import { ChatCallBanner, ChatCallStartSheet, isCallActive, type ChatCallView } from './ChatCall';
 import ChatComposer from './ChatComposer';
 import { ChatExportDialog, ChatScheduleDialog, ChatScheduledListDialog } from './ChatComposeDialogs';
 import ChatGallery, { type ChatGalleryPage } from './ChatGallery';
@@ -84,6 +88,17 @@ export interface ChatRoomSearch {
   onStart: () => Promise<unknown>;
   /** 이 메시지가 목록에 그려지도록 (지금 창보다 예전이면 전체 대화를 불러 목록을 늘린다) */
   onReveal: (messageId: string) => void;
+}
+
+/** 통화 (개발·미리보기에서만 — 없으면 통화 버튼·띠·기록을 하나도 그리지 않는다) */
+export interface ChatRoomCallProps {
+  state: ChatCallView;
+  /** 가짜 연결 (미리보기 안내 · '걸려 오는 통화 보기') */
+  mock: boolean;
+  onStart: (media: ChatCallMedia) => void;
+  onJoin: (callId: string, media: ChatCallMedia) => void;
+  onReturn: () => void;
+  onSimulateIncoming?: () => void;
 }
 
 /** 입력창 상태 — 답장 · 수정 · 조용히 보내기 (보내기는 ChatRoomContainer 가 한다) */
@@ -159,7 +174,10 @@ export interface ChatRoomViewProps {
   initialAnchor?: { ready: boolean; id: string | null };
   /** 녹음할 수 있는가 (미리보기에서 정해 줄 때) */
   voiceSupported?: boolean;
+  call?: ChatRoomCallProps;
 }
+
+const isCallLog = (m: ChatMessageView) => m.kind === 'system' && m.systemType === 'call';
 
 const NEAR_BOTTOM = 80;
 
@@ -190,12 +208,14 @@ function readFolded(roomId: string): string {
 
 export default function ChatRoomView(props: ChatRoomViewProps) {
   const {
-    room, myUid, lang, messages, loaded, outgoing, reads, state, hasMore, loadingOlder, onLoadOlder, onBack,
+    room, myUid, lang, messages: allMessages, loaded, outgoing, reads, state, hasMore, loadingOlder, onLoadOlder, onBack,
     tray, text, onTextChange, onSend, onRetry, onDiscard, onDelete, onReport, onBlock, onToggleMute, onStartDm,
     onBottomChange, push, boxStyle, search, initialSearch,
     compose, onCompose, onStartEdit, onCancelEdit, onReact, onVote, onClosePoll, onCreatePoll, onSendVoice,
-    notice, scheduled, onSchedule, onCancelScheduled, onExport, loadGalleryPage, pin, entryReadMs, initialAnchor, voiceSupported,
+    notice, scheduled, onSchedule, onCancelScheduled, onExport, loadGalleryPage, pin, entryReadMs, initialAnchor, voiceSupported, call,
   } = props;
+  // 통화가 꺼져 있으면(운영) 통화 기록도 보이지 않는다
+  const messages = useMemo(() => (call ? allMessages : allMessages.filter((m) => !isCallLog(m))), [call, allMessages]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
@@ -219,6 +239,7 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
     | { kind: 'scheduled' }
     | { kind: 'export' }
     | { kind: 'gallery' }
+    | { kind: 'call' }
     | null
   >(null);
   /** 접어 둔 공지 (그 공지 메시지 id — 새 공지가 오면 다시 펼친다) */
@@ -444,9 +465,18 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
   }, [messages, entryReadMs, myUid, blocked, seenMentions]);
 
   // ── 말풍선에서 부르는 동작 (한 번 만들어 넘긴다 — 최신 함수는 ref 로) ──
-  const live = useRef({ jumpTo, onReact, onVote, onClosePoll });
+  const joinCall = (callId: string, media: ChatCallMedia) => {
+    if (!call) return;
+    if (isCallActive(call.state) && call.state.callId !== callId) {
+      toast(L('chat.callAlreadyInCall'));
+      return;
+    }
+    if (isCallActive(call.state)) call.onReturn();
+    else call.onJoin(callId, media);
+  };
+  const live = useRef({ jumpTo, onReact, onVote, onClosePoll, joinCall });
   useEffect(() => {
-    live.current = { jumpTo, onReact, onVote, onClosePoll };
+    live.current = { jumpTo, onReact, onVote, onClosePoll, joinCall };
   });
   const rowActions = useMemo<ChatRowActions>(() => ({
     onReveal: (id) => setRevealed((s) => new Set(s).add(id)),
@@ -457,6 +487,7 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
     onVote: (m, ids) => live.current.onVote(m, ids),
     onClosePoll: (m) => live.current.onClosePoll(m),
     onPollVoters: (m, optionId) => setDialog({ kind: 'voters', m, optionId }),
+    onJoinCall: (m) => { if (m.call) live.current.joinCall(m.call.callId, m.call.media); },
   }), []);
 
   const senderName = (m: ChatMessageView) => memberInfo[m.senderId]?.name ?? m.senderName;
@@ -561,6 +592,9 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
       { key: 'hide', label: L('chat.hideRoom'), icon: <FiEyeOff size={16} />, onSelect: pin.onHide },
     );
   }
+  if (call?.mock && call.onSimulateIncoming) {
+    roomMenuActions.push({ key: 'simulateCall', label: L('chat.callSimulateIncoming'), icon: <FiPhoneIncoming size={16} />, onSelect: call.onSimulateIncoming });
+  }
   if (push && push.status !== 'unsupported') {
     roomMenuActions.push(
       push.status === 'default'
@@ -584,6 +618,15 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
   };
   const acksSummary = room.notice ? noticeAckSummary(room, notice.acks) : null;
 
+  // 통화 띠 — 방에서 진행 중인 통화(room.activeCall, 서버가 쓴다). 내가 이 방에서 통화 중이면 [통화로 돌아가기]
+  const myCallHere = !!call && isCallActive(call.state) && call.state.roomId === room.id;
+  const callInfo = call
+    ? room.activeCall ?? (myCallHere && call.state.minimized
+      ? { callId: call.state.callId ?? '', media: call.state.media, startedBy: myUid, startedByName: '', startedAt: call.state.startedAt ?? 0, participantIds: call.state.participants.map((p) => p.uid) }
+      : null)
+    : null;
+  const inThisCall = !!call && !!callInfo && isCallActive(call.state) && call.state.callId === callInfo.callId;
+
   return (
     <div className="relative flex flex-col h-full min-h-0 bg-[#e8eef5]" style={boxStyle} {...dragProps}>
       {/* 머리글 */}
@@ -602,6 +645,17 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
           </div>
           {subtitle && <p className="text-xs text-gray-500 truncate">{subtitle}</p>}
         </div>
+        {call && (
+          <button
+            type="button"
+            onClick={() => setDialog({ kind: 'call' })}
+            className="h-9 w-9 shrink-0 rounded-full text-gray-600 hover:bg-gray-100 flex items-center justify-center"
+            title={L('chat.callStartTitle')}
+            aria-label={L('chat.callStartTitle')}
+          >
+            <FiPhone size={18} />
+          </button>
+        )}
         {search && (
           <button
             type="button"
@@ -659,6 +713,17 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
           onOlder={goOlder}
           onNewer={goNewer}
           onClose={closeSearch}
+        />
+      )}
+
+      {call && callInfo && (
+        <ChatCallBanner
+          info={callInfo}
+          direct={isDm}
+          lang={lang}
+          inThisCall={inThisCall}
+          onJoin={(media) => joinCall(callInfo.callId, media)}
+          onReturn={call.onReturn}
         />
       )}
 
@@ -729,6 +794,8 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
                     highlight={normalizedQuery && !isUserBlocked(state, m.senderId) && chatMessageMatches(m, normalizedQuery) ? normalizedQuery : undefined}
                     current={m.id === currentHit && !!normalizedQuery}
                     flash={m.id === flashId}
+                    callDirect={isDm}
+                    callJoinable={!!m.call && m.call.status === 'started' && room.activeCall?.callId === m.call.callId}
                   />
                 </Fragment>
               );
@@ -902,6 +969,16 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
       )}
       {dialog?.kind === 'export' && <ChatExportDialog onExport={onExport} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'gallery' && <ChatGallery room={room} lang={lang} loadPage={loadGalleryPage} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'call' && call && (
+        <ChatCallStartSheet
+          direct={isDm}
+          lang={lang}
+          mock={call.mock}
+          busy={isCallActive(call.state)}
+          onStart={call.onStart}
+          onClose={() => setDialog(null)}
+        />
+      )}
       {viewer && viewerMsg && (viewerMsg.media?.length ?? 0) > 0 && (
         <ChatLightbox
           items={(viewerMsg.media ?? []).filter((x) => x.kind === 'image' || x.kind === 'video')}

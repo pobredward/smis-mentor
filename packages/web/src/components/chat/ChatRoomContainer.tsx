@@ -24,6 +24,7 @@ import {
   closeChatPoll,
   deleteChatMessage,
   editChatMessage,
+  dmPeerOf,
   extractMentions,
   firstUnreadIndex,
   getCurrentLocale,
@@ -47,6 +48,7 @@ import {
   cancelScheduledChatMessage,
   unreadOf,
   voteChatPoll,
+  type ChatCallMedia,
   type ChatMessageView,
   type ChatPoll,
   type ChatReactionKey,
@@ -59,7 +61,8 @@ import { authenticatedPost } from '@/lib/apiClient';
 import { saveTextFile } from '@/lib/chatMedia';
 import { enableWebPush, webPushPermission } from '@/lib/webPush';
 import { setViewingChatRoom } from '@/hooks/useChatUnread';
-import ChatRoomView, { type ChatComposeState, type ChatPushStatus, type ChatRoomSearch } from './ChatRoomView';
+import ChatRoomView, { type ChatComposeState, type ChatPushStatus, type ChatRoomCallProps, type ChatRoomSearch } from './ChatRoomView';
+import { isCallActive, setCallRoomMembers, useChatCall } from './chatCalls';
 import type { ChatGalleryPage } from './ChatGallery';
 import { discardChatOutgoing, queueChatMedia, queueChatVoice, retryChatOutgoing, sendChatText, settleChatOutbox, useChatOutbox } from './chatOutbox';
 import type { ChatSendExtra } from './chatTypes';
@@ -503,6 +506,49 @@ export default function ChatRoomContainer({ roomId, myUid, myName, state, curren
     return { messages: r.messages, hasMore: r.hasMore, cursor: r.oldest };
   }, [roomId]);
 
+  // ── 통화 (개발·미리보기에서만) ───────────────────────────
+  const callCtx = useChatCall();
+  useEffect(() => {
+    if (room) setCallRoomMembers(roomId, room.memberInfo);
+  }, [roomId, room]);
+  const callAdapter = callCtx.adapter;
+  const callState = callCtx.state;
+  const call = useMemo<ChatRoomCallProps | undefined>(() => {
+    if (!callCtx.enabled || !callAdapter || !room) return undefined;
+    const direct = room.type === 'dm';
+    const peerUid = direct ? dmPeerOf(room, myUid) : (room.memberIds ?? []).find((u) => u !== myUid);
+    const info = peerUid ? room.memberInfo?.[peerUid] : undefined;
+    const peer = peerUid ? { uid: peerUid, name: info?.name ?? L('chat.unknownUser'), photo: info?.photo } : undefined;
+    return {
+      state: callState,
+      mock: !!callState.mock || !!callAdapter.simulateIncoming,
+      onStart: (media: ChatCallMedia) => {
+        if (isCallActive(callAdapter.getState())) {
+          toast(L('chat.callAlreadyInCall'));
+          return;
+        }
+        void callAdapter.start({ roomId, media, direct, peer: direct ? peer : undefined });
+      },
+      onJoin: (callId: string, media: ChatCallMedia) => {
+        if (isCallActive(callAdapter.getState())) {
+          toast(L('chat.callAlreadyInCall'));
+          return;
+        }
+        void callAdapter.join({ roomId, callId, media });
+      },
+      onReturn: () => callAdapter.setMinimized(false),
+      onSimulateIncoming: callAdapter.simulateIncoming && peer
+        ? () => {
+          if (isCallActive(callAdapter.getState())) {
+            toast(L('chat.callAlreadyInCall'));
+            return;
+          }
+          callAdapter.simulateIncoming!(peer, 'video', roomId);
+        }
+        : undefined,
+    };
+  }, [callCtx.enabled, callAdapter, callState, room, roomId, myUid]);
+
   // ── 고정 · 숨기기 ────────────────────────────────────
   const preset = !!room && isPresetRoom(room) && chatRoomGeneration(room) === currentGeneration;
   const pinned = !!state?.pinned?.[roomId];
@@ -588,6 +634,7 @@ export default function ChatRoomContainer({ roomId, myUid, myName, state, curren
         pin={pin}
         entryReadMs={entryReadMs}
         initialAnchor={initialAnchor}
+        call={call}
       />
     </div>
   );
