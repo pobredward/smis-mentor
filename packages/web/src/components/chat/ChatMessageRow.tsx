@@ -93,10 +93,11 @@ function MoreButton({ onOpen }: { onOpen: (a: ChatMenuAnchor) => void }) {
 
 const bubbleBase = 'min-w-0 rounded-2xl px-3 py-2 text-[15px] leading-[1.45] whitespace-pre-wrap break-words [overflow-wrap:anywhere]';
 
-function TextBubble({ text, mine, tail }: { text: string; mine: boolean; tail: boolean }) {
+function TextBubble({ text, mine, tail, highlight, current }: { text: string; mine: boolean; tail: boolean; highlight?: string; current?: boolean }) {
+  const mark = highlight ? { query: highlight, markClass: `rounded-sm px-px text-gray-900 ${current ? 'bg-orange-300' : 'bg-yellow-200'}` } : undefined;
   return (
     <div className={`${bubbleBase} ${mine ? `bg-blue-500 text-white ${tail ? 'rounded-tr-md' : ''}` : `bg-white text-gray-900 ${tail ? 'rounded-tl-md' : ''}`}`}>
-      {linkify(text, mine ? 'underline text-white' : 'underline text-blue-600 hover:text-blue-700')}
+      {linkify(text, mine ? 'underline text-white' : 'underline text-blue-600 hover:text-blue-700', mark)}
     </div>
   );
 }
@@ -118,9 +119,15 @@ export interface ChatMessageRowProps {
   onReveal: (id: string) => void;
   onMenu: (m: ChatMessageView, a: ChatMenuAnchor) => void;
   onOpenMedia: (m: ChatMessageView, index: number) => void;
+  /** 검색어 (이 메시지가 검색 결과일 때만) — 글에서 그 자리를 표시 */
+  highlight?: string;
+  /** 지금 보고 있는 검색 결과 */
+  current?: boolean;
+  /** 검색 결과로 옮겨 왔을 때 잠깐 테두리 */
+  flash?: boolean;
 }
 
-export const ChatMessageRow = memo(function ChatMessageRow({ m, lay, firstInRun, sender, unread, lang, blocked, revealed, onReveal, onMenu, onOpenMedia }: ChatMessageRowProps) {
+export const ChatMessageRow = memo(function ChatMessageRow({ m, lay, firstInRun, sender, unread, lang, blocked, revealed, onReveal, onMenu, onOpenMedia, highlight, current, flash }: ChatMessageRowProps) {
   const openMenu = (a: ChatMenuAnchor) => onMenu(m, a);
   const press = useLongPress(openMenu);
   const mine = lay.mine;
@@ -149,7 +156,10 @@ export const ChatMessageRow = memo(function ChatMessageRow({ m, lay, firstInRun,
   const menuable = !m.deleted && !hidden;
 
   const content = (
-    <div className="flex flex-col gap-1 min-w-0" style={{ alignItems: mine ? 'flex-end' : 'flex-start' }}>
+    <div
+      className={`flex flex-col gap-1 min-w-0 rounded-2xl transition-shadow duration-300 ${flash ? 'ring-2 ring-orange-400 ring-offset-2 ring-offset-[#e8eef5]' : ''}`}
+      style={{ alignItems: mine ? 'flex-end' : 'flex-start' }}
+    >
       {m.deleted ? (
         <NoteBubble>{L('chat.deletedMessage')}</NoteBubble>
       ) : hidden ? (
@@ -162,7 +172,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({ m, lay, firstInRun,
       ) : (
         <>
           {cells.length > 0 && <ChatMediaGrid cells={cells} onOpen={(i) => onOpenMedia(m, i)} />}
-          {text && <TextBubble text={text} mine={mine} tail={firstInRun && !cells.length} />}
+          {text && <TextBubble text={text} mine={mine} tail={firstInRun && !cells.length} highlight={highlight} current={current} />}
         </>
       )}
     </div>
@@ -172,7 +182,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({ m, lay, firstInRun,
 
   if (mine) {
     return (
-      <div className={`group flex justify-end px-3 ${firstInRun ? 'mt-2.5' : 'mt-1'}`}>
+      <div data-mid={m.id} className={`group flex justify-end px-3 ${firstInRun ? 'mt-2.5' : 'mt-1'}`}>
         <div className="flex items-end gap-1 max-w-[85%] md:max-w-[70%] min-w-0 [-webkit-touch-callout:none] [@media(pointer:coarse)]:select-none" {...pressProps}>
           {menuable && <MoreButton onOpen={openMenu} />}
           <Meta mine unread={unread} time={time} pending={m.pending} />
@@ -183,7 +193,7 @@ export const ChatMessageRow = memo(function ChatMessageRow({ m, lay, firstInRun,
   }
 
   return (
-    <div className={`group flex items-start gap-2 px-3 ${lay.showSender ? 'mt-3' : 'mt-1'}`}>
+    <div data-mid={m.id} className={`group flex items-start gap-2 px-3 ${lay.showSender ? 'mt-3' : 'mt-1'}`}>
       <div className="w-9 shrink-0">{lay.showSender && <PersonAvatar name={sender?.name ?? m.senderName} photo={sender?.photo} size={36} />}</div>
       <div className="min-w-0 max-w-[80%] md:max-w-[70%]">
         {lay.showSender && <div className="mb-1 text-xs text-gray-600 truncate">{sender?.name ?? m.senderName}</div>}

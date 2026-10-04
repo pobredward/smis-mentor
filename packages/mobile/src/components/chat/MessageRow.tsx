@@ -38,6 +38,10 @@ interface MessageRowProps {
   /** 차단 메시지를 [보기]로 펼쳤는가 */
   revealed: boolean;
   bubbleMaxWidth: number;
+  /** 대화 내용 검색어 — 글에서 그 자리를 노란색으로 */
+  highlight?: string;
+  /** 검색 결과로 이동한 메시지 — 잠깐 줄 전체를 밝힌다 */
+  flash?: boolean;
   onReveal: (messageId: string) => void;
   onLongPress: (message: ChatMessageView) => void;
   onOpenMedia: (message: ChatMessageView, index: number) => void;
@@ -130,7 +134,7 @@ function OutboxBody({ item, onRetry, onDiscard }: { item: ChatOutboxItem; onRetr
 }
 
 function MessageRowImpl(props: MessageRowProps) {
-  const { row, lang, sender, unread, blocked, revealed, bubbleMaxWidth, onReveal, onLongPress, onOpenMedia, onRetry, onDiscard } = props;
+  const { row, lang, sender, unread, blocked, revealed, bubbleMaxWidth, highlight, flash, onReveal, onLongPress, onOpenMedia, onRetry, onDiscard } = props;
   const { layout } = row;
   const gap = row.firstInRun ? styles.rowGapLarge : styles.rowGapSmall;
   const date = new Date(row.type === 'message' ? messageMillis(row.message) || Date.now() : row.item.createdAt);
@@ -200,6 +204,8 @@ function MessageRowImpl(props: MessageRowProps) {
               style={mine ? styles.textMine : styles.textOther}
               linkStyle={mine ? styles.linkMine : styles.linkOther}
               onLongPress={longPress}
+              highlight={highlight}
+              highlightStyle={styles.hit}
             />
           </Pressable>
         ) : null}
@@ -213,7 +219,7 @@ function MessageRowImpl(props: MessageRowProps) {
     return (
       <View>
         {day}
-        <View style={[styles.rowMine, gap]}>
+        <View style={[styles.rowMine, gap, flash && styles.flash]}>
           {meta}
           <View style={[styles.contentMine, { maxWidth: bubbleMaxWidth }]}>{body}</View>
         </View>
@@ -225,7 +231,7 @@ function MessageRowImpl(props: MessageRowProps) {
   return (
     <View>
       {day}
-      <View style={[styles.rowOther, gap]}>
+      <View style={[styles.rowOther, gap, flash && styles.flash]}>
         <View style={styles.avatarSlot}>
           {layout.showSender ? <PersonAvatar name={name} photo={sender?.photo} size={38} /> : null}
         </View>
@@ -281,6 +287,8 @@ const styles = StyleSheet.create({
   linkMine: { color: '#ffffff', textDecorationLine: 'underline' },
   linkOther: { color: CHAT_COLORS.link, textDecorationLine: 'underline' },
   deleted: { color: CHAT_COLORS.muted, fontStyle: 'italic', fontSize: 14 },
+  hit: { backgroundColor: '#fde047', color: '#1e293b' },
+  flash: { backgroundColor: 'rgba(253, 224, 71, 0.35)' },
   reveal: { color: CHAT_COLORS.primary, fontSize: 13, fontWeight: '600' },
 
   meta: { marginHorizontal: 5, marginBottom: 1 },

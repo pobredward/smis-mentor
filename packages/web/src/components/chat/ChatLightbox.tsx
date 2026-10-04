@@ -40,7 +40,9 @@ export async function saveChatMedia(items: ChatMediaItem[], opts: { campCode?: s
   if (opts.index != null || items.length === 1) {
     const i = opts.index ?? 0;
     const ok = await downloadChatFile(items[i].url, names[i]);
+    // 받지 못하면 새 탭으로 열었다 — 거기서 직접 저장하도록 알린다
     if (ok) toast.success(L('chat.saved'));
+    else toast.error(L('chat.saveFailed'));
     return;
   }
   const id = toast.loading(L('chat.preparingDownload'));

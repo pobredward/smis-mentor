@@ -3,6 +3,7 @@
  *
  * 글은 sendChatMessage 를 부르면 Firestore 가 바로 '보내는 중' 메시지로 목록에 넣어 준다.
  * 사진·동영상은 파일을 올리는 동안 보낼 편지함(useChatOutbox)의 말풍선으로 보여 준다.
+ * 대화 내용 검색(카톡처럼): 처음 검색할 때 방 전체 메시지를 한 번 불러와 기기에서 찾는다.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -13,6 +14,7 @@ import {
   ActivityIndicator,
   Alert,
   AppState,
+  BackHandler,
   Keyboard,
   KeyboardAvoidingView,
   Linking,
@@ -37,9 +39,12 @@ import {
   getCurrentLocale,
   isRoomMuted,
   isUserBlocked,
+  loadAllChatMessages,
   logger,
   markChatRoomRead,
+  normalizeChatSearch,
   reportChatMessage,
+  searchChatMessages,
   setChatRoomMuted,
   setChatUserBlocked,
   subscribeChatRoom,
@@ -73,6 +78,7 @@ import { MembersSheet } from '../components/chat/MembersSheet';
 import { ReportSheet } from '../components/chat/ReportSheet';
 import { MediaViewer } from '../components/chat/MediaViewer';
 import { useChatToast } from '../components/chat/ChatToast';
+import { ChatSearchInput, ChatSearchNav } from '../components/chat/ChatSearchBar';
 import { saveChatMediaWithFeedback } from '../components/chat/saveWithFeedback';
 import { CHAT_COLORS } from '../components/chat/chatTheme';
 import type { RootStackScreenProps } from '../navigation/types';
@@ -134,7 +140,7 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
   }, [roomId]);
   const isMember = !!room && !!uid && (room.memberIds ?? []).includes(uid);
 
-  const { messages, loaded, loadingOlder, hasMore, loadOlder, reads, error } = useChatMessages(roomId, isMember);
+  const { messages, loaded, loadingOlder, hasMore, loadOlder, provideHistory, revealMessage, reads, error } = useChatMessages(roomId, isMember);
   const outbox = useChatOutbox(roomId);
   const visibleOutbox = useMemo(() => outbox.filter((it) => it.status !== 'sent'), [outbox]);
 
@@ -338,6 +344,178 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
     },
     [roomId],
   );
+
+  // ── 대화 내용 검색 ────────────────────────────────────────────────
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  /** 입력을 250ms 묶은 검색어 */
+  const [query, setQuery] = useState('');
+  /** 방 전체 메시지 (처음 검색할 때 한 번 불러와 화면이 있는 동안 둔다) */
+  const [history, setHistory] = useState<ChatMessageView[] | null>(null);
+  /** 불러오는 중이면 지금까지 받은 개수 */
+  const [historyLoading, setHistoryLoading] = useState<number | null>(null);
+  const [historyFailed, setHistoryFailed] = useState(false);
+  const [currentHitId, setCurrentHitId] = useState<string | null>(null);
+  /** 결과로 이동한 메시지 — 잠깐 밝힌다 */
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const [jumpTick, setJumpTick] = useState(0);
+  const pendingJumpRef = useRef<string | null>(null);
+  const scrollRetryRef = useRef(0);
+  const historyRequestedRef = useRef(false);
+
+  const loadHistory = useCallback(() => {
+    if (historyRequestedRef.current || !isMember) return;
+    historyRequestedRef.current = true;
+    setHistoryFailed(false);
+    setHistoryLoading(0);
+    loadAllChatMessages(db, roomId, { onProgress: (n) => setHistoryLoading(n) })
+      .then((all) => {
+        setHistory(all);
+        // 이제 위로 올려 더 보기 · 결과로 이동은 이 기록에서 (Firestore 를 다시 읽지 않음)
+        provideHistory(all);
+      })
+      .catch((e) => {
+        logger.warn('대화 내용 불러오기 실패:', e);
+        historyRequestedRef.current = false;
+        setHistoryFailed(true);
+        showToast(L('chat.loadFailed'));
+      })
+      .finally(() => setHistoryLoading(null));
+  }, [isMember, roomId, provideHistory, showToast]);
+
+  const openSearch = useCallback(() => {
+    setSearchOpen(true);
+    loadHistory();
+  }, [loadHistory]);
+
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearchText('');
+    setQuery('');
+    setCurrentHitId(null);
+    setFlashId(null);
+    pendingJumpRef.current = null;
+    Keyboard.dismiss();
+  }, []);
+
+  // Android 뒤로 가기 — 검색 중이면 검색만 닫는다
+  useFocusEffect(
+    useCallback(() => {
+      if (!searchOpen) return undefined;
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        closeSearch();
+        return true;
+      });
+      return () => sub.remove();
+    }, [searchOpen, closeSearch]),
+  );
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    const t = setTimeout(() => setQuery(searchText), 250);
+    return () => clearTimeout(t);
+  }, [searchText, searchOpen]);
+
+  // 찾을 메시지 — 방 전체 기록 + 그 뒤로 온(또는 바뀐) 메시지. 기록을 못 불러왔으면 지금 가진 것만
+  const searchPool = useMemo(() => {
+    if (!searchOpen) return null;
+    if (!history) return historyFailed ? messages : null;
+    const map = new Map<string, ChatMessageView>();
+    history.forEach((m) => map.set(m.id, m));
+    messages.forEach((m) => map.set(m.id, m));
+    return [...map.values()];
+  }, [searchOpen, history, historyFailed, messages]);
+  const searchReady = !!searchPool;
+  /** 결과 id — 최신 것부터 (차단한 사람 메시지는 찾지 않는다) */
+  const hits = useMemo(
+    () => (searchPool && query ? searchChatMessages(searchPool, query, state.blocked) : []),
+    [searchPool, query, state.blocked],
+  );
+  const hitSet = useMemo(() => new Set(hits), [hits]);
+  const hitsRef = useRef(hits);
+  hitsRef.current = hits;
+  const currentIdx = currentHitId ? hits.indexOf(currentHitId) : -1;
+
+  /** 이 메시지로 이동 — 목록에 없으면 받아 둔 기록에서 그 메시지까지 채운 뒤 */
+  const jumpTo = useCallback(
+    (id: string) => {
+      if (!revealMessage(id)) return;
+      pendingJumpRef.current = id;
+      scrollRetryRef.current = 0;
+      setFlashId(id);
+      setJumpTick((n) => n + 1);
+    },
+    [revealMessage],
+  );
+
+  useEffect(() => {
+    const id = pendingJumpRef.current;
+    if (!id) return;
+    const index = rows.findIndex((r) => r.type === 'message' && r.message.id === id);
+    if (index < 0) return; // 목록에 들어오면 다시
+    pendingJumpRef.current = null;
+    const frame = requestAnimationFrame(() => {
+      listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [rows, jumpTick]);
+
+  // 아직 그려지지 않은(높이를 모르는) 줄 — 어림한 위치로 먼저 간 뒤 다시
+  const onScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number }) => {
+    listRef.current?.scrollToOffset({ offset: Math.max(0, info.averageItemLength * info.index), animated: false });
+    if (scrollRetryRef.current >= 5) return;
+    scrollRetryRef.current += 1;
+    setTimeout(() => {
+      listRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.5, animated: true });
+    }, 150);
+  }, []);
+
+  useEffect(() => {
+    if (!flashId) return;
+    const t = setTimeout(() => setFlashId(null), 1800);
+    return () => clearTimeout(t);
+  }, [flashId, jumpTick]);
+
+  // 검색어가 바뀌면(또는 기록을 다 불러오면) 가장 최근 결과로
+  useEffect(() => {
+    if (!searchOpen || !searchReady) return;
+    const first = hitsRef.current[0] ?? null;
+    setCurrentHitId(first);
+    if (first) jumpTo(first);
+  }, [query, searchOpen, searchReady, jumpTo]);
+
+  const goToHit = useCallback(
+    (i: number) => {
+      const id = hits[i];
+      if (!id) return;
+      setCurrentHitId(id);
+      jumpTo(id);
+    },
+    [hits, jumpTo],
+  );
+  /** ↑ 이전(더 예전) 결과 */
+  const goOlder = useCallback(() => {
+    if (!hits.length) return;
+    goToHit(currentIdx < 0 ? 0 : Math.min(hits.length - 1, currentIdx + 1));
+  }, [hits.length, currentIdx, goToHit]);
+  /** ↓ 다음(더 최근) 결과 */
+  const goNewer = useCallback(() => {
+    if (currentIdx > 0) goToHit(currentIdx - 1);
+  }, [currentIdx, goToHit]);
+  /** 키보드 [검색] — 아직 묶이지 않은 검색어면 바로 찾고, 아니면 이전 결과로 */
+  const submitSearch = useCallback(() => {
+    if (searchText !== query) {
+      setQuery(searchText);
+      return;
+    }
+    goOlder();
+  }, [searchText, query, goOlder]);
+
+  let searchStatus = '';
+  if (historyLoading !== null) searchStatus = L('chat.searching', { n: historyLoading });
+  else if (!normalizeChatSearch(query)) searchStatus = '';
+  else if (!hits.length) searchStatus = L('chat.searchNoResults');
+  else searchStatus = L('chat.searchCount', { i: Math.max(0, currentIdx) + 1, n: hits.length });
 
   // ── 머리글 동작 ───────────────────────────────────────────────────
   const muted = isRoomMuted(state, roomId);
@@ -551,6 +729,8 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
           blocked={!mine && isUserBlocked(state, m.senderId)}
           revealed={revealed.has(m.id)}
           bubbleMaxWidth={bubbleMaxWidth}
+          highlight={searchOpen && hitSet.has(m.id) ? query : undefined}
+          flash={flashId === m.id}
           onReveal={reveal}
           onLongPress={openActions}
           onOpenMedia={openMedia}
@@ -559,7 +739,7 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
         />
       );
     },
-    [lang, uid, room, reads, state, revealed, bubbleMaxWidth, reveal, openActions, openMedia, retry, discard],
+    [lang, uid, room, reads, state, revealed, bubbleMaxWidth, searchOpen, hitSet, query, flashId, reveal, openActions, openMedia, retry, discard],
   );
 
   const title = room ? chatRoomTitle(room, lang, uid) : '';
@@ -580,6 +760,9 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
       </View>
       {isMember ? (
         <>
+          <TouchableOpacity onPress={openSearch} style={styles.headerBtn} hitSlop={6} accessibilityLabel={L('chat.search')}>
+            <Ionicons name="search" size={21} color={searchOpen ? CHAT_COLORS.primary : CHAT_COLORS.text} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={toggleMute} style={styles.headerBtn} hitSlop={6} accessibilityLabel={muted ? L('chat.unmute') : L('chat.mute')}>
             <Ionicons name={muted ? 'notifications-off-outline' : 'notifications-outline'} size={22} color={muted ? CHAT_COLORS.muted : CHAT_COLORS.text} />
           </TouchableOpacity>
@@ -618,6 +801,9 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
   return (
     <View style={styles.root}>
       {header}
+      {searchOpen ? (
+        <ChatSearchInput value={searchText} onChangeText={setSearchText} onSubmit={submitSearch} onClose={closeSearch} />
+      ) : null}
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <View style={styles.listWrap}>
           <FlatList
@@ -630,6 +816,7 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
             scrollEventThrottle={32}
             onEndReached={hasMore ? loadOlder : undefined}
             onEndReachedThreshold={0.4}
+            onScrollToIndexFailed={onScrollToIndexFailed}
             maintainVisibleContentPosition={{ minIndexForVisible: 1, autoscrollToTopThreshold: NEAR_BOTTOM_PX }}
             keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
             keyboardShouldPersistTaps="handled"
@@ -658,20 +845,33 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
           ) : null}
           {toastNode}
         </View>
-        <ChatComposer
-          text={text}
-          onChangeText={setText}
-          tray={tray}
-          original={original}
-          onToggleOriginal={setOriginal}
-          onRemoveFromTray={(key) => setTray((list) => list.filter((a) => a.key !== key))}
-          onPressAttach={() => {
-            Keyboard.dismiss();
-            setAttachOpen(true);
-          }}
-          onSend={send}
-          bottomInset={keyboardVisible ? 0 : insets.bottom}
-        />
+        {searchOpen ? (
+          // 검색 중에는 입력창 대신 결과 이동 막대 (카톡처럼)
+          <ChatSearchNav
+            status={searchStatus}
+            loading={historyLoading !== null}
+            canOlder={hits.length > 0 && currentIdx < hits.length - 1}
+            canNewer={currentIdx > 0}
+            onOlder={goOlder}
+            onNewer={goNewer}
+            bottomInset={keyboardVisible ? 0 : insets.bottom}
+          />
+        ) : (
+          <ChatComposer
+            text={text}
+            onChangeText={setText}
+            tray={tray}
+            original={original}
+            onToggleOriginal={setOriginal}
+            onRemoveFromTray={(key) => setTray((list) => list.filter((a) => a.key !== key))}
+            onPressAttach={() => {
+              Keyboard.dismiss();
+              setAttachOpen(true);
+            }}
+            onSend={send}
+            bottomInset={keyboardVisible ? 0 : insets.bottom}
+          />
+        )}
       </KeyboardAvoidingView>
 
       {/* [+] 사진·동영상 / 카메라 */}
@@ -761,7 +961,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: CHAT_COLORS.border,
   },
-  headerBtn: { width: 42, height: 44, alignItems: 'center', justifyContent: 'center' },
+  headerBtn: { width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
   headerTitleWrap: { flex: 1, paddingHorizontal: 2 },
   headerTitleLine: { flexDirection: 'row', alignItems: 'center' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: CHAT_COLORS.text, flexShrink: 1 },

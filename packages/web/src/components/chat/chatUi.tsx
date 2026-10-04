@@ -4,7 +4,7 @@
 import { Fragment, type ReactNode } from 'react';
 import { FiGlobe, FiUsers } from 'react-icons/fi';
 import { HiOutlineAcademicCap } from 'react-icons/hi2';
-import { L, type ChatMemberKind, type ChatRoomType } from '@smis-mentor/shared';
+import { L, splitByQuery, type ChatMemberKind, type ChatRoomType } from '@smis-mentor/shared';
 
 /** Timestamp(또는 비슷한 것) → ms. 없으면 0 */
 export const tsMillis = (ts: { toMillis?: () => number } | null | undefined): number =>
@@ -30,10 +30,21 @@ export const KIND_ORDER: ChatMemberKind[] = ['manager', 'mentor', 'foreign'];
 // 주소 뒤에 붙은 문장부호는 빼고 링크로
 const URL_RE = /(https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]}])/g;
 
-/** 글 속 http(s) 주소를 링크로 (줄바꿈은 whitespace-pre-wrap 이 유지) */
-export function linkify(text: string, linkClass: string): ReactNode {
+/** 검색어 자리를 노란 형광펜으로 */
+function marked(text: string, highlight?: { query: string; markClass: string }): ReactNode {
+  if (!highlight?.query) return text;
+  const parts = splitByQuery(text, highlight.query);
+  if (!parts.some((p) => p.hit)) return text;
+  return parts.map((p, i) => (p.hit ? <mark key={i} className={highlight.markClass}>{p.text}</mark> : <Fragment key={i}>{p.text}</Fragment>));
+}
+
+/**
+ * 글 속 http(s) 주소를 링크로 (줄바꿈은 whitespace-pre-wrap 이 유지).
+ * highlight 를 주면 검색어 자리를 표시한다 (링크 안 글자도 — 링크는 그대로 눌린다)
+ */
+export function linkify(text: string, linkClass: string, highlight?: { query: string; markClass: string }): ReactNode {
   const parts = text.split(URL_RE);
-  if (parts.length === 1) return text;
+  if (parts.length === 1) return marked(text, highlight);
   return parts.map((p, i) =>
     i % 2 === 1 ? (
       <a
@@ -44,10 +55,10 @@ export function linkify(text: string, linkClass: string): ReactNode {
         className={linkClass}
         onClick={(e) => e.stopPropagation()}
       >
-        {p}
+        {marked(p, highlight)}
       </a>
     ) : (
-      <Fragment key={i}>{p}</Fragment>
+      <Fragment key={i}>{marked(p, highlight)}</Fragment>
     ),
   );
 }

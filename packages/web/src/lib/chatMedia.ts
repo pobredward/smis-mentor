@@ -258,7 +258,8 @@ export async function prepareChatVideo(file: File, original: boolean, probe?: Ch
 // ── 내려받기 ─────────────────────────────────────────────────────────
 
 async function fetchBlob(url: string): Promise<Blob> {
-  const res = await fetch(url, { mode: 'cors', credentials: 'omit' });
+  // cache: 'reload' — 화면의 <img> 가 CORS 헤더 없이 받아 둔 캐시(1년 immutable)를 쓰면 CORS 오류가 나므로 새로 받는다
+  const res = await fetch(url, { mode: 'cors', credentials: 'omit', cache: 'reload' });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.blob();
 }
@@ -275,7 +276,7 @@ function saveBlob(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(href), 60_000);
 }
 
-/** 파일 한 개 저장 — 받지 못하면 새 탭으로 연다 (false) */
+/** 파일 한 개 저장 — 정말 받지 못했을 때만(네트워크·CORS 오류) 새 탭으로 연다 (false) */
 export async function downloadChatFile(url: string, name: string): Promise<boolean> {
   try {
     saveBlob(await fetchBlob(url), name);

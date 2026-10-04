@@ -514,3 +514,57 @@ export function cleanChatText(text: string): string {
 export function newChatClientId(): string {
   return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
+
+// ── 대화 내용 검색 (카톡 '대화 내용 검색') ───────────────────────────
+// Firestore 에는 글 검색이 없으므로 방의 메시지를 한 번 다 불러와(loadAllChatMessages) 기기에서 찾는다.
+
+/** 검색어 정리 — 앞뒤 공백 · 연속 공백 하나로 · 소문자 */
+export const normalizeChatSearch = (q: string | null | undefined): string =>
+  String(q ?? '').replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+
+/** 이 메시지 글에 검색어가 있는가 (삭제된 메시지 · 사진만 있는 메시지는 아님) */
+export function chatMessageMatches(m: Pick<ChatMessage, 'text' | 'deleted' | 'kind'>, query: string): boolean {
+  const q = normalizeChatSearch(query);
+  if (!q || m.deleted || m.kind === 'system') return false;
+  return String(m.text ?? '').replace(/\s+/g, ' ').toLocaleLowerCase().includes(q);
+}
+
+/**
+ * 검색 결과 — 메시지 id, **최신 것부터** (카톡처럼 처음엔 가장 최근 결과, ↑ 누르면 더 예전으로)
+ * @param messages 오래된 것 → 최신 순 (순서가 섞여 있어도 시각으로 정렬한다)
+ * @param blocked 차단한 사람 (그 사람 메시지는 찾지 않는다)
+ */
+export function searchChatMessages(
+  messages: Array<Pick<ChatMessage, 'id' | 'text' | 'deleted' | 'kind' | 'senderId' | 'createdAt'>>,
+  query: string,
+  blocked?: Record<string, boolean> | null,
+): string[] {
+  const q = normalizeChatSearch(query);
+  if (!q) return [];
+  const seen = new Set<string>();
+  return messages
+    .filter((m) => !blocked?.[m.senderId] && chatMessageMatches(m, q) && !seen.has(m.id) && !!seen.add(m.id))
+    .sort((a, b) => millis(b.createdAt) - millis(a.createdAt))
+    .map((m) => m.id);
+}
+
+/** 글을 검색어 자리로 나누기 — 강조 표시용 (대소문자 무시, 원래 글자 그대로) */
+export function splitByQuery(text: string | null | undefined, query: string | null | undefined): Array<{ text: string; hit: boolean }> {
+  const src = String(text ?? '');
+  const q = normalizeChatSearch(query);
+  if (!q || !src) return src ? [{ text: src, hit: false }] : [];
+  // 공백은 아무 공백 묶음과 맞게
+  const esc = q.split(' ').map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
+  const re = new RegExp(esc, 'gi');
+  const out: Array<{ text: string; hit: boolean }> = [];
+  let last = 0;
+  for (const m of src.matchAll(re)) {
+    const i = m.index ?? 0;
+    if (!m[0]) break;
+    if (i > last) out.push({ text: src.slice(last, i), hit: false });
+    out.push({ text: m[0], hit: true });
+    last = i + m[0].length;
+  }
+  if (last < src.length) out.push({ text: src.slice(last), hit: false });
+  return out;
+}

@@ -1,9 +1,10 @@
 /**
- * 말풍선 글 — 줄바꿈 그대로, http(s) 주소는 눌러서 연다
+ * 말풍선 글 — 줄바꿈 그대로, http(s) 주소는 눌러서 연다.
+ * 대화 내용 검색 중이면 검색어 자리를 노란색으로 (주소 부분은 그대로)
  */
 import React, { useMemo } from 'react';
 import { Linking, Text, type StyleProp, type TextStyle } from 'react-native';
-import { logger } from '@smis-mentor/shared';
+import { logger, splitByQuery } from '@smis-mentor/shared';
 
 const URL_RE = /(https?:\/\/[^\s<>"']+)/gi;
 /** 주소 끝에 붙은 문장 부호는 주소에서 뺀다 */
@@ -35,9 +36,12 @@ interface LinkedTextProps {
   style?: StyleProp<TextStyle>;
   linkStyle?: StyleProp<TextStyle>;
   onLongPress?: () => void;
+  /** 강조할 검색어 (없으면 강조 없음) */
+  highlight?: string;
+  highlightStyle?: StyleProp<TextStyle>;
 }
 
-export function LinkedText({ text, style, linkStyle, onLongPress }: LinkedTextProps) {
+export function LinkedText({ text, style, linkStyle, onLongPress, highlight, highlightStyle }: LinkedTextProps) {
   const parts = useMemo(() => splitLinks(text), [text]);
   return (
     <Text style={style} onLongPress={onLongPress} suppressHighlighting>
@@ -52,6 +56,12 @@ export function LinkedText({ text, style, linkStyle, onLongPress }: LinkedTextPr
             onLongPress={onLongPress}
           >
             {p.text}
+          </Text>
+        ) : highlight ? (
+          <Text key={i}>
+            {splitByQuery(p.text, highlight).map((h, j) => (
+              <Text key={j} style={h.hit ? highlightStyle : undefined}>{h.text}</Text>
+            ))}
           </Text>
         ) : (
           <Text key={i}>{p.text}</Text>

@@ -22,6 +22,7 @@ import {
   writeBatch,
   type DocumentData,
   type DocumentSnapshot,
+  type QuerySnapshot,
   type Firestore,
   type Unsubscribe,
 } from 'firebase/firestore';
@@ -103,6 +104,29 @@ export async function loadOlderChatMessages(
   const snap = await getDocs(query(collection(db, CHAT_ROOMS, roomId, 'messages'), orderBy('createdAt', 'desc'), startAfter(before), limit(pageSize)));
   const docs = snap.docs;
   return { messages: docs.map(messageOf).reverse(), hasMore: docs.length >= pageSize, oldest: docs[docs.length - 1] ?? before };
+}
+
+/**
+ * 방의 메시지 전부 (한 번 읽기, 오래된 것 → 최신 순) — 대화 내용 검색용.
+ * 500개씩 나눠 읽는다. onProgress 로 지금까지 읽은 수를 알려 준다.
+ */
+export async function loadAllChatMessages(
+  db: Firestore,
+  roomId: string,
+  opts: { pageSize?: number; onProgress?: (loaded: number) => void } = {},
+): Promise<ChatMessageView[]> {
+  const n = opts.pageSize ?? 500;
+  const out: ChatMessageView[] = [];
+  let after: DocumentSnapshot<DocumentData> | null = null;
+  for (;;) {
+    const base = query(collection(db, CHAT_ROOMS, roomId, 'messages'), orderBy('createdAt', 'asc'), limit(n));
+    const snap: QuerySnapshot<DocumentData> = await getDocs(after ? query(base, startAfter(after)) : base);
+    snap.docs.forEach((d) => out.push(messageOf(d)));
+    opts.onProgress?.(out.length);
+    if (snap.docs.length < n) break;
+    after = snap.docs[snap.docs.length - 1];
+  }
+  return out;
 }
 
 /** 방 사람들이 마지막으로 본 시각 — uid → ms (안 읽은 사람 수 '1' 계산) */

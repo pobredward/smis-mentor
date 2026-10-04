@@ -14,8 +14,10 @@ import {
   L,
   cleanChatText,
   deleteChatMessage,
+  CHAT_LIMITS,
   getCurrentLocale,
   isRoomMuted,
+  loadAllChatMessages,
   logger,
   markChatRoomRead,
   reportChatMessage,
@@ -29,9 +31,9 @@ import {
 import { db } from '@/lib/firebase';
 import { enableWebPush, webPushPermission } from '@/lib/webPush';
 import { setViewingChatRoom } from '@/hooks/useChatUnread';
-import ChatRoomView, { type ChatPushStatus } from './ChatRoomView';
+import ChatRoomView, { type ChatPushStatus, type ChatRoomSearch } from './ChatRoomView';
 import { discardChatOutgoing, queueChatMedia, retryChatOutgoing, sendChatText, settleChatOutbox, useChatOutbox } from './chatOutbox';
-import { useChatMessages, useChatReads, useChatRoom } from './useChatRoomData';
+import { mergeChatMessages, useChatMessages, useChatReads, useChatRoom } from './useChatRoomData';
 import { useChatTray } from './useChatTray';
 import { tsMillis } from './chatUi';
 
@@ -89,6 +91,31 @@ export default function ChatRoomContainer({ roomId, myUid, myName, state, onBack
   const [active, setActive] = useState(pageActive);
   const [pushStatus, setPushStatus] = useState<ChatPushStatus>(() => (typeof window === 'undefined' ? 'unsupported' : webPushPermission()));
   const box = useNarrowViewportBox();
+
+  // ── 대화 내용 검색 ─────────────────────────────────────
+  // 처음 검색할 때 방 전체 대화를 한 번 불러와 이 방이 열려 있는 동안 기억한다 (새 메시지는 실시간 목록에서 합친다)
+  const [history, setHistory] = useState<ChatMessageView[] | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyCount, setHistoryCount] = useState(0);
+  /** 검색 결과로 옮기느라 늘린 목록의 시작 시각 (불러 둔 대화에서 이 시각부터 보인다) */
+  const [floorMs, setFloorMs] = useState<number | null>(null);
+  const historyPromise = useRef<Promise<void> | null>(null);
+
+  const startSearch = useCallback((): Promise<void> => {
+    if (!historyPromise.current) {
+      setHistoryLoading(true);
+      setHistoryCount(0);
+      historyPromise.current = loadAllChatMessages(db, roomId, { onProgress: setHistoryCount })
+        .then((all) => setHistory(all))
+        .catch((e) => {
+          logger.warn('채팅 전체 대화 불러오기 실패:', e);
+          toast.error(L('chat.webActionFailed'));
+          historyPromise.current = null; // 다음에 검색을 열면 다시 시도 (그동안은 지금 목록에서만 찾는다)
+        })
+        .finally(() => setHistoryLoading(false));
+    }
+    return historyPromise.current ?? Promise.resolve();
+  }, [roomId]);
 
   // 좁은 화면에서는 방이 전체 화면을 덮으므로 뒤 목록이 같이 스크롤되지 않게
   useEffect(() => {
@@ -159,6 +186,42 @@ export default function ChatRoomContainer({ roomId, myUid, myName, state, onBack
     }, 800);
     return () => clearTimeout(t);
   }, [ready, active, unread, unseen, readsLoaded, nearBottom, newestOther, roomId, myUid]);
+
+  // 화면에 그릴 메시지 — 검색 결과로 예전 메시지까지 늘렸으면 불러 둔 대화에서 더 붙인다 (추가 읽기 없음)
+  const display = useMemo(
+    () => (history && floorMs != null ? mergeChatMessages(history.filter((m) => tsMillis(m.createdAt) >= floorMs), messages) : messages),
+    [history, floorMs, messages],
+  );
+  const searchPool = useMemo(() => (history ? mergeChatMessages(history, messages) : messages), [history, messages]);
+  const displayFirstMs = display.length ? tsMillis(display[0].createdAt) : 0;
+  const displayHasMore = history ? history.length > 0 && !!displayFirstMs && tsMillis(history[0].createdAt) < displayFirstMs : hasMore;
+
+  /** 위로 올려 더 보기 — 전체 대화를 불러 둔 뒤에는 거기서 50개씩 (Firestore 를 다시 읽지 않는다) */
+  const loadOlderDisplay = useCallback(() => {
+    if (!history || !displayFirstMs) {
+      void loadOlder();
+      return;
+    }
+    let idx = history.findIndex((m) => tsMillis(m.createdAt) >= displayFirstMs);
+    if (idx < 0) idx = history.length;
+    const k = Math.max(0, idx - CHAT_LIMITS.pageSize);
+    if (k >= idx) return;
+    setFloorMs(tsMillis(history[k].createdAt));
+  }, [history, displayFirstMs, loadOlder]);
+
+  /** 검색 결과가 지금 목록보다 예전이면 그 메시지(+ 위로 몇 개)까지 목록을 늘린다 */
+  const revealMessage = useCallback((id: string) => {
+    if (!history || display.some((m) => m.id === id)) return;
+    const k = history.findIndex((m) => m.id === id);
+    if (k < 0) return;
+    const floor = tsMillis(history[Math.max(0, k - 5)].createdAt);
+    setFloorMs((f) => (f == null ? floor : Math.min(f, floor)));
+  }, [history, display]);
+
+  const search: ChatRoomSearch = useMemo(
+    () => ({ pool: searchPool, loading: historyLoading, loadedCount: historyCount, onStart: startSearch, onReveal: revealMessage }),
+    [searchPool, historyLoading, historyCount, startSearch, revealMessage],
+  );
 
   // ── 보내기 ───────────────────────────────────────────
   const onSend = useCallback(() => {
@@ -255,14 +318,14 @@ export default function ChatRoomContainer({ roomId, myUid, myName, state, onBack
         room={room}
         myUid={myUid}
         lang={lang}
-        messages={messages}
+        messages={display}
         loaded={loaded}
         outgoing={outgoing}
         reads={reads}
         state={state}
-        hasMore={hasMore}
-        loadingOlder={loadingOlder}
-        onLoadOlder={loadOlder}
+        hasMore={displayHasMore}
+        loadingOlder={history ? false : loadingOlder}
+        onLoadOlder={loadOlderDisplay}
         onBack={onBack}
         tray={tray}
         text={text}
@@ -277,6 +340,7 @@ export default function ChatRoomContainer({ roomId, myUid, myName, state, onBack
         onStartDm={onStartDm}
         onBottomChange={setNearBottom}
         push={{ status: pushStatus, onEnable: () => void onEnablePush() }}
+        search={search}
       />
     </div>
   );

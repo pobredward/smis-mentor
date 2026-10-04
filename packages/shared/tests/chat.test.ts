@@ -195,3 +195,29 @@ describe('chat — 미리보기 · 묶음 · 시간', () => {
     ]);
   });
 });
+
+describe('chat — 대화 내용 검색', () => {
+  const at = (ms: number) => ({ toMillis: () => ms }) as unknown as import('firebase/firestore').Timestamp;
+  const msgs = [
+    { id: 'a', senderId: 'x', kind: 'text' as const, text: '내일 집결 시간은 9시', createdAt: at(1) },
+    { id: 'b', senderId: 'y', kind: 'text' as const, text: '집결  장소는 로비', createdAt: at(3) },
+    { id: 'c', senderId: 'x', kind: 'text' as const, text: '집결', createdAt: at(2), deleted: true },
+    { id: 'd', senderId: 'z', kind: 'text' as const, text: 'Bus at 9', createdAt: at(4) },
+    { id: 'e', senderId: 'blk', kind: 'text' as const, text: '집결 취소', createdAt: at(5) },
+    { id: 'f', senderId: 'x', kind: 'media' as const, text: '', createdAt: at(6) },
+  ];
+  it('최신 결과부터 · 삭제·차단 제외 · 공백·대소문자 무시', () => {
+    expect(C.searchChatMessages(msgs, ' 집결 ', { blk: true })).toEqual(['b', 'a']);
+    expect(C.searchChatMessages(msgs, '집결 장소')).toEqual(['b']);
+    expect(C.searchChatMessages(msgs, 'BUS')).toEqual(['d']);
+    expect(C.searchChatMessages(msgs, '   ')).toEqual([]);
+  });
+  it('강조 표시 나누기', () => {
+    expect(C.splitByQuery('Bus at 9 and bus at 10', 'bus')).toEqual([
+      { text: 'Bus', hit: true }, { text: ' at 9 and ', hit: false }, { text: 'bus', hit: true }, { text: ' at 10', hit: false },
+    ]);
+    expect(C.splitByQuery('집결  장소는 로비', '집결 장소')).toEqual([{ text: '집결  장소', hit: true }, { text: '는 로비', hit: false }]);
+    expect(C.splitByQuery('a+b (c)', '+b (')).toEqual([{ text: 'a', hit: false }, { text: '+b (', hit: true }, { text: 'c)', hit: false }]);
+    expect(C.splitByQuery('hello', '')).toEqual([{ text: 'hello', hit: false }]);
+  });
+});

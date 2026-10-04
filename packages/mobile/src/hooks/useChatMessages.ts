@@ -3,10 +3,14 @@
  *
  * 실시간 구독은 최근 CHAT_LIMITS.pageSize 개만 본다. 방에 있는 동안 새 메시지가 많이 오면
  * 오래된 쪽이 실시간 창에서 밀려나는데, 그 메시지는 '이전 메시지'로 옮겨 계속 보이게 한다.
+ *
+ * 대화 내용 검색으로 방 전체 메시지(provideHistory)를 받아 두면, 그 뒤로 위로 올려 더 보기와
+ * 검색 결과로 이동(revealMessage)은 Firestore 를 다시 읽지 않고 그 기록에서 채운다.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DocumentData, DocumentSnapshot } from 'firebase/firestore';
 import {
+  CHAT_LIMITS,
   loadOlderChatMessages,
   logger,
   subscribeChatMessages,
@@ -34,6 +38,10 @@ export interface ChatMessagesState {
   hasMore: boolean;
   loadingOlder: boolean;
   loadOlder: () => void;
+  /** 방 전체 메시지 (오래된 → 최신) — 받은 뒤로는 이전 메시지를 여기서 채운다 */
+  provideHistory: (all: ChatMessageView[]) => void;
+  /** 이 메시지가 목록에 있도록 이전 메시지를 그 메시지(+ 앞 몇 개)까지 채운다 — 목록에 있거나 채웠으면 true */
+  revealMessage: (messageId: string) => boolean;
   /** uid → 그 방을 마지막으로 본 시각(ms) */
   reads: Record<string, number>;
   error: Error | null;
@@ -49,6 +57,8 @@ export function useChatMessages(roomId: string, enabled: boolean): ChatMessagesS
   const [error, setError] = useState<Error | null>(null);
 
   const liveRef = useRef<ChatMessageView[]>([]);
+  const olderRef = useRef<ChatMessageView[]>([]);
+  const historyRef = useRef<ChatMessageView[] | null>(null);
   const cursorRef = useRef<DocumentSnapshot<DocumentData> | null>(null);
   const hasMoreRef = useRef(false);
   const loadingRef = useRef(false);
@@ -61,6 +71,8 @@ export function useChatMessages(roomId: string, enabled: boolean): ChatMessagesS
     setReads({});
     setError(null);
     liveRef.current = [];
+    olderRef.current = [];
+    historyRef.current = null;
     cursorRef.current = null;
     hasMoreRef.current = false;
     if (!enabled) return;
@@ -75,7 +87,10 @@ export function useChatMessages(roomId: string, enabled: boolean): ChatMessagesS
           const ids = new Set(msgs.map((m) => m.id));
           const firstAt = messageMillis(msgs[0]);
           const dropped = prev.filter((m) => !ids.has(m.id) && !m.pending && messageMillis(m) > 0 && messageMillis(m) <= firstAt);
-          if (dropped.length) setOlder((o) => mergeById([...o, ...dropped]));
+          if (dropped.length) {
+            olderRef.current = mergeById([...olderRef.current, ...dropped]);
+            setOlder(olderRef.current);
+          }
         }
         liveRef.current = msgs;
         setLive(msgs);
@@ -102,7 +117,64 @@ export function useChatMessages(roomId: string, enabled: boolean): ChatMessagesS
     };
   }, [roomId, enabled]);
 
+  /** 지금 가진 가장 오래된 메시지 시각 */
+  const oldestMillisNow = useCallback(() => {
+    const first = olderRef.current[0] ?? liveRef.current[0];
+    return first ? messageMillis(first) || Number.POSITIVE_INFINITY : Number.POSITIVE_INFINITY;
+  }, []);
+
+  const setMore = useCallback((more: boolean) => {
+    hasMoreRef.current = more;
+    setHasMore(more);
+  }, []);
+
+  const provideHistory = useCallback((all: ChatMessageView[]) => {
+    historyRef.current = all;
+    const oldest = oldestMillisNow();
+    setMore(all.some((m) => {
+      const t = messageMillis(m);
+      return t > 0 && t < oldest;
+    }));
+  }, [oldestMillisNow, setMore]);
+
+  const revealMessage = useCallback((messageId: string): boolean => {
+    if (olderRef.current.some((m) => m.id === messageId) || liveRef.current.some((m) => m.id === messageId)) return true;
+    const all = historyRef.current;
+    const idx = all ? all.findIndex((m) => m.id === messageId) : -1;
+    if (!all || idx < 0) return false;
+    // 그 메시지 앞 몇 개(맥락)부터 지금 가진 가장 오래된 메시지 직전까지
+    const from = Math.max(0, idx - 10);
+    const oldest = oldestMillisNow();
+    const slice = all.slice(from).filter((m) => {
+      const t = messageMillis(m);
+      return t > 0 && t < oldest;
+    });
+    if (slice.length) {
+      olderRef.current = mergeById([...slice, ...olderRef.current]);
+      setOlder(olderRef.current);
+    }
+    setMore(from > 0);
+    return true;
+  }, [oldestMillisNow, setMore]);
+
   const loadOlder = useCallback(() => {
+    // 방 전체 기록이 있으면 거기서 (Firestore 를 다시 읽지 않음)
+    const all = historyRef.current;
+    if (!enabled) return;
+    if (all) {
+      const oldest = oldestMillisNow();
+      const before = all.filter((m) => {
+        const t = messageMillis(m);
+        return t > 0 && t < oldest;
+      });
+      const page = before.slice(-CHAT_LIMITS.pageSize);
+      if (page.length) {
+        olderRef.current = mergeById([...page, ...olderRef.current]);
+        setOlder(olderRef.current);
+      }
+      setMore(before.length > page.length);
+      return;
+    }
     const cursor = cursorRef.current;
     if (!enabled || loadingRef.current || !hasMoreRef.current || !cursor) return;
     loadingRef.current = true;
@@ -113,14 +185,15 @@ export function useChatMessages(roomId: string, enabled: boolean): ChatMessagesS
         cursorRef.current = r.oldest;
         hasMoreRef.current = r.hasMore;
         setHasMore(r.hasMore);
-        setOlder((o) => mergeById([...r.messages, ...o]));
+        olderRef.current = mergeById([...r.messages, ...olderRef.current]);
+        setOlder(olderRef.current);
       })
       .catch((e) => logger.warn('이전 채팅 메시지 불러오기 실패:', e))
       .finally(() => {
         loadingRef.current = false;
         setLoadingOlder(false);
       });
-  }, [roomId, enabled]);
+  }, [roomId, enabled, oldestMillisNow, setMore]);
 
   const messages = useMemo(() => {
     if (!older.length) return live;
@@ -128,5 +201,5 @@ export function useChatMessages(roomId: string, enabled: boolean): ChatMessagesS
     return [...older.filter((m) => !liveIds.has(m.id)), ...live];
   }, [older, live]);
 
-  return { messages, loaded, hasMore, loadingOlder, loadOlder, reads, error };
+  return { messages, loaded, hasMore, loadingOlder, loadOlder, provideHistory, revealMessage, reads, error };
 }

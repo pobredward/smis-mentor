@@ -48,6 +48,15 @@ const createdMs = (d: DocumentSnapshot<DocumentData> | null | undefined): number
 const byTime = (a: ChatMessageView, b: ChatMessageView) =>
   (tsMillis(a.createdAt) || Number.MAX_SAFE_INTEGER) - (tsMillis(b.createdAt) || Number.MAX_SAFE_INTEGER) || a.id.localeCompare(b.id);
 
+/** 두 메시지 목록 합치기 (같은 id 는 뒤쪽 목록 것) — 오래된 것 → 최신 순 */
+export function mergeChatMessages(base: ChatMessageView[], newer: ChatMessageView[]): ChatMessageView[] {
+  if (!base.length) return newer;
+  const map = new Map<string, ChatMessageView>();
+  base.forEach((m) => map.set(m.id, m));
+  newer.forEach((m) => map.set(m.id, m));
+  return [...map.values()].sort(byTime);
+}
+
 /**
  * 메시지 — 최근 50개는 실시간, 위로 올리면 loadOlder 로 더 붙인다.
  * 새 메시지에 밀려 실시간 창(50개)에서 빠진 메시지는 버리지 않고 남겨 둔다.

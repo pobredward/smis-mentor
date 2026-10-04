@@ -19,11 +19,15 @@ import {
   FiTrash2,
   FiUsers,
   FiImage,
+  FiSearch,
 } from 'react-icons/fi';
 import {
   L,
   chatDayLabel,
   chatMessageLayout,
+  chatMessageMatches,
+  normalizeChatSearch,
+  searchChatMessages,
   chatRoomDescription,
   chatRoomTitle,
   dmPeerOf,
@@ -37,6 +41,7 @@ import {
   type Locale,
 } from '@smis-mentor/shared';
 import ChatComposer from './ChatComposer';
+import ChatSearchBar from './ChatSearchBar';
 import ChatLightbox, { saveChatMedia } from './ChatLightbox';
 import { ChatActionMenu, ChatReportDialog, type ChatMenuAction, type ChatMenuAnchor } from './ChatMenus';
 import { ChatMessageRow, ChatOutgoingRow } from './ChatMessageRow';
@@ -46,6 +51,19 @@ import type { ChatTray } from './useChatTray';
 import { RoomAvatar, dayKeyOf } from './chatUi';
 
 export type ChatPushStatus = 'unsupported' | 'default' | 'granted' | 'denied';
+
+/** 대화 내용 검색에 필요한 데이터 (ChatRoomContainer 가 준다) */
+export interface ChatRoomSearch {
+  /** 찾을 메시지 — 방 전체 대화(처음 검색할 때 한 번 불러옴) + 새로 온 메시지 */
+  pool: ChatMessageView[];
+  /** 전체 대화를 불러오는 중 · 지금까지 몇 개 */
+  loading: boolean;
+  loadedCount: number;
+  /** 검색을 열 때 — 전체 대화를 (한 번만) 불러온다. 다 불러오면 끝난다 */
+  onStart: () => Promise<void>;
+  /** 이 메시지가 목록에 그려지도록 (지금 창보다 예전이면 불러 둔 대화로 목록을 늘린다) */
+  onReveal: (messageId: string) => void;
+}
 
 export interface ChatRoomViewProps {
   room: ChatRoom;
@@ -77,6 +95,9 @@ export interface ChatRoomViewProps {
   push?: { status: ChatPushStatus; onEnable: () => void };
   /** 좁은 화면 전체 화면일 때 키보드 위로 맞춘 크기 */
   boxStyle?: CSSProperties;
+  search?: ChatRoomSearch;
+  /** 처음부터 이 검색어로 검색을 열어 둔다 (미리보기용) */
+  initialSearch?: string;
 }
 
 const NEAR_BOTTOM = 80;
@@ -101,7 +122,7 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
   const {
     room, myUid, lang, messages, loaded, outgoing, reads, state, hasMore, loadingOlder, onLoadOlder, onBack,
     tray, text, onTextChange, onSend, onRetry, onDiscard, onDelete, onReport, onBlock, onToggleMute, onStartDm,
-    onBottomChange, push, boxStyle,
+    onBottomChange, push, boxStyle, search, initialSearch,
   } = props;
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -117,6 +138,31 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
   const [revealed, setRevealed] = useState<Set<string>>(() => new Set());
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
+
+  // ── 대화 내용 검색 ─────────────────────────────────────
+  const [searchOpen, setSearchOpen] = useState(() => !!initialSearch && !!search);
+  /** 입력 중인 글 · 실제로 찾는 글(0.25초 뒤) */
+  const [query, setQuery] = useState(initialSearch ?? '');
+  const [activeQuery, setActiveQuery] = useState(initialSearch ?? '');
+  /** 지금 보고 있는 결과 (메시지 id) */
+  const [currentHit, setCurrentHit] = useState<string | null>(() =>
+    initialSearch && search ? searchChatMessages(search.pool, initialSearch, state?.blocked)[0] ?? null : null,
+  );
+  const [flashId, setFlashId] = useState<string | null>(null);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 그려지면 가운데로 옮길 메시지 */
+  const pendingJump = useRef<string | null>(currentHit);
+  const poolRef = useRef<ChatMessageView[]>(search?.pool ?? []);
+  const blockedRef = useRef(state?.blocked);
+  const queryRef = useRef(query);
+  const loadingRef = useRef(!!search?.loading);
+  useEffect(() => {
+    poolRef.current = search?.pool ?? [];
+    blockedRef.current = state?.blocked;
+    queryRef.current = query;
+    loadingRef.current = !!search?.loading;
+  }, [search?.pool, search?.loading, state?.blocked, query]);
 
   const memberInfo = room.memberInfo ?? {};
   const muted = isRoomMuted(state, room.id);
@@ -278,6 +324,90 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
     },
   };
 
+  const searchReady = !!search && !search.loading;
+  const normalizedQuery = searchOpen ? normalizeChatSearch(activeQuery) : '';
+  const searchPool = search?.pool;
+  const blocked = state?.blocked;
+  const hits = useMemo(
+    () => (searchReady && normalizedQuery && searchPool ? searchChatMessages(searchPool, normalizedQuery, blocked) : []),
+    [searchReady, normalizedQuery, searchPool, blocked],
+  );
+  const hitIndex = currentHit ? hits.indexOf(currentHit) : -1;
+
+  /** 결과로 옮기기 — 목록에 없으면 늘려서 그린 뒤 가운데로, 잠깐 테두리 */
+  const jumpTo = (id: string) => {
+    setCurrentHit(id);
+    stickRef.current = false;
+    pendingJump.current = id;
+    search?.onReveal(id);
+    setFlashId(id);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setFlashId(null), 1600);
+  };
+  /** 검색어로 가장 최근 결과부터 */
+  const runSearch = (q: string) => {
+    setActiveQuery(q);
+    const first = normalizeChatSearch(q) ? searchChatMessages(poolRef.current, q, blockedRef.current)[0] : undefined;
+    if (first) jumpTo(first);
+    else setCurrentHit(null);
+  };
+  const onQueryChange = (q: string) => {
+    setQuery(q);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      if (loadingRef.current) setActiveQuery(q); // 다 불러오면 onStart 가 이어서 찾는다
+      else runSearch(q);
+    }, 250);
+  };
+  const openSearch = () => {
+    if (!search) return;
+    setSearchOpen(true);
+    search.onStart().catch(() => undefined);
+  };
+  // 전체 대화를 다 불러오면 — 그동안 입력한 검색어로 바로 찾는다 (목록·결과가 새 데이터로 그려진 뒤)
+  const wasLoading = useRef(!!search?.loading);
+  useEffect(() => {
+    const loading = !!search?.loading;
+    if (wasLoading.current && !loading && searchOpen && normalizeChatSearch(queryRef.current)) runSearch(queryRef.current);
+    wasLoading.current = loading;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search?.loading]);
+  const closeSearch = () => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    setSearchOpen(false);
+    setQuery('');
+    setActiveQuery('');
+    setCurrentHit(null);
+    setFlashId(null);
+    pendingJump.current = null;
+  };
+  const goOlder = () => {
+    if (!hits.length) return;
+    const next = hitIndex < 0 ? 0 : Math.min(hits.length - 1, hitIndex + 1);
+    jumpTo(hits[next]);
+  };
+  const goNewer = () => {
+    if (!hits.length) return;
+    const next = hitIndex < 0 ? 0 : Math.max(0, hitIndex - 1);
+    jumpTo(hits[next]);
+  };
+
+  // 결과 메시지가 그려지면 가운데로 (목록을 늘리는 중이면 다음 그림에서)
+  useEffect(() => {
+    const id = pendingJump.current;
+    const box = scrollRef.current;
+    if (!id || !box) return;
+    const el = box.querySelector<HTMLElement>(`[data-mid="${CSS.escape(id)}"]`);
+    if (!el) return;
+    pendingJump.current = null;
+    el.scrollIntoView({ block: 'center' });
+  }, [messages, currentHit, flashId]);
+
+  useEffect(() => () => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+  }, []);
+
   const viewerMsg = viewer?.m;
   const lastDay = messages.length ? dayKeyOf(messages[messages.length - 1].createdAt?.toDate?.() ?? new Date()) : '';
   const todayKey = dayKeyOf(new Date());
@@ -314,6 +444,18 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
           </div>
           {subtitle && <p className="text-xs text-gray-500 truncate">{subtitle}</p>}
         </div>
+        {search && (
+          <button
+            type="button"
+            onClick={() => (searchOpen ? closeSearch() : openSearch())}
+            className={`h-9 w-9 rounded-full flex items-center justify-center ${searchOpen ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-100'}`}
+            title={L('chat.search')}
+            aria-label={L('chat.search')}
+            aria-pressed={searchOpen}
+          >
+            <FiSearch size={18} />
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setShowMembers(true)}
@@ -346,6 +488,21 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
           <FiMoreVertical size={18} />
         </button>
       </header>
+
+      {searchOpen && search && (
+        <ChatSearchBar
+          query={query}
+          onQueryChange={onQueryChange}
+          loading={search.loading}
+          loadedCount={search.loadedCount}
+          total={hits.length}
+          index={hitIndex}
+          noResults={searchReady && !!normalizedQuery && activeQuery === query && hits.length === 0}
+          onOlder={goOlder}
+          onNewer={goNewer}
+          onClose={closeSearch}
+        />
+      )}
 
       {/* 말풍선 */}
       <div className="relative flex-1 min-h-0">
@@ -391,6 +548,9 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
                     onReveal={reveal}
                     onMenu={openMenu}
                     onOpenMedia={openMedia}
+                    highlight={normalizedQuery && !isUserBlocked(state, m.senderId) && chatMessageMatches(m, normalizedQuery) ? normalizedQuery : undefined}
+                    current={m.id === currentHit && !!normalizedQuery}
+                    flash={m.id === flashId}
                   />
                 </Fragment>
               );
