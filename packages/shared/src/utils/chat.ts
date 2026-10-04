@@ -24,6 +24,7 @@ import {
 import { compareCampCodes } from '../types/camp';
 import { groupRank, normalizeGroupKey } from '../types/campTimetable';
 import { campRolesOf, TEACHER_GROUP_NAME } from './campTeachers';
+import { callLogText } from './chatCall';
 import { t, type Locale, type MessageKey } from '../i18n';
 
 export const CHAT_LIMITS = {
@@ -569,12 +570,18 @@ export function mediaCounts(media: ChatMediaItem[] | null | undefined): { images
 export function chatPreviewText(
   m: Pick<ChatMessage, 'kind' | 'text' | 'media' | 'deleted'> | ChatLastMessage | null | undefined,
   lang: Locale,
+  /** 통화 기록을 누구 쪽에서 볼지 (내가 건 통화면 '응답 없음' 등) · 1:1 방인지 */
+  opts: { myUid?: string; direct?: boolean } = {},
 ): string {
   if (!m) return t(lang, 'chat.noMessagesYet');
   if (m.deleted) return t(lang, 'chat.deletedMessage');
   const text = String(m.text ?? '').replace(/\s+/g, ' ').trim();
   if (m.kind === 'voice') return t(lang, 'chat.previewVoice');
   if (m.kind === 'poll') return t(lang, 'chat.previewPoll', { q: text });
+  const sys = m as Partial<ChatLastMessage>;
+  if (m.kind === 'system' && sys.systemType === 'call' && sys.call) {
+    return callLogText(sys.call, { direct: !!opts.direct, mine: !!opts.myUid && sys.senderId === opts.myUid, startedByName: sys.senderName, lang });
+  }
   if (m.kind === 'system') return text ? t(lang, 'chat.previewNotice', { text }) : t(lang, 'chat.noticeSet');
   const counts = 'media' in m ? mediaCounts(m.media) : { images: Number((m as ChatLastMessage).imageCount ?? 0), videos: Number((m as ChatLastMessage).videoCount ?? 0) };
   let media = '';

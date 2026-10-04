@@ -131,7 +131,7 @@ function RoomRow({ room, state, myUid, lang, active, onOpen, now, pinned, onMenu
             <span className="shrink-0 text-[11px] text-gray-400">{chatListTimeLabel(at, lang, now)}</span>
           </div>
           <div className="mt-0.5 flex items-center gap-2">
-            <p className="min-w-0 flex-1 text-[13px] text-gray-500 truncate">{chatPreviewText(room.lastMessage, lang)}</p>
+            <p className="min-w-0 flex-1 text-[13px] text-gray-500 truncate">{chatPreviewText(room.lastMessage, lang, { myUid, direct: room.type === 'dm' })}</p>
             {unread > 0 && <UnreadBadge text={unreadBadgeText(unread)} />}
           </div>
         </div>
@@ -392,7 +392,7 @@ export default function ChatRoomList({ groups, state, myUid, lang, activeRoomId,
                     <RoomAvatar type={r.type} peerName={peer?.name} peerPhoto={peer?.photo} groupKey={r.groupKey} size={40} />
                     <div className="min-w-0 flex-1">
                       <div className="text-[15px] font-medium text-gray-900 truncate">{chatRoomTitle(r, lang, myUid)}</div>
-                      <div className="text-xs text-gray-500 truncate">{chatPreviewText(r.lastMessage, lang)}</div>
+                      <div className="text-xs text-gray-500 truncate">{chatPreviewText(r.lastMessage, lang, { myUid, direct: r.type === 'dm' })}</div>
                     </div>
                     <button
                       type="button"

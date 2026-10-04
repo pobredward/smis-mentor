@@ -31,6 +31,7 @@ import {
 } from 'firebase/firestore';
 import { getDownloadURL, ref as storageRef, uploadBytesResumable, type FirebaseStorage } from 'firebase/storage';
 import type {
+  ChatCallDoc,
   ChatMediaItem,
   ChatMessage,
   ChatMessageView,
@@ -47,6 +48,7 @@ import { CHAT_LIMITS, cleanChatText } from '../../utils/chat';
 export const CHAT_ROOMS = 'chatRooms';
 export const CHAT_USER_STATE = 'chatUserState';
 export const CHAT_SCHEDULED = 'chatScheduled';
+export const CHAT_CALLS = 'chatCalls';
 
 const roomOf = (d: DocumentSnapshot<DocumentData>): ChatRoom => ({ id: d.id, ...(d.data() as Omit<ChatRoom, 'id'>) });
 const messageOf = (d: DocumentSnapshot<DocumentData>): ChatMessageView => ({
@@ -65,6 +67,27 @@ export function subscribeMyChatRooms(
   return onSnapshot(
     query(collection(db, CHAT_ROOMS), where('memberIds', 'array-contains', uid)),
     (snap) => onRooms(snap.docs.map(roomOf)),
+    (e) => onError?.(e),
+  );
+}
+
+// ── 통화 (chatCalls — 서버만 쓴다) ─────────────────────────────────
+
+const callOf = (d: DocumentSnapshot<DocumentData>): ChatCallDoc => ({ ...(d.data() as Omit<ChatCallDoc, 'id'>), id: d.id });
+
+/** 통화 하나 (실시간) — 없거나 읽을 수 없으면 null */
+export function subscribeChatCall(db: Firestore, callId: string, cb: (call: ChatCallDoc | null) => void, onError?: (e: Error) => void): Unsubscribe {
+  return onSnapshot(doc(db, CHAT_CALLS, callId), (d) => cb(d.exists() ? callOf(d) : null), (e) => {
+    onError?.(e);
+    cb(null);
+  });
+}
+
+/** 나에게 걸려 오는 1:1 통화 (벨 울리는 중) */
+export function subscribeIncomingChatCalls(db: Firestore, uid: string, cb: (calls: ChatCallDoc[]) => void, onError?: (e: Error) => void): Unsubscribe {
+  return onSnapshot(
+    query(collection(db, CHAT_CALLS), where('invitedIds', 'array-contains', uid), where('status', '==', 'ringing')),
+    (snap) => cb(snap.docs.map(callOf)),
     (e) => onError?.(e),
   );
 }

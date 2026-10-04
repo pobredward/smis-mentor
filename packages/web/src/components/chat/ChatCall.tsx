@@ -224,7 +224,12 @@ export function ChatCallScreen({ state, title, lang, wide: wideProp, renderVideo
       </CtrlButton>
     );
   } else if (state.phase === 'ended') {
-    const reason = state.endedReason === 'declined' ? L('chat.callDeclined') : state.endedReason === 'missed' ? L('chat.callMissed') : L('chat.callEnded');
+    const reason = state.endedReason === 'declined' ? L('chat.callDeclined')
+      : state.endedReason === 'rejected' ? L('chat.callDeclinedByPeer')
+      : state.endedReason === 'missed' ? L('chat.callMissed')
+        : state.endedReason === 'busy' ? L('chat.callBusy')
+          : state.endedReason === 'failed' ? L('chat.callFailed')
+            : L('chat.callEnded');
     body = (
       <div className="flex flex-col items-center gap-2 text-center">
         <FiPhoneOff size={36} className="text-white/70" />

@@ -10,6 +10,8 @@ import { Ionicons } from '@expo/vector-icons';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import {
   L,
+  callLogText,
+  isMissedCallLog,
   chatDayLabel,
   chatTimeLabel,
   type ChatMemberInfo,
@@ -57,7 +59,7 @@ interface MessageRowProps {
   lang: Locale;
   myUid: string;
   /** 멘션 · 답장 이름 (방 memberInfo) */
-  room: Pick<ChatRoom, 'memberInfo'> | null;
+  room: Pick<ChatRoom, 'memberInfo' | 'type'> | null;
   /** 보낸 사람 (방의 memberInfo) */
   sender?: ChatMemberInfo;
   /** 안 읽은 사람 수 — null/0 이면 숨김 */
@@ -241,6 +243,22 @@ function MessageRowImpl(props: MessageRowProps) {
   }
 
   const m = row.message;
+  if (m.kind === 'system' && m.systemType === 'call' && m.call) {
+    // 통화 기록 — 가운데 알약 (놓친 통화는 빨강)
+    const c = m.call;
+    const mineCall = m.senderId === myUid;
+    const missed = isMissedCallLog(c) && !mineCall;
+    const label = callLogText(c, { direct: room?.type === 'dm', mine: mineCall, startedByName: room?.memberInfo?.[m.senderId]?.name || m.senderName, lang });
+    return (
+      <View>
+        {day}
+        <View style={[styles.systemPill, styles.callPill, missed && styles.callPillMissed]}>
+          <Ionicons name={c.media === 'video' ? 'videocam' : 'call'} size={12} color={missed ? '#dc2626' : '#374151'} />
+          <Text style={[styles.systemText, missed && { color: '#dc2626' }]} numberOfLines={1}>{label}</Text>
+        </View>
+      </View>
+    );
+  }
   if (m.kind === 'system') {
     const isNotice = m.systemType === 'notice';
     const who = room?.memberInfo?.[m.senderId]?.name || m.senderName;
@@ -431,6 +449,8 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   systemText: { color: '#334155', fontSize: 12.5, textAlign: 'center' },
+  callPill: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  callPillMissed: { backgroundColor: '#fee2e2' },
   dividerWrap: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginVertical: 12, gap: 8 },
   dividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: '#94a3b8' },
   dividerText: { fontSize: 12, color: '#475569', fontWeight: '600' },

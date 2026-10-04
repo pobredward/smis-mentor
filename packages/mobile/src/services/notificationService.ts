@@ -11,6 +11,10 @@ Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     // 지금 열어 보고 있는 채팅방의 새 메시지 — 화면에 바로 보이므로 배너·소리 없이
     const data = notification.request.content.data as { type?: unknown; roomId?: unknown } | null | undefined;
+    // 걸려 온 통화 — 앱이 열려 있으면 앱 안 벨 화면(또는 CallKit)이 울리므로 알림은 띄우지 않는다
+    if (data?.type === 'chat-call') {
+      return { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
+    }
     if (data?.type === 'chat' && typeof data.roomId === 'string' && data.roomId === getOpenChatRoom()) {
       return {
         shouldShowBanner: false,

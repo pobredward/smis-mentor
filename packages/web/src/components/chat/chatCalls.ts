@@ -1,34 +1,60 @@
 'use client';
 
 /**
- * 채팅 통화 (Agora 예정 — 지금은 화면만) — 켜고 끄기 · 통화 연결 하나 · 앱 전체 상태
+ * 채팅 통화 — 켜고 끄기 · 통화 연결 하나 · 앱 전체 상태
  *
- * - chatCallsEnabled(): 아직 실제 통화가 안 되므로 개발 환경 · 미리보기(NEXT_PUBLIC_CHAT_CALLS=1)에서만 보인다.
- *   운영에서는 통화 버튼 · 띠 · 기록 · 통화 화면이 하나도 그려지지 않는다. 이 판단은 여기 한 곳에서만 한다.
- * - getChatCallAdapter(): 통화 연결은 여기서만 만든다 (지금은 가짜 — createMockCallAdapter).
+ * - 실제 통화(Agora): NEXT_PUBLIC_AGORA_APP_ID 가 있으면 운영에서도 켜진다 (토큰은 서버 /api/chat/call 이 준다).
+ *   앱 ID 가 없으면 개발 환경 · 미리보기(NEXT_PUBLIC_CHAT_CALLS=1)에서만 가짜 연결로 화면을 본다. 이 판단은 여기 한 곳에서만 한다.
+ * - getChatCallAdapter(): 통화 연결은 여기서만 만든다 — shared createCallController + 웹 Agora 엔진.
+ *   걸려 오는 1:1 통화는 chatCalls 구독(invitedIds)으로 벨 화면을 띄운다 (창이 닫혀 있으면 웹 알림이 대신).
  * - 상태는 모듈(화면 밖)에 하나 — 방을 옮기거나 다른 페이지로 가도 통화와 '작게 보기' 알약이 이어진다.
  */
 import { useEffect, useSyncExternalStore } from 'react';
+import toast from 'react-hot-toast';
 import {
+  L,
+  createCallApi,
+  createCallController,
   createMockCallAdapter,
   isChatStaff,
+  logger,
+  subscribeChatCall,
+  subscribeIncomingChatCalls,
   type ChatCallAdapter,
   type ChatCallMedia,
   type ChatMemberInfo,
   type ChatUserLike,
 } from '@smis-mentor/shared';
 import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/lib/firebase';
+import { authenticatedPost } from '@/lib/apiClient';
+import { chatInboxRoom } from '@/hooks/useChatUnread';
 import type { ChatCallView } from './ChatCall';
+import { callTones } from './callTones';
+import { createAgoraWebEngine, isMediaPermissionError, type AgoraWebEngine } from './agoraWebEngine';
 
-/** 통화 화면을 보여 줄까 — 개발 환경이거나 NEXT_PUBLIC_CHAT_CALLS=1 */
+/** 실제 통화(Agora)가 설정돼 있는가 */
+export const chatCallsReal = (): boolean => !!process.env.NEXT_PUBLIC_AGORA_APP_ID;
+
+/** 통화 화면을 보여 줄까 — Agora 가 있으면 늘, 없으면 개발 환경이거나 NEXT_PUBLIC_CHAT_CALLS=1 (가짜 연결) */
 export function chatCallsEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_CHAT_CALLS === '1' || process.env.NODE_ENV === 'development';
+  return chatCallsReal() || process.env.NEXT_PUBLIC_CHAT_CALLS === '1' || process.env.NODE_ENV === 'development';
 }
 
-/** 가짜 연결에만 있는 '걸려 오는 통화 보기' */
+/** 가짜 연결에만 있는 '걸려 오는 통화 보기' · 실제 연결의 영상 엔진 */
 export type ChatCallAdapterX = ChatCallAdapter & {
   simulateIncoming?: (peer: { uid: string; name: string; photo?: string }, media: ChatCallMedia, roomId: string) => void;
+  engine?: AgoraWebEngine;
+  dispose?: () => void;
 };
+
+/** 통화 오류 → 알림 (권한 · 서버가 준 이유) */
+export function toastCallError(e: unknown) {
+  if (isMediaPermissionError(e)) toast.error(L('chat.callPermission'));
+  else if (e instanceof Error && e.message && !/^chat\./.test(e.message)) toast.error(e.message);
+  else if (e instanceof Error && e.message === 'chat.callAlreadyInCall') toast(L('chat.callAlreadyInCall'));
+  else toast.error(L('chat.callFailed'));
+}
 
 export type ChatCallMe = { uid: string; name: string; photo?: string };
 
@@ -38,19 +64,36 @@ export function setCallRoomMembers(roomId: string, info: Record<string, ChatMemb
   if (info) roomMembers.set(roomId, info);
 }
 
+/** 방 사람 (이름 · 사진) — 열린 방이 알려 준 것, 없으면 받은 편지함의 방 */
+const membersOf = (roomId: string): Record<string, ChatMemberInfo> =>
+  roomMembers.get(roomId) ?? chatInboxRoom(roomId)?.memberInfo ?? {};
+
 /**
  * 통화 연결 만들기 — 앱 전체에서 이 함수 하나로만 만든다.
- *
- * 지금: createMockCallAdapter — 가짜 연결 (서버 · Agora · 마이크/카메라 권한 없음). 미리보기 · 개발용.
- * 나중: ▶ Agora 를 붙일 때 여기서 Agora 어댑터를 돌려주면 된다. 예)
- *         return createAgoraCallAdapter({ appId: process.env.NEXT_PUBLIC_AGORA_APP_ID!, me, tokenUrl: '/api/chat/call-token' });
- *       ChatCallAdapter 모양(start · join · accept · decline · leave · setMic · setCamera …)만 맞추면 화면은 그대로 쓴다.
- *       영상은 ChatCallTile 의 renderVideo(uid, isMe) 자리에 Agora 영상 트랙을 그린다.
+ * Agora 앱 ID 가 있으면 실제 연결(createCallController + 웹 Agora 엔진), 없으면 가짜 연결(미리보기 · 개발용).
+ * 영상은 ChatCallOverlay 가 ChatCallTile 의 renderVideo 자리에 엔진의 영상 트랙(AgoraVideo)을 그린다.
  */
 export function getChatCallAdapter(me: ChatCallMe): ChatCallAdapterX {
+  if (chatCallsReal()) {
+    const engine = createAgoraWebEngine();
+    const controller = createCallController({
+      me,
+      engine,
+      api: createCallApi(authenticatedPost),
+      watchCall: (id, cb) => subscribeChatCall(db, id, cb, (e) => logger.warn('통화 구독 오류:', e)),
+      watchIncoming: (cb) => subscribeIncomingChatCalls(db, me.uid, cb, (e) => logger.warn('걸려 오는 통화 구독 오류:', e)),
+      members: membersOf,
+      ring: callTones,
+      onError: (e, where) => {
+        logger.warn('통화 오류:', where, e);
+        if (where === 'accept') toastCallError(e);
+      },
+    });
+    return Object.assign(controller, { engine });
+  }
   const adapter: ChatCallAdapterX = createMockCallAdapter({
     me,
-    members: () => roomMembers.get(adapter.getState().roomId ?? '') ?? {},
+    members: () => membersOf(adapter.getState().roomId ?? ''),
     fakeJoiners: 5,
   });
   return adapter;
@@ -81,7 +124,9 @@ function ensure(me: ChatCallMe): ChatCallAdapterX {
 function drop() {
   if (!current) return;
   const st = current.adapter.getState();
-  if (st.phase !== 'idle' && st.phase !== 'ended') void current.adapter.leave();
+  if (current.adapter.dispose) current.adapter.dispose();
+  else if (st.phase !== 'idle' && st.phase !== 'ended') void current.adapter.leave();
+  callTones.stop();
   current.off();
   current = null;
   snapshot = IDLE;

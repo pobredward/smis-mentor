@@ -267,7 +267,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     // 채팅 알림 → 채팅 탭 › 그 방 (로그인·화면이 준비되면 MainTabs 의 useChatPushNavigation 이 연다)
     const openChatFromResponse = (response: Notifications.NotificationResponse): boolean => {
       const data = response.notification.request.content.data as { type?: unknown; roomId?: unknown } | undefined;
-      if (data?.type !== 'chat' || typeof data.roomId !== 'string' || !data.roomId) return false;
+      // 통화 알림(chat-call)도 그 방으로 — 아직 울리는 중이면 앱 안 벨 화면이 뜬다
+      if ((data?.type !== 'chat' && data?.type !== 'chat-call') || typeof data.roomId !== 'string' || !data.roomId) return false;
       queueChatRoomOpen(data.roomId, `${response.notification.request.identifier}:${response.actionIdentifier}`);
       return true;
     };

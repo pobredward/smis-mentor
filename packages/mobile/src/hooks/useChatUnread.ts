@@ -43,6 +43,11 @@ function subscribeStore(listener: () => void) {
 }
 const getSnapshot = () => snapshot;
 
+/** 방 하나 (통화 — 걸려 온 통화의 이름·사진) */
+export function chatStoreRoom(roomId: string) {
+  return snapshot.rooms.find((r) => r.id === roomId) ?? null;
+}
+
 /** 채팅 방 목록 · 상태 (읽기 전용) */
 export function useChatStore(): ChatStoreSnapshot {
   return useSyncExternalStore(subscribeStore, getSnapshot, getSnapshot);

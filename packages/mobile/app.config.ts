@@ -1,6 +1,6 @@
 import { ConfigContext, ExpoConfig } from '@expo/config';
 import type { ConfigPlugin } from 'expo/config-plugins';
-import { withProjectBuildGradle, withDangerousMod } from 'expo/config-plugins';
+import { withProjectBuildGradle, withDangerousMod, withAppDelegate, withAndroidManifest, AndroidConfig } from 'expo/config-plugins';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
@@ -42,6 +42,162 @@ pod 'RecaptchaInterop', :modular_headers => true
       return c;
     },
   ]);
+
+/**
+ * 채팅 통화 — 진짜 전화처럼 잠금화면에서 받기
+ *
+ * iOS: 앱이 꺼져 있어도 VoIP 푸시(PushKit)가 오면 AppDelegate 가 바로 CallKit 수신 화면을 띄운다
+ *      (iOS 13+ 는 VoIP 푸시마다 CallKit 에 알리지 않으면 앱을 죽인다 — JS 를 기다리지 않고 네이티브에서 바로 알린다).
+ *      react-native-callkeep · react-native-voip-push-notification 의 클래스 메서드를 ObjC 런타임으로 부른다
+ *      (Expo SDK 54+ 에서 브리징 헤더로 import 하면 빌드가 깨진다 — callkeep issue #869).
+ * Android: @config-plugins/react-native-callkeep 가 VoiceConnectionService 를 넣고, 여기서는 이름 · 포그라운드 서비스 권한만 맞춘다.
+ */
+const SMIS_CALL_MARK = '// smis-callkit';
+const SMIS_CALL_SWIFT = `
+
+// MARK: - 채팅 통화 잠금화면 수신 (PushKit VoIP → CallKit) ${SMIS_CALL_MARK} — app.config.ts withSmisCallKit 가 넣는다
+extension AppDelegate: PKPushRegistryDelegate {
+  func pushRegistry(_ registry: PKPushRegistry, didUpdate pushCredentials: PKPushCredentials, for type: PKPushType) {
+    SmisCallBridge.tokenUpdated(pushCredentials, type: type)
+  }
+
+  func pushRegistry(_ registry: PKPushRegistry, didInvalidatePushTokenFor type: PKPushType) {}
+
+  func pushRegistry(_ registry: PKPushRegistry, didReceiveIncomingPushWith payload: PKPushPayload, for type: PKPushType, completion: @escaping () -> Void) {
+    SmisCallBridge.incoming(payload)
+    completion()
+  }
+}
+
+/// react-native-callkeep (RNCallKeep) · react-native-voip-push-notification (RNVoipPushNotificationManager) 를 헤더 없이 부른다
+enum SmisCallBridge {
+  private static var registry: PKPushRegistry?
+  private static var fallbackProvider: CXProvider?
+
+  private struct Target {
+    let obj: AnyObject
+    let sel: Selector
+    let imp: IMP
+  }
+
+  private typealias Fn1 = @convention(c) (AnyObject, Selector, AnyObject?) -> Void
+  private typealias Fn2 = @convention(c) (AnyObject, Selector, AnyObject?, AnyObject?) -> Void
+  private typealias ReportFn = @convention(c) (AnyObject, Selector, NSString, NSString, NSString, Bool, NSString?, Bool, Bool, Bool, Bool, Bool, NSDictionary?, AnyObject?) -> Void
+
+  private static func classMethod(_ className: String, _ name: String) -> Target? {
+    guard let cls: AnyClass = NSClassFromString(className) else { return nil }
+    let sel = NSSelectorFromString(name)
+    guard let method = class_getClassMethod(cls, sel) else { return nil }
+    return Target(obj: cls as AnyObject, sel: sel, imp: method_getImplementation(method))
+  }
+
+  /// 앱 시작 — CallKit 설정 (callkeep 은 네이티브에서 한 번 설정하면 JS setup 을 무시한다) · VoIP 토큰 받기
+  static func start(_ delegate: PKPushRegistryDelegate) {
+    if let t = classMethod("RNCallKeep", "setup:") {
+      let options: NSDictionary = [
+        "appName": "SMIS Mentor",
+        "handleType": "generic",
+        "supportsVideo": true,
+        "maximumCallGroups": "1",
+        "maximumCallsPerCallGroup": "1",
+        "includesCallsInRecents": false,
+      ]
+      unsafeBitCast(t.imp, to: Fn1.self)(t.obj, t.sel, options)
+    }
+    let r = PKPushRegistry(queue: DispatchQueue.main)
+    r.delegate = delegate
+    r.desiredPushTypes = [PKPushType.voIP]
+    registry = r
+  }
+
+  /// VoIP 토큰 → JS ('register' 이벤트 — JS 가 users/{uid}.voipTokens 에 저장)
+  static func tokenUpdated(_ credentials: PKPushCredentials, type: PKPushType) {
+    guard let t = classMethod("RNVoipPushNotificationManager", "didUpdatePushCredentials:forType:") else { return }
+    unsafeBitCast(t.imp, to: Fn2.self)(t.obj, t.sel, credentials, type.rawValue as NSString)
+  }
+
+  /// VoIP 푸시 → 바로 CallKit 수신 화면 (payload: 서버 ringPeer 의 uuid · callId · callerName · handle · hasVideo …)
+  static func incoming(_ payload: PKPushPayload) {
+    let data = payload.dictionaryPayload
+    var info: [String: Any] = [:]
+    for (key, value) in data {
+      if let k = key as? String { info[k] = value }
+    }
+    var uuid = (info["uuid"] as? String) ?? ""
+    if UUID(uuidString: uuid) == nil { uuid = UUID().uuidString.lowercased() }
+    let callerName = (info["callerName"] as? String) ?? "SMIS Mentor"
+    let handle = (info["handle"] as? String) ?? callerName
+    let hasVideo = (info["hasVideo"] as? Bool) ?? ((info["media"] as? String) == "video")
+    let sel = "reportNewIncomingCall:handle:handleType:hasVideo:localizedCallerName:supportsHolding:supportsDTMF:supportsGrouping:supportsUngrouping:fromPushKit:payload:withCompletionHandler:"
+    if let t = classMethod("RNCallKeep", sel) {
+      unsafeBitCast(t.imp, to: ReportFn.self)(
+        t.obj, t.sel,
+        uuid as NSString, handle as NSString, "generic" as NSString, hasVideo, callerName as NSString,
+        false, false, false, false, true,
+        info as NSDictionary, nil
+      )
+    } else {
+      reportFallback(uuid: uuid, callerName: callerName, hasVideo: hasVideo)
+    }
+  }
+
+  /// callkeep 을 못 찾았을 때 — 그래도 CallKit 에 알려야 iOS 가 앱을 죽이지 않는다 (바로 끝냄)
+  private static func reportFallback(uuid: String, callerName: String, hasVideo: Bool) {
+    let provider: CXProvider
+    if let p = fallbackProvider {
+      provider = p
+    } else {
+      let config = CXProviderConfiguration()
+      config.supportsVideo = true
+      config.maximumCallGroups = 1
+      config.maximumCallsPerCallGroup = 1
+      provider = CXProvider(configuration: config)
+      fallbackProvider = provider
+    }
+    let update = CXCallUpdate()
+    update.remoteHandle = CXHandle(type: .generic, value: callerName)
+    update.localizedCallerName = callerName
+    update.hasVideo = hasVideo
+    let id = UUID(uuidString: uuid) ?? UUID()
+    provider.reportNewIncomingCall(with: id, update: update) { _ in
+      provider.reportCall(with: id, endedAt: Date(), reason: .failed)
+    }
+  }
+}
+`;
+
+const withSmisCallKit: ConfigPlugin = (cfg) => {
+  cfg = withAppDelegate(cfg, (c) => {
+    if (c.modResults.language !== 'swift') {
+      throw new Error('[withSmisCallKit] AppDelegate 가 Swift 가 아닙니다 — 통화 수신 코드를 넣지 못했습니다.');
+    }
+    let src = c.modResults.contents;
+    if (src.includes(SMIS_CALL_MARK)) return c;
+    const importLine = /^(?:internal |public )?import Expo\s*$/m;
+    const imports = `import PushKit ${SMIS_CALL_MARK}\nimport CallKit\nimport ObjectiveC`;
+    src = importLine.test(src) ? src.replace(importLine, (m) => `${m.trimEnd()}\n${imports}`) : `${imports}\n${src}`;
+    const ret = /^([ \t]*)return super\.application\(application, didFinishLaunchingWithOptions: launchOptions\)/m;
+    if (!ret.test(src)) {
+      throw new Error('[withSmisCallKit] AppDelegate 에서 didFinishLaunching 의 return super.application(...) 줄을 찾지 못했습니다.');
+    }
+    src = src.replace(ret, (m, indent: string) => `${indent}SmisCallBridge.start(self) ${SMIS_CALL_MARK}\n${m}`);
+    c.modResults.contents = src.trimEnd() + '\n' + SMIS_CALL_SWIFT;
+    return c;
+  });
+  // callkeep 플러그인이 넣은 서비스 — VoiceConnectionService 이름을 앱 이름으로 (시스템 통화 계정 화면에 보인다),
+  // 쓰지 않는 RNCallKeepBackgroundMessagingService(밖에서 부를 수 있는 headless JS 서비스)는 뺀다 (Android 벨은 expo-notifications 백그라운드 작업이 띄운다)
+  cfg = withAndroidManifest(cfg, (c) => {
+    const app = AndroidConfig.Manifest.getMainApplicationOrThrow(c.modResults);
+    app.service = (app.service ?? []).filter((svc) => svc.$['android:name'] !== 'io.wazo.callkeep.RNCallKeepBackgroundMessagingService');
+    for (const svc of app.service) {
+      if (svc.$['android:name'] === 'io.wazo.callkeep.VoiceConnectionService') {
+        (svc.$ as Record<string, string>)['android:label'] = 'SMIS Mentor';
+      }
+    }
+    return c;
+  });
+  return cfg;
+};
 
 // .env 파일 로드
 dotenv.config();
@@ -145,6 +301,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         NSLocationAlwaysUsageDescription: '캠프 위치 공유를 위해 항상 위치 접근 권한이 필요합니다.',
         NSContactsUsageDescription: '학생 부모님 연락처를 기기 연락처 앱에 저장하기 위해 연락처 접근 권한이 필요합니다.',
         ITSAppUsesNonExemptEncryption: false,
+        // 채팅 통화 — 화면이 꺼지거나 다른 앱으로 가도 통화가 이어지게(audio), 잠금화면 수신(voip — PushKit · CallKit)
+        UIBackgroundModes: ['audio', 'voip', 'remote-notification'],
         CFBundleURLTypes: [
           {
             CFBundleURLSchemes: ['com.googleusercontent.apps.382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me'],
@@ -203,6 +361,15 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         'POST_NOTIFICATIONS',
         'READ_CONTACTS',
         'WRITE_CONTACTS',
+        // 채팅 통화 (Agora) — 마이크 · 카메라 · 스피커/블루투스 전환
+        'RECORD_AUDIO',
+        'CAMERA',
+        'MODIFY_AUDIO_SETTINGS',
+        'BLUETOOTH_CONNECT',
+        'ACCESS_NETWORK_STATE',
+        // 잠금화면 수신(ConnectionService) — 받은 통화가 백그라운드에서도 이어지게 (Android 14+ 포그라운드 서비스 phoneCall)
+        'FOREGROUND_SERVICE_PHONE_CALL',
+        'MANAGE_OWN_CALLS',
       ],
       googleServicesFile: './google-services.json',
     },
@@ -221,9 +388,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         'expo-image-picker',
         {
           photosPermission: '이 앱은 프로필 사진과 분실물 사진·영상을 업로드하기 위해 사진 라이브러리에 접근합니다.',
-          cameraPermission: '이 앱은 프로필 사진과 분실물 사진·영상을 촬영하기 위해 카메라에 접근합니다.',
+          cameraPermission: '이 앱은 채팅 영상 통화와 프로필 사진·분실물 사진·영상 촬영을 위해 카메라에 접근합니다.',
           // expo-audio 와 같은 문구 (NSMicrophoneUsageDescription 은 하나라서 둘 다 같게)
-          microphonePermission: '이 앱은 채팅방 음성 메시지를 녹음하고 분실물 영상을 촬영할 때 소리를 녹음하기 위해 마이크를 사용합니다.',
+          microphonePermission: '이 앱은 채팅 통화, 채팅방 음성 메시지 녹음, 분실물 영상 촬영 때 소리를 녹음하기 위해 마이크를 사용합니다.',
         },
       ],
       [
@@ -254,7 +421,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         // 채팅 음성 메시지 — 녹음(RECORD_AUDIO · NSMicrophoneUsageDescription)만. 백그라운드 재생·녹음은 쓰지 않는다
         'expo-audio',
         {
-          microphonePermission: '이 앱은 채팅방 음성 메시지를 녹음하고 분실물 영상을 촬영할 때 소리를 녹음하기 위해 마이크를 사용합니다.',
+          microphonePermission: '이 앱은 채팅 통화, 채팅방 음성 메시지 녹음, 분실물 영상 촬영 때 소리를 녹음하기 위해 마이크를 사용합니다.',
           recordAudioAndroid: true,
           enableBackgroundPlayback: false,
           enableBackgroundRecording: false,
@@ -262,6 +429,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ],
       'expo-web-browser',
       'expo-apple-authentication',
+      // 채팅 통화 잠금화면 수신 — iOS CallKit(voip 백그라운드 · CallKit.framework) · Android ConnectionService(VoiceConnectionService · 전화 권한)
+      '@config-plugins/react-native-callkeep',
       '@react-native-community/datetimepicker',
       [
         '@sentry/react-native',
@@ -335,5 +504,5 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   };
 
   // ConfigPlugin을 직접 적용하여 타입 오류 해결
-  return withNaverLoginProguard(withReactNativePickerMonorepo(withIosModularHeaders(baseConfig)));
+  return withSmisCallKit(withNaverLoginProguard(withReactNativePickerMonorepo(withIosModularHeaders(baseConfig))));
 };

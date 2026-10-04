@@ -72,6 +72,7 @@ import {
   cancelScheduledChatMessage,
   extractMentions,
   type ChatMessage,
+  type ChatCallMedia,
   type ChatMessageView,
   type ChatPoll,
   type ChatReactionKey,
@@ -96,6 +97,8 @@ import { MessageRow, type ChatRow, type MessageRowActions } from '../components/
 import { ChatComposer } from '../components/chat/ChatComposer';
 import { EditBar, MentionPicker, ReplyBar, ScheduledBar, SilentBar } from '../components/chat/ComposerBars';
 import { ChatSheet, ChatSheetOption } from '../components/chat/ChatSheet';
+import { CallBanner, CallStartOptions } from '../components/chat/call/CallViews';
+import { alertCallError, isCallActive, setCallRoomMembers, useChatCall } from '../services/chatCalls';
 import { MembersSheet } from '../components/chat/MembersSheet';
 import { ReportSheet } from '../components/chat/ReportSheet';
 import { MediaViewer } from '../components/chat/MediaViewer';
@@ -386,6 +389,41 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
 
   // ── 머리글 · 방 메뉴 ──────────────────────────────────────────────
   const [roomMenuOpen, setRoomMenuOpen] = useState(false);
+
+  // ── 통화 ──────────────────────────────────────────────────────────
+  const callCtx = useChatCall();
+  const callAdapter = callCtx.adapter;
+  const callState = callCtx.state;
+  const [callSheetOpen, setCallSheetOpen] = useState(false);
+  useEffect(() => {
+    if (room) setCallRoomMembers(roomId, room.memberInfo);
+  }, [roomId, room]);
+  const callDirect = room?.type === 'dm';
+  const callPeer = useMemo(() => {
+    if (!room || room.type !== 'dm') return undefined;
+    const peerUid = (room.memberIds ?? []).find((u) => u !== uid);
+    const info = peerUid ? room.memberInfo?.[peerUid] : undefined;
+    return peerUid ? { uid: peerUid, name: info?.name ?? L('chat.unknownUser'), photo: info?.photo } : undefined;
+  }, [room, uid]);
+  const startCall = useCallback((media: ChatCallMedia) => {
+    setCallSheetOpen(false);
+    if (!callAdapter) return;
+    if (isCallActive(callAdapter.getState())) {
+      Alert.alert(L('chat.callAlreadyInCall'));
+      return;
+    }
+    callAdapter.start({ roomId, media, direct: callDirect, peer: callPeer }).catch(alertCallError);
+  }, [callAdapter, roomId, callDirect, callPeer]);
+  const activeCall = room?.activeCall?.callId ? room.activeCall : null;
+  const inThisCall = !!activeCall && callState.callId === activeCall.callId && isCallActive(callState);
+  const joinCall = useCallback((media: ChatCallMedia) => {
+    if (!callAdapter || !activeCall) return;
+    if (isCallActive(callAdapter.getState())) {
+      Alert.alert(L('chat.callAlreadyInCall'));
+      return;
+    }
+    callAdapter.join({ roomId, callId: activeCall.callId, media }).catch(alertCallError);
+  }, [callAdapter, activeCall, roomId]);
   const [membersOpen, setMembersOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -825,6 +863,19 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
       </View>
       {isMember ? (
         <>
+          {callCtx.enabled && callAdapter ? (
+            <TouchableOpacity
+              onPress={() => {
+                Keyboard.dismiss();
+                setCallSheetOpen(true);
+              }}
+              style={styles.headerBtn}
+              hitSlop={6}
+              accessibilityLabel={L('chat.callStartTitle')}
+            >
+              <Ionicons name="call-outline" size={21} color={CHAT_COLORS.text} />
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity onPress={search.openSearch} style={styles.headerBtn} hitSlop={6} accessibilityLabel={L('chat.search')}>
             <Ionicons name="search" size={21} color={search.open ? CHAT_COLORS.primary : CHAT_COLORS.text} />
           </TouchableOpacity>
@@ -889,6 +940,16 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
       {header}
       {search.open ? (
         <ChatSearchInput value={search.text} onChangeText={search.setText} onSubmit={search.submit} onClose={closeSearch} />
+      ) : null}
+      {activeCall && callCtx.enabled && callAdapter && !search.open ? (
+        <CallBanner
+          info={activeCall}
+          direct={callDirect}
+          lang={lang}
+          inThisCall={inThisCall}
+          onJoin={joinCall}
+          onReturn={() => callAdapter.setMinimized(false)}
+        />
       ) : null}
       {notice && !search.open ? (
         <NoticeBanner
@@ -1062,6 +1123,11 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
           />
         ) : null}
         <ChatSheetOption label={L('common.cancel')} onPress={closeActions} />
+      </ChatSheet>
+
+      {/* 통화하기 (📞) — 음성 · 영상 */}
+      <ChatSheet visible={callSheetOpen} onClose={() => setCallSheetOpen(false)} title={L('chat.callStartTitle')}>
+        <CallStartOptions direct={callDirect} lang={lang} mock={!!callState.mock || !!callAdapter?.simulateIncoming} busy={isCallActive(callState)} onStart={startCall} />
       </ChatSheet>
 
       {/* 방 메뉴 (⋮) */}

@@ -1,11 +1,12 @@
 /**
- * 통화 화면 도우미 (Agora 예정 — 지금은 화면만) · 미리보기용 가짜 연결
+ * 통화 화면 도우미 · 통화 기록 글 · Agora uid · 미리보기용 가짜 연결
  *
- * 화면(web·mobile)은 ChatCallAdapter 만 쓴다. 실제 통화를 붙일 때 Agora 로 같은 모양을 구현해 바꿔 끼우면 된다.
- * 단체방은 '통화 시작 → 다른 사람이 참여' (벨 없음), 1:1 은 상대에게 벨이 울린다.
+ * 화면(web·mobile)은 ChatCallAdapter 만 쓴다. 실제 통화는 createCallController(chatCallController.ts) + Agora 엔진,
+ * 미리보기는 createMockCallAdapter. 단체방은 '통화 시작 → 다른 사람이 참여' (벨 없음), 1:1 은 상대에게 벨이 울린다.
  */
 import type {
   ChatCallAdapter,
+  ChatCallLog,
   ChatCallMedia,
   ChatCallParticipant,
   ChatCallState,
@@ -22,7 +23,63 @@ export const CHAT_CALL_LIMITS = {
   participantsMax: 100,
   /** 1:1 벨이 울리는 시간 (ms) — 지나면 부재중 */
   ringMs: 40_000,
+  /** 통화 중 '살아 있음' 알리기 (ms) */
+  heartbeatMs: 30_000,
+  /** 이만큼 소식이 없으면 서버가 통화에서 뺀다 (ms) */
+  staleMs: 100_000,
+  /** Agora 토큰 유효 시간 (초) — 끝나기 전에 엔진이 알려 주면 새로 받는다 */
+  tokenTtlSec: 2 * 60 * 60,
+  /** '통화가 끝났어요' 를 보여 주는 시간 (ms) */
+  endedShowMs: 1_800,
+  /** 말하는 중으로 보는 소리 크기 (0~100) */
+  speakingLevel: 12,
 } as const;
+
+/**
+ * Firebase uid → Agora uid (1 ~ 2^31-1, 같은 uid 는 늘 같은 숫자 — FNV-1a 32bit).
+ * 한 통화 안에서 겹치면 서버가 다른 숫자를 준다 (chatCalls.agoraUids 가 기준).
+ */
+export function agoraUidFor(uid: string, salt = 0): number {
+  let h = 0x811c9dc5 ^ salt;
+  for (let i = 0; i < uid.length; i += 1) {
+    h ^= uid.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  const n = (h >>> 0) & 0x7fffffff;
+  return n === 0 ? 1 : n;
+}
+
+/**
+ * 통화 기록 한 줄 — 채팅 안 · 방 목록 미리보기 공통.
+ * mine: 내가 건 통화인가 (보낸 사람 = 건 사람) — 1:1 응답 없음/취소/거절은 건 사람과 받는 사람이 다르게 본다.
+ */
+export function callLogText(
+  call: Pick<ChatCallLog, 'status' | 'media' | 'durationMs'>,
+  opts: { direct: boolean; mine: boolean; startedByName?: string; lang: Locale },
+): string {
+  const { lang } = opts;
+  const media = callMediaLabel(call.media, opts.direct, lang);
+  switch (call.status) {
+    case 'started':
+      return t(lang, 'chat.callStartedBy', { name: opts.startedByName ?? '', media });
+    case 'ended':
+      return t(lang, 'chat.callLogEnded', { media, t: formatCallDuration(call.durationMs) });
+    case 'missed':
+      return opts.mine ? t(lang, 'chat.callNoAnswer') : t(lang, 'chat.callMissed');
+    case 'canceled':
+      return opts.mine ? t(lang, 'chat.callCanceled') : t(lang, 'chat.callMissed');
+    case 'declined':
+      return opts.mine ? t(lang, 'chat.callDeclinedByPeer') : t(lang, 'chat.callDeclined');
+    case 'busy':
+      return opts.mine ? t(lang, 'chat.callBusy') : t(lang, 'chat.callMissed');
+    default:
+      return media;
+  }
+}
+
+/** 빨간색으로 보일 기록 (놓친 통화 · 거절) */
+export const isMissedCallLog = (call: Pick<ChatCallLog, 'status'>): boolean =>
+  call.status === 'missed' || call.status === 'canceled' || call.status === 'declined' || call.status === 'busy';
 
 /** 1:00:03 · 03:12 */
 export function formatCallDuration(ms: number | null | undefined): string {

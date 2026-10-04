@@ -37,7 +37,7 @@ function ChatRoomRowImpl({ room, myUid, lang, unread, muted, lastFromBlocked, pi
   const at = room.lastMessageAt?.toDate?.() ?? null;
   const preview = lastFromBlocked && room.lastMessage && !room.lastMessage.deleted
     ? L('chat.blockedMessage')
-    : chatPreviewText(room.lastMessage, lang);
+    : chatPreviewText(room.lastMessage, lang, { myUid, direct: room.type === 'dm' });
   return (
     <TouchableOpacity
       style={styles.row}

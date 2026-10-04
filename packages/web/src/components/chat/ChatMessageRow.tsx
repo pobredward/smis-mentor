@@ -12,8 +12,8 @@ import { memo, type ReactNode } from 'react';
 import { FiAlertCircle, FiBellOff, FiClock, FiCornerUpLeft, FiMoreHorizontal, FiPhone, FiPhoneMissed, FiRefreshCw, FiTrash2, FiVideo } from 'react-icons/fi';
 import {
   L,
-  callMediaLabel,
-  formatCallDuration,
+  callLogText,
+  isMissedCallLog,
   chatReplyPreview,
   chatTimeLabel,
   type ChatMemberInfo,
@@ -171,15 +171,8 @@ export const ChatMessageRow = memo(function ChatMessageRow({ m, lay, firstInRun,
 
   if (m.kind === 'system' && m.systemType === 'call' && m.call) {
     const c = m.call;
-    const media = callMediaLabel(c.media, !!callDirect, lang);
-    const missed = c.status === 'missed' || c.status === 'declined';
-    const text = c.status === 'started'
-      ? L('chat.callStartedBy', { name: memberInfo[m.senderId]?.name ?? m.senderName, media })
-      : c.status === 'ended'
-        ? L('chat.callLogEnded', { media, t: formatCallDuration(c.durationMs) })
-        : c.status === 'missed'
-          ? L('chat.callMissed')
-          : L('chat.callDeclined');
+    const missed = isMissedCallLog(c) && m.senderId !== myUid;
+    const text = callLogText(c, { direct: !!callDirect, mine: m.senderId === myUid, startedByName: memberInfo[m.senderId]?.name ?? m.senderName, lang });
     return (
       <div data-mid={m.id} className="flex justify-center px-6 my-2">
         <span className={`inline-flex max-w-full items-center gap-1.5 rounded-full px-3 py-1 text-xs ${missed ? 'bg-red-50 text-red-600' : 'bg-black/10 text-gray-700'}`}>

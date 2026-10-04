@@ -190,6 +190,9 @@ export interface ChatLastMessage {
   imageCount?: number;
   videoCount?: number;
   deleted?: boolean;
+  /** 알림 메시지 종류 ('notice' · 'call') · 통화 기록 */
+  systemType?: string;
+  call?: ChatCallLog;
 }
 
 export interface ChatRoom {
@@ -237,7 +240,7 @@ export interface ChatUserState {
 
 export type ChatReportReason = 'spam' | 'abuse' | 'sexual' | 'privacy' | 'other';
 
-// ── 통화 (Agora 예정 — 지금은 화면만) ───────────────────────────────
+// ── 통화 (Agora) ─────────────────────────────────────────────────────
 
 /** 음성 · 영상 */
 export type ChatCallMedia = 'voice' | 'video';
@@ -253,13 +256,65 @@ export interface ChatCallInfo {
   participantIds: string[];
 }
 
-/** 채팅에 남는 통화 기록 */
+/**
+ * 채팅에 남는 통화 기록 (system 메시지 systemType 'call', 보낸 사람 = 건 사람)
+ *  started 단체 통화 시작 · ended 끝남(길이) · missed 1:1 응답 없음 · canceled 1:1 건 사람이 받기 전에 끊음
+ *  declined 1:1 거절 · busy 1:1 상대가 다른 통화 중
+ */
 export interface ChatCallLog {
   callId: string;
   media: ChatCallMedia;
-  status: 'started' | 'ended' | 'missed' | 'declined';
+  status: 'started' | 'ended' | 'missed' | 'canceled' | 'declined' | 'busy';
   /** 끝난 통화의 길이 (ms) */
   durationMs?: number;
+}
+
+/** 통화 문서 상태 — ringing 1:1 벨 울리는 중 · active 통화 중 · ended 끝남 */
+export type ChatCallStatus = 'ringing' | 'active' | 'ended';
+export type ChatCallEndReason = 'ended' | 'missed' | 'canceled' | 'declined' | 'busy' | 'failed';
+
+/**
+ * chatCalls/{callId} — 통화 하나 (서버 /api/chat/call 만 쓴다. 방 사람 · 벨 받는 사람이 읽는다).
+ * Agora 채널 이름 = callId. 시각은 모두 ms.
+ */
+export interface ChatCallDoc {
+  id: string;
+  /** OS 통화 화면(CallKit · ConnectionService)용 UUID — VoIP 푸시에도 같은 값 */
+  uuid: string;
+  roomId: string;
+  direct: boolean;
+  media: ChatCallMedia;
+  status: ChatCallStatus;
+  startedBy: string;
+  startedByName: string;
+  /** 1:1 벨을 받는 사람 */
+  invitedIds: string[];
+  /** 지금 통화 안에 있는 사람 */
+  participantIds: string[];
+  /** 한 번이라도 들어왔던 사람 */
+  joinedIds: string[];
+  /** Firebase uid → Agora uid (숫자) — 상대 영상·이름을 맞춘다 */
+  agoraUids: Record<string, number>;
+  /** 사람마다 마지막으로 살아 있다고 알린 시각 — 오래되면 서버가 뺀다 */
+  lastSeen?: Record<string, number>;
+  createdAt: number;
+  /** 연결된 시각 (1:1 은 받은 때, 단체는 시작한 때) */
+  connectedAt?: number;
+  endedAt?: number;
+  endedReason?: ChatCallEndReason;
+  durationMs?: number;
+}
+
+/** /api/chat/call start · join 의 답 — 이걸로 Agora 채널에 들어간다 */
+export interface ChatCallJoin {
+  call: ChatCallDoc;
+  appId: string;
+  channel: string;
+  token: string;
+  /** 내 Agora uid */
+  uid: number;
+  /** 토큰 만료 (ms) */
+  expiresAt: number;
 }
 
 export interface ChatCallParticipant {
@@ -271,6 +326,8 @@ export interface ChatCallParticipant {
   /** 지금 말하는 중 (소리 크기로 판단) */
   speaking?: boolean;
   isMe?: boolean;
+  /** Agora uid (영상을 그릴 때 — 나는 0) */
+  agoraUid?: number;
   /** ms */
   joinedAt: number;
   connection?: 'good' | 'poor' | 'reconnecting';
@@ -299,7 +356,8 @@ export interface ChatCallState {
   startedAt?: number;
   /** 1:1 받는 중 · 거는 중일 때 상대 */
   peer?: { uid: string; name: string; photo?: string };
-  endedReason?: 'left' | 'ended' | 'declined' | 'missed' | 'failed';
+  /** declined 내가 거절 · rejected 상대가 거절 · busy 상대가 다른 통화 중 · missed 받지 못함 · failed 연결 실패 · elsewhere 내 다른 기기에서 받음 (화면 없이 idle) */
+  endedReason?: 'left' | 'ended' | 'declined' | 'rejected' | 'missed' | 'busy' | 'failed' | 'elsewhere';
   /** 작게 보기 (채팅을 보면서 통화) */
   minimized: boolean;
   /** 미리보기용 가짜 연결인가 */
@@ -307,7 +365,7 @@ export interface ChatCallState {
 }
 
 /**
- * 통화 연결 — 화면은 이 모양만 쓴다. 지금은 createMockCallAdapter(가짜), 나중에 Agora 로 같은 모양을 구현해 바꿔 끼운다.
+ * 통화 연결 — 화면은 이 모양만 쓴다. 실제 통화는 createCallController(Agora 엔진), 미리보기는 createMockCallAdapter(가짜).
  */
 export interface ChatCallAdapter {
   getState(): ChatCallState;

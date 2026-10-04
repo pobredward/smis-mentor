@@ -955,6 +955,18 @@ service cloud.firestore {
     }
 
     // 예약 메시지 — 보낸 사람만 보고 지운다. 그 시각에 Functions(chatSendScheduled)가 방에 보낸다 (글만)
+    // 통화 (chatCalls/{callId}) — 서버(/api/chat/call, Admin SDK)만 쓴다.
+    // 읽기: 그 방 사람 · 벨을 받는 사람 · 통화 안에 있는 사람. 목록은 '나에게 걸려 오는 통화'(invitedIds array-contains 나)만.
+    match /chatCalls/{callId} {
+      allow get: if isAuthenticated() && (
+        request.auth.uid in resource.data.invitedIds ||
+        request.auth.uid in resource.data.participantIds ||
+        isChatMember(resource.data.roomId)
+      );
+      allow list: if isAuthenticated() && request.auth.uid in resource.data.invitedIds;
+      allow write: if false;
+    }
+
     match /chatScheduled/{scheduledId} {
       allow read, delete: if isAuthenticated() && resource.data.senderId == request.auth.uid;
       allow create: if (

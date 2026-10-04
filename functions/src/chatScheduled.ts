@@ -1,5 +1,8 @@
 /**
- * 채팅 예약 메시지 보내기 — 1분마다 (서울 리전)
+ * 채팅 예약 메시지 보내기 · 멈춘 통화 정리 — 1분마다 (서울 리전)
+ *
+ * 통화(chatCalls): 앱이 갑자기 꺼져 '나가기'를 못 보낸 사람을 빼고(소식 없는 지 STALE_MS), 아무도 없으면 끝낸다.
+ * 벨이 너무 오래 울린 1:1 은 응답 없음으로. 규칙은 web lib/chatCallServer.ts staleCheck 와 같게.
  *
  * chatScheduled/{id} 중 보낼 시각이 된 것을 그 방에 메시지로 쓰고 예약을 지운다.
  * 보내는 사람이 그 방에서 빠졌으면 보내지 않고 지운다. 같은 예약을 두 번 보내지 않게 트랜잭션으로 지우며 쓴다.
@@ -57,5 +60,81 @@ export const chatSendScheduled = onSchedule(
         console.error('예약 메시지 보내기 실패', d.id, e);
       }
     }
+    await sweepCalls(db).catch((e) => console.error('통화 정리 실패', e));
   },
 );
+
+// ── 멈춘 통화 정리 (shared CHAT_CALL_LIMITS 와 같은 값) ─────────────────
+const RING_MS = 40_000;
+const STALE_MS = 100_000;
+
+interface CallDoc {
+  roomId: string;
+  direct: boolean;
+  media: string;
+  status: 'ringing' | 'active' | 'ended';
+  startedBy: string;
+  startedByName: string;
+  participantIds: string[];
+  lastSeen?: Record<string, number>;
+  createdAt: number;
+  connectedAt?: number;
+}
+
+function staleCheck(c: CallDoc, now: number): { participantIds: string[]; end: string | null } {
+  const seen = c.lastSeen ?? {};
+  const participantIds = (c.participantIds ?? []).filter((u) => now - Number(seen[u] ?? c.createdAt) < STALE_MS);
+  if (c.status === 'ringing' && now - c.createdAt > RING_MS + 15_000) return { participantIds, end: 'missed' };
+  if (c.status === 'ringing' && !participantIds.includes(c.startedBy)) return { participantIds, end: 'canceled' };
+  if (c.status === 'active' && (participantIds.length === 0 || (c.direct && participantIds.length < 2 && now - (c.connectedAt ?? now) > 15_000))) {
+    return { participantIds, end: 'ended' };
+  }
+  return { participantIds, end: null };
+}
+
+async function sweepCalls(db: admin.firestore.Firestore): Promise<void> {
+  const snap = await db.collection('chatCalls').where('status', 'in', ['ringing', 'active']).limit(200).get();
+  const now = Date.now();
+  for (const d of snap.docs) {
+    try {
+      const ended = await db.runTransaction(async (tx) => {
+        const cur = await tx.get(d.ref);
+        const c = cur.data() as CallDoc | undefined;
+        if (!c || c.status === 'ended') return null;
+        const roomRef = db.collection('chatRooms').doc(c.roomId);
+        const room = await tx.get(roomRef);
+        const isActive = room.data()?.activeCall?.callId === d.id;
+        const st = staleCheck(c, now);
+        if (st.end) {
+          const durationMs = c.status === 'active' && c.connectedAt ? Math.max(0, now - c.connectedAt) : 0;
+          tx.update(d.ref, { status: 'ended', endedAt: now, endedReason: st.end, durationMs, participantIds: [] });
+          if (isActive) tx.update(roomRef, { activeCall: null });
+          return { c, reason: st.end, durationMs };
+        }
+        if (st.participantIds.length !== (c.participantIds ?? []).length) {
+          tx.update(d.ref, { participantIds: st.participantIds });
+          if (isActive) tx.update(roomRef, { 'activeCall.participantIds': st.participantIds });
+        }
+        return null;
+      });
+      if (!ended) continue;
+      const { c, reason, durationMs } = ended;
+      const status = !c.direct ? 'ended' : reason === 'ended' ? (durationMs ? 'ended' : 'canceled') : reason;
+      const call: Record<string, unknown> = { callId: d.id, media: c.media, status };
+      if (status === 'ended' && durationMs) call.durationMs = durationMs;
+      await db.collection('chatRooms').doc(c.roomId).collection('messages').doc(`call_${d.id}_${status}`).set({
+        senderId: c.startedBy,
+        senderName: c.startedByName,
+        kind: 'system',
+        systemType: 'call',
+        call,
+        text: '',
+        media: [],
+        clientId: `call-${d.id}-${status}`,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      console.error('통화 정리 실패', d.id, e);
+    }
+  }
+}

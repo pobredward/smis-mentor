@@ -131,6 +131,11 @@ function subscribe(l: () => void) {
 const getSnapshot = () => snapshot;
 const getServerSnapshot = () => EMPTY;
 
+/** 받은 편지함에 있는 방 하나 (통화 — 걸려 온 통화의 이름·사진) */
+export function chatInboxRoom(roomId: string) {
+  return snapshot.rooms.find((r) => r.id === roomId) ?? null;
+}
+
 /** 지금 보고 있는 방 (그 방 푸시는 작은 알림을 띄우지 않는다) */
 export function setViewingChatRoom(roomId: string | null) {
   viewingRoomId = roomId;

@@ -37,6 +37,8 @@
     "@tiptap/react": "^2.11.5",
     "@tiptap/starter-kit": "^2.11.5",
     "@types/leaflet": "^1.9.21",
+    "agora-rtc-sdk-ng": "^4.24.8",
+    "agora-token": "^2.0.6",
     "date-fns": "^4.1.0",
     "firebase": "^11.5.0",
     "firebase-admin": "^13.7.0",

@@ -47,6 +47,8 @@ interface MessageDoc {
   silent?: boolean;
   poll?: { question?: string } | null;
   systemType?: string;
+  /** 통화 기록 (systemType 'call') — 보낸 사람 = 건 사람 */
+  call?: { callId?: string; media?: string; status?: string; durationMs?: number } | null;
   editedAt?: admin.firestore.Timestamp | null;
 }
 interface RoomDoc {
@@ -83,6 +85,28 @@ const langOf = (u: UserDoc): Lang =>
 function counts(media?: MediaItem[]) {
   const list = media ?? [];
   return { images: list.filter((m) => m.kind !== 'video').length, videos: list.filter((m) => m.kind === 'video').length };
+}
+
+/** shared formatCallDuration 과 같게 */
+function callDuration(ms?: number): string {
+  const sec = Math.max(0, Math.floor(Number(ms ?? 0) / 1000));
+  const h = Math.floor(sec / 3600);
+  const mm = Math.floor((sec % 3600) / 60);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return h ? `${h}:${p(mm)}:${p(sec % 60)}` : `${p(mm)}:${p(sec % 60)}`;
+}
+
+/** 통화 기록 한 줄 (받는 사람 쪽 — 푸시) · shared callLogText 와 같은 말 */
+function callPreview(m: MessageDoc, lang: Lang, direct: boolean): string {
+  const c = m.call ?? {};
+  const en = lang === 'en';
+  const media = direct
+    ? (c.media === 'video' ? (en ? 'Video call' : '영상 통화') : (en ? 'Voice call' : '음성 통화'))
+    : (c.media === 'video' ? (en ? 'Group video call' : '그룹 영상 통화') : (en ? 'Group voice call' : '그룹 음성 통화'));
+  if (c.status === 'started') return en ? `${m.senderName ?? ''} started a ${media.toLowerCase()}` : `${m.senderName ?? ''} 님이 ${media}를 시작했어요`;
+  if (c.status === 'ended') return `${media} · ${callDuration(c.durationMs)}`;
+  if (c.status === 'declined') return en ? 'Call declined' : '통화를 거절했어요';
+  return en ? `Missed ${media.toLowerCase()}` : `부재중 ${media}`;
 }
 
 function preview(m: MessageDoc, lang: Lang): string {
@@ -175,6 +199,11 @@ export const chatOnMessageCreated = onDocumentCreated(
     };
     if (c.images) last.imageCount = c.images;
     if (c.videos) last.videoCount = c.videos;
+    if (m.kind === 'system' && m.systemType) last.systemType = m.systemType;
+    if (m.kind === 'system' && m.systemType === 'call' && m.call) last.call = m.call;
+    // 통화 기록 — 끝남 · 거절은 함께 있던 사람의 기록이라 안 읽은 수 · 푸시 없이 (부재중 · 단체 통화 시작만 알린다)
+    const isCall = m.kind === 'system' && m.systemType === 'call';
+    const quietCall = isCall && (m.call?.status === 'ended' || m.call?.status === 'declined');
 
     // 1) 방 — 늦게 도착한 트리거가 더 최근 메시지를 덮지 않게
     //    메시지도 트랜잭션 안에서 다시 읽는다: 이 트리거가 늦게 돌아(콜드 스타트 등) 그사이 '모두에게서 삭제'되었고
@@ -205,7 +234,7 @@ export const chatOnMessageCreated = onDocumentCreated(
 
     const senderId = String(m.senderId ?? '');
     const recipients = [...new Set(room.memberIds ?? [])].filter((uid) => uid && uid !== senderId);
-    if (!recipients.length) return;
+    if (!recipients.length || quietCall) return;
     const [users, states] = await Promise.all([loadUsers(recipients), loadStates(recipients)]);
 
     // 2) 안 읽은 수
@@ -236,14 +265,16 @@ export const chatOnMessageCreated = onDocumentCreated(
       const isNotice = m.kind === 'system' && m.systemType === 'notice';
       if (ns.generalNotifications === false || ns.chat === false || (s.muted?.[roomId] && !mentioned && !isNotice)) continue;
       const lang = langOf(u);
-      const body0 = preview(m, lang);
       const isDm = room.type === 'dm';
+      const body0 = isCall ? callPreview(m, lang, isDm) : preview(m, lang);
       const rt = isDm ? String(m.senderName ?? '') : roomTitle(room, lang);
       const sender = String(m.senderName ?? '');
       let title = rt;
       let body = isDm ? body0 : `${sender}: ${body0}`;
       if (isNotice) {
         title = `${lang === 'en' ? '[Notice]' : '[공지]'} ${roomTitle(room, lang) || sender}`;
+        body = body0;
+      } else if (isCall) {
         body = body0;
       } else if (mentioned) {
         title = m.mentionAll

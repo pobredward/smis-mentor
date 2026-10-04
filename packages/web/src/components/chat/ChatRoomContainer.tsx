@@ -60,7 +60,7 @@ import { saveTextFile } from '@/lib/chatMedia';
 import { enableWebPush, webPushPermission } from '@/lib/webPush';
 import { setViewingChatRoom } from '@/hooks/useChatUnread';
 import ChatRoomView, { type ChatComposeState, type ChatPushStatus, type ChatRoomCallProps, type ChatRoomSearch } from './ChatRoomView';
-import { isCallActive, setCallRoomMembers, useChatCall } from './chatCalls';
+import { isCallActive, setCallRoomMembers, toastCallError, useChatCall } from './chatCalls';
 import type { ChatGalleryPage } from './ChatGallery';
 import { discardChatOutgoing, queueChatMedia, queueChatVoice, retryChatOutgoing, sendChatText, settleChatOutbox, useChatOutbox } from './chatOutbox';
 import type { ChatSendExtra } from './chatTypes';
@@ -491,7 +491,7 @@ export default function ChatRoomContainer({ roomId, myUid, myName, state, curren
     return { messages: r.messages, hasMore: r.hasMore, cursor: r.oldest };
   }, [roomId]);
 
-  // ── 통화 (개발·미리보기에서만) ───────────────────────────
+  // ── 통화 (Agora — 앱 ID 가 없으면 개발·미리보기의 가짜 연결) ───────────
   const callCtx = useChatCall();
   useEffect(() => {
     if (room) setCallRoomMembers(roomId, room.memberInfo);
@@ -512,14 +512,14 @@ export default function ChatRoomContainer({ roomId, myUid, myName, state, curren
           toast(L('chat.callAlreadyInCall'));
           return;
         }
-        void callAdapter.start({ roomId, media, direct, peer: direct ? peer : undefined });
+        callAdapter.start({ roomId, media, direct, peer: direct ? peer : undefined }).catch(toastCallError);
       },
       onJoin: (callId: string, media: ChatCallMedia) => {
         if (isCallActive(callAdapter.getState())) {
           toast(L('chat.callAlreadyInCall'));
           return;
         }
-        void callAdapter.join({ roomId, callId, media });
+        callAdapter.join({ roomId, callId, media }).catch(toastCallError);
       },
       onReturn: () => callAdapter.setMinimized(false),
       onSimulateIncoming: callAdapter.simulateIncoming && peer

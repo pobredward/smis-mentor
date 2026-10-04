@@ -442,6 +442,13 @@ export const signOut = async () => {
       } catch (tokenError) {
         logger.warn('⚠️ 로그아웃 전 푸시 토큰 제거 실패 (계속 진행):', tokenError);
       }
+      // 통화 벨(iOS VoIP) 토큰 — 다음 사람이 이 폰으로 로그인해도 내 통화가 울리지 않게
+      try {
+        const { removeMyVoipToken } = await import('./nativeCallsImpl');
+        await removeMyVoipToken(uid);
+      } catch (voipError) {
+        logger.warn('⚠️ 로그아웃 전 VoIP 토큰 제거 실패 (계속 진행):', voipError);
+      }
     }
     await firebaseSignOut(auth);
     await clearLoginRememberEmail();

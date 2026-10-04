@@ -191,6 +191,20 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "chatCalls",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "invitedIds",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
