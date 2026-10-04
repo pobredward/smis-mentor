@@ -137,6 +137,31 @@ export async function linkSocialWithPassword(apiBaseUrl: string, linkTicket: str
   return json.result;
 }
 
+/**
+ * 설정 화면 — 로그인한 사람에게 소셜 연결 (idToken = 원래 사람의 ID 토큰, proof = 연결할 소셜 증명)
+ * 구글 · 애플 팝업이 세션을 임시 계정으로 바꿨으면 customToken 으로 원래 사람에게 돌아간다.
+ */
+export async function linkSocialAccount(apiBaseUrl: string, idToken: string, proof: SocialProof): Promise<{ provider: string; customToken?: string }> {
+  const res = await fetch(`${apiBaseUrl}/api/auth/social/link`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify({ proof }),
+  });
+  if (!res.ok) throw await readError(res, '계정 연결 중 오류가 발생했습니다.');
+  const json = (await res.json()) as { result: { provider: string; customToken?: string } };
+  return json.result;
+}
+
+/** 설정 화면 — 소셜 연결 해제 (마지막 로그인 방법은 서버가 막는다) */
+export async function unlinkSocialAccount(apiBaseUrl: string, idToken: string, provider: string): Promise<void> {
+  const res = await fetch(`${apiBaseUrl}/api/auth/social/unlink`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify({ provider }),
+  });
+  if (!res.ok) throw await readError(res, '연결 해제 중 오류가 발생했습니다.');
+}
+
 /** 'google' · 'google.com' · 'naver' … → 화면에 보이는 이름 */
 export function socialProviderLabel(p: string): string {
   const n = String(p || '').replace('.com', '').toLowerCase();

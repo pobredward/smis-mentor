@@ -10,7 +10,7 @@ import { logger } from '@smis-mentor/shared';
  * POST /api/auth/social/link — 로그인한 사람의 계정에 소셜 연결 (설정 화면)
  * header: Authorization: Bearer <지금 계정의 ID 토큰>
  * body: { proof } — 구글·애플은 연결할 계정의 팝업 세션 ID 토큰(kind:'firebase'), 네이버·카카오는 액세스 토큰
- * 구글·애플 팝업으로 생긴 임시 Auth 계정은 users 문서가 없으면 지운다.
+ * 구글·애플 팝업으로 생긴 임시 Auth 계정은 users 문서가 없으면 지우고, 원래 세션을 되살릴 customToken 을 준다.
  */
 export async function POST(request: NextRequest) {
   const ctx = await getAuthenticatedUser(request);
@@ -21,12 +21,16 @@ export async function POST(request: NextRequest) {
     const ref = identityRefOf(identity);
     if (!ref) throw new IdentityError(400, 'NOT_SOCIAL', '소셜 로그인 정보가 아닙니다.');
     await linkIdentity(ctx.firebaseUid, ref);
+    // 팝업이 브라우저 세션을 다른(임시) 계정으로 바꿨다 — 임시 계정을 지우고, 원래 사람으로 돌아갈 토큰을 준다
+    // (요청의 Bearer 가 원래 사람의 ID 토큰이므로 같은 사람의 세션을 되살리는 것뿐)
+    let customToken: string | undefined;
     if (identity.firebaseUid && identity.firebaseUid !== ctx.firebaseUid) {
       const hasDoc = (await getAdminFirestore().collection('users').doc(identity.firebaseUid).get()).exists;
       if (!hasDoc) await getAdminAuth().deleteUser(identity.firebaseUid).catch(() => undefined);
+      customToken = await getAdminAuth().createCustomToken(ctx.firebaseUid, { provider: 'restore' });
     }
     logger.info('🔗 소셜 연결(설정):', { provider: ref.provider, uid: ctx.firebaseUid.substring(0, 8) + '...' });
-    return NextResponse.json({ result: { provider: ref.provider } });
+    return NextResponse.json({ result: { provider: ref.provider, ...(customToken ? { customToken } : {}) } });
   } catch (e) {
     if (e instanceof ProofError || e instanceof IdentityError) {
       return NextResponse.json({ error: { status: e.code, message: e.message } }, { status: e.status });

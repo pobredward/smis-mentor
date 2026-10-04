@@ -10,7 +10,11 @@ import Button from '@/components/common/Button';
 import LinkedAccountsDisplay from '@/components/settings/LinkedAccountsDisplay';
 import { JobCodeWithId } from '@/types';
 import { SocialProvider } from '@smis-mentor/shared';
-import { unlinkSocialProvider, getSocialProviderName } from '@smis-mentor/shared';
+import { unlinkSocialProvider, getSocialProviderName, linkSocialAccount, unlinkSocialAccount, AuthApiError } from '@smis-mentor/shared';
+import { signInWithCustomToken, unlink as unlinkAuthProvider } from 'firebase/auth';
+
+/** 새 소셜 로그인 흐름(서버 연결표) — NEXT_PUBLIC_AUTH_V2=1 이면 연결 · 해제도 서버 API 로 */
+const AUTH_V2 = process.env.NEXT_PUBLIC_AUTH_V2 === '1';
 import toast from 'react-hot-toast';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -290,8 +294,89 @@ export default function ProfilePage() {
     }
   };
 
+  // 새 흐름 — 연결: 증명만 서버로 (서버가 연결표 · authProviders 를 쓰고, 팝업이 바꾼 세션은 토큰으로 되돌린다)
+  const handleLinkV2 = async (providerId: SocialProvider) => {
+    const currentUser = auth.currentUser;
+    if (!userData?.userId || !currentUser) {
+      toast.error(L('misc.yourSessionHasExpiredPlease'));
+      setTimeout(() => router.push('/sign-in?redirect=/profile'), 2000);
+      return;
+    }
+    if (providerId === 'kakao') {
+      toast.error(L('misc.kakaoLinkingIsComingSoon'));
+      return;
+    }
+    const originalIdToken = await currentUser.getIdToken(true);
+    setIsLinking(true);
+    try {
+      let proof: { kind: 'naver'; accessToken: string } | { kind: 'firebase'; idToken: string };
+      if (providerId === 'naver') {
+        const { signInWithNaver } = await import('@/lib/naverAuthService');
+        const data = await signInWithNaver();
+        if (!data.accessToken) throw new Error('네이버 인증 정보를 받지 못했습니다.');
+        proof = { kind: 'naver', accessToken: data.accessToken };
+      } else {
+        // 구글 · 애플 팝업 — 세션이 그 계정으로 바뀔 수 있다 (서버가 정리하고 되돌릴 토큰을 준다)
+        if (providerId === 'google.com') {
+          const { getGoogleCredential } = await import('@/lib/googleAuthService');
+          await getGoogleCredential();
+        } else {
+          const { getAppleCredential } = await import('@/lib/appleAuthService');
+          await getAppleCredential();
+        }
+        const popupUser = auth.currentUser;
+        if (!popupUser) throw new Error('소셜 인증 세션이 없습니다. 다시 시도해주세요.');
+        proof = { kind: 'firebase', idToken: await popupUser.getIdToken() };
+      }
+      const res = await linkSocialAccount('', originalIdToken, proof);
+      if (res.customToken) await signInWithCustomToken(auth, res.customToken);
+      toast.success(`${getSocialProviderName(providerId)} 계정이 연동되었습니다.`);
+      await refreshUserData();
+    } catch (error) {
+      console.error('소셜 연동(새 흐름) 실패:', error);
+      // 팝업 세션에 남았으면 원래 사람으로 돌아가기 — 실패하면 다시 로그인 안내
+      if (auth.currentUser?.uid !== userData.userId) {
+        try {
+          await signInWithCustomTokenFromFunction(userData.userId, { kind: 'firebase', idToken: originalIdToken });
+        } catch {
+          toast.error(L('misc.yourSessionHasExpiredPlease'));
+        }
+      }
+      toast.error(error instanceof AuthApiError ? error.message : '계정 연동 중 오류가 발생했습니다.');
+    } finally {
+      setIsLinking(false);
+    }
+  };
+
+  // 새 흐름 — 해제: 서버가 연결표 · authProviders 를 지운다 (마지막 로그인 방법은 서버가 막음)
+  const handleUnlinkV2 = async (providerId: SocialProvider) => {
+    const currentUser = auth.currentUser;
+    if (!userData?.userId || !currentUser) {
+      toast.error(L('misc.userInformationNotFoundPlease'));
+      return;
+    }
+    const name = getSocialProviderName(providerId);
+    if (!window.confirm(`${name} 연동을 해제할까요?`)) return;
+    try {
+      await unlinkSocialAccount('', await currentUser.getIdToken(), providerId);
+      // Firebase Auth 에 붙어 있던 구글 · 애플도 떼어 둔다 (없으면 무시)
+      if (providerId === 'google.com' || providerId === 'apple.com') {
+        await unlinkAuthProvider(currentUser, providerId).catch(() => undefined);
+      }
+      toast.success(`${name} 연동이 해제되었습니다.`);
+      await refreshUserData();
+    } catch (error) {
+      console.error('소셜 연동 해제(새 흐름) 실패:', error);
+      toast.error(error instanceof AuthApiError ? error.message : '연동 해제 중 오류가 발생했습니다.');
+    }
+  };
+
   // 소셜 계정 연동 핸들러
   const handleLink = async (providerId: SocialProvider) => {
+    if (AUTH_V2) {
+      await handleLinkV2(providerId);
+      return;
+    }
     if (!userData?.userId) {
       toast.error(L('home.userInformationNotFound'));
       return;
@@ -583,6 +668,10 @@ export default function ProfilePage() {
 
   // 소셜 계정 연동 해제 핸들러
   const handleUnlink = async (providerId: SocialProvider) => {
+    if (AUTH_V2) {
+      await handleUnlinkV2(providerId);
+      return;
+    }
     console.log('🔓 연동 해제 시작:', {
       providerId,
       userData: userData ? {

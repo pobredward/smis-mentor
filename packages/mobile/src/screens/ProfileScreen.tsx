@@ -1225,6 +1225,22 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               const { removeCache, CACHE_STORE } = await import('../services/cacheUtils');
               await removeCache(CACHE_STORE.USERS, userData.userId);
 
+              // 새 흐름(EXPO_PUBLIC_AUTH_V2=1): 서버가 연결표 · authProviders 를 지운다 (마지막 로그인 방법은 서버가 막음)
+              if (process.env.EXPO_PUBLIC_AUTH_V2 === '1') {
+                const { unlinkSocialAccount } = await import('@smis-mentor/shared');
+                const { getApiBaseUrl } = await import('../services/authService');
+                const me = auth.currentUser;
+                if (!me) throw new Error(L('profile.userDocumentNotFound'));
+                await unlinkSocialAccount(getApiBaseUrl(), await me.getIdToken(), providerId);
+                if (providerId === 'google.com' || providerId === 'apple.com') {
+                  const { unlink } = await import('firebase/auth');
+                  await unlink(me, providerId).catch(() => undefined);
+                }
+                Alert.alert(L('common.success'), L('profile.v0AccountHasBeenUnlinked', { v0: providerName }));
+                await refreshUserData();
+                return;
+              }
+
               const { unlinkSocialProvider } = await import('@smis-mentor/shared');
               const { getUserById, updateUser, getUserByEmail } = await import('../services/authService');
               const { runTransaction, doc } = await import('firebase/firestore');
