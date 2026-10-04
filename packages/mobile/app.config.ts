@@ -1,6 +1,6 @@
 import { ConfigContext, ExpoConfig } from '@expo/config';
 import type { ConfigPlugin } from 'expo/config-plugins';
-import { withProjectBuildGradle, withAppBuildGradle, withDangerousMod, withAppDelegate, withAndroidManifest, AndroidConfig } from 'expo/config-plugins';
+import { withProjectBuildGradle, withAppBuildGradle, withDangerousMod, withAppDelegate, withAndroidManifest, withXcodeProject, AndroidConfig } from 'expo/config-plugins';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
@@ -208,8 +208,147 @@ const withSmisCallKit: ConfigPlugin = (cfg) => {
   return cfg;
 };
 
-// .env 파일 로드
-dotenv.config();
+/**
+ * iOS 채팅 알림에 보낸 사람 사진 (통신 알림 · Communication Notification)
+ * 알림 서비스 확장 대상(SmisNotificationService)을 Xcode 프로젝트에 넣는다 — ios/ 는 prebuild 때마다 새로 만들어진다.
+ * - 소스: native/ios/SmisNotificationService/NotificationService.swift → ios/SmisNotificationService/ 로 복사
+ * - 앱 쪽: ios.entitlements 의 usernotifications.communication, Info.plist NSUserActivityTypes(INSendMessageIntent)
+ * - EAS 자격 증명: extra.eas.build.experimental.ios.appExtensions (대상 이름 · 번들 ID 가 여기와 같아야 한다)
+ * - 확장의 버전은 빌드 때 앱 Info.plist 에서 옮겨 적는다 (EAS 가 올린 빌드 번호와 맞추기)
+ */
+const NSE_TARGET = 'SmisNotificationService';
+const APPLE_TEAM_ID = '3V8G7Y74HY';
+const nseBundleId = (bundleId?: string) => `${bundleId}.NotificationService`;
+const nseInfoPlist = (version: string, build: string) => `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>${NSE_TARGET}</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>CFBundleShortVersionString</key>
+	<string>${version}</string>
+	<key>CFBundleVersion</key>
+	<string>${build}</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.usernotifications.service</string>
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).NotificationService</string>
+	</dict>
+</dict>
+</plist>
+`;
+
+const withSmisNotificationService: ConfigPlugin = (cfg) => {
+  cfg = withDangerousMod(cfg, [
+    'ios',
+    async (c) => {
+      const src = path.join(c.modRequest.projectRoot, 'native', 'ios', NSE_TARGET);
+      const dest = path.join(c.modRequest.platformProjectRoot, NSE_TARGET);
+      fs.mkdirSync(dest, { recursive: true });
+      fs.copyFileSync(path.join(src, 'NotificationService.swift'), path.join(dest, 'NotificationService.swift'));
+      fs.writeFileSync(path.join(dest, 'Info.plist'), nseInfoPlist(String(c.version ?? '1.0.0'), String(c.ios?.buildNumber ?? '1')));
+      return c;
+    },
+  ]);
+  cfg = withXcodeProject(cfg, (c) => {
+    const proj = c.modResults;
+    // 이미 있으면 그대로 (ios/ 를 지우지 않고 prebuild 를 다시 돌린 경우 — 파일의 이름은 따옴표째 읽힌다)
+    const targets = proj.pbxNativeTargetSection() as Record<string, { name?: string } | string>;
+    if (Object.values(targets).some((t) => typeof t === 'object' && String(t.name ?? '').replace(/"/g, '') === NSE_TARGET)) return c;
+    const appName = c.modRequest.projectName ?? 'SMISMentor';
+    type BuildConfig = { buildSettings?: Record<string, string> };
+    const configs = (): Record<string, BuildConfig> => proj.pbxXCBuildConfigurationSection();
+
+    // 배포 버전 — 앱 프로젝트에서 가장 높은 값 (통신 알림은 iOS 15+)
+    let deployment = '15.1';
+    for (const conf of Object.values(configs())) {
+      const v = typeof conf === 'object' ? conf.buildSettings?.IPHONEOS_DEPLOYMENT_TARGET : undefined;
+      if (v && parseFloat(String(v).replace(/"/g, '')) > parseFloat(deployment)) deployment = String(v).replace(/"/g, '');
+    }
+
+    // 파일 묶음 → 최상위 묶음에 (Xcode 파일 목록에 보이게)
+    const group = proj.addPbxGroup(['NotificationService.swift', 'Info.plist'], NSE_TARGET, NSE_TARGET);
+    const groups = proj.hash.project.objects.PBXGroup as Record<string, { name?: string; path?: string } | string>;
+    for (const key of Object.keys(groups)) {
+      const g = groups[key];
+      if (typeof g === 'object' && g.name === undefined && g.path === undefined) proj.addToPbxGroup(group.uuid, key);
+    }
+    // 대상이 하나뿐인 프로젝트에는 이 구역이 없어 addTarget 이 실패한다 (cordova-node-xcode)
+    const objects = proj.hash.project.objects;
+    objects.PBXTargetDependency = objects.PBXTargetDependency || {};
+    objects.PBXContainerItemProxy = objects.PBXContainerItemProxy || {};
+
+    // 확장 대상 — 앱의 'Copy Files'(PlugIns)로 넣고 앱이 이 대상에 기대게 한다
+    const target = proj.addTarget(NSE_TARGET, 'app_extension', NSE_TARGET, nseBundleId(c.ios?.bundleIdentifier));
+    proj.addBuildPhase(['NotificationService.swift'], 'PBXSourcesBuildPhase', 'Sources', target.uuid);
+    proj.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', target.uuid);
+    proj.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', target.uuid);
+    const script = [
+      'APP_PLIST="${SRCROOT}/' + appName + '/Info.plist"',
+      'OUT="${TARGET_BUILD_DIR}/${INFOPLIST_PATH}"',
+      'if [ -f "$APP_PLIST" ] && [ -f "$OUT" ]; then',
+      'V=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP_PLIST" 2>/dev/null)',
+      'B=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP_PLIST" 2>/dev/null)',
+      'case "$V" in ""|*\'$(\'*) ;; *) /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $V" "$OUT" ;; esac',
+      'case "$B" in ""|*\'$(\'*) ;; *) /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $B" "$OUT" ;; esac',
+      'fi',
+      'exit 0',
+    ].join('\\n');
+    proj.addBuildPhase([], 'PBXShellScriptBuildPhase', 'Sync version with app', target.uuid, { shellPath: '/bin/sh', shellScript: script });
+
+    for (const conf of Object.values(configs())) {
+      const bs = typeof conf === 'object' ? conf.buildSettings : undefined;
+      if (!bs || bs.PRODUCT_NAME !== `"${NSE_TARGET}"`) continue;
+      Object.assign(bs, {
+        INFOPLIST_FILE: `"${NSE_TARGET}/Info.plist"`,
+        PRODUCT_BUNDLE_IDENTIFIER: `"${nseBundleId(c.ios?.bundleIdentifier)}"`,
+        IPHONEOS_DEPLOYMENT_TARGET: deployment,
+        TARGETED_DEVICE_FAMILY: '"1,2"',
+        SWIFT_VERSION: '5.0',
+        CLANG_ENABLE_MODULES: 'YES',
+        GENERATE_INFOPLIST_FILE: 'NO',
+        ENABLE_USER_SCRIPT_SANDBOXING: 'NO',
+        CODE_SIGN_STYLE: 'Automatic',
+        DEVELOPMENT_TEAM: APPLE_TEAM_ID,
+        MARKETING_VERSION: String(c.version ?? '1.0.0'),
+        CURRENT_PROJECT_VERSION: String(c.ios?.buildNumber ?? '1'),
+      });
+    }
+    proj.addTargetAttribute('DevelopmentTeam', APPLE_TEAM_ID, target);
+
+    // 확장 넣기(Copy Files) 단계를 앱의 Resources 바로 뒤로 — 스크립트 단계 뒤에 있으면
+    // Xcode 15+ 에서 'Cycle inside SMISMentor; building could produce unreliable results' 로 빌드가 멈춘다
+    const main = proj.getFirstTarget()?.firstTarget as { buildPhases?: Array<{ value: string; comment: string }> } | undefined;
+    const phases = main?.buildPhases;
+    if (phases) {
+      const embedAt = phases.findIndex((ph) => ph.comment === 'Copy Files');
+      const resAt = phases.findIndex((ph) => ph.comment === 'Resources');
+      if (embedAt > -1 && resAt > -1 && embedAt > resAt + 1) {
+        const [embed] = phases.splice(embedAt, 1);
+        phases.splice(resAt + 1, 0, embed);
+      }
+    }
+    return c;
+  });
+  return cfg;
+};
+
+// 로컬 환경 변수 — packages/mobile/.env.local 하나만 쓴다 (Expo CLI 도 같은 파일을 읽는다. EAS 빌드는 EAS 환경 변수)
+dotenv.config({ path: path.resolve(__dirname, '.env.local'), quiet: true });
 
 /**
  * 네이버 로그인 SDK Proguard 규칙 주입
@@ -299,7 +438,11 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       associatedDomains: [
         'applinks:smis-mentor.com',
         'applinks:www.smis-mentor.com',
-      ], 
+      ],
+      // 통신 알림(Communication Notifications) — 채팅 알림에 앱 아이콘 대신 보낸 사람 사진. EAS 가 App ID 기능을 맞춘다
+      entitlements: {
+        'com.apple.developer.usernotifications.communication': true,
+      },
       // ios.config.googleMapsApiKey(구형 설정)는 Podfile에 지금은 없는 'react-native-google-maps' pod을 넣어
       // iOS 빌드가 pod install에서 실패한다. 대신 아래 plugins의 react-native-maps 플러그인으로 키를 넘긴다.
       infoPlist: {
@@ -310,6 +453,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         NSLocationAlwaysUsageDescription: '캠프 위치 공유를 위해 항상 위치 접근 권한이 필요합니다.',
         NSContactsUsageDescription: '학생 부모님 연락처를 기기 연락처 앱에 저장하기 위해 연락처 접근 권한이 필요합니다.',
         ITSAppUsesNonExemptEncryption: false,
+        // 채팅 알림에 보낸 사람 사진 (통신 알림) — 알림 서비스 확장이 INSendMessageIntent 로 알림을 바꾼다
+        NSUserActivityTypes: ['INSendMessageIntent'],
         // 채팅 통화 — 화면이 꺼지거나 다른 앱으로 가도 통화가 이어지게(audio), 잠금화면 수신(voip — PushKit · CallKit)
         UIBackgroundModes: ['audio', 'voip', 'remote-notification'],
         CFBundleURLTypes: [
@@ -496,6 +641,16 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     extra: {
       eas: {
         projectId: '684d0445-c299-4e77-a362-42efa9c671ac',
+        // 앱 확장 — EAS 가 이 대상의 App ID · 프로비저닝 프로필을 만든다 (withSmisNotificationService 와 같은 이름 · 번들 ID)
+        build: {
+          experimental: {
+            ios: {
+              appExtensions: [
+                { targetName: NSE_TARGET, bundleIdentifier: nseBundleId('com.smis.smismentor'), entitlements: {} },
+              ],
+            },
+          },
+        },
       },
       EXPO_PUBLIC_WEBSITE_URL: process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smis-mentor.com',
       // www 없는 도메인 사용 필수: www.smis-mentor.com → smis-mentor.com 리다이렉트 시
@@ -514,5 +669,5 @@ export default ({ config }: ConfigContext): ExpoConfig => {
   };
 
   // ConfigPlugin을 직접 적용하여 타입 오류 해결
-  return withSmisCallKit(withNaverLoginProguard(withReactNativePickerMonorepo(withIosModularHeaders(baseConfig))));
+  return withSmisNotificationService(withSmisCallKit(withNaverLoginProguard(withReactNativePickerMonorepo(withIosModularHeaders(baseConfig)))));
 };

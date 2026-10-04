@@ -286,6 +286,26 @@ describe('chat — 대화 내용 검색', () => {
     expect(C.searchChatMessages(msgs, 'BUS')).toEqual(['d']);
     expect(C.searchChatMessages(msgs, '   ')).toEqual([]);
   });
+  it('날짜로 이동 — 그날 첫 메시지 · 없으면 뒤 · 뒤에도 없으면 마지막 · 차단·보내는 중 제외', () => {
+    const d = (y: number, mo: number, day: number, h = 0) => new Date(y, mo - 1, day, h).getTime();
+    const list = [
+      { id: 'n', senderId: 'x', createdAt: null },
+      { id: 'p', senderId: 'x', createdAt: at(d(2026, 10, 1, 9)) },
+      { id: 'q', senderId: 'blk', createdAt: at(d(2026, 10, 3, 8)) },
+      { id: 'r', senderId: 'y', createdAt: at(d(2026, 10, 3, 10)) },
+      { id: 's', senderId: 'x', createdAt: at(d(2026, 10, 3, 9)) },
+      { id: 't', senderId: 'x', createdAt: at(d(2026, 10, 6, 20)) },
+    ];
+    const blk = { blk: true };
+    expect(C.chatMessageOnDate(list, new Date(2026, 9, 3, 15), blk)).toEqual({ id: 's', exact: true });
+    expect(C.chatMessageOnDate(list, new Date(2026, 9, 3), null)).toEqual({ id: 'q', exact: true });
+    expect(C.chatMessageOnDate(list, new Date(2026, 9, 4), blk)).toEqual({ id: 't', exact: false });
+    expect(C.chatMessageOnDate(list, new Date(2026, 9, 9), blk)).toEqual({ id: 't', exact: false });
+    expect(C.chatMessageOnDate(list, new Date(2026, 8, 1), blk)).toEqual({ id: 'p', exact: false });
+    expect(C.chatMessageOnDate([{ id: 'n', senderId: 'x', createdAt: null }], new Date(), blk)).toBe(null);
+    expect(C.chatFirstMessageAt(list)?.getTime()).toBe(d(2026, 10, 1, 9));
+    expect(C.chatFirstMessageAt([])).toBe(null);
+  });
   it('강조 표시 나누기', () => {
     expect(C.splitByQuery('Bus at 9 and bus at 10', 'bus')).toEqual([
       { text: 'Bus', hit: true }, { text: ' at 9 and ', hit: false }, { text: 'bus', hit: true }, { text: ' at 10', hit: false },

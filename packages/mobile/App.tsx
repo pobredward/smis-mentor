@@ -125,7 +125,7 @@ function AppContent() {
   return (
     <>
       <RootNavigator />
-      {/* 채팅 통화 — 통화 화면 · 작게 보기 막대 (어느 화면에서든) */}
+      {/* 채팅 통화 — 통화 화면 · 작게 보기 알약 (어느 화면에서든) */}
       <ChatCallLayer />
       {/* 캠프 코드가 있는 멘토: 캠프 참가 정보 필수 입력 */}
       <EmailVerifyGate />

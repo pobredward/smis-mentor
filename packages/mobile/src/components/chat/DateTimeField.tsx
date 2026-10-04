@@ -23,9 +23,11 @@ interface DateTimeFieldProps {
   onChange: (d: Date) => void;
   minimumDate?: Date;
   maximumDate?: Date;
+  /** iOS 분 단위 (기본 10분) — Android 시각 창은 늘 1분 단위 */
+  minuteInterval?: 1 | 5 | 10;
 }
 
-export function DateTimeField({ value, onChange, minimumDate, maximumDate }: DateTimeFieldProps) {
+export function DateTimeField({ value, onChange, minimumDate, maximumDate, minuteInterval = 10 }: DateTimeFieldProps) {
   const lang = getCurrentLocale();
   if (Platform.OS === 'ios') {
     return (
@@ -34,7 +36,7 @@ export function DateTimeField({ value, onChange, minimumDate, maximumDate }: Dat
           value={value}
           mode="datetime"
           display="compact"
-          minuteInterval={10}
+          minuteInterval={minuteInterval}
           minimumDate={minimumDate}
           maximumDate={maximumDate}
           locale={lang === 'en' ? 'en-US' : 'ko-KR'}

@@ -3,9 +3,10 @@
 /**
  * 대화 내용 검색 줄 (카톡처럼) — 머리글 아래
  * Enter · ↑ = 이전(더 예전) 결과, Shift+Enter · ↓ = 다음(더 최근) 결과, Esc = 닫기
+ * 📅 = 날짜로 이동 (그날 첫 메시지 — 카톡처럼)
  */
 import { useEffect, useRef, type KeyboardEvent } from 'react';
-import { FiChevronDown, FiChevronUp, FiSearch, FiX } from 'react-icons/fi';
+import { FiCalendar, FiChevronDown, FiChevronUp, FiSearch, FiX } from 'react-icons/fi';
 import { L } from '@smis-mentor/shared';
 
 export interface ChatSearchBarProps {
@@ -22,12 +23,34 @@ export interface ChatSearchBarProps {
   onOlder: () => void;
   onNewer: () => void;
   onClose: () => void;
+  /** 날짜로 이동 — 'YYYY-MM-DD' (없으면 📅 숨김) */
+  onPickDate?: (ymd: string) => void;
+  /** 고를 수 있는 날 (YYYY-MM-DD) */
+  minDate?: string;
+  maxDate?: string;
 }
 
 const btn = 'h-9 w-9 shrink-0 rounded-full flex items-center justify-center text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:hover:bg-transparent';
 
-export default function ChatSearchBar({ query, onQueryChange, loading, loadedCount, total, index, noResults, onOlder, onNewer, onClose }: ChatSearchBarProps) {
+export default function ChatSearchBar({ query, onQueryChange, loading, loadedCount, total, index, noResults, onOlder, onNewer, onClose, onPickDate, minDate, maxDate }: ChatSearchBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const dateRef = useRef<HTMLInputElement>(null);
+  /** 📅 — 브라우저 날짜 창 (showPicker 가 없으면 입력칸에 초점) */
+  const openDate = () => {
+    const el = dateRef.current;
+    if (!el) return;
+    el.value = '';
+    try {
+      if (typeof el.showPicker === 'function') {
+        el.showPicker();
+        return;
+      }
+    } catch {
+      /* 사용자 동작이 아니라고 거절될 때 — 아래로 */
+    }
+    el.focus();
+    el.click();
+  };
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -83,6 +106,25 @@ export default function ChatSearchBar({ query, onQueryChange, loading, loadedCou
           L('chat.searchCount', { i: index + 1, n: total })
         ) : null}
       </div>
+      {onPickDate && (
+        <span className="relative shrink-0">
+          <button type="button" onClick={openDate} disabled={loading} className={btn} aria-label={L('chat.jumpToDate')} title={L('chat.jumpToDate')}>
+            <FiCalendar size={18} />
+          </button>
+          <input
+            ref={dateRef}
+            type="date"
+            min={minDate}
+            max={maxDate}
+            tabIndex={-1}
+            aria-hidden
+            onChange={(e) => {
+              if (e.target.value) onPickDate(e.target.value);
+            }}
+            className="absolute left-0 bottom-0 h-px w-px opacity-0 pointer-events-none"
+          />
+        </span>
+      )}
       <button type="button" onClick={onOlder} disabled={!total || index >= total - 1} className={btn} aria-label={L('chat.searchOlder')} title={L('chat.searchOlder')}>
         <FiChevronUp size={20} />
       </button>

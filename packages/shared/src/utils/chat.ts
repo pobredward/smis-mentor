@@ -830,6 +830,44 @@ export function searchChatMessages(
     .map((m) => m.id);
 }
 
+/**
+ * 날짜로 이동 (카톡처럼) — 그날(기기 시간대) 첫 메시지.
+ * 그날 대화가 없으면 그 뒤 첫 메시지, 뒤에도 없으면 마지막 메시지 (exact: false).
+ * 차단한 사람 메시지 · 아직 시각이 없는(보내는 중) 메시지는 건너뛴다.
+ */
+export function chatMessageOnDate(
+  messages: Array<Pick<ChatMessage, 'id' | 'senderId' | 'createdAt'>>,
+  day: Date,
+  blocked?: Record<string, boolean> | null,
+): { id: string; exact: boolean } | null {
+  const start = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+  const end = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime();
+  let after: { id: string; t: number } | null = null;
+  let before: { id: string; t: number } | null = null;
+  for (const m of messages) {
+    if (blocked?.[m.senderId]) continue;
+    const t = millis(m.createdAt);
+    if (!t) continue;
+    if (t >= start) {
+      if (!after || t < after.t) after = { id: m.id, t };
+    } else if (!before || t > before.t) {
+      before = { id: m.id, t };
+    }
+  }
+  if (after) return { id: after.id, exact: after.t < end };
+  return before ? { id: before.id, exact: false } : null;
+}
+
+/** 이 방 첫 메시지 시각 — 날짜 고르기의 가장 이른 날 */
+export function chatFirstMessageAt(messages: Array<Pick<ChatMessage, 'createdAt'>>): Date | null {
+  let min = 0;
+  for (const m of messages) {
+    const t = millis(m.createdAt);
+    if (t && (!min || t < min)) min = t;
+  }
+  return min ? new Date(min) : null;
+}
+
 /** 글을 검색어 자리로 나누기 — 강조 표시용 (대소문자 무시, 원래 글자 그대로) */
 export function splitByQuery(text: string | null | undefined, query: string | null | undefined): Array<{ text: string; hit: boolean }> {
   const src = String(text ?? '');

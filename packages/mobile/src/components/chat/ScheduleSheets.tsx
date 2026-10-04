@@ -60,6 +60,7 @@ export function ScheduleCreateSheet({ visible, composerText, hasMedia, onClose, 
           onChange={setAt}
           minimumDate={new Date()}
           maximumDate={new Date(Date.now() + CHAT_LIMITS.scheduleMaxDays * 86400000)}
+          minuteInterval={1}
         />
         {hasMedia ? <Text style={styles.note}>{L('chat.scheduleTextOnly')}</Text> : null}
         {useComposer ? (

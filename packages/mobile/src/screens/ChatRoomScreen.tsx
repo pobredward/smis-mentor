@@ -104,6 +104,7 @@ import { ReportSheet } from '../components/chat/ReportSheet';
 import { MediaViewer } from '../components/chat/MediaViewer';
 import { useChatToast } from '../components/chat/ChatToast';
 import { ChatSearchInput, ChatSearchNav } from '../components/chat/ChatSearchBar';
+import { useChatDatePicker } from '../components/chat/ChatDatePicker';
 import { ReactionPickerRow } from '../components/chat/ChatReactions';
 import { UidListSheet, type UidListTab } from '../components/chat/UidListSheet';
 import { NoticeBanner } from '../components/chat/NoticeBanner';
@@ -353,6 +354,16 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
   // ── 대화 내용 검색 ────────────────────────────────────────────────
   const onHistoryFailed = useCallback(() => showToast(L('chat.loadFailed')), [showToast]);
   const search = useChatSearch({ messages, history, blocked: state.blocked, jumpTo, onLoadFailed: onHistoryFailed });
+  // 검색 중 📅 — 그날 첫 메시지로 (없으면 가까운 날)
+  const goToDate = search.goToDate;
+  const [datePickerNode, openDatePicker] = useChatDatePicker(
+    useCallback((day: Date) => {
+      void goToDate(day).then((r) => {
+        if (r === 'nearest') showToast(L('chat.jumpDateNearest'));
+        else if (r === 'none') showToast(L('chat.jumpDateEmpty'));
+      });
+    }, [goToDate, showToast]),
+  );
   const searchClose = search.closeSearch;
   const closeSearch = useCallback(() => {
     searchClose();
@@ -1020,6 +1031,7 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
             </TouchableOpacity>
           ) : null}
           {toastNode}
+          {datePickerNode}
         </View>
         {search.open ? (
           // 검색 중에는 입력창 대신 결과 이동 막대 (카톡처럼)
@@ -1030,6 +1042,10 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
             canNewer={search.currentIdx > 0}
             onOlder={search.goOlder}
             onNewer={search.goNewer}
+            onPickDate={() => {
+              Keyboard.dismiss();
+              openDatePicker({ minimumDate: search.loading ? null : search.firstDate });
+            }}
             bottomInset={bottomInset}
           />
         ) : composer.recording ? (

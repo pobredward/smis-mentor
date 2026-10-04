@@ -74,7 +74,7 @@ export function ChatScheduleDialog({ initialText, lang, onSchedule, onClose }: {
           <input
             type="datetime-local"
             value={when}
-            step={600}
+            step={60}
             min={toLocalInput(new Date(now + CHAT_LIMITS.scheduleMinMs))}
             max={toLocalInput(new Date(now + CHAT_LIMITS.scheduleMaxDays * 86400000))}
             onChange={(e) => setWhen(e.target.value)}

@@ -60,6 +60,7 @@ interface RoomDoc {
   lastMessage?: { messageId?: string } | null;
   lastMessageAt?: admin.firestore.Timestamp | null;
   notice?: { messageId?: string } | null;
+  memberInfo?: Record<string, { name?: string; photo?: string } | undefined>;
 }
 interface UserDoc {
   name?: string;
@@ -255,7 +256,10 @@ export const chatOnMessageCreated = onDocumentCreated(
     if (gone) return;
     const expoMessages: ExpoPushMessage[] = [];
     const expoOwner: string[] = [];
-    const webByLang = new Map<string, { tokens: string[]; owners: string[]; title: string; body: string; silent: boolean }>();
+    const webByLang = new Map<string, { tokens: string[]; owners: string[]; title: string; body: string; silent: boolean; photo: string }>();
+    // 보낸 사람 사진 — 알림에 앱 아이콘 대신 (iOS 통신 알림 · Android 큰 아이콘 · 웹 아이콘). 공지는 앱 아이콘 그대로
+    const photo0 = String(room.memberInfo?.[senderId]?.photo ?? '');
+    const senderPhoto = /^https:\/\//.test(photo0) && photo0.length <= 1000 ? photo0 : '';
     for (const uid of counted) {
       const u = users.get(uid);
       const s = states.get(uid) ?? {};
@@ -284,6 +288,15 @@ export const chatOnMessageCreated = onDocumentCreated(
         body = isDm ? body0 : `${rt} · ${body0}`;
       }
       const silent = !!m.silent && !isNotice;
+      // iOS 알림 확장(SmisNotificationService)이 쓰는 값 — 단체방은 제목: 방 이름 · 부제: 보낸 사람이라 본문에 이름을 빼고,
+      // 멘션은 제목 대신 본문 앞에 표시
+      const photo = isNotice ? '' : senderPhoto;
+      const mentionTag = mentioned && !isCall
+        ? (m.mentionAll ? (lang === 'en' ? '@everyone' : '@모두') : (lang === 'en' ? '@you' : '@회원님'))
+        : '';
+      const comm = photo
+        ? { cs: senderId, cn: sender, cp: photo, cg: isDm ? '' : rt, cb: mentionTag ? `${mentionTag} · ${body0}` : body0 }
+        : {};
       const unreadSum = Object.entries(s.unread ?? {}).reduce((a, [, v]) => a + (Number(v) > 0 ? Number(v) : 0), 0);
       const badge = unreadSum + 1;
       Object.keys(u.pushTokens ?? {}).filter((tk) => Expo.isExpoPushToken(tk)).forEach((tk) => {
@@ -291,14 +304,15 @@ export const chatOnMessageCreated = onDocumentCreated(
           to: tk, title, body, badge, priority: 'high',
           // 조용히 보내기 — 소리 없이 (Android 는 앱이 만든 'chat-silent' 채널: 소리·진동 없음)
           ...(silent ? { channelId: 'chat-silent' } : { sound: 'default', channelId: 'default' }),
-          data: { type: 'chat', roomId, messageId, ...(mentioned ? { mention: true } : {}), ...(isNotice ? { notice: true } : {}) },
+          ...(photo ? { mutableContent: true, richContent: { image: photo } } : {}),
+          data: { type: 'chat', roomId, messageId, ...(mentioned ? { mention: true } : {}), ...(isNotice ? { notice: true } : {}), ...comm },
         });
         expoOwner.push(uid);
       });
       const web = Object.keys(u.webPushTokens ?? {});
       if (web.length) {
-        const key = `${title}\u0000${body}\u0000${silent ? 1 : 0}`;
-        const g = webByLang.get(key) ?? { tokens: [], owners: [], title, body, silent };
+        const key = `${title}\u0000${body}\u0000${silent ? 1 : 0}\u0000${photo}`;
+        const g = webByLang.get(key) ?? { tokens: [], owners: [], title, body, silent, photo };
         web.forEach((tk) => { g.tokens.push(tk); g.owners.push(uid); });
         webByLang.set(key, g);
       }
@@ -333,7 +347,7 @@ export const chatOnMessageCreated = onDocumentCreated(
           notification: { title: g.title, body: g.body },
           data: { type: 'chat', roomId, messageId },
           webpush: {
-            notification: { icon: `${SITE}/android-icon-192x192.png`, tag: `chat-${roomId}`, renotify: !g.silent, silent: g.silent },
+            notification: { icon: g.photo || `${SITE}/android-icon-192x192.png`, tag: `chat-${roomId}`, renotify: !g.silent, silent: g.silent },
             fcmOptions: { link: `${SITE}/chat?room=${encodeURIComponent(roomId)}` },
           },
         }).then(async (res) => {

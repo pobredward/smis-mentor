@@ -1,7 +1,7 @@
 /**
  * 대화 내용 검색 (카톡처럼)
  * - ChatSearchInput: 머리글 아래 검색창 + [닫기]
- * - ChatSearchNav: 입력창 자리에 "2/15" · ↑(이전 결과) · ↓(다음 결과)
+ * - ChatSearchNav: 입력창 자리에 📅(날짜로 이동) · "2/15" · ↑(이전 결과) · ↓(다음 결과)
  */
 import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
@@ -59,6 +59,7 @@ export function ChatSearchNav({
   canNewer,
   onOlder,
   onNewer,
+  onPickDate,
   bottomInset,
 }: {
   /** "2/15" · "검색 결과가 없어요" · "대화를 불러오는 중… 1,500개" */
@@ -68,10 +69,17 @@ export function ChatSearchNav({
   canNewer: boolean;
   onOlder: () => void;
   onNewer: () => void;
+  /** 날짜로 이동 (카톡처럼) */
+  onPickDate?: () => void;
   bottomInset: number;
 }) {
   return (
     <View style={[styles.nav, { paddingBottom: Math.max(bottomInset, 8) }]}>
+      {onPickDate ? (
+        <TouchableOpacity style={styles.calendar} onPress={onPickDate} accessibilityRole="button" accessibilityLabel={L('chat.jumpToDate')} hitSlop={4}>
+          <Ionicons name="calendar-outline" size={21} color={CHAT_COLORS.text} />
+        </TouchableOpacity>
+      ) : null}
       <View style={styles.statusWrap}>
         {loading ? <ActivityIndicator size="small" color={CHAT_COLORS.sub} style={styles.spinner} /> : null}
         <Text style={styles.status} numberOfLines={1}>{status}</Text>
@@ -127,6 +135,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: CHAT_COLORS.border,
   },
+  calendar: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center', marginRight: 4, marginLeft: -6 },
   statusWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   spinner: { marginRight: 8 },
   status: { fontSize: 14, color: CHAT_COLORS.sub, flexShrink: 1 },

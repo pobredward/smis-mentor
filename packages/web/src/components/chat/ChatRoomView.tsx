@@ -47,6 +47,8 @@ import {
   isUserBlocked,
   normalizeChatSearch,
   searchChatMessages,
+  chatFirstMessageAt,
+  chatMessageOnDate,
   unreadReaders,
   type ChatCallMedia,
   type ChatMessageView,
@@ -450,6 +452,21 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
     if (!hits.length) return;
     jumpToHit(hits[hitIndex < 0 ? 0 : Math.max(0, hitIndex - 1)]);
   };
+  /** 📅 날짜로 이동 — 그날 첫 메시지 (없으면 가까운 날) */
+  const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const firstAt = useMemo(() => (searchReady && searchPool ? chatFirstMessageAt(searchPool) : null), [searchReady, searchPool]);
+  const goToDate = (value: string) => {
+    const [y, mo, d] = value.split('-').map(Number);
+    if (!y || !mo || !d) return;
+    const hit = chatMessageOnDate(poolRef.current, new Date(y, mo - 1, d), blockedRef.current);
+    if (!hit) {
+      toast(L('chat.jumpDateEmpty'));
+      return;
+    }
+    setCurrentHit(null);
+    jumpTo(hit.id);
+    if (!hit.exact) toast(L('chat.jumpDateNearest'));
+  };
 
   // ── '@ 나를 언급' — 들어올 때 안 읽은 메시지 중 나를 부른 것 ──
   const mentionIds = useMemo(() => {
@@ -708,6 +725,9 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
           onOlder={goOlder}
           onNewer={goNewer}
           onClose={closeSearch}
+          onPickDate={goToDate}
+          minDate={firstAt ? ymd(firstAt) : undefined}
+          maxDate={ymd(new Date())}
         />
       )}
 

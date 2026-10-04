@@ -2,12 +2,12 @@
  * 통화 화면 조각 (앱) — web components/chat/ChatCall.tsx 와 같은 구성
  * - CallScreen: 전체 화면 (거는 중 · 받는 중 · 연결 중 · 통화 중 · 끝남) — Android 뒤로가기 = 작게 보기
  * - CallTile: 사람 칸 — 카메라 켬이면 Agora 영상(RtcSurfaceView), 끔이면 둥근 사진/첫 글자
- * - CallBar: 작게 보기 — 화면 위 얇은 초록 막대 '📞 03:12 · J29 전체방 — 통화로 돌아가기'
+ * - CallBar: 작게 보기 — 떠 있는 초록 알약 '📞 03:12 / J29 전체방' (누르면 다시 크게, 끌어서 옮기면 좌우 가장자리에 붙음)
  * - CallBanner: 방 위 '그룹 음성 통화 중 · 3명' [참여] / [통화로 돌아가기]
  * - CallStartOptions: 방 머리글 📞 → [음성 통화] [영상 통화]
  */
-import React, { useContext, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Modal, PanResponder, ScrollView, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { SafeAreaInsetsContext, initialWindowMetrics } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
@@ -262,20 +262,114 @@ export function CallScreen({ state, title, lang, real, hideIncoming, onMinimize,
   );
 }
 
-/** 작게 보기 — 화면 위 얇은 초록 막대 (누르면 다시 크게) */
+/**
+ * 작게 보기 — 떠 있는 초록 알약 (웹과 같은 방식).
+ * 화면 위 막대는 머리글·뒤로가기를 가려서, 작은 알약을 오른쪽 가장자리(머리글 아래)에 띄운다.
+ * 누르면 다시 크게, 끌어서 옮기면 가까운 좌우 가장자리에 붙고 그 자리를 이번 실행 동안 기억한다.
+ */
+const PILL_MARGIN = 10;
+let pillSpot: { side: 'left' | 'right'; y: number } | null = null;
+
 export function CallBar({ state, title, lang, onReturn }: { state: ChatCallView; title: string; lang: Locale; onReturn: () => void }) {
   const insets = useInsets();
+  const { width, height } = useWindowDimensions();
   const now = useNow(state.phase === 'inCall');
   const status = state.phase === 'inCall'
     ? formatCallDuration(now - (state.startedAt ?? now))
     : state.phase === 'incoming'
       ? L('chat.callIncoming', { media: callMediaLabel(state.media, true, lang) })
       : state.phase === 'outgoing' ? L('chat.callRinging') : L('chat.callConnecting');
+  const speaking = state.phase === 'inCall' && state.participants.some((p) => p.speaking);
+
+  const [size, setSize] = useState({ w: 150, h: 48 });
+  const box = useRef({ minX: 0, maxX: 0, minY: 0, maxY: 0, w: 150 });
+  box.current = {
+    minX: insets.left + PILL_MARGIN,
+    maxX: Math.max(insets.left + PILL_MARGIN, width - insets.right - PILL_MARGIN - size.w),
+    minY: insets.top + PILL_MARGIN,
+    maxY: Math.max(insets.top + PILL_MARGIN, height - insets.bottom - PILL_MARGIN - size.h - 64),
+    w: size.w,
+  };
+  const clampY = (y: number) => Math.min(box.current.maxY, Math.max(box.current.minY, y));
+  const spotXY = (spot: { side: 'left' | 'right'; y: number }) => ({
+    x: spot.side === 'left' ? box.current.minX : box.current.maxX,
+    y: clampY(spot.y),
+  });
+  // 처음 자리: 오른쪽, 머리글(약 56) 아래
+  const spot = useRef(pillSpot ?? { side: 'right' as const, y: insets.top + 64 });
+  const pos = useRef(new Animated.ValueXY(spotXY(spot.current))).current;
+  const cur = useRef(spotXY(spot.current));
+  const drag = useRef({ x: 0, y: 0, moved: false });
+  const returnRef = useRef(onReturn);
+  returnRef.current = onReturn;
+
+  // 화면 크기 · 알약 크기가 바뀌면 (회전 · 글자 길이) 같은 가장자리로 다시
+  useEffect(() => {
+    const xy = spotXY(spot.current);
+    cur.current = xy;
+    pos.setValue(xy);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [width, height, size.w, size.h, insets.top, insets.bottom, insets.left, insets.right]);
+
+  const pan = useMemo(
+    () => PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) + Math.abs(g.dy) > 4,
+      onPanResponderGrant: () => {
+        drag.current = { x: cur.current.x, y: cur.current.y, moved: false };
+      },
+      onPanResponderMove: (_, g) => {
+        if (Math.abs(g.dx) + Math.abs(g.dy) > 4) drag.current.moved = true;
+        if (drag.current.moved) pos.setValue({ x: drag.current.x + g.dx, y: drag.current.y + g.dy });
+      },
+      onPanResponderRelease: (_, g) => {
+        if (!drag.current.moved) {
+          returnRef.current();
+          return;
+        }
+        const x = drag.current.x + g.dx;
+        const next = { side: (x + box.current.w / 2 < width / 2 ? 'left' : 'right') as 'left' | 'right', y: drag.current.y + g.dy };
+        spot.current = next;
+        pillSpot = { side: next.side, y: clampY(next.y) };
+        const xy = spotXY(next);
+        cur.current = xy;
+        Animated.spring(pos, { toValue: xy, useNativeDriver: false, friction: 7, tension: 60 }).start();
+      },
+      onPanResponderTerminate: () => {
+        const xy = spotXY(spot.current);
+        cur.current = xy;
+        Animated.spring(pos, { toValue: xy, useNativeDriver: false }).start();
+      },
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [width, pos],
+  );
+
   return (
-    <TouchableOpacity onPress={onReturn} activeOpacity={0.85} style={[styles.bar, { paddingTop: insets.top + 4 }]} accessibilityRole="button" accessibilityLabel={L('chat.callReturn')}>
-      <Ionicons name={state.media === 'video' ? 'videocam' : 'call'} size={15} color="#ffffff" />
-      <Text style={styles.barText} numberOfLines={1}>{status} · {title} — {L('chat.callReturn')}</Text>
-    </TouchableOpacity>
+    <Animated.View
+      {...pan.panHandlers}
+      onLayout={(e) => {
+        const { width: w, height: h } = e.nativeEvent.layout;
+        if (Math.abs(w - size.w) > 0.5 || Math.abs(h - size.h) > 0.5) setSize({ w, h });
+      }}
+      style={[styles.pill, { transform: pos.getTranslateTransform() }]}
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel={`${title} — ${L('chat.callReturn')}`}
+      accessibilityActions={[{ name: 'activate' }]}
+      onAccessibilityAction={(e) => {
+        if (e.nativeEvent.actionName === 'activate') onReturn();
+      }}
+    >
+      <View style={styles.pillIcon}>
+        <Ionicons name={state.media === 'video' ? 'videocam' : 'call'} size={15} color="#ffffff" />
+        {speaking ? <View style={styles.pillSpeaking} /> : null}
+      </View>
+      <View style={styles.pillTextWrap}>
+        <Text style={styles.pillStatus} numberOfLines={1}>{status}</Text>
+        {title ? <Text style={styles.pillTitle} numberOfLines={1}>{title}</Text> : null}
+      </View>
+    </Animated.View>
   );
 }
 
@@ -354,8 +448,16 @@ const styles = StyleSheet.create({
   tileFootCompact: { paddingHorizontal: 6, paddingVertical: 4 },
   tileName: { flex: 1, color: '#ffffff', fontSize: 13.5, fontWeight: '500' },
   pip: { position: 'absolute', right: 12, bottom: 12, width: 110, height: 160 },
-  bar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 50, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14, paddingBottom: 6, backgroundColor: '#16a34a' },
-  barText: { flex: 1, color: '#ffffff', fontSize: 13, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  pill: {
+    position: 'absolute', top: 0, left: 0, zIndex: 60, flexDirection: 'row', alignItems: 'center', gap: 8,
+    maxWidth: 200, paddingVertical: 6, paddingLeft: 6, paddingRight: 14, borderRadius: 26, backgroundColor: '#16a34a',
+    shadowColor: '#000000', shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 8,
+  },
+  pillIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  pillSpeaking: { position: 'absolute', top: -1, right: -1, width: 10, height: 10, borderRadius: 5, backgroundColor: '#bef264', borderWidth: 2, borderColor: '#16a34a' },
+  pillTextWrap: { flexShrink: 1, minWidth: 0 },
+  pillStatus: { color: '#ffffff', fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  pillTitle: { color: 'rgba(255,255,255,0.85)', fontSize: 11, marginTop: 1 },
   banner: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#f0fdf4', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#bbf7d0' },
   bannerIcon: { width: 28, height: 28, borderRadius: 14, backgroundColor: '#22c55e', alignItems: 'center', justifyContent: 'center' },
   bannerText: { flex: 1, color: '#14532d', fontSize: 13.5, fontWeight: '500' },

@@ -4,7 +4,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard } from 'react-native';
-import { L, normalizeChatSearch, searchChatMessages, type ChatMessageView } from '@smis-mentor/shared';
+import { L, chatFirstMessageAt, chatMessageOnDate, normalizeChatSearch, searchChatMessages, type ChatMessageView } from '@smis-mentor/shared';
 import type { ChatHistoryApi } from './useChatHistory';
 
 interface Params {
@@ -93,6 +93,32 @@ export function useChatSearch({ messages, history, blocked, jumpTo, onLoadFailed
     goOlder();
   }, [text, query, goOlder]);
 
+  /** 날짜 고르기 — 가장 이른 날 (기록을 다 불러오기 전엔 지금 가진 메시지 기준) */
+  const firstDate = useMemo(() => chatFirstMessageAt(pool ?? messages), [pool, messages]);
+
+  /** 그날 첫 메시지로 (카톡의 '날짜로 이동') — 그날 대화가 없으면 가까운 날 */
+  const goToDate = useCallback(
+    async (day: Date): Promise<'exact' | 'nearest' | 'none'> => {
+      let list = pool;
+      if (!list) {
+        const all = await history.ensure();
+        if (!all) onLoadFailed();
+        const map = new Map<string, ChatMessageView>();
+        (all ?? []).forEach((m) => map.set(m.id, m));
+        messages.forEach((m) => map.set(m.id, m));
+        list = [...map.values()];
+      }
+      const hit = chatMessageOnDate(list, day, blocked);
+      if (!hit) return 'none';
+      Keyboard.dismiss();
+      setCurrentId(null);
+      const ok = await jumpTo(hit.id);
+      if (!ok) return 'none';
+      return hit.exact ? 'exact' : 'nearest';
+    },
+    [pool, history, onLoadFailed, messages, blocked, jumpTo],
+  );
+
   let status = '';
   if (history.loading !== null) status = L('chat.searching', { n: history.loading });
   else if (!normalizeChatSearch(query)) status = '';
@@ -112,6 +138,8 @@ export function useChatSearch({ messages, history, blocked, jumpTo, onLoadFailed
     goOlder,
     goNewer,
     submit,
+    firstDate,
+    goToDate,
     status,
     loading: history.loading !== null,
   };

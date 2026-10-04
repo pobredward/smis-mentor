@@ -5,10 +5,7 @@
 
 cd "$(dirname "$0")"
 
-# 환경 변수 로드
-if [ -f "../../.env.local" ]; then
-  export $(cat ../../.env.local | grep -v '^#' | xargs)
-fi
+# 환경 변수 — packages/mobile/.env.local 은 expo start 가 직접 읽는다 (따로 export 하지 않음)
 
 # CI 모드 명시적 비활성화
 unset CI
