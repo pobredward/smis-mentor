@@ -36,7 +36,14 @@ import {
   handleSocialAuthError,
   getSocialProviderName,
 } from '@smis-mentor/shared';
-import { getUserByForeignName } from '../services/authService';
+import { getUserByForeignName, buildSocialProof as buildProofV2, getApiBaseUrl } from '../services/authService';
+import { resolveSocialLogin, linkSocialWithPassword, socialProviderLabel, AuthApiError } from '@smis-mentor/shared';
+
+/**
+ * 새 소셜 로그인 흐름 — 서버(/api/auth/social)가 사용자를 찾고 판정한다 (공개 조회 API 를 쓰지 않음).
+ * EAS 환경 변수 EXPO_PUBLIC_AUTH_V2=1 이면 켜진다 (빌드 · 코드푸시에 들어감). 꺼져 있으면 예전 흐름 그대로.
+ */
+const AUTH_V2 = process.env.EXPO_PUBLIC_AUTH_V2 === '1';
 import type { SocialUserData, LastLoginInfo, LastLoginMethod } from '@smis-mentor/shared';
 import type { User as LegacyUser } from '@smis-mentor/shared';
 
@@ -88,6 +95,8 @@ export function SignInScreen({
   const [googleCredential, setGoogleCredential] = useState<any>(null);
   const [appleCredential, setAppleCredential] = useState<any>(null);
   const [existingUserEmail, setExistingUserEmail] = useState('');
+  /** 새 흐름: 서버가 준 연결 표 (비밀번호로 기존 계정에 소셜 연결) */
+  const [linkTicket, setLinkTicket] = useState<string | null>(null);
   // 비밀번호 모달이 열릴 시점의 소셜 임시 계정 UID.
   // LINK_ACTIVE / NEED_PHONE→needsLink 경로에서 handlePasswordSubmit 내부
   // signIn으로 auth.currentUser가 기존 계정으로 교체될 수 있어,
@@ -212,9 +221,93 @@ export function SignInScreen({
   // ========== 소셜 로그인 핸들러 ==========
 
   /**
+   * 새 흐름에서 가입 단계를 그만둘 때 — 구글 · 애플 자격 증명으로 만든 Firebase 계정이 아직 사용자 문서가 없으면 지운다
+   * (예전 앱 흐름은 이 단계에서 Firebase 에 로그인하지 않았다)
+   */
+  const dropPendingSocialSession = async () => {
+    try {
+      const { auth: firebaseAuth, db: firestore } = await import('../config/firebase');
+      const { doc, getDoc } = await import('firebase/firestore');
+      const u = firebaseAuth.currentUser;
+      if (!u) return;
+      const has = await getDoc(doc(firestore, 'users', u.uid)).then((d) => d.exists()).catch(() => true);
+      if (!has) await u.delete().catch(() => firebaseAuth.signOut());
+    } catch (e) {
+      logger.warn('가입 중단 — 임시 세션 정리 실패(무시):', e);
+    }
+  };
+
+  /**
+   * 새 흐름 — 구글 · 애플은 자격 증명으로 Firebase 세션을 만든 뒤 그 ID 토큰을, 네이버 · 카카오는 액세스 토큰을
+   * 서버에 보내고 판정대로 (LOGIN · LINK_ACTIVE · NEED_PHONE). 필요 없는 임시 Auth 계정은 서버가 지운다.
+   */
+  const handleSocialV2 = async (socialUserData: SocialUserData, credential?: any) => {
+    setIsLoading(true);
+    try {
+      const { auth: firebaseAuth } = await import('../config/firebase');
+      const fbAuth = await import('firebase/auth');
+      const tokenProvider = socialUserData.providerId === 'naver' || socialUserData.providerId === 'kakao';
+      if (!tokenProvider) {
+        if (!credential) throw new Error('소셜 인증 정보가 없습니다. 다시 시도해주세요.');
+        await fbAuth.signInWithCredential(firebaseAuth, credential);
+      }
+      const res = await resolveSocialLogin(getApiBaseUrl(), await buildProofV2(socialUserData));
+
+      if (res.action === 'LOGIN') {
+        if (!res.alreadySignedIn) {
+          if (!res.customToken) throw new Error('로그인 토큰이 없습니다.');
+          await fbAuth.signInWithCustomToken(firebaseAuth, res.customToken);
+        }
+        const signedEmail = firebaseAuth.currentUser?.email || socialUserData.email;
+        if (signedEmail) await persistLoginRememberEmail(signedEmail);
+        await persistLastLoginMethod(socialUserData.providerId, socialUserData.email || signedEmail || '');
+        onSignInSuccess();
+        return;
+      }
+
+      if (res.action === 'LINK_ACTIVE') {
+        // 임시 Auth 계정은 서버가 지웠다 — 기기 세션만 정리
+        if (firebaseAuth.currentUser) await firebaseAuth.signOut().catch(() => undefined);
+        const name = socialProviderLabel(socialUserData.providerId);
+        if (!res.hasPassword) {
+          const methods = res.providers.map(socialProviderLabel).join(', ') || '다른 방법';
+          Alert.alert('이미 가입된 이메일', `이 이메일(${res.maskedEmail})은 이미 ${methods}(으)로 가입되어 있습니다.\n${methods}(으)로 로그인한 뒤 ${name}를 연동해주세요.`);
+          return;
+        }
+        setSocialTempUid(null);
+        setSocialData(socialUserData);
+        setLinkTicket(res.linkTicket);
+        setExistingUserEmail(res.maskedEmail);
+        setShowPasswordModal(true);
+        return;
+      }
+
+      // NEED_PHONE — 예전 흐름과 같게 (역할 선택 → 전화번호 → 가입 · temp 계정)
+      setSocialData(socialUserData);
+      if (socialUserData.providerId === 'google.com') setGoogleCredential(credential || null);
+      if (socialUserData.providerId === 'apple.com') setAppleCredential(credential || null);
+      setSelectedSocialRole(null);
+      setShowRoleSelectionModal(true);
+    } catch (error: any) {
+      logger.error('소셜 로그인(새 흐름) 실패:', error);
+      try {
+        const { auth: firebaseAuth } = await import('../config/firebase');
+        if (firebaseAuth.currentUser && !(error instanceof AuthApiError)) await firebaseAuth.signOut();
+      } catch { /* ignore */ }
+      Alert.alert('로그인 실패', error instanceof AuthApiError ? error.message : handleSocialAuthError(error));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
    * Google 로그인 성공 핸들러
    */
   const handleGoogleSignInSuccess = async (socialUserData: SocialUserData, credential?: any) => {
+    if (AUTH_V2) {
+      await handleSocialV2(socialUserData, credential);
+      return;
+    }
     try {
       setIsLoading(true); // 로딩 시작
 
@@ -344,6 +437,10 @@ export function SignInScreen({
    * 네이버 로그인 성공 핸들러
    */
   const handleNaverSignInSuccess = async (socialUserData: SocialUserData) => {
+    if (AUTH_V2) {
+      await handleSocialV2(socialUserData);
+      return;
+    }
     try {
       setIsLoading(true); // 로딩 시작
 
@@ -442,6 +539,10 @@ export function SignInScreen({
    * Apple 로그인 성공 핸들러
    */
   const handleAppleSignInSuccess = async (socialUserData: SocialUserData, credential?: any) => {
+    if (AUTH_V2) {
+      await handleSocialV2(socialUserData, credential);
+      return;
+    }
     try {
       setIsLoading(true); // 로딩 시작
 
@@ -888,6 +989,40 @@ export function SignInScreen({
    */
   const handlePasswordSubmit = async (password: string) => {
     if (!socialData || !existingUserEmail) return;
+    // 새 흐름: 서버가 비밀번호를 확인하고 연결한 뒤 토큰을 준다 (전체 이메일을 기기에 내리지 않는다)
+    if (linkTicket) {
+      setIsLoading(true);
+      try {
+        const { auth: firebaseAuth } = await import('../config/firebase');
+        const { signInWithCustomToken: fbSignIn } = await import('firebase/auth');
+        const { customToken } = await linkSocialWithPassword(getApiBaseUrl(), linkTicket, password);
+        await fbSignIn(firebaseAuth, customToken);
+        const signedEmail = firebaseAuth.currentUser?.email || '';
+        if (signedEmail) await persistLoginRememberEmail(signedEmail);
+        await persistLastLoginMethod(socialData.providerId, socialData.email || signedEmail);
+        setShowPasswordModal(false);
+        setLinkTicket(null);
+        setSocialData(null);
+        setExistingUserEmail('');
+        Alert.alert('연동 완료', `${socialProviderLabel(socialData.providerId)} 계정이 연동되었습니다.`);
+        onSignInSuccess();
+      } catch (error: any) {
+        logger.error('계정 연동(새 흐름) 실패:', error);
+        const code = error instanceof AuthApiError ? error.code : '';
+        if (code === 'WRONG_PASSWORD') {
+          Alert.alert('비밀번호 오류', '비밀번호가 올바르지 않습니다.\n본인의 계정이 아니라면 관리자에게 문의하세요.\n\n관리자: 010-7656-7933 (신선웅)');
+        } else if (code === 'TICKET_EXPIRED') {
+          Alert.alert('시간 초과', '확인 시간이 지났습니다. 처음부터 다시 로그인해주세요.');
+          setShowPasswordModal(false);
+          setLinkTicket(null);
+        } else {
+          Alert.alert('오류', error instanceof AuthApiError ? error.message : '계정 연동 중 오류가 발생했습니다. 다시 시도해주세요.');
+        }
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
     
     setIsLoading(true);
     try {
@@ -1050,6 +1185,7 @@ export function SignInScreen({
     setSocialTempUid(null);
     setSocialData(null);
     setExistingUserEmail('');
+    setLinkTicket(null);
   };
 
   /**
@@ -1057,7 +1193,9 @@ export function SignInScreen({
    */
   const handleForgotPasswordFromModal = () => {
     setShowPasswordModal(false);
-    setResetEmail(existingUserEmail);
+    // 새 흐름은 가린 이메일만 알고 있다 — 미리 채우지 않는다
+    setResetEmail(linkTicket ? '' : existingUserEmail);
+    setLinkTicket(null);
     setShowResetForm(true);
   };
 
@@ -1230,7 +1368,10 @@ export function SignInScreen({
       <SocialRoleSelectionModal
         visible={showRoleSelectionModal}
         onRoleSelect={handleSocialRoleSelect}
-        onCancel={() => setShowRoleSelectionModal(false)}
+        onCancel={() => {
+          setShowRoleSelectionModal(false);
+          if (AUTH_V2) void dropPendingSocialSession();
+        }}
       />
 
       {/* 멘토 본인 확인 모달 (이름 + 전화번호) */}
@@ -1239,7 +1380,10 @@ export function SignInScreen({
         socialProviderName={socialData ? getSocialProviderName(socialData.providerId) : 'Google'}
         defaultName={socialData?.name || ''}
         onSubmit={handlePhoneSubmit}
-        onCancel={() => setShowPhoneModal(false)}
+        onCancel={() => {
+          setShowPhoneModal(false);
+          if (AUTH_V2) void dropPendingSocialSession();
+        }}
       />
 
       {/* 원어민 본인 확인 모달 (성명 + 국가코드 + 전화번호) */}
@@ -1248,7 +1392,10 @@ export function SignInScreen({
         socialProviderName={socialData ? getSocialProviderName(socialData.providerId) : 'Google'}
         defaultName={socialData?.name || ''}
         onSubmit={handleForeignPhoneSubmit}
-        onCancel={() => setShowForeignPhoneModal(false)}
+        onCancel={() => {
+          setShowForeignPhoneModal(false);
+          if (AUTH_V2) void dropPendingSocialSession();
+        }}
       />
       
       {/* 비밀번호 입력 모달 (계정 연동용) */}

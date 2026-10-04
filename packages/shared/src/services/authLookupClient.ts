@@ -4,6 +4,7 @@
  *  - lookupUserViaApi   : /api/auth/lookup  — 비로그인 상태의 이메일/전화/원어민 이름/소셜 제공자 조회
  *                         (Firestore 규칙에서 users 의 비인증 list 가 막혔으므로 서버가 대신 조회)
  *  - requestCustomToken : /api/auth/create-custom-token — 소셜 증명(proof)으로 Custom Token 발급
+ *  - resolveSocialLogin · linkSocialWithPassword : 새 소셜 로그인 흐름 (/api/auth/social*) — 서버가 사용자를 찾고 판정한다
  *
  * 서버가 Timestamp 를 { __ts: millis } 로 직렬화하므로 클라이언트 Timestamp 로 되살린다.
  */
@@ -99,4 +100,45 @@ export async function replaceTempUserViaApi(apiBaseUrl: string, idToken: string,
   if (!res.ok) throw await readError(res, '임시 계정 정리 실패');
   const json = (await res.json()) as { deleted?: boolean };
   return !!json?.deleted;
+}
+
+// ── 새 소셜 로그인 흐름 (서버가 판정) ─────────────────────────────────
+
+/**
+ * POST /api/auth/social 결과 (web lib/socialLoginServer.ts 와 같은 모양)
+ *  - LOGIN       : customToken 으로 로그인 (alreadySignedIn 이면 지금 세션이 그 사용자)
+ *  - LINK_ACTIVE : 같은 이메일의 기존 계정 — hasPassword 면 비밀번호로 연결(linkSocialWithPassword), 아니면 기존 방법으로 로그인 안내
+ *  - NEED_PHONE  : 처음 보는 사람 — 기존 가입 · temp 계정 흐름
+ */
+export type SocialResolveResult =
+  | { action: 'LOGIN'; userId: string; customToken?: string; alreadySignedIn?: boolean }
+  | { action: 'LINK_ACTIVE'; linkTicket: string; maskedEmail: string; hasPassword: boolean; providers: string[] }
+  | { action: 'NEED_PHONE' };
+
+export async function resolveSocialLogin(apiBaseUrl: string, proof: SocialProof): Promise<SocialResolveResult> {
+  const res = await fetch(`${apiBaseUrl}/api/auth/social`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ proof }),
+  });
+  if (!res.ok) throw await readError(res, '로그인 처리 중 오류가 발생했습니다.');
+  const json = (await res.json()) as { result: SocialResolveResult };
+  return json.result;
+}
+
+export async function linkSocialWithPassword(apiBaseUrl: string, linkTicket: string, password: string): Promise<{ userId: string; customToken: string }> {
+  const res = await fetch(`${apiBaseUrl}/api/auth/social/link-password`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ linkTicket, password }),
+  });
+  if (!res.ok) throw await readError(res, '계정 연결 중 오류가 발생했습니다.');
+  const json = (await res.json()) as { result: { userId: string; customToken: string } };
+  return json.result;
+}
+
+/** 'google' · 'google.com' · 'naver' … → 화면에 보이는 이름 */
+export function socialProviderLabel(p: string): string {
+  const n = String(p || '').replace('.com', '').toLowerCase();
+  return n === 'google' ? 'Google' : n === 'apple' ? 'Apple' : n === 'naver' ? '네이버' : n === 'kakao' ? '카카오' : n === 'password' ? '이메일' : p;
 }

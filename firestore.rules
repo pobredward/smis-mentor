@@ -1344,6 +1344,18 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────────────────────
+    // 소셜 신원 연결표 · 속도 제한 — 서버(Admin SDK) 전용
+    // authIdentities/{제공자}_{제공자 id} → { uid } : /api/auth/social* 만 쓴다 (web lib/authIdentity.ts)
+    // rateLimits : /api/auth/lookup 의 IP 별 횟수
+    // ──────────────────────────────────────────────────────────────
+    match /authIdentities/{id} {
+      allow read, write: if false;
+    }
+    match /rateLimits/{id} {
+      allow read, write: if false;
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // 기본 거부 (명시되지 않은 모든 컬렉션)
     // ──────────────────────────────────────────────────────────────
     match /{document=**} {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminAuth } from '@/lib/firebase-admin';
-import { completeSignup, SignupError } from '@/lib/signupServer';
+import { completeSignup, SignupError, verifiedSignupIdentity } from '@/lib/signupServer';
 import { writeAuditLog } from '@/lib/auditLog';
 import { logger, type CompleteSignupInput } from '@smis-mentor/shared';
 
@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await completeSignup(decoded.uid, decoded.email, body, header.slice(7));
+    const result = await completeSignup(decoded.uid, decoded.email, body, header.slice(7), verifiedSignupIdentity(decoded));
     if (result.claimedTemp) {
       await writeAuditLog({
         action: 'SIGNUP_TEMP_CLAIM', category: 'ACCOUNT', performedBy: decoded.uid,

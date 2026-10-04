@@ -35,6 +35,14 @@ import { handleGoogleAuthError } from '@/lib/googleAuthService';
 import { handleNaverAuthError } from '@/lib/naverAuthService';
 import { handleAppleAuthError } from '@/lib/appleAuthService';
 import { auth } from '@/lib/firebase';
+import { signInWithCustomToken } from 'firebase/auth';
+import { resolveSocialLogin, linkSocialWithPassword, socialProviderLabel, AuthApiError } from '@smis-mentor/shared';
+
+/**
+ * 새 소셜 로그인 흐름 — 서버(/api/auth/social)가 사용자를 찾고 판정한다 (공개 조회 API 를 쓰지 않음).
+ * Vercel 환경 변수 NEXT_PUBLIC_AUTH_V2=1 이면 켜진다. 꺼져 있으면 예전 흐름 그대로.
+ */
+const AUTH_V2 = process.env.NEXT_PUBLIC_AUTH_V2 === '1';
 
 /** 원어민 가입 페이지는 URL 파라미터로 이동하므로, 네이버/카카오 access token 은 URL 대신 세션 스토리지에 보관 */
 function stashSocialAccessToken(socialData: SocialUserData) {
@@ -76,6 +84,8 @@ export function SignInClient() {
   const [showPhoneModal, setShowPhoneModal] = useState(false);
   const [showForeignPhoneModal, setShowForeignPhoneModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  /** 새 흐름: 서버가 준 연결 표 (비밀번호로 기존 계정에 소셜 연결) — 있으면 비밀번호 창이 이 표로 연결한다 */
+  const [linkTicket, setLinkTicket] = useState<string | null>(null);
   const [socialData, setSocialData] = useState<SocialUserData | null>(null);
   const [existingUserEmail, setExistingUserEmail] = useState<string | null>(null);
   // 비밀번호 모달이 열릴 시점의 소셜 임시 계정 UID.
@@ -204,8 +214,73 @@ export function SignInClient() {
     }
   };
   
+  // 새 흐름 — 소셜 증명만 서버에 보내고 서버 판정대로 (LOGIN · LINK_ACTIVE · NEED_PHONE)
+  const handleSocialV2 = async (data: SocialUserData) => {
+    setIsLoading(true);
+    try {
+      const proof = data.providerId === 'naver' || data.providerId === 'kakao' ? await buildSocialProof(data) : await getFirebaseProof();
+      const res = await resolveSocialLogin('', proof);
+
+      if (res.action === 'LOGIN') {
+        if (!res.alreadySignedIn) {
+          if (!res.customToken) throw new Error('로그인 토큰이 없습니다.');
+          toast.loading('로그인 인증 중...', { id: 'custom-token-loading' });
+          await signInWithCustomToken(auth, res.customToken);
+          toast.dismiss('custom-token-loading');
+        }
+        rememberLastLogin(data.providerId, data.email);
+        toast.success('로그인에 성공했습니다!');
+        setTimeout(() => {
+          const params = new URLSearchParams(window.location.search);
+          router.push(safeRedirect(params.get('redirect')) || '/');
+        }, 1000);
+        return;
+      }
+
+      if (res.action === 'LINK_ACTIVE') {
+        // 팝업으로 생긴 임시 Auth 계정은 서버가 지웠다 — 이 브라우저의 세션만 정리
+        if (auth.currentUser) await auth.signOut().catch(() => undefined);
+        const name = socialProviderLabel(data.providerId);
+        if (!res.hasPassword) {
+          const methods = res.providers.map(socialProviderLabel).join(', ') || '다른 방법';
+          toast.error(
+            `이 이메일(${res.maskedEmail})은 이미 ${methods}(으)로 가입되어 있습니다.\n` +
+            `${methods}(으)로 로그인한 뒤 마이페이지에서 ${name}를 연동해주세요.`,
+            { duration: 7000 },
+          );
+          return;
+        }
+        setSocialTempUid(null);
+        setSocialData(data);
+        setLinkTicket(res.linkTicket);
+        setExistingUserEmail(res.maskedEmail);
+        setShowPasswordModal(true);
+        return;
+      }
+
+      // NEED_PHONE — 예전 흐름과 같게 (역할 선택 → 전화번호 → 가입 · temp 계정)
+      const currentUser = auth.currentUser;
+      setSocialData({ ...data, firebaseAuthUid: currentUser?.uid || `${data.providerId}_${data.email}` });
+      setShowRoleSelectionModal(true);
+    } catch (error) {
+      toast.dismiss('custom-token-loading');
+      logger.error('소셜 로그인(새 흐름) 오류:', error);
+      if (auth.currentUser && !(error instanceof AuthApiError)) {
+        // 팝업 세션만 남은 채 실패 — 다음 시도가 꼬이지 않게
+        await auth.signOut().catch(() => undefined);
+      }
+      toast.error(error instanceof AuthApiError ? error.message : '로그인 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.', { duration: 6000 });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Google 로그인 성공 핸들러
   const handleGoogleSignInSuccess = async (data: SocialUserData) => {
+    if (AUTH_V2) {
+      await handleSocialV2(data);
+      return;
+    }
     setIsLoading(true); // ✅ 로딩 시작
     try {
       const result = await handleSocialLogin(data, getUserByEmail, getUserBySocialProvider, updateUser);
@@ -833,11 +908,40 @@ export function SignInClient() {
     setSocialTempUid(null);
     setSocialData(null);
     setExistingUserEmail(null);
+    setLinkTicket(null);
   };
   
   // 비밀번호 입력 핸들러 (계정 연동)
   const handlePasswordSubmit = async (password: string) => {
     if (!socialData || !existingUserEmail) return;
+    // 새 흐름: 서버가 비밀번호를 확인하고 연결한 뒤 토큰을 준다 (전체 이메일을 브라우저에 내리지 않는다)
+    if (linkTicket) {
+      setIsLoading(true);
+      try {
+        const { customToken } = await linkSocialWithPassword('', linkTicket, password);
+        await signInWithCustomToken(auth, customToken);
+        rememberLastLogin(socialData.providerId, socialData.email);
+        toast.success(`${socialProviderLabel(socialData.providerId)} 계정이 연동되었습니다!`);
+        setShowPasswordModal(false);
+        setLinkTicket(null);
+        setTimeout(() => { window.location.href = '/profile'; }, 1000);
+      } catch (error) {
+        logger.error('계정 연동(새 흐름) 오류:', error);
+        const code = error instanceof AuthApiError ? error.code : '';
+        if (code === 'WRONG_PASSWORD') {
+          toast.error('비밀번호가 올바르지 않습니다.\n본인의 계정이 아니라면 관리자에게 문의하세요.\n\n관리자: 010-7656-7933 (신선웅)', { duration: 8000 });
+        } else if (code === 'TICKET_EXPIRED') {
+          toast.error('확인 시간이 지났습니다. 처음부터 다시 로그인해주세요.');
+          setShowPasswordModal(false);
+          setLinkTicket(null);
+        } else {
+          toast.error(error instanceof AuthApiError ? error.message : '계정 연동 중 오류가 발생했습니다. 다시 시도해주세요.');
+        }
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
     
     setIsLoading(true);
     try {
@@ -923,9 +1027,11 @@ export function SignInClient() {
   const handleForgotPasswordFromModal = () => {
     setShowPasswordModal(false);
     setShowResetForm(true);
-    if (existingUserEmail) {
+    // 새 흐름은 가린 이메일만 알고 있다 — 미리 채우지 않는다
+    if (existingUserEmail && !linkTicket) {
       setResetEmail(existingUserEmail);
     }
+    setLinkTicket(null);
   };
   
   return (

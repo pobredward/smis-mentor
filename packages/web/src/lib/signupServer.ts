@@ -9,6 +9,8 @@
  */
 import { getAdminAuth, getAdminFirestore, adminFieldValue } from '@/lib/firebase-admin';
 import { sendVerificationEmail } from '@/lib/emailVerification';
+import { findIdentityOwner, identityProviderOf, linkIdentity, storedProviderId, type IdentityRef } from '@/lib/authIdentity';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 import { Timestamp } from 'firebase-admin/firestore';
 import {
   CONSENT_VERSION,
@@ -140,6 +142,28 @@ async function phoneInUse(phoneNumber: string, uid: string): Promise<boolean> {
   return snap.docs.some((d) => d.id !== uid && d.data().status === 'active' && normalizePhoneForMatch(d.data().phoneNumber) === want);
 }
 
+/**
+ * 가입하는 세션의 '서버가 확인한' 소셜 신원 — 클라이언트가 보낸 providerUid 는 믿지 않는다.
+ *  - 구글·애플: 팝업 세션 토큰의 firebase.identities
+ *  - 네이버·카카오: create-custom-token(signup) 이 넣은 provider · providerUid 클레임
+ */
+export function verifiedSignupIdentity(decoded: DecodedIdToken): IdentityRef | null {
+  const sp = String(decoded.firebase?.sign_in_provider ?? '');
+  if (sp === 'google.com' || sp === 'apple.com') {
+    const id = (decoded.firebase?.identities as Record<string, unknown[]> | undefined)?.[sp]?.[0];
+    const provider = identityProviderOf(sp);
+    return provider && id ? { provider, providerUid: String(id), ...(decoded.email ? { email: String(decoded.email).toLowerCase() } : {}) } : null;
+  }
+  if (sp === 'custom') {
+    const provider = identityProviderOf(decoded.provider);
+    const pu = typeof decoded.providerUid === 'string' ? decoded.providerUid : '';
+    if ((provider === 'naver' || provider === 'kakao') && pu) {
+      return { provider, providerUid: pu, ...(decoded.email ? { email: String(decoded.email).toLowerCase() } : {}) };
+    }
+  }
+  return null;
+}
+
 async function rollbackAuth(uid: string) {
   try {
     const auth = getAdminAuth();
@@ -158,7 +182,7 @@ async function rollbackAuth(uid: string) {
   }
 }
 
-export async function completeSignup(uid: string, tokenEmail: string | undefined, input: CompleteSignupInput, idToken?: string): Promise<CompleteSignupResult> {
+export async function completeSignup(uid: string, tokenEmail: string | undefined, input: CompleteSignupInput, idToken?: string, verified?: IdentityRef | null): Promise<CompleteSignupResult> {
   const db = getAdminFirestore();
   const userRef = db.collection('users').doc(uid);
 
@@ -175,6 +199,13 @@ export async function completeSignup(uid: string, tokenEmail: string | undefined
     let email = String(authUser.email || tokenEmail || '').toLowerCase();
     if (!email) throw new SignupError(400, 'NO_EMAIL', kind === 'foreign' ? 'No email address on this account.' : '이메일 정보가 없습니다.');
 
+    // 이 소셜 계정이 이미 다른 활성 계정에 연결돼 있으면 새로 만들지 않는다 (로그인으로 안내)
+    if (verified) {
+      const owner = await findIdentityOwner(verified.provider, verified.providerUid);
+      if (owner && owner.uid !== uid && owner.data.status === 'active') {
+        throw new SignupError(409, 'IDENTITY_TAKEN', kind === 'foreign' ? 'This social account is already linked to another account. Please sign in.' : '이 소셜 계정은 이미 다른 계정에 연결되어 있습니다. 로그인해주세요.');
+      }
+    }
     const temp = await findTempAccount(kind, profile, email, str(input.tempUserId, 128));
     if (!temp && kind === 'mentor' && await phoneInUse(String(profile.phoneNumber), uid)) {
       throw new SignupError(409, 'PHONE_IN_USE', '이 전화번호는 이미 가입되어 있습니다.');
@@ -188,7 +219,11 @@ export async function completeSignup(uid: string, tokenEmail: string | undefined
     const role = temp
       ? (t.role === 'foreign_temp' ? 'foreign' : t.role === 'admin' ? 'admin' : 'mentor')
       : (kind === 'foreign' ? 'foreign' : 'mentor'); // 가입을 마치면 바로 멘토 (mentor_temp 는 관리자가 미리 만든 가입 전 계정에만)
-    const providerId = PROVIDERS.includes(input?.provider?.providerId) ? input.provider.providerId : 'password';
+    // 서버가 확인한 소셜 신원이 있으면 그것으로 (없으면 예전처럼 클라이언트 값 — 옛 앱 호환)
+    const providerId = verified
+      ? (storedProviderId(verified.provider) as SignupProviderId)
+      : PROVIDERS.includes(input?.provider?.providerId) ? input.provider.providerId : 'password';
+    const providerUid = verified ? verified.providerUid : (str(input?.provider?.providerUid, 128) || uid);
     const now = Timestamp.now();
     const jobExperiences = Array.isArray(t.jobExperiences) ? t.jobExperiences : [];
 
@@ -236,7 +271,7 @@ export async function completeSignup(uid: string, tokenEmail: string | undefined
       consentedAt: now,
       authProviders: [{
         providerId,
-        uid: str(input?.provider?.providerUid, 128) || uid,
+        uid: providerUid,
         email,
         linkedAt: now,
         ...(str(input?.provider?.displayName, 100) && { displayName: str(input.provider.displayName, 100) }),
@@ -269,6 +304,10 @@ export async function completeSignup(uid: string, tokenEmail: string | undefined
       logger.warn('⚠️ 탈퇴 계정 이메일 정리 실패 (가입은 완료):', (e as Error)?.message);
     }
 
+    // 서버가 확인한 소셜 신원은 연결표에도 (실패해도 가입은 완료 — 로그인 때 authProviders 에서 다시 채운다)
+    if (verified) {
+      await linkIdentity(uid, { ...verified, email }).catch((e) => logger.warn('⚠️ 가입 신원 연결표 기록 실패:', (e as Error)?.message));
+    }
     // 소셜 가입인데 Auth 에 인증 표시가 없으면 맞춰 둔다
     if (providerId !== 'password' && !authUser.emailVerified) {
       await getAdminAuth().updateUser(uid, { emailVerified: true }).catch(() => undefined);
