@@ -9,8 +9,9 @@
  *
  * Storage: chat/{roomId}/{uid}/{messageId}/{0.jpg | 0_t.jpg …}
  *
- * 캠프 방 (캠프마다 5개, id = `${jobCodeId}_${type}`)
+ * 캠프 방 (캠프마다 6개, id = `${jobCodeId}_${type}`)
  *  camp_all           전체방      매니저 + 멘토 + 원어민
+ *  camp_manager       매니저방    매니저 + 부매니저 (멘토 '부매니저' · 원어민 'Sub Manager')
  *  camp_mentor        멘토방      매니저 + 멘토
  *  camp_mentor_only   멘토끼리    멘토 (부매니저 포함, 매니저 빠짐)
  *  camp_foreign       원어민방    매니저 + 원어민
@@ -27,7 +28,7 @@
  */
 import type { Timestamp } from 'firebase/firestore';
 
-export const CAMP_CHAT_ROOM_TYPES = ['camp_all', 'camp_mentor', 'camp_mentor_only', 'camp_foreign', 'camp_foreign_only'] as const;
+export const CAMP_CHAT_ROOM_TYPES = ['camp_all', 'camp_mentor', 'camp_mentor_only', 'camp_foreign', 'camp_foreign_only', 'camp_manager'] as const;
 export type CampChatRoomType = typeof CAMP_CHAT_ROOM_TYPES[number];
 export type ChatRoomType = CampChatRoomType | 'camp_group' | 'dm';
 

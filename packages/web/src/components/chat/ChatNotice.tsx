@@ -1,32 +1,24 @@
 'use client';
 
 /**
- * 방 공지 띠 — 📢 글(2줄)/작은 그림 · 'OO 님이 올린 공지' · [확인] · '확인 12 · 미확인 4' · [공지 내리기] · 접기/펼치기
- * 누르면 그 메시지로 옮겨 간다.
+ * 방 공지 띠 — 📢 글(2줄)/작은 그림 · 'OO 님이 올린 공지' · [공지 내리기] · 접기/펼치기
+ * 누르면 그 메시지로 옮겨 간다. (누가 확인했는지는 보이지 않는다)
  */
-import { FiCheck, FiChevronDown, FiChevronUp } from 'react-icons/fi';
-import { L, noticeAckSummary, type ChatRoom } from '@smis-mentor/shared';
+import { FiChevronDown, FiChevronUp } from 'react-icons/fi';
+import { L, type ChatRoom } from '@smis-mentor/shared';
 
 export interface ChatNoticeBannerProps {
   room: ChatRoom;
-  myUid: string;
-  /** 공지 메시지의 확인 (uid → 시각) — 실시간 */
-  acks: Record<string, unknown> | null;
   canManage: boolean;
   collapsed: boolean;
   onToggle: () => void;
   onOpen: () => void;
-  onAck: () => void;
-  onShowAcks: () => void;
   onClear: () => void;
 }
 
-export default function ChatNoticeBanner({ room, myUid, acks, canManage, collapsed, onToggle, onOpen, onAck, onShowAcks, onClear }: ChatNoticeBannerProps) {
+export default function ChatNoticeBanner({ room, canManage, collapsed, onToggle, onOpen, onClear }: ChatNoticeBannerProps) {
   const notice = room.notice;
   if (!notice) return null;
-  const summary = noticeAckSummary(room, acks);
-  const needsAck = myUid !== notice.setBy && myUid !== notice.senderId;
-  const acked = !!acks?.[myUid];
   const text = notice.text || (notice.thumbUrl ? L('chat.previewPhotoShort') : L('chat.notice'));
 
   if (collapsed) {
@@ -36,7 +28,6 @@ export default function ChatNoticeBanner({ room, myUid, acks, canManage, collaps
           <span aria-hidden="true">📢</span>
           <span className="min-w-0 flex-1 truncate text-sm text-gray-800">{text}</span>
         </button>
-        {needsAck && !acked && <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" aria-label={L('chat.ack')} />}
         <button type="button" onClick={onToggle} className="h-8 w-8 shrink-0 rounded-full text-gray-500 hover:bg-gray-100 flex items-center justify-center" aria-label={L('chat.notice')} aria-expanded={false}>
           <FiChevronDown size={16} />
         </button>
@@ -63,27 +54,13 @@ export default function ChatNoticeBanner({ room, myUid, acks, canManage, collaps
             <FiChevronUp size={16} />
           </button>
         </div>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          {needsAck && (
-            <button
-              type="button"
-              onClick={onAck}
-              disabled={acked}
-              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold ${acked ? 'bg-gray-100 text-gray-500' : 'bg-blue-500 text-white hover:bg-blue-600'}`}
-            >
-              {acked && <FiCheck size={12} />}
-              {acked ? L('chat.acked') : L('chat.ack')}
-            </button>
-          )}
-          <button type="button" onClick={onShowAcks} className="text-xs text-gray-600 hover:underline tabular-nums">
-            {L('chat.ackCount', { a: summary.acked.length, b: summary.pending.length })}
-          </button>
-          {canManage && (
+        {canManage && (
+          <div className="mt-2 flex items-center">
             <button type="button" onClick={onClear} className="ml-auto text-xs text-gray-500 hover:text-red-600">
               {L('chat.clearNotice')}
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

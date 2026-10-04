@@ -63,17 +63,23 @@ export const CHAT_LIMITS = {
 
 /** 매니저로 보는 캠프 그룹 역할 — 부매니저 · Sub Manager 는 멘토·원어민 쪽 */
 export const CHAT_MANAGER_GROUP_ROLES: readonly string[] = ['매니저', 'Manager'];
+/** 부매니저 — 자리는 멘토·원어민 그대로, 매니저방에만 더 들어간다 */
+export const CHAT_SUB_MANAGER_GROUP_ROLES: readonly string[] = ['부매니저', 'Sub Manager'];
 
-/** 캠프 방 순서 (목록 위에 고정) — 사람마다 보이는 방은 3개: 매니저 [전체·멘토방·원어민방], 멘토 [전체·멘토방·멘토끼리], 원어민 [전체·원어민방·원어민끼리] */
-export const CAMP_CHAT_ROOM_ORDER: readonly CampChatRoomType[] = ['camp_all', 'camp_mentor', 'camp_mentor_only', 'camp_foreign', 'camp_foreign_only'];
+/**
+ * 캠프 방 순서 (목록 위에 고정) — 매니저 [전체·매니저방·멘토방·원어민방], 멘토 [전체·멘토방·멘토끼리],
+ * 원어민 [전체·원어민방·원어민끼리], 부매니저는 여기에 매니저방이 더 보인다.
+ */
+export const CAMP_CHAT_ROOM_ORDER: readonly CampChatRoomType[] = ['camp_all', 'camp_manager', 'camp_mentor', 'camp_mentor_only', 'camp_foreign', 'camp_foreign_only'];
 
-/** 방마다 들어가는 자리 */
+/** 방마다 들어가는 자리 — 매니저방은 여기에 부매니저(멘토·원어민)가 더 들어간다 (chatCampRoomWants) */
 export const CAMP_CHAT_ROOM_MEMBERS: Record<CampChatRoomType, readonly ChatMemberKind[]> = {
   camp_all: ['manager', 'mentor', 'foreign'],
   camp_mentor: ['manager', 'mentor'],
   camp_mentor_only: ['mentor'],
   camp_foreign: ['manager', 'foreign'],
   camp_foreign_only: ['foreign'],
+  camp_manager: ['manager'],
 };
 
 const ROOM_LABEL_KEY: Record<CampChatRoomType, MessageKey> = {
@@ -82,6 +88,7 @@ const ROOM_LABEL_KEY: Record<CampChatRoomType, MessageKey> = {
   camp_mentor_only: 'chat.roomMentorOnly',
   camp_foreign: 'chat.roomForeign',
   camp_foreign_only: 'chat.roomForeignOnly',
+  camp_manager: 'chat.roomManager',
 };
 const ROOM_DESC_KEY: Record<CampChatRoomType, MessageKey> = {
   camp_all: 'chat.roomAllDesc',
@@ -89,6 +96,7 @@ const ROOM_DESC_KEY: Record<CampChatRoomType, MessageKey> = {
   camp_mentor_only: 'chat.roomMentorOnlyDesc',
   camp_foreign: 'chat.roomForeignDesc',
   camp_foreign_only: 'chat.roomForeignOnlyDesc',
+  camp_manager: 'chat.roomManagerDesc',
 };
 
 export const isCampChatRoomType = (v: unknown): v is CampChatRoomType =>
@@ -146,6 +154,20 @@ export function chatMemberKindOf(
   return u.role === 'foreign' ? 'foreign' : 'mentor';
 }
 
+/** 이 캠프에서 부매니저인가 (그룹 역할 '부매니저' · 'Sub Manager') — 매니저방에 들어간다 */
+export function isChatSubManager(u: ChatUserLike | null | undefined, jobCodeId: string): boolean {
+  const exp = (u?.jobExperiences ?? []).find((e) => e?.id === jobCodeId);
+  const role = String(exp?.groupRole ?? '').trim().toLowerCase();
+  return !!role && CHAT_SUB_MANAGER_GROUP_ROLES.some((r) => r.toLowerCase() === role);
+}
+
+/** 이 캠프 방에 들어가는가 — 자리(kind)로, 매니저방은 부매니저도 */
+export function chatCampRoomWants(type: CampChatRoomType, kind: ChatMemberKind | null, u: ChatUserLike | null | undefined, jobCodeId: string): boolean {
+  if (!kind) return false;
+  if (CAMP_CHAT_ROOM_MEMBERS[type].includes(kind)) return true;
+  return type === 'camp_manager' && isChatSubManager(u, jobCodeId);
+}
+
 export function chatMemberInfoOf(u: ChatUserLike, kind: ChatMemberKind, jobCodeId?: string): ChatMemberInfo {
   const info: ChatMemberInfo = { name: String(u.name ?? '').trim() || '?', kind, role: String(u.role ?? '') };
   // 사진은 주소만 (data: URL 같은 큰 값은 방 문서를 키우므로 뺀다)
@@ -167,7 +189,7 @@ export interface CampChatRoomPlan {
 }
 
 /**
- * 캠프 방 5개의 사람 — 서버가 방 문서를 맞출 때 쓴다.
+ * 캠프 방 6개의 사람 — 서버가 방 문서를 맞출 때 쓴다.
  * users: 이 캠프(관리자는 같은 기수 캠프)에 배정된 사람들. memberIds 는 정렬해 두어 바뀐 게 없으면 쓰지 않게 한다.
  * generationJobCodeIds: 같은 기수 캠프 id 전부 (관리자 자리 판단)
  */
@@ -180,8 +202,7 @@ export function campChatRoomPlan(
     .map((u) => ({ uid: uidOf(u), kind: chatMemberKindOf(u, camp.jobCodeId, gen), u }))
     .filter((p): p is { uid: string; kind: ChatMemberKind; u: ChatUserLike } => !!p.uid && !!p.kind);
   return CAMP_CHAT_ROOM_TYPES.map((type) => {
-    const allowed = CAMP_CHAT_ROOM_MEMBERS[type];
-    const inRoom = people.filter((p) => allowed.includes(p.kind));
+    const inRoom = people.filter((p) => chatCampRoomWants(type, p.kind, p.u, camp.jobCodeId));
     const memberIds = [...new Set(inRoom.map((p) => p.uid))].sort();
     const memberInfo: Record<string, ChatMemberInfo> = {};
     inRoom.forEach((p) => { memberInfo[p.uid] = chatMemberInfoOf(p.u, p.kind, camp.jobCodeId); });
@@ -329,7 +350,7 @@ export interface ChatCampGroup {
   jobCodeId: string;
   campCode: string;
   generation: string;
-  /** 전체방 → 멘토방 → 멘토끼리 → 원어민방 → 원어민끼리 → 그룹방(Junior …) 순 (보이는 것만) */
+  /** 전체방 → 매니저방 → 멘토방 → 멘토끼리 → 원어민방 → 원어민끼리 → 그룹방(Junior …) 순 (보이는 것만) */
   rooms: ChatRoom[];
 }
 
@@ -890,13 +911,13 @@ export function pollResults(m: Pick<ChatMessage, 'poll' | 'pollVotes'>, myUid: s
 
 const SUB_MANAGER_LABEL = /(^|\s)(부매니저|Sub Manager)(\s|$)/;
 
-/** 공지를 올리고 내릴 수 있나 — 캠프 방: 매니저 · 그룹방: 매니저 + 그 그룹 부매니저 · 1:1: 둘 다 */
+/** 공지를 올리고 내릴 수 있나 — 캠프 방: 매니저 · 매니저방: 매니저 + 부매니저 · 그룹방: 매니저 + 그 그룹 부매니저 · 1:1: 둘 다 */
 export function canSetNotice(room: Pick<ChatRoom, 'type' | 'memberIds' | 'memberInfo'>, uid: string): boolean {
   if (!(room.memberIds ?? []).includes(uid)) return false;
   if (room.type === 'dm') return true;
   const info = room.memberInfo?.[uid];
   if (info?.kind === 'manager') return true;
-  return room.type === 'camp_group' && SUB_MANAGER_LABEL.test(String(info?.label ?? ''));
+  return (room.type === 'camp_group' || room.type === 'camp_manager') && SUB_MANAGER_LABEL.test(String(info?.label ?? ''));
 }
 
 /** 공지로 올릴 수 있는 메시지 — 글 · 사진/동영상 · 투표 (삭제 · 음성 · 알림 제외) */

@@ -4,9 +4,12 @@
  * /chat — 채팅 (카톡방 대체)
  * 넓은 화면: 왼쪽 방 목록(340px) + 오른쪽 열린 방. 좁은 화면: 목록 또는 방(전체 화면, 뒤로 버튼).
  * 열린 방 = ?room=<roomId> (푸시 링크도 /chat?room=…)
+ * 방 열기·닫기는 주소만 바꾼다 (history.pushState — Next 가 useSearchParams 를 맞춰 준다, 서버 왕복 없음).
+ * router.push 를 쓰지 않는 까닭: Next 16.2 는 /chat?room=A 로 처음 들어온 뒤 router.push 로 다른 방을 열면
+ * 미리 불러온 캐시 때문에 A 로 되돌아간다 (vercel/next.js#92187) — 왼쪽 목록을 눌러도 방이 안 바뀌던 문제.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import {
   L,
@@ -64,8 +67,13 @@ function readFilter(): ChatCampFilter {
   }
 }
 
+/** 채팅 화면 안에서 주소 바꾸기 (방 열기·닫기) */
+function goChat(href: string, replace = false) {
+  if (replace) window.history.replaceState(null, '', href);
+  else window.history.pushState(null, '', href);
+}
+
 function ChatScreen({ uid, user }: { uid: string; user: User }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const roomId = searchParams.get('room') || null;
   const inbox = useChatInbox();
@@ -112,12 +120,13 @@ function ChatScreen({ uid, user }: { uid: string; user: User }) {
   }, [inbox.rooms, activeJobCodeId, uid]);
 
   const openRoom = useCallback((id: string) => {
-    router.push(`/chat?room=${encodeURIComponent(id)}`);
-  }, [router]);
+    if (id === roomId) return;
+    goChat(`/chat?room=${encodeURIComponent(id)}`);
+  }, [roomId]);
 
   const closeRoom = useCallback(() => {
-    router.push('/chat');
-  }, [router]);
+    goChat('/chat');
+  }, []);
 
   const onPin = useCallback((id: string, pinned: boolean) => {
     setChatRoomPinned(db, uid, id, pinned).catch((e) => {
@@ -132,8 +141,8 @@ function ChatScreen({ uid, user }: { uid: string; user: User }) {
         logger.warn('채팅방 숨기기 실패:', e);
         toast.error(L('chat.webActionFailed'));
       });
-    if (hidden && id === roomId) router.push('/chat');
-  }, [uid, roomId, router]);
+    if (hidden && id === roomId) goChat('/chat', true);
+  }, [uid, roomId]);
 
   const startDm = useCallback(async (userId: string) => {
     try {

@@ -164,6 +164,8 @@ export const ko = {
     roomForeignDesc: "매니저 + 원어민",
     roomForeignOnly: "원어민끼리",
     roomForeignOnlyDesc: "원어민만 (매니저 없음)",
+    roomManager: "매니저방",
+    roomManagerDesc: "매니저 + 부매니저",
     roomInfo: "채팅방 정보",
     roomMentor: "멘토방",
     roomMentorDesc: "매니저 + 멘토",

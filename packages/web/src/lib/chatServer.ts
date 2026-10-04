@@ -1,7 +1,7 @@
 /**
  * 채팅 방 만들기 · 사람 맞추기 (Next.js API 라우트 전용, Admin SDK)
  *
- * - syncCampChatRooms: 캠프 방 5개를 캠프 배정(users.jobCodeIds)대로 맞춘다 (없으면 만든다).
+ * - syncCampChatRooms: 캠프 방 6개(매니저방 포함)를 캠프 배정(users.jobCodeIds)대로 맞춘다 (없으면 만든다).
  *   관리자는 같은 기수 캠프 하나에라도 배정돼 있으면 그 기수 모든 캠프의 매니저 — 그래서 기수 단위로 사람을 읽는다.
  * - 그룹방: 캠프 그룹마다 매니저 + 그 그룹 멘토(부매니저 포함), 원어민 없음 (campGroupRoomPlan)
  * - syncGenerationChatRooms: 같은 기수 캠프 전부 (채팅 탭을 열 때 · 선생님 명단 저장 뒤)
@@ -75,7 +75,7 @@ async function usersOfCamps(jobCodeIds: string[]): Promise<ChatUserLike[]> {
 async function writeCampRooms(camp: CampInfo, generationIds: string[], users: ChatUserLike[]): Promise<number> {
   const db = getAdminFirestore();
   const opts = { ...camp, generationJobCodeIds: generationIds };
-  // 캠프 방 5개 + 그룹방 (그룹마다 매니저 + 그 그룹 멘토)
+  // 캠프 방 6개 + 그룹방 (그룹마다 매니저 + 그 그룹 멘토)
   const groupPlan = campGroupRoomPlan(users, opts);
   const plan: Array<(CampChatRoomPlan | CampGroupRoomPlan)> = [...campChatRoomPlan(users, opts), ...groupPlan];
   // 멘토가 모두 빠진 그룹의 방 — 매니저만 남긴다 (방과 대화는 그대로)

@@ -247,6 +247,8 @@ const Header = () => {
                 <Link 
                   key={item.path}
                   href={item.path} 
+                  // 지금 페이지로 가는 링크는 미리 불러오지 않는다 — BottomNavigation 과 같은 이유 (vercel/next.js#92187)
+                  prefetch={item.path === pathname ? false : undefined}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                     isActive(item.path)
                       ? 'bg-blue-50 text-blue-600 shadow-sm'

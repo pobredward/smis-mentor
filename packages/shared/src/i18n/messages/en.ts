@@ -166,6 +166,8 @@ export const en: Messages = {
     roomForeignDesc: "Managers + native teachers",
     roomForeignOnly: "Native Teachers Only",
     roomForeignOnlyDesc: "Native teachers only (no managers)",
+    roomManager: "Managers",
+    roomManagerDesc: "Managers + sub managers",
     roomInfo: "Chat info",
     roomMentor: "Mentors & Managers",
     roomMentorDesc: "Managers + mentors",

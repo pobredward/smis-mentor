@@ -5,7 +5,7 @@ import { ChatServerError, syncGenerationChatRooms } from '@/lib/chatServer';
 
 /**
  * POST /api/chat/sync  { jobCodeIds?: string[] }
- * 캠프 채팅방(캠프마다 5개)을 캠프 배정대로 맞춘다 — 그 캠프와 같은 기수 캠프 전부. 채팅 탭을 열 때 부른다 (안전망 —
+ * 캠프 채팅방(캠프마다 6개 — 매니저방 포함)을 캠프 배정대로 맞춘다 — 그 캠프와 같은 기수 캠프 전부. 채팅 탭을 열 때 부른다 (안전망 —
  * 평소에는 Functions 가 배정이 바뀔 때 바로 맞춘다).
  * 캠프를 주지 않으면 지금 보고 있는 캠프. 내가 배정된 캠프만 (관리자는 아무 캠프나).
  */

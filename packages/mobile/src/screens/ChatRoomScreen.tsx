@@ -53,7 +53,6 @@ import {
   logger,
   markChatRoomRead,
   newChatClientId,
-  noticeAckSummary,
   pollResults,
   reactionSummary,
   reportChatMessage,
@@ -66,12 +65,10 @@ import {
   setChatRoomMuted,
   setChatRoomPinned,
   setChatUserBlocked,
-  subscribeChatMessage,
   subscribeChatRoom,
   unreadOf,
   unreadReaders,
   voteChatPoll,
-  ackChatNotice,
   cancelScheduledChatMessage,
   extractMentions,
   type ChatMessage,
@@ -137,7 +134,6 @@ const confirm = (title: string, message: string | undefined, okText: string, onO
 type SheetState =
   | { kind: 'reactions'; message: ChatMessageView }
   | { kind: 'voters'; title: string; uids: string[] }
-  | { kind: 'acks' }
   | null;
 
 export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'ChatRoom'>) {
@@ -377,16 +373,6 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
 
   // ── 공지 ──────────────────────────────────────────────────────────
   const notice = room?.notice ?? null;
-  const [noticeMsg, setNoticeMsg] = useState<ChatMessageView | null>(null);
-  useEffect(() => {
-    setNoticeMsg(null);
-    if (!isMember || !notice?.messageId) return;
-    return subscribeChatMessage(db, roomId, notice.messageId, setNoticeMsg, (e) => logger.warn('공지 메시지 구독 실패:', e));
-  }, [isMember, roomId, notice?.messageId]);
-  const ackSummary = useMemo(
-    () => (room && notice ? noticeAckSummary(room, noticeMsg?.acks) : { acked: [], pending: [] }),
-    [room, notice, noticeMsg?.acks],
-  );
   const canNotice = !!room && canSetNotice(room, uid);
 
   const postNotice = useCallback(
@@ -761,7 +747,7 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
     }, true);
   }, []);
 
-  // ── 시트 내용 (공감한 사람 · 투표한 사람 · 공지 확인) ──────────────
+  // ── 시트 내용 (공감한 사람 · 투표한 사람) ─────────────────────────
   const sheetTabs = useMemo<{ title: string; tabs: UidListTab[] } | null>(() => {
     if (!sheet) return null;
     if (sheet.kind === 'reactions') {
@@ -776,15 +762,8 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
         ],
       };
     }
-    if (sheet.kind === 'voters') return { title: sheet.title, tabs: [{ key: 'v', label: '', uids: sheet.uids }] };
-    return {
-      title: L('chat.notice'),
-      tabs: [
-        { key: 'acked', label: L('chat.ackedList'), uids: ackSummary.acked },
-        { key: 'pending', label: L('chat.pendingList'), uids: ackSummary.pending },
-      ],
-    };
-  }, [sheet, ackSummary]);
+    return { title: sheet.title, tabs: [{ key: 'v', label: '', uids: sheet.uids }] };
+  }, [sheet]);
 
   // ── 그리기 ────────────────────────────────────────────────────────
   const bubbleMaxWidth = Math.round(Math.min(width * 0.7, 360));
@@ -916,18 +895,10 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
           roomId={roomId}
           notice={notice}
           lang={lang}
-          canAck={uid !== notice.setBy && uid !== notice.senderId}
-          acked={!!noticeMsg?.acks?.[uid]}
-          ackedCount={ackSummary.acked.length}
-          pendingCount={ackSummary.pending.length}
           canClear={canNotice}
           onPress={() => {
             void jumpTo(notice.messageId);
           }}
-          onAck={() => {
-            ackChatNotice(db, roomId, notice.messageId, uid).catch((e) => Alert.alert(L('common.error'), errorMessage(e)));
-          }}
-          onShowAcks={() => setSheet({ kind: 'acks' })}
           onClear={() => confirm(L('chat.clearNotice'), L('chat.appNoticeClearConfirm'), L('chat.clearNotice'), () => postNotice(null), true)}
         />
       ) : null}

@@ -2,7 +2,7 @@
  * 채팅 화면(web) 작은 도우미 — 시각 · 글 속 링크 · 동영상 길이 · 자리 이름 · 아바타
  */
 import { Fragment, type ReactNode } from 'react';
-import { FiGlobe, FiUsers } from 'react-icons/fi';
+import { FiBriefcase, FiGlobe, FiUsers } from 'react-icons/fi';
 import { HiOutlineAcademicCap } from 'react-icons/hi2';
 import {
   L,
@@ -99,8 +99,9 @@ export function richText(text: string, opts: RichTextOptions): ReactNode {
 }
 
 /** 캠프 방 종류별 색 · 아이콘 (그룹방은 주황 동그라미 + 그룹 첫 글자) */
-const ROOM_STYLE: Record<Exclude<ChatRoomType, 'dm' | 'camp_group'>, { bg: string; icon: 'all' | 'mentor' | 'foreign' }> = {
+const ROOM_STYLE: Record<Exclude<ChatRoomType, 'dm' | 'camp_group'>, { bg: string; icon: 'all' | 'mentor' | 'foreign' | 'manager' }> = {
   camp_all: { bg: 'bg-blue-500', icon: 'all' },
+  camp_manager: { bg: 'bg-slate-700', icon: 'manager' },
   camp_mentor: { bg: 'bg-emerald-500', icon: 'mentor' },
   camp_mentor_only: { bg: 'bg-teal-600', icon: 'mentor' },
   camp_foreign: { bg: 'bg-violet-500', icon: 'foreign' },
@@ -144,7 +145,7 @@ export function RoomAvatar({ type, peerName, peerPhoto, groupKey, size = 44 }: {
   const iconSize = Math.round(size * 0.48);
   return (
     <div style={avatarSize(size)} className={`${st.bg} rounded-full text-white flex items-center justify-center shrink-0`} aria-hidden="true">
-      {st.icon === 'all' ? <FiUsers size={iconSize} /> : st.icon === 'mentor' ? <HiOutlineAcademicCap size={iconSize} /> : <FiGlobe size={iconSize} />}
+      {st.icon === 'all' ? <FiUsers size={iconSize} /> : st.icon === 'mentor' ? <HiOutlineAcademicCap size={iconSize} /> : st.icon === 'manager' ? <FiBriefcase size={iconSize} /> : <FiGlobe size={iconSize} />}
     </div>
   );
 }

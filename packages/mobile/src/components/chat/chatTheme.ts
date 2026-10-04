@@ -31,6 +31,7 @@ type IoniconName = keyof typeof Ionicons.glyphMap;
 /** 캠프 방 아바타 — 방 종류별 색 동그라미 + 아이콘 */
 export const ROOM_AVATAR: Record<Exclude<ChatRoomType, 'dm'>, { color: string; icon: IoniconName }> = {
   camp_all: { color: '#3b82f6', icon: 'people' },
+  camp_manager: { color: '#334155', icon: 'briefcase' },
   camp_mentor: { color: '#10b981', icon: 'school' },
   camp_mentor_only: { color: '#0ea5e9', icon: 'chatbubbles' },
   camp_foreign: { color: '#8b5cf6', icon: 'globe-outline' },

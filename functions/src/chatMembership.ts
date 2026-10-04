@@ -6,8 +6,9 @@
  *  - 채팅 계정: 관리자·멘토·원어민, 탈퇴·비활성·임시 아님
  *  - 매니저: 그 캠프 그룹 역할 '매니저'/'Manager', 또는 관리자 — 관리자는 같은 기수 캠프 하나에라도 배정돼 있으면 그 기수 모든 캠프의 매니저
  *  - 방: 전체(매니저+멘토+원어민) · 멘토방(매니저+멘토) · 멘토끼리(멘토) · 원어민방(매니저+원어민) · 원어민끼리(원어민)
+ *        · 매니저방(매니저 + 부매니저 — 그룹 역할 '부매니저'/'Sub Manager')
  */
-export const CAMP_ROOM_TYPES = ['camp_all', 'camp_mentor', 'camp_mentor_only', 'camp_foreign', 'camp_foreign_only'] as const;
+export const CAMP_ROOM_TYPES = ['camp_all', 'camp_mentor', 'camp_mentor_only', 'camp_foreign', 'camp_foreign_only', 'camp_manager'] as const;
 export type CampRoomType = typeof CAMP_ROOM_TYPES[number];
 export type MemberKind = 'manager' | 'mentor' | 'foreign';
 
@@ -17,9 +18,11 @@ export const ROOM_MEMBERS: Record<CampRoomType, readonly MemberKind[]> = {
   camp_mentor_only: ['mentor'],
   camp_foreign: ['manager', 'foreign'],
   camp_foreign_only: ['foreign'],
+  camp_manager: ['manager'],
 };
 
 const MANAGER_GROUP_ROLES = ['매니저', 'Manager'];
+const SUB_MANAGER_GROUP_ROLES = ['부매니저', 'Sub Manager'];
 const STAFF = ['admin', 'mentor', 'foreign'];
 
 /** shared TEACHER_GROUP_NAME 과 같게 */
@@ -70,6 +73,20 @@ export function memberKindOf(u: UserLike | null | undefined, jobCodeId: string, 
   return u.role === 'foreign' ? 'foreign' : 'mentor';
 }
 
+/** shared isChatSubManager 와 같게 */
+export function isSubManager(u: UserLike | null | undefined, jobCodeId: string): boolean {
+  const exp = (u?.jobExperiences ?? []).find((e) => e?.id === jobCodeId);
+  const role = String(exp?.groupRole ?? '').trim().toLowerCase();
+  return !!role && SUB_MANAGER_GROUP_ROLES.some((r) => r.toLowerCase() === role);
+}
+
+/** shared chatCampRoomWants 와 같게 — 매니저방은 부매니저도 */
+export function wantsRoom(type: CampRoomType, kind: MemberKind | null, u: UserLike | null | undefined, jobCodeId: string): boolean {
+  if (!kind) return false;
+  if (ROOM_MEMBERS[type].includes(kind)) return true;
+  return type === 'camp_manager' && isSubManager(u, jobCodeId);
+}
+
 /** shared campRolesOf(u)[jobCodeId] 와 같게 — 같은 캠프가 여러 번이면 마지막 것 */
 function campRoleLabel(u: UserLike, jobCodeId: string): string {
   let out = '';
@@ -104,7 +121,7 @@ export function campRoomPlan(
     .map((u) => ({ uid: String(u.userId ?? ''), kind: memberKindOf(u, camp.jobCodeId, camp.generationIds), u }))
     .filter((p): p is { uid: string; kind: MemberKind; u: UserLike } => !!p.uid && !!p.kind);
   return CAMP_ROOM_TYPES.map((type) => {
-    const inRoom = people.filter((p) => ROOM_MEMBERS[type].includes(p.kind));
+    const inRoom = people.filter((p) => wantsRoom(type, p.kind, p.u, camp.jobCodeId));
     const memberIds = [...new Set(inRoom.map((p) => p.uid))].sort();
     const memberInfo: Record<string, MemberInfo> = {};
     inRoom.forEach((p) => { memberInfo[p.uid] = memberInfoOf(p.u, p.kind, camp.jobCodeId); });

@@ -150,7 +150,11 @@ function useInboxRetain(): { enabled: boolean; uid: string } {
   }, [enabled, uid]);
 
   useEffect(() => {
-    navigate = (href) => router.push(href);
+    // 채팅 화면에 있으면 주소만 바꾼다 (ChatPage 와 같은 이유 — Next 16.2 router.push 가 처음 연 방으로 되돌아갈 수 있다)
+    navigate = (href) => {
+      if (window.location.pathname === '/chat') window.history.pushState(null, '', href);
+      else router.push(href);
+    };
   }, [router]);
 
   return { enabled, uid };

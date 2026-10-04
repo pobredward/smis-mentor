@@ -15,7 +15,6 @@ import { FiChevronLeft } from 'react-icons/fi';
 import {
   CHAT_LIMITS,
   L,
-  ackChatNotice,
   chatExportFileName,
   chatExportText,
   chatReplyRefOf,
@@ -43,7 +42,6 @@ import {
   setChatRoomMuted,
   setChatRoomPinned,
   setChatUserBlocked,
-  subscribeChatMessage,
   subscribeMyScheduledChatMessages,
   cancelScheduledChatMessage,
   unreadOf,
@@ -130,7 +128,6 @@ export default function ChatRoomContainer({ roomId, myUid, myName, state, curren
   const [active, setActive] = useState(pageActive);
   const [pushStatus, setPushStatus] = useState<ChatPushStatus>(() => (typeof window === 'undefined' ? 'unsupported' : webPushPermission()));
   const [scheduled, setScheduled] = useState<ChatScheduledMessage[]>([]);
-  const [noticeAcks, setNoticeAcks] = useState<{ id: string; acks: Record<string, unknown> | null } | null>(null);
   const box = useNarrowViewportBox();
 
   // ── 전체 대화 (검색 · 답장 이동 · 읽지 않은 곳 · 내보내기) ───
@@ -188,13 +185,6 @@ export default function ChatRoomContainer({ roomId, myUid, myName, state, curren
     (e) => logger.warn('예약 메시지 구독 오류:', e),
   ), [myUid, roomId]);
 
-  // 공지 메시지의 '확인' (실시간)
-  const noticeId = room?.notice?.messageId ?? '';
-  useEffect(() => {
-    if (!noticeId || !ready) return;
-    return subscribeChatMessage(db, roomId, noticeId, (m) => setNoticeAcks({ id: noticeId, acks: (m?.acks as Record<string, unknown> | undefined) ?? null }), (e) => logger.warn('공지 확인 구독 오류:', e));
-  }, [roomId, noticeId, ready]);
-  const acks = noticeAcks && noticeAcks.id === noticeId ? noticeAcks.acks : null;
 
   const onTextChange = useCallback((v: string) => {
     setText(v);
@@ -451,18 +441,13 @@ export default function ChatRoomContainer({ roomId, myUid, myName, state, curren
 
   // ── 공지 ─────────────────────────────────────────────
   const notice = useMemo(() => ({
-    acks,
     onSet: (m: ChatMessageView) => {
       authenticatedPost('/api/chat/notice', { roomId, messageId: m.id }).catch((e) => toast.error(errorText(e)));
     },
     onClear: () => {
       authenticatedPost('/api/chat/notice', { roomId, messageId: null }).catch((e) => toast.error(errorText(e)));
     },
-    onAck: () => {
-      if (!noticeId) return;
-      ackChatNotice(db, roomId, noticeId, myUid).catch(() => toast.error(L('chat.webActionFailed')));
-    },
-  }), [acks, roomId, noticeId, myUid]);
+  }), [roomId]);
 
   // ── 예약 메시지 ───────────────────────────────────────
   const onSchedule = useCallback(async (t: string, at: Date) => {

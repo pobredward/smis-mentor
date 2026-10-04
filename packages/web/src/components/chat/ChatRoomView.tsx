@@ -45,7 +45,6 @@ import {
   isMentioned,
   isRoomMuted,
   isUserBlocked,
-  noticeAckSummary,
   normalizeChatSearch,
   searchChatMessages,
   unreadReaders,
@@ -153,12 +152,10 @@ export interface ChatRoomViewProps {
   onClosePoll: (m: ChatMessageView) => void;
   onCreatePoll: (poll: ChatPoll, closesAt: Date | null) => Promise<void>;
   onSendVoice: (blob: Blob, durationMs: number) => void;
-  /** 공지 — 공지 메시지의 확인(실시간) · 올리기 · 내리기 · 확인 */
+  /** 공지 — 올리기 · 내리기 */
   notice: {
-    acks: Record<string, unknown> | null;
     onSet: (m: ChatMessageView) => void;
     onClear: () => void;
-    onAck: () => void;
   };
   /** 이 방의 내 예약 메시지 */
   scheduled: ChatScheduledMessage[];
@@ -233,7 +230,6 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
   const [dialog, setDialog] = useState<
     | { kind: 'reactions'; m: ChatMessageView }
     | { kind: 'voters'; m: ChatMessageView; optionId: string }
-    | { kind: 'acks' }
     | { kind: 'poll' }
     | { kind: 'schedule' }
     | { kind: 'scheduled' }
@@ -616,7 +612,6 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
       /* 저장소를 못 쓰면 이번만 */
     }
   };
-  const acksSummary = room.notice ? noticeAckSummary(room, notice.acks) : null;
 
   // 통화 띠 — 방에서 진행 중인 통화(room.activeCall, 서버가 쓴다). 내가 이 방에서 통화 중이면 [통화로 돌아가기]
   const myCallHere = !!call && isCallActive(call.state) && call.state.roomId === room.id;
@@ -730,14 +725,10 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
       {room.notice && (
         <ChatNoticeBanner
           room={room}
-          myUid={myUid}
-          acks={notice.acks}
           canManage={canNotice}
           collapsed={noticeFolded}
           onToggle={toggleNotice}
           onOpen={() => jumpTo(room.notice!.messageId)}
-          onAck={notice.onAck}
-          onShowAcks={() => setDialog({ kind: 'acks' })}
           onClear={notice.onClear}
         />
       )}
@@ -927,18 +918,6 @@ export default function ChatRoomView(props: ChatRoomViewProps) {
             uids: Object.entries(dialog.m.pollVotes ?? {}).filter(([, ids]) => ids.includes(o.id)).map(([uid]) => uid),
           }))}
           initialTab={dialog.optionId}
-          memberInfo={memberInfo}
-          myUid={myUid}
-          onClose={() => setDialog(null)}
-        />
-      )}
-      {dialog?.kind === 'acks' && acksSummary && (
-        <ChatPeopleTabsDialog
-          title={L('chat.notice')}
-          tabs={[
-            { key: 'acked', label: L('chat.ackedList'), uids: acksSummary.acked },
-            { key: 'pending', label: L('chat.pendingList'), uids: acksSummary.pending },
-          ]}
           memberInfo={memberInfo}
           myUid={myUid}
           onClose={() => setDialog(null)}

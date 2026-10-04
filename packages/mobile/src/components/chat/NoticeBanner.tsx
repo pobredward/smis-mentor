@@ -1,6 +1,6 @@
 /**
- * 방 공지 띠 — 📢 글(2줄)/작은 그림 · 'OO 님이 올린 공지' · [확인] · '확인 12 · 미확인 4' · [공지 내리기]
- * 누르면 그 메시지로 이동, 접기/펼치기는 방마다 기억한다 (같은 공지인 동안).
+ * 방 공지 띠 — 📢 글(2줄)/작은 그림 · 'OO 님이 올린 공지' · [공지 내리기]
+ * 누르면 그 메시지로 이동, 접기/펼치기는 방마다 기억한다 (같은 공지인 동안). 누가 확인했는지는 보이지 않는다.
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
@@ -16,15 +16,8 @@ interface NoticeBannerProps {
   roomId: string;
   notice: ChatNotice;
   lang: Locale;
-  /** 확인 버튼을 보일까 (올린 사람·글쓴이는 아님) */
-  canAck: boolean;
-  acked: boolean;
-  ackedCount: number;
-  pendingCount: number;
   canClear: boolean;
   onPress: () => void;
-  onAck: () => void;
-  onShowAcks: () => void;
   onClear: () => void;
 }
 
@@ -32,14 +25,8 @@ export function NoticeBanner({
   roomId,
   notice,
   lang,
-  canAck,
-  acked,
-  ackedCount,
-  pendingCount,
   canClear,
   onPress,
-  onAck,
-  onShowAcks,
   onClear,
 }: NoticeBannerProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -87,23 +74,14 @@ export function NoticeBanner({
           <Ionicons name="chevron-up" size={18} color={CHAT_COLORS.sub} />
         </TouchableOpacity>
       </View>
-      <View style={styles.bottom}>
-        <TouchableOpacity onPress={onShowAcks} hitSlop={6}>
-          <Text style={styles.count}>{L('chat.ackCount', { a: ackedCount, b: pendingCount })}</Text>
-        </TouchableOpacity>
-        <View style={styles.spacer} />
-        {canClear ? (
+      {canClear ? (
+        <View style={styles.bottom}>
+          <View style={styles.spacer} />
           <TouchableOpacity onPress={onClear} style={styles.ghost} hitSlop={4}>
             <Text style={styles.ghostText}>{L('chat.clearNotice')}</Text>
           </TouchableOpacity>
-        ) : null}
-        {canAck ? (
-          <TouchableOpacity onPress={onAck} disabled={acked} style={[styles.ack, acked && styles.ackDone]}>
-            {acked ? <Ionicons name="checkmark" size={14} color={CHAT_COLORS.primary} /> : null}
-            <Text style={[styles.ackText, acked && styles.ackTextDone]}>{acked ? L('chat.acked') : L('chat.ack')}</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -127,20 +105,7 @@ const styles = StyleSheet.create({
   thumb: { width: 40, height: 40, borderRadius: 6 },
   chev: { paddingLeft: 8, paddingTop: 1 },
   bottom: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 8 },
-  count: { fontSize: 12.5, color: CHAT_COLORS.primary, fontWeight: '600' },
   spacer: { flex: 1 },
   ghost: { paddingHorizontal: 8, paddingVertical: 4 },
   ghostText: { fontSize: 12.5, color: CHAT_COLORS.danger },
-  ack: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: CHAT_COLORS.primary,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 5,
-  },
-  ackDone: { backgroundColor: '#eff6ff' },
-  ackText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
-  ackTextDone: { color: CHAT_COLORS.primary },
 });

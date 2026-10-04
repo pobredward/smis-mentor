@@ -30,6 +30,7 @@ const ROOM_LABEL: Record<string, Record<Lang, string>> = {
   camp_mentor_only: { ko: '멘토끼리', en: 'Mentors Only' },
   camp_foreign: { ko: '원어민방', en: 'Native Teachers & Managers' },
   camp_foreign_only: { ko: '원어민끼리', en: 'Native Teachers Only' },
+  camp_manager: { ko: '매니저방', en: 'Managers' },
 };
 
 interface MediaItem { kind?: string; path?: string; thumbPath?: string }

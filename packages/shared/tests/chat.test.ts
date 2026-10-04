@@ -34,8 +34,21 @@ describe('chat — 방 구성', () => {
     expect(C.chatMemberKindOf(users[9], J)).toBe(null);
   });
 
-  it('방 5개 — 끼리 방에는 매니저가 없다', () => {
-    expect(plan.map((p) => p.id)).toEqual(['jc29_camp_all', 'jc29_camp_mentor', 'jc29_camp_mentor_only', 'jc29_camp_foreign', 'jc29_camp_foreign_only']);
+  it('방 6개 — 끼리 방에는 매니저가 없다 · 매니저방은 매니저 + 부매니저', () => {
+    expect(plan.map((p) => p.id)).toEqual(['jc29_camp_all', 'jc29_camp_mentor', 'jc29_camp_mentor_only', 'jc29_camp_foreign', 'jc29_camp_foreign_only', 'jc29_camp_manager']);
+    expect(members('camp_manager')).toEqual(['admin1', 'fmgr', 'fsub', 'mgr', 'sub']);
+    expect(plan.find((p) => p.type === 'camp_manager')!.memberInfo.sub.kind).toBe('mentor');
+    expect(C.isChatSubManager(users[2], J)).toBe(true);
+    expect(C.isChatSubManager(users[5], J)).toBe(true);
+    expect(C.isChatSubManager(users[3], J)).toBe(false);
+    expect(C.isChatSubManager(users[2], 'x')).toBe(false);
+    // 탈퇴한 부매니저는 어느 방에도
+    expect(C.chatCampRoomWants('camp_manager', null, { jobExperiences: exp('부매니저') }, J)).toBe(false);
+    const mroom = { type: 'camp_manager' as const, memberIds: members('camp_manager'), memberInfo: plan.find((p) => p.type === 'camp_manager')!.memberInfo };
+    expect(C.canSetNotice(mroom, 'sub')).toBe(true);
+    expect(C.canSetNotice(mroom, 'fsub')).toBe(true);
+    expect(C.canSetNotice({ ...mroom, type: 'camp_mentor' as const }, 'sub')).toBe(false);
+    expect(C.chatRoomTitle({ type: 'camp_manager', campCode: 'J29', memberIds: [] }, 'ko')).toBe('J29 매니저방');
     expect(members('camp_all')).toEqual(['admin1', 'f1', 'fmgr', 'fsub', 'm1', 'mgr', 'sub']);
     expect(members('camp_mentor')).toEqual(['admin1', 'fmgr', 'm1', 'mgr', 'sub']);
     expect(members('camp_mentor_only')).toEqual(['m1', 'sub']);
@@ -66,6 +79,7 @@ describe('chat — 방 구성', () => {
     const ePlan = C.campChatRoomPlan([...users, a2, old], { jobCodeId: E, campCode: 'E29', generation: '29기', generationJobCodeIds: gen });
     expect(ePlan.map((p) => [p.type, p.memberIds])).toEqual([
       ['camp_all', ['adm2', 'admin1']], ['camp_mentor', ['adm2', 'admin1']], ['camp_mentor_only', []], ['camp_foreign', ['adm2', 'admin1']], ['camp_foreign_only', []],
+      ['camp_manager', ['adm2', 'admin1']],
     ]);
     expect(ePlan[0].generation).toBe('29기');
     expect(ePlan[0].memberInfo.adm2).toEqual({ name: '오호석', kind: 'manager', role: 'admin' });
@@ -102,6 +116,7 @@ describe('chat — 방 이름 · 목록', () => {
       room('s_camp_all', 'camp_all', 10, { jobCodeId: 's', campCode: 'S29', generation: '29기' }),
       room('a_camp_all', 'camp_all', 100, { jobCodeId: 'a', campCode: 'J29', generation: '29기' }),
       room('a_camp_mentor', 'camp_mentor', 50, { jobCodeId: 'a', campCode: 'J29', generation: '29기' }),
+      room('a_camp_manager', 'camp_manager', 0, { jobCodeId: 'a', campCode: 'J29', generation: '29기' }),
       room('b_camp_mentor', 'camp_mentor', 300, { jobCodeId: 'b', campCode: 'E29' }),
       room('b_camp_all', 'camp_all', 0, { jobCodeId: 'b', campCode: 'E29' }),
       room('c_camp_all', 'camp_all', 800, { jobCodeId: 'c', campCode: 'S28', generation: '28기' }),
@@ -111,6 +126,8 @@ describe('chat — 방 이름 · 목록', () => {
     expect(g.generation).toBe('29기');
     expect(g.camps.map((c) => c.campCode)).toEqual(['J29', 'E29', 'S29']);
     expect(g.camps[1].rooms.map((r) => r.id)).toEqual(['b_camp_all', 'b_camp_mentor']);
+    // 매니저방은 전체방 바로 뒤
+    expect(g.camps[0].rooms.map((r) => r.id)).toEqual(['a_camp_all', 'a_camp_manager', 'a_camp_mentor']);
     expect(g.otherGenerations.map((x) => [x.generation, x.camps.map((c) => c.campCode)])).toEqual([['28기', ['S28']], ['27기', ['J27']]]);
     expect(g.dms.map((r) => r.id)).toEqual(['dm_2', 'dm_1']);
     expect(C.chatRoomGroups(rooms, { activeJobCodeId: 'a', keepEmptyDmId: 'dm_empty' }).dms.map((r) => r.id)).toEqual(['dm_2', 'dm_1', 'dm_empty']);

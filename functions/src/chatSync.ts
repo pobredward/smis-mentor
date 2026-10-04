@@ -1,7 +1,7 @@
 /**
  * 채팅 방 사람 맞추기 — 배정이 바뀌는 순간 (Firestore 트리거, 서울 리전)
  *
- *  - chatOnJobCodeWritten: 캠프 코드를 만들면 그 캠프 방 5개를 바로 만든다 (아무도 채팅을 열지 않아도 방이 있다).
+ *  - chatOnJobCodeWritten: 캠프 코드를 만들면 그 캠프 방 6개를 바로 만든다 (아무도 채팅을 열지 않아도 방이 있다).
  *    캠프 코드·기수가 바뀌면 방 이름·사람을 다시 맞춘다.
  *  - 그룹방(캠프 그룹마다 매니저 + 그 그룹 멘토)도 같이 — 멘토가 처음 들어오는 그룹이면 그때 만든다.
  *  - chatOnUserWritten: 사람의 캠프 배정·역할·상태·이름·사진이 바뀌면 그 사람을 방에 넣고 뺀다.
@@ -25,7 +25,6 @@ import {
   groupRoomPlan,
   memberInfoOf,
   memberKindOf,
-  ROOM_MEMBERS,
   roomNeedsSync,
   sameInfo,
   type GroupRoomPlan,
@@ -33,6 +32,7 @@ import {
   type RoomLike,
   type RoomPlan,
   type UserLike,
+  wantsRoom,
 } from './chatMembership';
 
 const REGION = 'asia-northeast3';
@@ -73,7 +73,7 @@ async function groupRoomsOf(campId: string) {
 }
 
 /**
- * 캠프 방 5개 + 그룹방 맞추기 — 없는 방은 만들고(createMissing), 있는 방은 계획과 다르면 고친다(rewrite).
+ * 캠프 방 6개 + 그룹방 맞추기 — 없는 방은 만들고(createMissing), 있는 방은 계획과 다르면 고친다(rewrite).
  * 방 만들기는 create 라서 다른 트리거가 먼저 만들었으면 건너뛴다.
  * 멘토가 모두 빠진 그룹의 방은 rewrite 때 매니저만 남긴다.
  */
@@ -83,11 +83,11 @@ async function syncCampRooms(camp: Camp, camps: Camp[], opts: { createMissing: b
   const ids = (siblings.length ? siblings : [camp]).map((c) => c.id);
   const users = await usersOfCamps(ids);
   const base = { jobCodeId: camp.id, campCode: camp.code, generation: camp.generation, generationIds: ids };
-  const camp5 = campRoomPlan(users, base);
-  const plan: AnyPlan[] = [...camp5, ...groupRoomPlan(users, base)];
+  const campPlan = campRoomPlan(users, base);
+  const plan: AnyPlan[] = [...campPlan, ...groupRoomPlan(users, base)];
   if (opts.rewrite) {
     const planned = new Set(plan.map((p) => p.id));
-    const managerInfo = Object.fromEntries(Object.entries(camp5[0].memberInfo).filter(([, v]) => v.kind === 'manager'));
+    const managerInfo = Object.fromEntries(Object.entries(campPlan[0].memberInfo).filter(([, v]) => v.kind === 'manager'));
     (await groupRoomsOf(camp.id)).filter((d) => !planned.has(d.id)).forEach((d) => {
       plan.push({
         id: d.id, type: 'camp_group', groupKey: String(d.data().groupKey ?? ''), jobCodeId: camp.id, campCode: camp.code,
@@ -139,8 +139,8 @@ async function applyToRoom(
 }
 
 /**
- * 이 사람 한 명만 — 캠프 방 5개와 그룹방에서 들어가야 할 방엔 넣고(이름·사진도 고침), 아닌 방에선 뺀다.
- * 멘토의 그룹방이 아직 없으면 만든다. 빠진 방의 안 읽은 수도 지운다.
+ * 이 사람 한 명만 — 캠프 방 6개와 그룹방에서 들어가야 할 방엔 넣고(이름·사진도 고침), 아닌 방에선 뺀다.
+ * 멘토의 그룹방이나 빠진 캠프 방(매니저방 등)이 아직 없으면 만든다. 빠진 방의 안 읽은 수도 지운다.
  */
 async function applyUserToCamp(uid: string, user: UserLike | null, camp: Camp, camps: Camp[]): Promise<void> {
   const ids = siblingsOf(camps, camp.id).map((c) => c.id);
@@ -148,17 +148,19 @@ async function applyUserToCamp(uid: string, user: UserLike | null, camp: Camp, c
   const info = user && kind ? memberInfoOf(user, kind, camp.id) : null;
   const myGroup = user && kind === 'mentor' ? groupKeyOf(user, camp.id) : '';
   const refs = CAMP_ROOM_TYPES.map((t) => fdb().collection('chatRooms').doc(campRoomId(camp.id, t)));
-  const snaps = await fdb().getAll(...refs);
+  let snaps = await fdb().getAll(...refs);
   let groups = await groupRoomsOf(camp.id);
-  // 내 그룹방이 없으면 먼저 만든다 (그 그룹 멘토 · 매니저 모두 넣어서)
-  if (myGroup && !groups.some((d) => d.id === groupRoomId(camp.id, myGroup)) && snaps.some((x) => x.exists)) {
+  // 내 그룹방이나 캠프 방(나중에 생긴 매니저방 등)이 없으면 먼저 만든다 (들어갈 사람 모두 넣어서)
+  const missingGroup = !!myGroup && !groups.some((d) => d.id === groupRoomId(camp.id, myGroup));
+  if (snaps.some((x) => x.exists) && (missingGroup || snaps.some((x) => !x.exists))) {
     await syncCampRooms(camp, camps, { createMissing: true, rewrite: false });
+    snaps = await fdb().getAll(...refs);
     groups = await groupRoomsOf(camp.id);
   }
   const removed = (await Promise.all([
     ...CAMP_ROOM_TYPES.map((type, i) => {
       if (!snaps[i].exists) return null;
-      return applyToRoom(refs[i], snaps[i].data() as RoomLike, uid, !!kind && ROOM_MEMBERS[type].includes(kind), info);
+      return applyToRoom(refs[i], snaps[i].data() as RoomLike, uid, wantsRoom(type, kind, user, camp.id), info);
     }),
     ...groups.map((d) => {
       const want = kind === 'manager' || (kind === 'mentor' && !!myGroup && d.data().groupKey === myGroup);
@@ -239,7 +241,7 @@ export const chatOnJobCodeWritten = onDocumentWritten(
     if (!created && !renamed) return;
     const camps = await allCamps(true);
     const camp = camps.find((c) => c.id === id) ?? { id, code: String(after.code ?? ''), generation: (after.generation as string) || null };
-    // 새 캠프 → 방 5개. 같은 기수 관리자도 매니저로 들어간다
+    // 새 캠프 → 방 6개. 같은 기수 관리자도 매니저로 들어간다
     await syncCampRooms(camp, camps, { createMissing: created, rewrite: renamed });
     // 기수가 바뀌면 같은 기수 다른 캠프들의 관리자 자리도 달라진다 (있는 방만 다시 맞춤)
     if (before && (before.generation ?? null) !== (after.generation ?? null)) {

@@ -110,6 +110,9 @@ const BottomNavigation = () => {
             <Link
               key={item.path}
               href={item.path}
+              // 지금 페이지로 가는 링크는 미리 불러오지 않는다 — Next 16.2 는 /chat?room=A 에서 /chat 을 미리 불러오면
+              // 그 뒤 /chat?room=B 로 가도 A 로 되돌아가는 문제가 있다 (vercel/next.js#92187)
+              prefetch={item.path === pathname ? false : undefined}
               className={`flex flex-col items-center justify-center flex-1 h-full transition-colors ${
                 active ? 'text-blue-600' : 'text-gray-600'
               }`}
