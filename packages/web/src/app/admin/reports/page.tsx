@@ -9,20 +9,26 @@ import {
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { db } from '@/lib/firebase';
+import { authenticatedPost } from '@/lib/apiClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { logger } from '@smis-mentor/shared';
+import { chatRoomLabel, isCampChatRoomType, logger } from '@smis-mentor/shared';
 
 /**
- * 커뮤니티 신고 처리 (관리자)
+ * 커뮤니티 · 채팅 신고 처리 (관리자)
  * - reports 컬렉션(status=open)을 최신순으로 표시
- * - 조치: 게시글 삭제 / 댓글 삭제(soft) / 문제 없음(닫기)
+ * - 조치: 게시글 삭제 / 댓글 삭제(soft) / 채팅 메시지 삭제(/api/chat/moderate) / 문제 없음(닫기)
  * 앱스토어 UGC 정책상 신고를 접수·처리하는 수단이 있어야 한다.
  */
 type Report = {
   id: string;
-  targetType: 'post' | 'comment';
+  targetType: 'post' | 'comment' | 'chatMessage';
   postId: string;
   commentId: string | null;
+  /** 채팅 신고 — 방 · 메시지 · 글 일부 · 사진·동영상 수 */
+  roomId?: string;
+  messageId?: string;
+  excerpt?: string;
+  mediaCount?: number;
   targetAuthorId: string;
   reporterId: string;
   reason: string;
@@ -35,6 +41,17 @@ type Report = {
 const REASON_LABELS: Record<string, string> = {
   spam: '스팸·광고', abuse: '욕설·비방·혐오', sexual: '성적·부적절한 내용', privacy: '개인정보 노출', other: '기타',
 };
+
+const TARGET_LABELS: Record<Report['targetType'], string> = { post: '게시글', comment: '댓글', chatMessage: '채팅' };
+const DELETE_LABELS: Record<Report['targetType'], string> = { post: '게시글 삭제', comment: '댓글 삭제', chatMessage: '메시지 삭제' };
+
+/** 채팅방 id → 읽기 쉬운 이름 ("{jobCodeId}_camp_all" → "전체방", "dm_…" → "1:1 대화") */
+function chatRoomText(roomId?: string): string {
+  if (!roomId) return '';
+  if (roomId.startsWith('dm_')) return chatRoomLabel('dm', 'ko');
+  const m = /_(camp_[a-z_]+)$/.exec(roomId);
+  return m && isCampChatRoomType(m[1]) ? chatRoomLabel(m[1], 'ko') : '';
+}
 
 export default function AdminReportsPage() {
   const { userData } = useAuth();
@@ -81,10 +98,19 @@ export default function AdminReportsPage() {
   };
 
   const handleDeleteTarget = async (r: Report) => {
-    if (!confirm(r.targetType === 'post' ? '신고된 게시글을 삭제하시겠습니까? (댓글 포함, 되돌릴 수 없음)' : '신고된 댓글을 삭제 처리하시겠습니까?')) return;
+    const question = r.targetType === 'post'
+      ? '신고된 게시글을 삭제하시겠습니까? (댓글 포함, 되돌릴 수 없음)'
+      : r.targetType === 'chatMessage'
+        ? '신고된 채팅 메시지를 모두에게서 삭제하시겠습니까? (사진·동영상 포함, 되돌릴 수 없음)'
+        : '신고된 댓글을 삭제 처리하시겠습니까?';
+    if (!confirm(question)) return;
     setBusy(r.id);
     try {
-      if (r.targetType === 'post') {
+      if (r.targetType === 'chatMessage') {
+        if (!r.roomId || !r.messageId) throw new Error('채팅 신고에 방·메시지 정보가 없습니다.');
+        // 서버가 메시지를 지우고 같은 메시지의 신고를 모두 '처리됨'으로 바꾼다
+        await authenticatedPost('/api/chat/moderate', { roomId: r.roomId, messageId: r.messageId });
+      } else if (r.targetType === 'post') {
         await deleteDoc(doc(db, 'posts', r.postId));
       } else if (r.commentId) {
         await updateDoc(doc(db, 'posts', r.postId, 'comments', r.commentId), {
@@ -122,7 +148,7 @@ export default function AdminReportsPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">커뮤니티 신고 처리</h1>
-            <p className="text-sm text-gray-500 mt-1">앱 게시판에서 접수된 신고입니다. 확인 후 삭제 또는 문제 없음으로 처리해주세요.</p>
+            <p className="text-sm text-gray-500 mt-1">앱 게시판·채팅에서 접수된 신고입니다. 확인 후 삭제 또는 문제 없음으로 처리해주세요.</p>
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-600">
             <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />
@@ -142,13 +168,25 @@ export default function AdminReportsPage() {
                   <span className={`px-2 py-0.5 rounded-full font-medium ${r.status === 'open' ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
                     {r.status === 'open' ? '미처리' : r.status === 'resolved' ? '삭제 처리' : '문제 없음'}
                   </span>
-                  <span>{r.targetType === 'post' ? '게시글' : '댓글'}</span>
+                  <span>{TARGET_LABELS[r.targetType] ?? r.targetType}</span>
                   <span>· 사유: <b className="text-gray-700">{REASON_LABELS[r.reason] ?? r.reason}</b></span>
                   <span>· 작성자: {names[r.targetAuthorId] ?? r.targetAuthorId}</span>
                   <span>· 신고자: {names[r.reporterId] ?? r.reporterId}</span>
                   {r.createdAt && <span>· {r.createdAt.toDate().toLocaleString('ko-KR')}</span>}
                 </div>
-                {r.contentSnapshot && (
+                {r.targetType === 'chatMessage' ? (
+                  <div className="text-sm text-gray-800 bg-gray-50 rounded-lg p-3 mb-2 space-y-1">
+                    {r.excerpt ? (
+                      <p className="whitespace-pre-wrap break-words">{r.excerpt}</p>
+                    ) : (
+                      <p className="text-gray-500">(글 없음)</p>
+                    )}
+                    {!!r.mediaCount && <p className="text-xs text-gray-600">사진·동영상 {r.mediaCount}개</p>}
+                    <p className="text-xs text-gray-400 break-all">
+                      방: {chatRoomText(r.roomId) && <b className="font-medium text-gray-500">{chatRoomText(r.roomId)} · </b>}{r.roomId}
+                    </p>
+                  </div>
+                ) : r.contentSnapshot && (
                   <p className="text-sm text-gray-800 whitespace-pre-wrap bg-gray-50 rounded-lg p-3 mb-2">{r.contentSnapshot}</p>
                 )}
                 {r.detail && <p className="text-xs text-gray-600 mb-2">신고 내용: {r.detail}</p>}
@@ -156,7 +194,7 @@ export default function AdminReportsPage() {
                   <div className="flex gap-2 justify-end">
                     <Button variant="secondary" size="sm" onClick={() => handleDismiss(r)} disabled={busy === r.id}>문제 없음</Button>
                     <Button variant="danger" size="sm" onClick={() => handleDeleteTarget(r)} disabled={busy === r.id}>
-                      {r.targetType === 'post' ? '게시글 삭제' : '댓글 삭제'}
+                      {DELETE_LABELS[r.targetType] ?? '삭제'}
                     </Button>
                   </div>
                 )}

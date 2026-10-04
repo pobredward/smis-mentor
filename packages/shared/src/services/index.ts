@@ -36,3 +36,4 @@ export * from './campTeachers';
 export * from './campDisplay';
 export * from './batchRead';
 export * from './userLookup';
+export * from './chat';

@@ -27,7 +27,7 @@ export default function Layout({ children, requireAuth, requireAdmin, noPadding 
     router.push(`/sign-in?redirect=${encodeURIComponent(pathname)}`);
   };
 
-  const shouldHideFooter = pathname.startsWith('/camp') || pathname.startsWith('/admin');
+  const shouldHideFooter = pathname.startsWith('/camp') || pathname.startsWith('/admin') || pathname.startsWith('/chat');
 
   // 공개 페이지는 인증 확인을 기다리지 않고 바로 렌더 (서버 HTML 에 본문·푸터 포함)
   if (loading && !isPublicSsrPath(pathname)) {

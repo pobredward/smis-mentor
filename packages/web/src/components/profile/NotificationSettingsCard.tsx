@@ -10,6 +10,7 @@ import {
   notificationMasterOn,
   notificationMasterTogglePatch,
   NOTIFICATION_GROUP_LABELS,
+  NOTIFICATION_GROUP_ORDER,
   type NotificationKey,
   type NotificationSettings,
   type NotificationType,
@@ -43,7 +44,7 @@ export default function NotificationSettingsCard() {
 
   const groups = useMemo(() => {
     const list = visibleNotificationTypes(userData as { role?: string; jobExperiences?: Array<{ id?: string; group?: string; groupRole?: string }> } | null);
-    const order: NotificationType['group'][] = ['task', 'supply', 'stock', 'lost'];
+    const order = NOTIFICATION_GROUP_ORDER;
     return order.map(g => ({ g, types: list.filter(t => t.group === g) })).filter(x => x.types.length > 0);
   }, [userData]);
 

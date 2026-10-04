@@ -250,6 +250,32 @@ service firebase.storage {
     }
 
     // ──────────────────────────────────────────────────────────────
+    // 채팅 사진·동영상
+    // 경로: chat/{roomId}/{uid}/{messageId}/{파일}
+    // 역할: 그 방 사람만 올리기·보기, 올린 본인만 지우기 (메시지 삭제 때는 서버가 지운다)
+    // 크기: 사진 30MB(원본 포함) · 동영상 500MB
+    // ──────────────────────────────────────────────────────────────
+    function isChatRoomMember(roomId) {
+      return request.auth != null &&
+        request.auth.uid in firestore.get(/databases/(default)/documents/chatRooms/$(roomId)).data.memberIds;
+    }
+
+    match /chat/{roomId}/{uid}/{messageId}/{fileName} {
+      allow read: if isChatRoomMember(roomId);
+      allow create: if (
+        isOwner(uid) &&
+        isChatRoomMember(roomId) &&
+        request.resource != null &&
+        (
+          (request.resource.contentType.matches('image/.*') && request.resource.size <= 30 * 1024 * 1024) ||
+          (request.resource.contentType.matches('video/.*') && request.resource.size <= 500 * 1024 * 1024)
+        )
+      );
+      allow update: if false;
+      allow delete: if isOwner(uid);
+    }
+
+    // ──────────────────────────────────────────────────────────────
     // 기본 거부 (명시되지 않은 모든 경로)
     // ──────────────────────────────────────────────────────────────
     match /{allPaths=**} {

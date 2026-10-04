@@ -18,6 +18,7 @@ import { ProfileEditScreen } from '../screens/ProfileEditScreen';
 import { PostDetailScreen } from '../screens/PostDetailScreen';
 import { PostWriteScreen } from '../screens/PostWriteScreen';
 import { LessonPlanScreen } from '../screens/LessonPlanScreen';
+import { ChatRoomScreen } from '../screens/ChatRoomScreen';
 import { L } from '@smis-mentor/shared';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -165,6 +166,17 @@ function AppStack() {
       <Stack.Screen
         name="PostDetail"
         component={PostDetailScreen}
+        options={{
+          headerShown: false,
+          presentation: 'card',
+          animation: 'slide_from_right',
+        }}
+      />
+      <Stack.Screen
+        name="ChatRoom"
+        component={ChatRoomScreen}
+        // 방마다 따로 쌓는다 (대화방에서 1:1 대화를 열면 새 화면, 같은 방이면 그 화면으로)
+        getId={({ params }) => params.roomId}
         options={{
           headerShown: false,
           presentation: 'card',

@@ -902,3 +902,8 @@ export const auditUserChanges = firestoreV2.onDocumentUpdatedWithAuthContext(
     await batch.commit();
   }
 );
+
+// 채팅 — 메시지 저장 뒤 방 미리보기 · 안 읽은 수 · 푸시 (functions/src/chat.ts)
+export { chatOnMessageCreated, chatOnMessageUpdated } from './chat';
+// 채팅 — 캠프 코드를 만들면 방 5개, 배정이 바뀌면 방 사람 맞추기 (functions/src/chatSync.ts)
+export { chatOnUserWritten, chatOnJobCodeWritten } from './chatSync';

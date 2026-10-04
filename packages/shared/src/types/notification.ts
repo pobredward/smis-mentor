@@ -11,6 +11,7 @@ import { tr } from '../i18n';
 
 /** 알림 종류 키 (= notificationSettings 의 필드명) */
 export const NOTIFICATION_KEYS = [
+  'chat',
   'taskReminders',
   'lostItem',
   'supplyRequest',
@@ -50,7 +51,7 @@ export const isNotifyStockManager = (u?: NotificationAudience | null): boolean =
 export interface NotificationType {
   key: NotificationKey;
   /** 설정 화면 묶음 */
-  group: 'task' | 'supply' | 'stock' | 'lost';
+  group: 'chat' | 'task' | 'supply' | 'stock' | 'lost';
   label: string;
   labelEn: string;
   desc: string;
@@ -62,6 +63,13 @@ export interface NotificationType {
 const everyone = () => true;
 
 export const NOTIFICATION_TYPES: NotificationType[] = [
+  {
+    key: 'chat', group: 'chat',
+    label: '채팅 메시지', labelEn: 'Chat messages',
+    desc: '채팅방에 새 메시지가 왔을 때 (방마다 따로 끌 수도 있어요)',
+    descEn: 'New chat messages (you can also mute each room)',
+    visible: everyone,
+  },
   {
     key: 'taskReminders', group: 'task',
     label: '업무 알림', labelEn: 'Task reminders',
@@ -128,11 +136,15 @@ export const NOTIFICATION_TYPES: NotificationType[] = [
 ];
 
 export const NOTIFICATION_GROUP_LABELS: Record<NotificationType['group'], { ko: string; en: string }> = {
+  chat: { ko: '채팅', en: 'Chat' },
   task: { ko: '업무', en: 'Tasks' },
   supply: { ko: '물품 요청 · 구매', en: 'Supply requests' },
   stock: { ko: '재고 관리', en: 'Stock' },
   lost: { ko: '분실물', en: 'Lost & found' },
 };
+
+/** 설정 화면의 묶음 순서 */
+export const NOTIFICATION_GROUP_ORDER: readonly NotificationType['group'][] = ['chat', 'task', 'supply', 'stock', 'lost'];
 
 /** 이 사람의 설정 화면에 보여 줄 알림 종류 (권한이 바뀌면 결과도 바로 바뀐다) */
 export function visibleNotificationTypes(u?: NotificationAudience | null): NotificationType[] {

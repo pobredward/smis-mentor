@@ -28,6 +28,7 @@ import {
   addNotificationResponseReceivedListener,
 } from '../services/notificationService';
 import { navigateToTasksTab, navigateToCampTab, setInventoryDeepLink } from './CampTabContext';
+import { queueChatRoomOpen } from '../services/chatPresence';
 import * as Notifications from 'expo-notifications';
 import { createNavigationContainerRef } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/types';
@@ -263,9 +264,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       logger.info('알림 수신:', notification);
     });
 
+    // 채팅 알림 → 채팅 탭 › 그 방 (로그인·화면이 준비되면 MainTabs 의 useChatPushNavigation 이 연다)
+    const openChatFromResponse = (response: Notifications.NotificationResponse): boolean => {
+      const data = response.notification.request.content.data as { type?: unknown; roomId?: unknown } | undefined;
+      if (data?.type !== 'chat' || typeof data.roomId !== 'string' || !data.roomId) return false;
+      queueChatRoomOpen(data.roomId, `${response.notification.request.identifier}:${response.actionIdentifier}`);
+      return true;
+    };
+
     responseListener.current = addNotificationResponseReceivedListener(response => {
       logger.info('알림 응답:', response);
       const data = response.notification.request.content.data;
+
+      if (openChatFromResponse(response)) return;
       
       // 재고·구매 요청·분실물 알림 → 캠프 › 재고 탭
       if (data?.type === 'supply' || data?.type === 'stock' || data?.type === 'lost-item') {
@@ -308,6 +319,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         }
       }
     });
+
+    // 앱이 꺼져 있다가 채팅 알림을 눌러 켜진 경우 (채팅만 — 다른 알림은 기존 동작 그대로)
+    try {
+      const last = Notifications.getLastNotificationResponse();
+      if (last && openChatFromResponse(last)) Notifications.clearLastNotificationResponse();
+    } catch (e) {
+      logger.warn('마지막 알림 응답 확인 실패:', e);
+    }
 
     return () => {
       if (notificationListener.current) {

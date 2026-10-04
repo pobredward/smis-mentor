@@ -897,6 +897,15 @@ export const signOut = async () => {
   try {
     // 세션 스토리지 소셜 로그인 정보 삭제
     sessionStorage.removeItem('social_user');
+
+    // 이 브라우저의 채팅 웹 푸시 토큰 지우기 (로그아웃한 계정의 알림이 계속 오지 않게) — 실패·지연돼도 로그아웃은 진행
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      await Promise.race([
+        import('./webPush').then((m) => m.removeWebPushToken(uid)).catch(() => undefined),
+        new Promise((resolve) => setTimeout(resolve, 2500)),
+      ]);
+    }
     
     // Firebase Auth 로그아웃
     await firebaseSignOut(auth);

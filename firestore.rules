@@ -788,11 +788,102 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────────────────────
-    // reports 컬렉션 (커뮤니티 신고) — 앱스토어 UGC 정책
+    // 채팅 (카톡방 대체) — packages/shared/src/types/chat.ts
+    //  chatRooms/{roomId}            방 — 서버(/api/chat/sync · /api/chat/dm, Admin SDK)만 만들고 사람을 바꾼다
+    //    messages/{messageId}        방 사람이 본인 이름으로 쓴다. 고치기는 '모두에게서 삭제'만
+    //    reads/{uid}                 마지막으로 본 시각 — 본인만
+    //  chatUserState/{uid}           안 읽은 수 · 알림 끈 방 · 차단 — 본인 (안 읽은 수 더하기는 Functions)
+    // 끼리 방(멘토끼리·원어민끼리)은 memberIds 에 관리자가 없으므로 관리자도 읽을 수 없다.
+    // ──────────────────────────────────────────────────────────────
+    function chatRoomDoc(roomId) {
+      return get(/databases/$(database)/documents/chatRooms/$(roomId));
+    }
+    function isChatMember(roomId) {
+      return isAuthenticated() && request.auth.uid in chatRoomDoc(roomId).data.memberIds;
+    }
+
+    match /chatRooms/{roomId} {
+      allow read: if isAuthenticated() && request.auth.uid in resource.data.memberIds;
+      allow write: if false;
+
+      match /messages/{messageId} {
+        allow read: if isChatMember(roomId);
+        allow create: if (
+          isActiveUser() &&
+          isChatMember(roomId) &&
+          request.resource.data.senderId == request.auth.uid &&
+          request.resource.data.keys().hasOnly(['senderId', 'senderName', 'kind', 'text', 'media', 'clientId', 'createdAt']) &&
+          request.resource.data.keys().hasAll(['senderId', 'senderName', 'kind', 'text', 'media', 'clientId', 'createdAt']) &&
+          request.resource.data.kind in ['text', 'media'] &&
+          request.resource.data.createdAt == request.time &&
+          request.resource.data.senderName is string &&
+          request.resource.data.senderName.size() <= 60 &&
+          request.resource.data.text is string &&
+          request.resource.data.text.size() <= 5000 &&
+          request.resource.data.media is list &&
+          request.resource.data.media.size() <= 10 &&
+          request.resource.data.clientId is string &&
+          request.resource.data.clientId.size() <= 64 &&
+          (request.resource.data.text.size() > 0 || request.resource.data.media.size() > 0) &&
+          (request.resource.data.kind == 'media') == (request.resource.data.media.size() > 0)
+        );
+        // 모두에게서 삭제 — 보낸 사람 (관리자는 들어가 있는 방에서 신고 처리용으로)
+        allow update: if (
+          isChatMember(roomId) &&
+          (resource.data.senderId == request.auth.uid || isAdmin()) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deleted', 'deletedAt', 'text', 'media']) &&
+          request.resource.data.deleted == true &&
+          request.resource.data.deletedAt == request.time &&
+          request.resource.data.text == '' &&
+          request.resource.data.media.size() == 0
+        );
+        allow delete: if false;
+      }
+
+      match /reads/{uid} {
+        allow read: if isChatMember(roomId);
+        allow write: if (
+          isOwner(uid) &&
+          isChatMember(roomId) &&
+          request.resource.data.keys().hasOnly(['uid', 'at']) &&
+          request.resource.data.uid == uid &&
+          request.resource.data.at == request.time
+        );
+      }
+    }
+
+    match /chatUserState/{uid} {
+      allow read: if isOwner(uid);
+      allow create, update: if (
+        isOwner(uid) &&
+        request.resource.data.keys().hasOnly(['unread', 'muted', 'blocked', 'updatedAt']) &&
+        (!('unread' in request.resource.data) || request.resource.data.unread is map) &&
+        (!('muted' in request.resource.data) || request.resource.data.muted is map) &&
+        (!('blocked' in request.resource.data) || request.resource.data.blocked is map)
+      );
+      allow delete: if false;
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // reports 컬렉션 (커뮤니티 · 채팅 신고) — 앱스토어 UGC 정책
     // 작성: 로그인 사용자 본인 명의 / 열람·처리: admin
     // ──────────────────────────────────────────────────────────────
     match /reports/{reportId} {
       allow read: if isAdmin();
+      // 채팅 메시지 신고 — 그 방 사람만, 같은 메시지는 한 번
+      allow create: if (
+        isActiveUser() &&
+        request.resource.data.reporterId == request.auth.uid &&
+        request.resource.data.targetType == 'chatMessage' &&
+        request.resource.data.keys().hasAll(['targetType', 'roomId', 'messageId', 'targetAuthorId', 'reporterId', 'reason', 'status', 'createdAt']) &&
+        request.resource.data.keys().hasOnly(['targetType', 'roomId', 'messageId', 'targetAuthorId', 'reporterId', 'reason', 'detail', 'excerpt', 'mediaCount', 'status', 'createdAt']) &&
+        (!('detail' in request.resource.data) || (request.resource.data.detail is string && request.resource.data.detail.size() <= 500)) &&
+        (!('excerpt' in request.resource.data) || (request.resource.data.excerpt is string && request.resource.data.excerpt.size() <= 500)) &&
+        request.resource.data.reason in ['spam', 'abuse', 'sexual', 'privacy', 'other'] &&
+        request.resource.data.status == 'open' &&
+        isChatMember(request.resource.data.roomId) &&
+        reportId == 'chatMessage_' + request.resource.data.roomId + '_' + request.resource.data.messageId + '_' + request.auth.uid
+      );
       allow create: if (
         isActiveUser() &&
         request.resource.data.reporterId == request.auth.uid &&

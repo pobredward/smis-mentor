@@ -30,6 +30,7 @@ import {
   type CampRosterRow,
   type CampRosterTier,
 } from '@smis-mentor/shared';
+import { syncGenerationChatRooms } from './chatServer';
 
 export class CampRosterError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -354,6 +355,14 @@ export async function saveCampRoster(
     updatedAt: new Date().toISOString(), updatedBy: by.uid, updatedByName: by.name ?? '',
   };
   await rosterRef(jobCodeId).set(doc);
+
+  // 7) 캠프 채팅방 사람 맞추기 — 같은 기수 전부 (관리자 배정은 기수 단위). 실패해도 명단 저장은 끝난 것
+  try {
+    await syncGenerationChatRooms(jobCodeId, { force: true });
+  } catch (e) {
+    console.warn('채팅방 동기화 실패:', e);
+    warnings.push('채팅방 사람을 맞추지 못했습니다 — 채팅 탭을 열면 다시 맞춥니다.');
+  }
 
   const unmatched = [...mentors.filter((r) => !r.userId).map((r) => rosterMatchName('mentor', r)), ...foreign.filter((r) => !r.userId).map((r) => rosterMatchName('foreign', r))].filter(Boolean);
   return { assigned, removed, unmatched, warnings };

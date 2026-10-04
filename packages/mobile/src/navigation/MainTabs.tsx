@@ -9,10 +9,12 @@ import {
   HomeScreen,
   CampScreen,
   ProfileScreen,
-  CommunityScreen,
+  ChatListScreen,
 } from '../screens';
 import { useAuth } from '../context/AuthContext';
-import { L } from '@smis-mentor/shared';
+import { useChatUnread } from '../hooks/useChatUnread';
+import { useChatPushNavigation } from '../hooks/useChatPushNavigation';
+import { L, isChatStaff, unreadBadgeText } from '@smis-mentor/shared';
 
 const Tab = createBottomTabNavigator<MainTabsParamList>();
 
@@ -20,8 +22,14 @@ export function MainTabs() {
   const { userData } = useAuth();
   const isAdmin = userData?.role === 'admin';
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
-  // 업무코드가 하나라도 있는 사용자에게만 게시판 탭 표시
   const hasAnyJobCode = (userData?.jobExperiences?.length ?? 0) > 0;
+  // 채팅 — 관리자·멘토·원어민(활성) 계정. 탭은 캠프가 하나라도 있거나 관리자일 때
+  const chatStaff = isChatStaff(userData);
+  const showChatTab = chatStaff && (hasAnyJobCode || isAdmin);
+  // 방 목록·안 읽은 수 구독은 여기 한 곳에서 (탭 배지 · 앱 아이콘 배지 · 채팅 화면들이 같이 쓴다)
+  const chatUnread = useChatUnread(userData?.userId, chatStaff);
+  // 채팅 알림을 눌렀을 때 그 방 열기
+  useChatPushNavigation(chatStaff, showChatTab);
 
   return (
     <Tab.Navigator
@@ -74,15 +82,16 @@ export function MainTabs() {
             ),
           }}
         />
-        {/* 업무코드가 하나 이상 있는 멘토/원어민에게만 게시판 탭 표시 */}
-        {hasAnyJobCode && (
+        {/* 채팅 (카톡방 대체) — 게시판 탭 자리. 게시판 화면·코드는 남겨 두었다 */}
+        {showChatTab && (
           <Tab.Screen
-            name="Community"
-            component={CommunityScreen}
+            name="Chat"
+            component={ChatListScreen}
             options={{
-              title: L('nav.board'),
-              tabBarIcon: ({ color, size }) => (
-                <Ionicons name="newspaper-outline" size={size} color={color} />
+              title: L('nav.chat'),
+              tabBarBadge: chatUnread > 0 ? unreadBadgeText(chatUnread) : undefined,
+              tabBarIcon: ({ color, size, focused }) => (
+                <Ionicons name={focused ? 'chatbubbles' : 'chatbubbles-outline'} size={size} color={color} />
               ),
             }}
           />

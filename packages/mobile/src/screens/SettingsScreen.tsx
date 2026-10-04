@@ -27,12 +27,14 @@ import {
   notificationMasterOn,
   notificationMasterTogglePatch,
   NOTIFICATION_GROUP_LABELS,
+  NOTIFICATION_GROUP_ORDER,
   type NotificationKey,
   type NotificationType,
 } from '@smis-mentor/shared';
 
 /** 종류별 아이콘 */
 const NOTIFICATION_ICONS: Record<NotificationKey, keyof typeof Ionicons.glyphMap> = {
+  chat: 'chatbubbles-outline',
   taskReminders: 'checkmark-circle-outline',
   lostItem: 'search-outline',
   supplyRequest: 'clipboard-outline',
@@ -139,7 +141,7 @@ export function SettingsScreen() {
    */
   const visibleTypes = React.useMemo(() => {
     const list = visibleNotificationTypes(userData as { role?: string; jobExperiences?: Array<{ id?: string; group?: string; groupRole?: string }> } | null);
-    const order: NotificationType['group'][] = ['task', 'supply', 'stock', 'lost'];
+    const order = NOTIFICATION_GROUP_ORDER;
     return order
       .map(groupKey => ({ groupKey, types: list.filter(t => t.group === groupKey) }))
       .filter(g => g.types.length > 0);

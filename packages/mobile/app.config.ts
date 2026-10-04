@@ -110,7 +110,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name: 'SMIS Mentor',
     slug: 'smis-mentor',
-    version: '1.7.2',
+    version: '1.8.0',
     // 코드푸시(EAS Update) — 같은 앱 버전의 스토어 빌드에만 JS 업데이트를 보낸다.
     // 네이티브 변경(라이브러리·권한·app.config 네이티브 설정)이 있으면 버전을 올려 새로 빌드할 것.
     runtimeVersion: { policy: 'appVersion' },
@@ -139,7 +139,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       // iOS 빌드가 pod install에서 실패한다. 대신 아래 plugins의 react-native-maps 플러그인으로 키를 넘긴다.
       infoPlist: {
         NSPhotoLibraryUsageDescription: '이 앱은 프로필 사진과 분실물 사진·영상을 업로드하기 위해 사진 라이브러리에 접근합니다.',
-        NSPhotoLibraryAddUsageDescription: '이 앱은 사진을 저장하기 위해 사진 라이브러리에 접근합니다.',
+        NSPhotoLibraryAddUsageDescription: '이 앱은 채팅방의 사진·동영상을 저장하기 위해 사진 라이브러리에 접근합니다.',
         NSLocationWhenInUseUsageDescription: '사용자 위치를 지도에 표시하기 위해 위치 정보가 필요합니다.',
         NSLocationAlwaysAndWhenInUseUsageDescription: '캠프 위치 공유를 위해 항상 위치 접근 권한이 필요합니다.',
         NSLocationAlwaysUsageDescription: '캠프 위치 공유를 위해 항상 위치 접근 권한이 필요합니다.',
@@ -189,6 +189,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           category: ['BROWSABLE', 'DEFAULT'],
         },
       ],
+      // expo-media-library 플러그인이 넣는 '선택한 사진만 읽기' 권한 — 채팅은 저장(쓰기)만 하므로 막는다 (Google Play 사진 권한 정책)
+      blockedPermissions: ['android.permission.READ_MEDIA_VISUAL_USER_SELECTED'],
       permissions: [
         // Android 13+ (API 33+)에서는 Photo Picker가 자동으로 사용되어 READ_MEDIA_IMAGES 권한 불필요
         // Android 12 이하에서는 READ_EXTERNAL_STORAGE로 충분
@@ -234,6 +236,19 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           androidCollapsedTitle: 'SMIS Mentor',
         },
       ],
+      [
+        // 채팅 사진·동영상 저장 — 쓰기만 쓴다 (requestPermissionsAsync(true))
+        // granularPermissions: [] → Android 13+ READ_MEDIA_IMAGES/VIDEO/AUDIO 를 넣지 않는다 (Google Play 사진 권한 정책)
+        'expo-media-library',
+        {
+          photosPermission: '이 앱은 프로필 사진과 분실물 사진·영상을 업로드하기 위해 사진 라이브러리에 접근합니다.',
+          savePhotosPermission: '이 앱은 채팅방의 사진·동영상을 저장하기 위해 사진 라이브러리에 접근합니다.',
+          isAccessMediaLocationEnabled: false,
+          granularPermissions: [],
+        },
+      ],
+      // 채팅 동영상 재생 — 백그라운드 재생·PiP 는 쓰지 않는다 (옵션 없이 등록하면 네이티브 설정을 바꾸지 않음)
+      'expo-video',
       'expo-web-browser',
       'expo-apple-authentication',
       '@react-native-community/datetimepicker',

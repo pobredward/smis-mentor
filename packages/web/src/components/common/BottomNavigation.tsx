@@ -5,7 +5,8 @@ import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { memo, useState, useEffect } from 'react';
 import { getCampTabUrl } from '@/lib/campUtils';
-import { L } from '@smis-mentor/shared';
+import { L, isChatStaff, unreadBadgeText, type ChatUserLike } from '@smis-mentor/shared';
+import { useChatUnreadTotal } from '@/hooks/useChatUnread';
 
 const BottomNavigation = () => {
   // 모바일 폭 전체 화면 오버레이가 탭바 위에서 끝나도록 표시 (globals.css: body.has-bottom-nav)
@@ -17,6 +18,9 @@ const BottomNavigation = () => {
   const { userData } = useAuth();
   const isAdmin = userData?.role === 'admin';
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+  // 채팅 — 캠프 선생님(관리자·멘토·원어민) 중 캠프가 하나라도 있는 사람 (관리자는 항상)
+  const showChat = isChatStaff(userData as unknown as ChatUserLike) && (isAdmin || (userData?.jobExperiences?.length ?? 0) > 0);
+  const chatUnread = useChatUnreadTotal();
 
   const isActive = (path: string) => {
     if (path === '/') {
@@ -33,7 +37,7 @@ const BottomNavigation = () => {
     setCampUrl(getCampTabUrl(userData?.role));
   }, [userData?.role]);
 
-  const navItems = [
+  const navItems: Array<{ name: string; path: string; icon: (active: boolean) => React.ReactNode; badge?: number }> = [
     // 원어민이 아닌 경우에만 '홈' 탭 표시
     ...(!isForeign ? [{
       name: '홈',
@@ -63,6 +67,16 @@ const BottomNavigation = () => {
         </svg>
       )
     },
+    ...(showChat ? [{
+      name: L('nav.chat'),
+      path: '/chat',
+      badge: chatUnread,
+      icon: (active: boolean) => (
+        <svg className={`w-6 h-6 ${active ? 'text-blue-600' : 'text-gray-600'}`} fill={active ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={active ? 0 : 2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+      )
+    }] : []),
     {
       name: L('common.myPage'),
       path: '/profile',
@@ -100,7 +114,14 @@ const BottomNavigation = () => {
                 active ? 'text-blue-600' : 'text-gray-600'
               }`}
             >
-              {item.icon(active)}
+              <span className="relative">
+                {item.icon(active)}
+                {!!item.badge && item.badge > 0 && (
+                  <span className="absolute -top-1.5 left-3.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none ring-2 ring-white">
+                    {unreadBadgeText(item.badge)}
+                  </span>
+                )}
+              </span>
               <span className={`text-xs mt-1 ${active ? 'font-semibold' : 'font-normal'}`}>
                 {item.name}
               </span>

@@ -20,6 +20,7 @@ export * from './notification';
 export * from './allowance';
 export * from './studentDevice';
 export * from './studentMemo';
+export * from './chat';
 
 // 기존 타입들도 re-export (추후 이동 예정)
 export type {

@@ -1,12 +1,13 @@
 import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { CompositeScreenProps } from '@react-navigation/native';
+import { CompositeScreenProps, NavigatorScreenParams } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { MaterialTopTabScreenProps } from '@react-navigation/material-top-tabs';
 import type { CampPageCategory, CampTeacherKind } from '@smis-mentor/shared';
 
 // Root Stack (전체 네비게이션)
 export type RootStackParamList = {
-  MainTabs: undefined;
+  /** 하단 탭 — 알림에서 특정 탭으로 바로 갈 때 { screen: 'Chat' } 처럼 넘긴다 */
+  MainTabs: NavigatorScreenParams<MainTabsParamList> | undefined;
   ProfileEdit: undefined;
   StudentDetail: { studentId: string };
   TaskDetail: { taskId: string; taskDate?: string };
@@ -25,6 +26,8 @@ export type RootStackParamList = {
   TermsOfService: undefined;
   /** 게시글 세부 화면 (댓글 포함) */
   PostDetail: { postId: string };
+  /** 채팅 대화방 */
+  ChatRoom: { roomId: string };
   /** 원어민 레슨플랜 — bookKey(내 교재) · planId(문서) · sample(샘플: speaking·reading·writing) */
   LessonPlan: { bookKey?: string; planId?: string; sample?: string };
   /** 게시글 작성/수정 화면 */
@@ -48,6 +51,9 @@ export type MainTabsParamList = {
   Home: undefined;
   Recruitment: undefined;
   Camp: undefined;
+  /** 채팅 (카톡방 대체) */
+  Chat: undefined;
+  /** 게시판 — 탭에서는 내렸다 (화면·코드는 남겨 둠) */
   Community: undefined;
   Profile: undefined;
   Admin: undefined;

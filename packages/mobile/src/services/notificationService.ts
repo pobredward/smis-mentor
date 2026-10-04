@@ -5,14 +5,27 @@ import Constants from 'expo-constants';
 import { doc, setDoc, getDoc, deleteField, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { logger, type NotificationSettings as SharedNotificationSettings } from '@smis-mentor/shared';
+import { getOpenChatRoom } from './chatPresence';
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,    // 배너 표시 (상단 알림)
-    shouldShowList: true,      // 알림 센터에 표시
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
+  handleNotification: async (notification) => {
+    // 지금 열어 보고 있는 채팅방의 새 메시지 — 화면에 바로 보이므로 배너·소리 없이
+    const data = notification.request.content.data as { type?: unknown; roomId?: unknown } | null | undefined;
+    if (data?.type === 'chat' && typeof data.roomId === 'string' && data.roomId === getOpenChatRoom()) {
+      return {
+        shouldShowBanner: false,
+        shouldShowList: false,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+      };
+    }
+    return {
+      shouldShowBanner: true,    // 배너 표시 (상단 알림)
+      shouldShowList: true,      // 알림 센터에 표시
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    };
+  },
 });
 
 /** 알림 설정 — 전체 on/off + 종류별 on/off (종류 목록은 shared 의 NOTIFICATION_TYPES) */

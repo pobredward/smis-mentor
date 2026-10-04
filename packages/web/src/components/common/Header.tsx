@@ -8,12 +8,15 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { getCampTabUrl } from '@/lib/campUtils';
 import { User } from '@/types';
-import { L } from '@smis-mentor/shared';
+import { L, isChatStaff, unreadBadgeText, type ChatUserLike } from '@smis-mentor/shared';
+import { useChatUnreadTotal } from '@/hooks/useChatUnread';
 
 interface NavItem {
   name: string;
   path: string;
   icon: React.ReactNode;
+  /** 빨간 숫자 배지 (0 이면 숨김) */
+  badge?: number;
 }
 
 const ProfileDropdown = memo(({ 
@@ -104,6 +107,9 @@ const Header = () => {
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const isAdmin = userData?.role === 'admin';
+  // 채팅 — 캠프 선생님(관리자·멘토·원어민) 중 캠프가 하나라도 있는 사람 (관리자는 항상)
+  const showChat = isChatStaff(userData as unknown as ChatUserLike) && (isAdmin || (userData?.jobExperiences?.length ?? 0) > 0);
+  const chatUnread = useChatUnreadTotal();
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -190,6 +196,16 @@ const Header = () => {
         </svg>
       )
     },
+    ...(showChat ? [{
+      name: L('nav.chat'),
+      path: '/chat',
+      badge: chatUnread,
+      icon: (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+      )
+    }] : []),
     { 
       name: L('common.myPage'), 
       path: '/profile',
@@ -241,6 +257,11 @@ const Header = () => {
                     {item.icon}
                   </span>
                   {item.name}
+                  {!!item.badge && item.badge > 0 && (
+                    <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-red-500 text-white text-[11px] font-semibold leading-none">
+                      {unreadBadgeText(item.badge)}
+                    </span>
+                  )}
                 </Link>
               ))}
             </nav>
