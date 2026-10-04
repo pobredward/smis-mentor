@@ -18,9 +18,10 @@ export interface BundleCell {
   durationMs?: number;
 }
 
+/** 묶음 칸 — 사진·동영상만 (음성은 음성 말풍선이 그린다) */
 export const cellsOfMedia = (media: ChatMediaItem[]): BundleCell[] =>
-  media.map((m) => ({
-    kind: m.kind,
+  media.filter((m) => m.kind === 'image' || m.kind === 'video').map((m) => ({
+    kind: m.kind === 'video' ? 'video' : 'image',
     uri: m.thumbUrl || (m.kind === 'image' ? m.url : undefined),
     w: m.w,
     h: m.h,

@@ -1,6 +1,7 @@
 /**
  * 채팅 화면(web) 내부 타입 — 보내기 전 고른 파일 · 보내는 중인 메시지
  */
+import type { ChatReplyRef } from '@smis-mentor/shared';
 import type { ChatImageProbe, ChatPickKind, ChatVideoProbe } from '@/lib/chatMedia';
 
 /** 보내기 전 미리보기 줄의 한 칸 */
@@ -28,11 +29,19 @@ export interface ChatOutgoingItem {
   durationMs?: number;
 }
 
-/** 아직 서버 메시지가 되지 않은 내 메시지 — 사진 올리는 중 · 보내지 못함 */
+/** 보낼 때 함께 붙는 것 — 답장 · @멘션 · 조용히 보내기 */
+export interface ChatSendExtra {
+  replyTo?: ChatReplyRef | null;
+  mentions?: string[];
+  mentionAll?: boolean;
+  silent?: boolean;
+}
+
+/** 아직 서버 메시지가 되지 않은 내 메시지 — 사진·음성 올리는 중 · 보내지 못함 */
 export interface ChatOutgoing {
   clientId: string;
   roomId: string;
-  kind: 'text' | 'media';
+  kind: 'text' | 'media' | 'voice';
   /** 글 (사진 묶음이면 묶음 다음에 따로 보낼 글) */
   text: string;
   items: ChatOutgoingItem[];
@@ -44,4 +53,6 @@ export interface ChatOutgoing {
   done: number;
   messageId?: string;
   createdAt: number;
+  /** 음성 메시지 길이 */
+  durationMs?: number;
 }

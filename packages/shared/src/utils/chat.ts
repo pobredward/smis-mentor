@@ -5,7 +5,13 @@
  */
 import {
   CAMP_CHAT_ROOM_TYPES,
+  CHAT_REACTIONS,
+  CHAT_REACTION_EMOJI,
   type CampChatRoomType,
+  type ChatNotice,
+  type ChatPoll,
+  type ChatReactionKey,
+  type ChatReplyRef,
   type ChatLastMessage,
   type ChatMediaItem,
   type ChatMemberInfo,
@@ -16,7 +22,8 @@ import {
   type ChatUserState,
 } from '../types/chat';
 import { compareCampCodes } from '../types/camp';
-import { campRolesOf } from './campTeachers';
+import { groupRank, normalizeGroupKey } from '../types/campTimetable';
+import { campRolesOf, TEACHER_GROUP_NAME } from './campTeachers';
 import { t, type Locale, type MessageKey } from '../i18n';
 
 export const CHAT_LIMITS = {
@@ -36,6 +43,22 @@ export const CHAT_LIMITS = {
   videoMaxBytes: 500 * 1024 * 1024,
   /** 처음 불러오는 메시지 수 · 위로 올릴 때 더 불러오는 수 */
   pageSize: 50,
+  /** 글 고치기 — 보낸 뒤 24시간 안 */
+  editWindowMs: 24 * 60 * 60 * 1000,
+  /** 음성 메시지 — 최대 5분 · 20MB */
+  voiceMaxMs: 5 * 60 * 1000,
+  audioMaxBytes: 20 * 1024 * 1024,
+  /** 투표 */
+  pollQuestionMax: 300,
+  pollOptionMax: 100,
+  pollOptionsMin: 2,
+  pollOptionsMax: 10,
+  /** 예약 메시지 — 30일 안, 1분 뒤부터 */
+  scheduleMaxDays: 30,
+  scheduleMinMs: 60 * 1000,
+  /** 답장 · 공지에 붙는 원래 글 길이 */
+  replyTextMax: 100,
+  noticeTextMax: 500,
 } as const;
 
 /** 매니저로 보는 캠프 그룹 역할 — 부매니저 · Sub Manager 는 멘토·원어민 쪽 */
@@ -73,6 +96,15 @@ export const isCampChatRoomType = (v: unknown): v is CampChatRoomType =>
 
 export const campChatRoomId = (jobCodeId: string, type: CampChatRoomType): string => `${jobCodeId}_${type}`;
 export const dmRoomId = (a: string, b: string): string => `dm_${[a, b].sort().join('_')}`;
+export const campGroupRoomId = (jobCodeId: string, groupKey: string): string => `${jobCodeId}_group_${groupKey}`;
+/** 미리 만들어진 방 (캠프 방 · 그룹방) — 늘 위에 고정, 고정 해제 · 숨기기 불가 */
+export const isPresetRoom = (room: Pick<ChatRoom, 'type'>): boolean => room.type !== 'dm';
+
+/** 그룹방을 만들지 않는 그룹 */
+export const CHAT_GROUP_ROOM_EXCLUDED: readonly string[] = ['', 'manager', 'common', 'all'];
+/** 그룹 표시 이름 — junior → Junior, short1 → 단기 1 */
+export const chatGroupLabel = (groupKey?: string | null): string =>
+  TEACHER_GROUP_NAME[String(groupKey ?? '')] ?? String(groupKey ?? '');
 export const isDmRoomId = (roomId: string): boolean => roomId.startsWith('dm_');
 
 // ── 사람 ────────────────────────────────────────────────────────────
@@ -160,10 +192,64 @@ export function campChatRoomPlan(
   });
 }
 
+/** 이 캠프에서의 그룹 키 (junior · summer …) — 없거나 그룹방이 없는 그룹이면 '' */
+export function chatGroupKeyOf(u: ChatUserLike | null | undefined, jobCodeId: string): string {
+  const exp = (u?.jobExperiences ?? []).find((e) => e?.id === jobCodeId);
+  const k = normalizeGroupKey(String(exp?.group ?? ''));
+  return CHAT_GROUP_ROOM_EXCLUDED.includes(k) ? '' : k;
+}
+
+export interface CampGroupRoomPlan {
+  id: string;
+  type: 'camp_group';
+  groupKey: string;
+  jobCodeId: string;
+  campCode: string;
+  generation: string | null;
+  memberIds: string[];
+  memberInfo: Record<string, ChatMemberInfo>;
+}
+
+/**
+ * 그룹방 — 그룹마다 하나: 캠프 매니저(관리자 포함) + 그 그룹 멘토(부매니저 포함). 원어민은 넣지 않는다.
+ * 멘토가 한 명이라도 있는 그룹만 (그룹 순서대로).
+ */
+export function campGroupRoomPlan(
+  users: ChatUserLike[],
+  camp: { jobCodeId: string; campCode: string; generation?: string | null; generationJobCodeIds?: readonly string[] },
+): CampGroupRoomPlan[] {
+  const gen = camp.generationJobCodeIds ?? [];
+  const managers: Array<{ uid: string; u: ChatUserLike }> = [];
+  const byGroup = new Map<string, Array<{ uid: string; u: ChatUserLike }>>();
+  users.forEach((u) => {
+    const uid = uidOf(u);
+    const kind = uid ? chatMemberKindOf(u, camp.jobCodeId, gen) : null;
+    if (kind === 'manager') managers.push({ uid, u });
+    else if (kind === 'mentor') {
+      const g = chatGroupKeyOf(u, camp.jobCodeId);
+      if (!g) return;
+      if (!byGroup.has(g)) byGroup.set(g, []);
+      byGroup.get(g)!.push({ uid, u });
+    }
+  });
+  return [...byGroup.keys()]
+    .sort((a, b) => groupRank(a) - groupRank(b) || a.localeCompare(b))
+    .map((groupKey) => {
+      const memberInfo: Record<string, ChatMemberInfo> = {};
+      managers.forEach((p) => { memberInfo[p.uid] = chatMemberInfoOf(p.u, 'manager', camp.jobCodeId); });
+      byGroup.get(groupKey)!.forEach((p) => { memberInfo[p.uid] = chatMemberInfoOf(p.u, 'mentor', camp.jobCodeId); });
+      return {
+        id: campGroupRoomId(camp.jobCodeId, groupKey), type: 'camp_group' as const, groupKey,
+        jobCodeId: camp.jobCodeId, campCode: camp.campCode, generation: camp.generation ?? null,
+        memberIds: Object.keys(memberInfo).sort(), memberInfo,
+      };
+    });
+}
+
 /** 방 문서가 계획과 다른가 (사람 · 이름 · 사진 · 역할) */
 export function chatRoomNeedsSync(
   room: Pick<ChatRoom, 'memberIds' | 'memberInfo' | 'campCode' | 'generation'> | null | undefined,
-  plan: CampChatRoomPlan,
+  plan: Pick<CampChatRoomPlan, 'campCode' | 'generation' | 'memberIds' | 'memberInfo'>,
 ): boolean {
   if (!room) return true;
   if ((room.campCode ?? '') !== plan.campCode) return true;
@@ -195,24 +281,28 @@ export function dmCandidates<T extends ChatUserLike>(users: T[], me: ChatUserLik
 
 // ── 방 이름 · 목록 ───────────────────────────────────────────────────
 
-/** 방 이름 — 캠프 방 "J29 전체방", DM 은 상대 이름 */
-export function chatRoomTitle(room: Pick<ChatRoom, 'type' | 'campCode' | 'memberIds' | 'memberInfo'>, lang: Locale, myUid?: string): string {
+/** 방 이름 — 캠프 방 "J29 전체방", 그룹방 "J29 Junior", DM 은 상대 이름 */
+export function chatRoomTitle(room: Pick<ChatRoom, 'type' | 'campCode' | 'memberIds' | 'memberInfo' | 'groupKey'>, lang: Locale, myUid?: string): string {
   if (room.type === 'dm') {
     const other = (room.memberIds ?? []).find((id) => id !== myUid) ?? myUid ?? '';
     return room.memberInfo?.[other]?.name || t(lang, 'chat.unknownUser');
   }
-  const label = t(lang, ROOM_LABEL_KEY[room.type]);
+  const label = chatRoomLabel(room.type, lang, room.groupKey);
   return room.campCode ? `${room.campCode} ${label}` : label;
 }
 
 /** 캠프 방 설명 — "매니저 + 멘토" */
 export function chatRoomDescription(type: ChatRoomType, lang: Locale): string {
-  return type === 'dm' ? '' : t(lang, ROOM_DESC_KEY[type]);
+  if (type === 'dm') return '';
+  if (type === 'camp_group') return t(lang, 'chat.roomGroupDesc');
+  return t(lang, ROOM_DESC_KEY[type]);
 }
 
-/** 캠프 방 짧은 이름 (캠프 코드 없이) — "전체방" */
-export function chatRoomLabel(type: ChatRoomType, lang: Locale): string {
-  return type === 'dm' ? t(lang, 'chat.dm') : t(lang, ROOM_LABEL_KEY[type]);
+/** 방 짧은 이름 (캠프 코드 없이) — "전체방", 그룹방 "Junior" */
+export function chatRoomLabel(type: ChatRoomType, lang: Locale, groupKey?: string | null): string {
+  if (type === 'dm') return t(lang, 'chat.dm');
+  if (type === 'camp_group') return t(lang, 'chat.roomGroup', { group: chatGroupLabel(groupKey) });
+  return t(lang, ROOM_LABEL_KEY[type]);
 }
 
 /** DM 상대 uid */
@@ -239,7 +329,7 @@ export interface ChatCampGroup {
   jobCodeId: string;
   campCode: string;
   generation: string;
-  /** 전체방 → 멘토방 → 멘토끼리 → 원어민방 → 원어민끼리 순 (보이는 것만) */
+  /** 전체방 → 멘토방 → 멘토끼리 → 원어민방 → 원어민끼리 → 그룹방(Junior …) 순 (보이는 것만) */
   rooms: ChatRoom[];
 }
 
@@ -248,25 +338,42 @@ export interface ChatRoomGroups {
   generation: string;
   /** 지금 기수의 캠프들 (J → E → S → F …) — 2개 이상이면 [All][J29][E29]… 버튼으로 골라 본다 */
   camps: ChatCampGroup[];
-  /** 1:1 대화 — 최근 순 (메시지가 없는 방은 빼고) */
+  /** 내가 위에 고정한 방 (DM · 지난 기수 방) — 고정한 순서 */
+  pinned: ChatRoom[];
+  /** 1:1 대화 — 최근 순 (메시지가 없는 방 · 숨긴 방 · 고정한 방은 빼고) */
   dms: ChatRoom[];
+  /** 숨긴 방 수 (새 메시지가 오면 다시 나온다) */
+  hiddenCount: number;
   /** 지난 기수 — 최근 기수 먼저 (접어 둔다) */
   otherGenerations: Array<{ generation: string; camps: ChatCampGroup[] }>;
 }
 
+/** 숨긴 방인가 — 숨긴 뒤 새 메시지가 오면 다시 보인다 */
+export function isRoomHidden(state: ChatUserState | null | undefined, room: ChatRoom): boolean {
+  const at = Number(state?.hidden?.[room.id] ?? 0);
+  return at > 0 && roomTime(room) <= at;
+}
+
 /**
- * 목록 나누기 — 지금 기수의 캠프 방(위) · 1:1 대화 · 지난 기수.
+ * 목록 나누기 — 지금 기수의 캠프 방(위, 늘 고정) · 내가 고정한 방 · 1:1 대화 · 지난 기수.
  * @param activeJobCodeId 지금 보고 있는 캠프 — 이 캠프의 기수가 '지금 기수'
- * @param keepEmptyDmId 메시지가 아직 없어도 보여 줄 DM (방금 만든 대화)
+ * @param keepEmptyDmId 메시지가 아직 없어도 보여 줄 DM (방금 만든 대화) — 숨겼어도 보인다
+ * @param state 고정 · 숨김 (지금 기수 캠프 방에는 적용하지 않는다)
  */
-export function chatRoomGroups(rooms: ChatRoom[], opts: { activeJobCodeId?: string | null; keepEmptyDmId?: string | null } = {}): ChatRoomGroups {
+export function chatRoomGroups(
+  rooms: ChatRoom[],
+  opts: { activeJobCodeId?: string | null; keepEmptyDmId?: string | null; state?: ChatUserState | null } = {},
+): ChatRoomGroups {
   const byCamp = new Map<string, ChatRoom[]>();
   rooms.filter((r) => r.type !== 'dm' && r.jobCodeId).forEach((r) => {
     const k = String(r.jobCodeId);
     if (!byCamp.has(k)) byCamp.set(k, []);
     byCamp.get(k)!.push(r);
   });
-  const order = (r: ChatRoom) => CAMP_CHAT_ROOM_ORDER.indexOf(r.type as CampChatRoomType);
+  const order = (r: ChatRoom) => {
+    const i = CAMP_CHAT_ROOM_ORDER.indexOf(r.type as CampChatRoomType);
+    return i >= 0 ? i : 10 + groupRank(r.groupKey ?? '');
+  };
   const camps: ChatCampGroup[] = [...byCamp.entries()].map(([jobCodeId, list]) => ({
     jobCodeId,
     campCode: String(list[0].campCode ?? ''),
@@ -283,16 +390,42 @@ export function chatRoomGroups(rooms: ChatRoom[], opts: { activeJobCodeId?: stri
     if (!others.has(c.generation)) others.set(c.generation, []);
     others.get(c.generation)!.push(c);
   });
+  const st = opts.state;
+  const keep = (r: ChatRoom) => r.id === opts.keepEmptyDmId;
+  const visible = (r: ChatRoom) => keep(r) || !isRoomHidden(st, r);
+  const pinnedAt = (r: ChatRoom) => Number(st?.pinned?.[r.id] ?? 0);
+  const currentIds = new Set(camps.filter((c) => c.generation === generation).flatMap((c) => c.rooms.map((r) => r.id)));
+  let hiddenCount = 0;
+  const pinned: ChatRoom[] = [];
+  rooms.forEach((r) => {
+    if (currentIds.has(r.id) || !pinnedAt(r)) return;
+    if (r.type === 'dm' && !r.lastMessage && !keep(r)) return;
+    if (!visible(r)) { hiddenCount += 1; return; }
+    pinned.push(r);
+  });
+  pinned.sort((a, b) => pinnedAt(a) - pinnedAt(b));
+  const pinnedIds = new Set(pinned.map((r) => r.id));
   const dms = rooms
-    .filter((r) => r.type === 'dm' && (!!r.lastMessage || r.id === opts.keepEmptyDmId))
+    .filter((r) => r.type === 'dm' && (!!r.lastMessage || keep(r)) && !pinnedIds.has(r.id) && !pinnedAt(r))
+    .filter((r) => (visible(r) ? true : (hiddenCount += 1, false)))
     .sort((a, b) => roomTime(b) - roomTime(a));
+  const otherGenerations = [...others.entries()]
+    .map(([g, list]) => ({
+      generation: g,
+      camps: list
+        .map((c) => ({ ...c, rooms: c.rooms.filter((r) => !pinnedIds.has(r.id) && !pinnedAt(r) && (visible(r) ? true : (hiddenCount += 1, false))) }))
+        .filter((c) => c.rooms.length)
+        .sort(byCode),
+    }))
+    .filter((x) => x.camps.length)
+    .sort((a, b) => generationNumber(b.generation) - generationNumber(a.generation));
   return {
     generation,
     camps: camps.filter((c) => c.generation === generation).sort(byCode),
+    pinned,
     dms,
-    otherGenerations: [...others.entries()]
-      .map(([g, list]) => ({ generation: g, camps: list.sort(byCode) }))
-      .sort((a, b) => generationNumber(b.generation) - generationNumber(a.generation)),
+    hiddenCount,
+    otherGenerations,
   };
 }
 
@@ -332,8 +465,11 @@ export function chatPreviewText(
 ): string {
   if (!m) return t(lang, 'chat.noMessagesYet');
   if (m.deleted) return t(lang, 'chat.deletedMessage');
-  const counts = 'media' in m ? mediaCounts(m.media) : { images: Number((m as ChatLastMessage).imageCount ?? 0), videos: Number((m as ChatLastMessage).videoCount ?? 0) };
   const text = String(m.text ?? '').replace(/\s+/g, ' ').trim();
+  if (m.kind === 'voice') return t(lang, 'chat.previewVoice');
+  if (m.kind === 'poll') return t(lang, 'chat.previewPoll', { q: text });
+  if (m.kind === 'system') return text ? t(lang, 'chat.previewNotice', { text }) : t(lang, 'chat.noticeSet');
+  const counts = 'media' in m ? mediaCounts(m.media) : { images: Number((m as ChatLastMessage).imageCount ?? 0), videos: Number((m as ChatLastMessage).videoCount ?? 0) };
   let media = '';
   if (counts.images && counts.videos) media = t(lang, 'chat.previewMedia', { images: counts.images, videos: counts.videos });
   else if (counts.images) media = t(lang, 'chat.previewPhotos', { n: counts.images });
@@ -343,12 +479,12 @@ export function chatPreviewText(
 }
 
 /** 방 문서에 둘 마지막 메시지 */
-export function chatLastMessageOf(m: Pick<ChatMessage, 'id' | 'kind' | 'text' | 'media' | 'senderId' | 'senderName' | 'deleted'>): ChatLastMessage {
-  const c = mediaCounts(m.media);
+export function chatLastMessageOf(m: Pick<ChatMessage, 'id' | 'kind' | 'text' | 'media' | 'senderId' | 'senderName' | 'deleted' | 'poll'>): ChatLastMessage {
+  const c = m.kind === 'voice' ? { images: 0, videos: 0 } : mediaCounts(m.media);
   const last: ChatLastMessage = {
     messageId: m.id,
     kind: m.kind,
-    text: String(m.text ?? '').slice(0, 200),
+    text: String(m.kind === 'poll' ? m.poll?.question ?? '' : m.text ?? '').slice(0, 200),
     senderId: m.senderId,
     senderName: m.senderName,
   };
@@ -408,10 +544,11 @@ export function chatFileExt(contentType?: string | null, name?: string | null): 
   const map: Record<string, string> = {
     'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/heic': 'heic', 'image/heif': 'heif',
     'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm', 'video/3gpp': '3gp', 'video/x-m4v': 'm4v',
+    'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/m4a': 'm4a', 'audio/aac': 'aac', 'audio/mpeg': 'mp3', 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/wav': 'wav',
   };
   if (map[ct]) return map[ct];
   const m = /\.([a-z0-9]{2,5})$/i.exec(String(name ?? ''));
-  return m ? m[1].toLowerCase() : ct.startsWith('video/') ? 'mp4' : 'jpg';
+  return m ? m[1].toLowerCase() : ct.startsWith('video/') ? 'mp4' : ct.startsWith('audio/') ? 'm4a' : 'jpg';
 }
 
 // ── 안 읽은 사람 수 ('1') ────────────────────────────────────────────
@@ -567,4 +704,321 @@ export function splitByQuery(text: string | null | undefined, query: string | nu
   }
   if (last < src.length) out.push({ text: src.slice(last), hit: false });
   return out;
+}
+
+
+// ── 답장 ─────────────────────────────────────────────────────────────
+
+/** 답장할 때 붙일 원래 메시지 요약 */
+export function chatReplyRefOf(m: Pick<ChatMessage, 'id' | 'senderId' | 'senderName' | 'kind' | 'text' | 'media' | 'poll'>): ChatReplyRef {
+  const ref: ChatReplyRef = {
+    id: m.id,
+    senderId: m.senderId,
+    senderName: m.senderName,
+    kind: m.kind,
+    text: String(m.kind === 'poll' ? m.poll?.question ?? '' : m.text ?? '').replace(/\s+/g, ' ').trim().slice(0, CHAT_LIMITS.replyTextMax),
+  };
+  const first = (m.media ?? []).find((x) => x.kind === 'image' || x.kind === 'video');
+  if (first) ref.thumbUrl = first.thumbUrl || first.url;
+  return ref;
+}
+
+/** 답장 위에 보일 원래 글 한 줄 */
+export function chatReplyPreview(r: ChatReplyRef, lang: Locale): string {
+  if (r.deleted) return t(lang, 'chat.deletedMessage');
+  if (r.text) return r.kind === 'poll' ? t(lang, 'chat.previewPoll', { q: r.text }) : r.text;
+  if (r.kind === 'voice') return t(lang, 'chat.previewVoice');
+  return r.thumbUrl ? t(lang, 'chat.previewPhotoShort') : t(lang, 'chat.deletedMessage');
+}
+
+// ── @멘션 ─────────────────────────────────────────────────────────────
+
+/** @모두 — 한국어·영어 둘 다 */
+export const CHAT_MENTION_ALL_TOKENS: readonly string[] = ['모두', 'all', 'everyone'];
+
+/** @모두를 쓸 수 있는가 — 캠프 방·그룹방의 매니저 */
+export const canMentionAll = (room: Pick<ChatRoom, 'type' | 'memberInfo'>, uid: string): boolean =>
+  room.type !== 'dm' && room.memberInfo?.[uid]?.kind === 'manager';
+
+/** @ 뒤에 칠 때 고를 사람 — 이름에 검색어가 들어간 사람 (나 빼고, 이름 순) */
+export function mentionCandidates(room: Pick<ChatRoom, 'memberInfo'>, myUid: string, query: string): Array<{ uid: string; name: string; label?: string; kind: ChatMemberKind }> {
+  const q = String(query ?? '').trim().toLocaleLowerCase();
+  return Object.entries(room.memberInfo ?? {})
+    .filter(([uid, m]) => uid !== myUid && (!q || m.name.toLocaleLowerCase().includes(q)))
+    .map(([uid, m]) => ({ uid, name: m.name, label: m.label, kind: m.kind }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+}
+
+/**
+ * 글에서 @이름 찾기 — 보낼 때 mentions · mentionAll 을 채운다 (@모두는 매니저만).
+ * 이름이 긴 것부터 맞춘다 ("김민" 과 "김민지" 가 있으면 "@김민지" 는 김민지).
+ */
+export function extractMentions(
+  text: string,
+  room: Pick<ChatRoom, 'type' | 'memberInfo'>,
+  myUid: string,
+): { mentions: string[]; mentionAll: boolean } {
+  const found = new Set<string>();
+  let all = false;
+  for (const part of mentionParts(text, room)) {
+    if (part.mention === 'all') all = true;
+    else if (part.mention) found.add(part.mention);
+  }
+  return { mentions: [...found].filter((u) => u !== myUid).sort(), mentionAll: all && canMentionAll(room, myUid) };
+}
+
+/**
+ * 글을 멘션 자리로 나누기 — 강조 표시용. mention: 사람 uid 또는 'all'
+ * '@' 앞은 글 처음이거나 공백이어야 한다 (이메일 주소 제외).
+ */
+export function mentionParts(
+  text: string | null | undefined,
+  room: Pick<ChatRoom, 'memberInfo'>,
+): Array<{ text: string; mention?: string }> {
+  const src = String(text ?? '');
+  if (!src.includes('@')) return src ? [{ text: src }] : [];
+  const names = Object.entries(room.memberInfo ?? {})
+    .map(([uid, m]) => ({ uid, name: m.name }))
+    .filter((x) => x.name && x.name !== '?')
+    .sort((a, b) => b.name.length - a.name.length);
+  const out: Array<{ text: string; mention?: string }> = [];
+  let buf = '';
+  let i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    if (ch === '@' && (i === 0 || /\s/.test(src[i - 1]))) {
+      const rest = src.slice(i + 1);
+      const allTok = CHAT_MENTION_ALL_TOKENS.find((tk) => rest.toLocaleLowerCase().startsWith(tk) && !/[\p{L}\p{N}]/u.test(rest.charAt(tk.length)));
+      const hit = allTok ? null : names.find((x) => rest.startsWith(x.name));
+      if (allTok || hit) {
+        if (buf) out.push({ text: buf });
+        buf = '';
+        const len = 1 + (allTok ? allTok.length : hit!.name.length);
+        out.push({ text: src.slice(i, i + len), mention: allTok ? 'all' : hit!.uid });
+        i += len;
+        continue;
+      }
+    }
+    buf += ch;
+    i += 1;
+  }
+  if (buf) out.push({ text: buf });
+  return out;
+}
+
+/** 이 메시지가 나를 불렀나 */
+export const isMentioned = (m: Pick<ChatMessage, 'mentions' | 'mentionAll' | 'senderId'>, uid: string): boolean =>
+  m.senderId !== uid && (!!m.mentionAll || (m.mentions ?? []).includes(uid));
+
+// ── 공감 ─────────────────────────────────────────────────────────────
+
+export interface ChatReactionCount { key: ChatReactionKey; emoji: string; count: number; uids: string[] }
+
+/** 공감 모아 보기 — 정해진 순서, 0개는 빼고 */
+export function reactionSummary(reactions: Record<string, ChatReactionKey> | null | undefined): ChatReactionCount[] {
+  const by = new Map<ChatReactionKey, string[]>();
+  Object.entries(reactions ?? {}).forEach(([uid, k]) => {
+    if (!(CHAT_REACTIONS as readonly string[]).includes(k)) return;
+    if (!by.has(k)) by.set(k, []);
+    by.get(k)!.push(uid);
+  });
+  return CHAT_REACTIONS.filter((k) => by.has(k)).map((k) => ({ key: k, emoji: CHAT_REACTION_EMOJI[k], count: by.get(k)!.length, uids: by.get(k)! }));
+}
+
+// ── 고치기 ───────────────────────────────────────────────────────────
+
+/** 이 메시지를 고칠 수 있나 — 내 글 메시지, 보낸 뒤 24시간 안, 삭제 안 됨 */
+export function canEditChatMessage(m: Pick<ChatMessage, 'senderId' | 'kind' | 'deleted' | 'createdAt'>, uid: string, now: number = Date.now()): boolean {
+  const at = millis(m.createdAt);
+  return m.senderId === uid && m.kind === 'text' && !m.deleted && at > 0 && now - at < CHAT_LIMITS.editWindowMs;
+}
+
+// ── 투표 ─────────────────────────────────────────────────────────────
+
+/** 투표 만들기 — 빈 항목·같은 항목은 빼고, 2개 이상이어야 한다 (아니면 null) */
+export function makeChatPoll(
+  question: string,
+  options: string[],
+  opts: { multi?: boolean; anonymous?: boolean; closesAt?: ChatPoll['closesAt'] } = {},
+): ChatPoll | null {
+  const q = String(question ?? '').replace(/\s+/g, ' ').trim().slice(0, CHAT_LIMITS.pollQuestionMax);
+  const seen = new Set<string>();
+  const list = options
+    .map((o) => String(o ?? '').replace(/\s+/g, ' ').trim().slice(0, CHAT_LIMITS.pollOptionMax))
+    .filter((o) => o && !seen.has(o.toLocaleLowerCase()) && !!seen.add(o.toLocaleLowerCase()))
+    .slice(0, CHAT_LIMITS.pollOptionsMax);
+  if (!q || list.length < CHAT_LIMITS.pollOptionsMin) return null;
+  const poll: ChatPoll = { question: q, options: list.map((text, i) => ({ id: `o${i + 1}`, text })), multi: !!opts.multi, anonymous: !!opts.anonymous };
+  if (opts.closesAt) poll.closesAt = opts.closesAt;
+  return poll;
+}
+
+/** 마감됐나 — 만든 사람이 닫았거나 마감 시각이 지났다 */
+export const isPollClosed = (m: Pick<ChatMessage, 'poll' | 'pollClosed'>, now: number = Date.now()): boolean =>
+  !!m.pollClosed || (!!m.poll?.closesAt && now >= millis(m.poll.closesAt));
+
+export interface ChatPollResult {
+  /** 투표한 사람 수 */
+  voters: number;
+  options: Array<{ id: string; text: string; count: number; uids: string[]; ratio: number }>;
+  /** 내가 고른 것 */
+  mine: string[];
+  /** 가장 많이 받은 항목 id (같으면 여럿) */
+  top: string[];
+}
+
+export function pollResults(m: Pick<ChatMessage, 'poll' | 'pollVotes'>, myUid: string): ChatPollResult {
+  const opts = m.poll?.options ?? [];
+  const valid = new Set(opts.map((o) => o.id));
+  const votes = Object.entries(m.pollVotes ?? {})
+    .map(([uid, ids]) => [uid, (ids ?? []).filter((id) => valid.has(id))] as const)
+    .filter(([, ids]) => ids.length);
+  const options = opts.map((o) => {
+    const uids = votes.filter(([, ids]) => ids.includes(o.id)).map(([uid]) => uid);
+    return { id: o.id, text: o.text, count: uids.length, uids, ratio: votes.length ? uids.length / votes.length : 0 };
+  });
+  const max = Math.max(0, ...options.map((o) => o.count));
+  return {
+    voters: votes.length,
+    options,
+    mine: votes.find(([uid]) => uid === myUid)?.[1].slice() ?? [],
+    top: max > 0 ? options.filter((o) => o.count === max).map((o) => o.id) : [],
+  };
+}
+
+// ── 공지 ─────────────────────────────────────────────────────────────
+
+const SUB_MANAGER_LABEL = /(^|\s)(부매니저|Sub Manager)(\s|$)/;
+
+/** 공지를 올리고 내릴 수 있나 — 캠프 방: 매니저 · 그룹방: 매니저 + 그 그룹 부매니저 · 1:1: 둘 다 */
+export function canSetNotice(room: Pick<ChatRoom, 'type' | 'memberIds' | 'memberInfo'>, uid: string): boolean {
+  if (!(room.memberIds ?? []).includes(uid)) return false;
+  if (room.type === 'dm') return true;
+  const info = room.memberInfo?.[uid];
+  if (info?.kind === 'manager') return true;
+  return room.type === 'camp_group' && SUB_MANAGER_LABEL.test(String(info?.label ?? ''));
+}
+
+/** 공지로 올릴 수 있는 메시지 — 글 · 사진/동영상 · 투표 (삭제 · 음성 · 알림 제외) */
+export const canBeNotice = (m: Pick<ChatMessage, 'kind' | 'deleted'>): boolean =>
+  !m.deleted && (m.kind === 'text' || m.kind === 'media' || m.kind === 'poll');
+
+/** 공지 확인 현황 — 방 사람 중 공지 올린 사람·글쓴이 빼고 확인 / 미확인 */
+export function noticeAckSummary(
+  room: Pick<ChatRoom, 'memberIds' | 'memberInfo' | 'notice'>,
+  acks: Record<string, unknown> | null | undefined,
+): { acked: string[]; pending: string[] } {
+  const skip = new Set([room.notice?.setBy, room.notice?.senderId].filter(Boolean) as string[]);
+  const names = (uid: string) => room.memberInfo?.[uid]?.name ?? '';
+  const people = (room.memberIds ?? []).filter((uid) => !skip.has(uid)).sort((a, b) => names(a).localeCompare(names(b), 'ko'));
+  return { acked: people.filter((uid) => !!acks?.[uid]), pending: people.filter((uid) => !acks?.[uid]) };
+}
+
+/** 공지 문서 (서버가 쓴다) */
+export function chatNoticeOf(
+  m: Pick<ChatMessage, 'id' | 'kind' | 'text' | 'media' | 'senderId' | 'senderName' | 'poll'>,
+  by: { uid: string; name: string },
+): Omit<ChatNotice, 'setAt'> {
+  const n: Omit<ChatNotice, 'setAt'> = {
+    messageId: m.id,
+    kind: m.kind,
+    text: String(m.kind === 'poll' ? m.poll?.question ?? '' : m.text ?? '').slice(0, CHAT_LIMITS.noticeTextMax),
+    senderId: m.senderId,
+    senderName: m.senderName,
+    setBy: by.uid,
+    setByName: by.name,
+  };
+  const first = (m.media ?? []).find((x) => x.kind === 'image' || x.kind === 'video');
+  if (first) n.thumbUrl = first.thumbUrl || first.url;
+  return n;
+}
+
+// ── 읽지 않은 곳부터 ─────────────────────────────────────────────────
+
+/**
+ * '여기까지 읽었습니다' 줄 — 방에 들어올 때의 내 마지막 읽은 시각 뒤로 남이 보낸 첫 메시지 자리.
+ * 없으면 -1 (다 읽음 · 처음 들어온 방은 맨 아래로)
+ */
+export function firstUnreadIndex(
+  messages: Array<Pick<ChatMessage, 'senderId' | 'createdAt' | 'kind'>>,
+  myReadMs: number | null | undefined,
+  myUid: string,
+): number {
+  if (!myReadMs) return -1;
+  return messages.findIndex((m) => m.senderId !== myUid && m.kind !== 'system' && millis(m.createdAt) > myReadMs);
+}
+
+// ── 예약 메시지 ───────────────────────────────────────────────────────
+
+/** 예약할 수 있는 시각인가 — 1분 뒤 ~ 30일 안 */
+export function scheduleTimeError(at: Date | null | undefined, now: Date = new Date()): 'past' | 'tooFar' | null {
+  if (!at || Number.isNaN(at.getTime())) return 'past';
+  const d = at.getTime() - now.getTime();
+  if (d < CHAT_LIMITS.scheduleMinMs) return 'past';
+  if (d > CHAT_LIMITS.scheduleMaxDays * 86400000) return 'tooFar';
+  return null;
+}
+
+// ── 음성 · 시간 길이 ─────────────────────────────────────────────────
+
+/** 1:05 · 12:30 */
+export function formatChatDuration(ms: number | null | undefined): string {
+  const sec = Math.max(0, Math.round(Number(ms ?? 0) / 1000));
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+}
+
+// ── 대화 내보내기 (기록 보관) ─────────────────────────────────────────
+
+/**
+ * 대화를 글 파일로 — 카톡 '대화 내보내기'처럼 날짜 줄 + [이름] [시각] 내용.
+ * includeMediaLinks: 사진·동영상·음성 주소를 함께 적는다 (주소가 있으면 누구나 열 수 있으니 기본은 끔)
+ */
+export function chatExportText(
+  room: Pick<ChatRoom, 'type' | 'campCode' | 'memberIds' | 'memberInfo' | 'groupKey'>,
+  messages: Array<Pick<ChatMessage, 'kind' | 'text' | 'media' | 'deleted' | 'senderId' | 'senderName' | 'createdAt' | 'editedAt' | 'replyTo' | 'poll' | 'pollVotes' | 'pollClosed' | 'systemType'>>,
+  opts: { lang: Locale; myUid: string; includeMediaLinks?: boolean; exportedAt?: Date },
+): string {
+  const { lang } = opts;
+  const at = opts.exportedAt ?? new Date();
+  const lines: string[] = [
+    t(lang, 'chat.exportTitle', { room: chatRoomTitle(room, lang, opts.myUid) }),
+    t(lang, 'chat.exportSavedAt', { at: `${chatDayLabel(at, lang)} ${chatTimeLabel(at, lang)}` }),
+    t(lang, 'chat.exportMembers', { n: (room.memberIds ?? []).length }),
+    '',
+  ];
+  let day = '';
+  messages.forEach((m) => {
+    const ms = millis(m.createdAt);
+    if (!ms) return;
+    const d = new Date(ms);
+    const dk = dayKey(d);
+    if (dk !== day) {
+      day = dk;
+      lines.push(`--------------- ${chatDayLabel(d, lang)} ---------------`);
+    }
+    const head = `[${m.senderName || '?'}] [${chatTimeLabel(d, lang)}]`;
+    if (m.kind === 'system') { lines.push(`${head} ${chatPreviewText(m, lang)}`); return; }
+    if (m.deleted) { lines.push(`${head} ${t(lang, 'chat.deletedMessage')}`); return; }
+    const reply = m.replyTo ? `(${t(lang, 'chat.exportReplyTo', { name: m.replyTo.senderName, text: chatReplyPreview(m.replyTo, lang).slice(0, 30) })}) ` : '';
+    let body = '';
+    if (m.kind === 'poll' && m.poll) {
+      const r = pollResults(m, opts.myUid);
+      body = `${t(lang, 'chat.previewPoll', { q: m.poll.question })} — ${r.options.map((o) => `${o.text} ${o.count}`).join(', ')}${isPollClosed(m) ? ` (${t(lang, 'chat.pollClosed')})` : ''}`;
+    } else if (m.kind === 'media' || m.kind === 'voice') {
+      body = chatPreviewText(m, lang);
+    } else {
+      body = String(m.text ?? '');
+    }
+    if (m.editedAt) body += ` (${t(lang, 'chat.edited')})`;
+    lines.push(`${head} ${reply}${body}`);
+    if (opts.includeMediaLinks) (m.media ?? []).forEach((x) => lines.push(`    ${x.url}`));
+  });
+  return lines.join('\n') + '\n';
+}
+
+/** 내보낼 파일 이름 — SMIS_채팅_J29_전체방_20261004.txt */
+export function chatExportFileName(room: Pick<ChatRoom, 'type' | 'campCode' | 'memberIds' | 'memberInfo' | 'groupKey'>, lang: Locale, myUid: string, at: Date = new Date()): string {
+  const title = chatRoomTitle(room, lang, myUid).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, '_');
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `SMIS_${lang === 'en' ? 'chat' : '채팅'}_${title}_${at.getFullYear()}${p(at.getMonth() + 1)}${p(at.getDate())}.txt`;
 }

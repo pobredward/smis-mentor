@@ -3,6 +3,7 @@
  *
  * - syncCampChatRooms: 캠프 방 5개를 캠프 배정(users.jobCodeIds)대로 맞춘다 (없으면 만든다).
  *   관리자는 같은 기수 캠프 하나에라도 배정돼 있으면 그 기수 모든 캠프의 매니저 — 그래서 기수 단위로 사람을 읽는다.
+ * - 그룹방: 캠프 그룹마다 매니저 + 그 그룹 멘토(부매니저 포함), 원어민 없음 (campGroupRoomPlan)
  * - syncGenerationChatRooms: 같은 기수 캠프 전부 (채팅 탭을 열 때 · 선생님 명단 저장 뒤)
  *   평소에는 Functions(chatOnUserWritten · chatOnJobCodeWritten)가 배정·캠프 생성 때 바로 맞춘다 — 여기는 안전망.
  *   누가 어느 방인지는 shared 의 campChatRoomPlan() 한 곳에서 정한다 (functions/src/chatMembership.ts 가 같은 규칙).
@@ -13,6 +14,9 @@
  */
 import {
   campChatRoomPlan,
+  campGroupRoomPlan,
+  type CampChatRoomPlan,
+  type CampGroupRoomPlan,
   canStartDm,
   chatMemberInfoOf,
   chatRoomNeedsSync,
@@ -70,7 +74,22 @@ async function usersOfCamps(jobCodeIds: string[]): Promise<ChatUserLike[]> {
 
 async function writeCampRooms(camp: CampInfo, generationIds: string[], users: ChatUserLike[]): Promise<number> {
   const db = getAdminFirestore();
-  const plan = campChatRoomPlan(users, { ...camp, generationJobCodeIds: generationIds });
+  const opts = { ...camp, generationJobCodeIds: generationIds };
+  // 캠프 방 5개 + 그룹방 (그룹마다 매니저 + 그 그룹 멘토)
+  const groupPlan = campGroupRoomPlan(users, opts);
+  const plan: Array<(CampChatRoomPlan | CampGroupRoomPlan)> = [...campChatRoomPlan(users, opts), ...groupPlan];
+  // 멘토가 모두 빠진 그룹의 방 — 매니저만 남긴다 (방과 대화는 그대로)
+  const planned = new Set(plan.map((p) => p.id));
+  const oldGroups = await db.collection('chatRooms').where('jobCodeId', '==', camp.jobCodeId).where('type', '==', 'camp_group').get();
+  const managersOnly = campChatRoomPlan(users, opts).find((p) => p.type === 'camp_foreign')!; // 매니저 + 원어민 → 매니저만 골라 쓴다
+  oldGroups.docs.filter((d) => !planned.has(d.id)).forEach((d) => {
+    const memberInfo = Object.fromEntries(Object.entries(managersOnly.memberInfo).filter(([, v]) => v.kind === 'manager'));
+    const groupKey = String(d.data().groupKey ?? '');
+    plan.push({
+      id: d.id, type: 'camp_group', groupKey, jobCodeId: camp.jobCodeId, campCode: camp.campCode, generation: camp.generation,
+      memberIds: Object.keys(memberInfo).sort(), memberInfo,
+    });
+  });
   const refs = plan.map((p) => db.collection('chatRooms').doc(p.id));
   const existing = await db.getAll(...refs);
   const batch = db.batch();
@@ -78,16 +97,17 @@ async function writeCampRooms(camp: CampInfo, generationIds: string[], users: Ch
   plan.forEach((p, i) => {
     const cur = existing[i];
     const now = adminFieldValue.serverTimestamp();
+    const extra = p.type === 'camp_group' ? { groupKey: (p as CampGroupRoomPlan).groupKey } : {};
     if (!cur.exists) {
       batch.set(refs[i], {
-        type: p.type, jobCodeId: camp.jobCodeId, campCode: camp.campCode, generation: camp.generation,
+        type: p.type, jobCodeId: camp.jobCodeId, campCode: camp.campCode, generation: camp.generation, ...extra,
         memberIds: p.memberIds, memberInfo: p.memberInfo,
         lastMessage: null, lastMessageAt: null, messageCount: 0, createdAt: now, updatedAt: now, syncedAt: now,
       });
       changed += 1;
     } else if (chatRoomNeedsSync(cur.data() as Pick<ChatRoom, 'memberIds' | 'memberInfo' | 'campCode' | 'generation'>, p)) {
       batch.update(refs[i], {
-        memberIds: p.memberIds, memberInfo: p.memberInfo, campCode: camp.campCode, generation: camp.generation, updatedAt: now, syncedAt: now,
+        memberIds: p.memberIds, memberInfo: p.memberInfo, campCode: camp.campCode, generation: camp.generation, ...extra, updatedAt: now, syncedAt: now,
       });
       changed += 1;
     }

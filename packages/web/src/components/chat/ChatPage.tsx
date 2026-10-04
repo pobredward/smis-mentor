@@ -15,12 +15,17 @@ import {
   getCurrentLocale,
   isChatStaff,
   isDmRoomId,
+  isRoomHidden,
+  logger,
+  setChatRoomHidden,
+  setChatRoomPinned,
   resolveActiveJobCodeId,
   unreadBadgeText,
   type ChatUserLike,
 } from '@smis-mentor/shared';
 import Layout from '@/components/common/Layout';
 import { useAuth } from '@/contexts/AuthContext';
+import { db } from '@/lib/firebase';
 import { authenticatedPost } from '@/lib/apiClient';
 import { useChatInbox } from '@/hooks/useChatUnread';
 import ChatRoomList, { type ChatCampFilter } from './ChatRoomList';
@@ -86,9 +91,10 @@ function ChatScreen({ uid, user }: { uid: string; user: User }) {
 
   const activeJobCodeId = resolveActiveJobCodeId(user as unknown as Parameters<typeof resolveActiveJobCodeId>[0]) ?? null;
   const groups = useMemo(
-    () => chatRoomGroups(inbox.rooms, { activeJobCodeId, keepEmptyDmId: roomId && isDmRoomId(roomId) ? roomId : keepDm }),
-    [inbox.rooms, activeJobCodeId, roomId, keepDm],
+    () => chatRoomGroups(inbox.rooms, { activeJobCodeId, keepEmptyDmId: roomId && isDmRoomId(roomId) ? roomId : keepDm, state: inbox.state }),
+    [inbox.rooms, activeJobCodeId, roomId, keepDm, inbox.state],
   );
+  const hiddenRooms = useMemo(() => inbox.rooms.filter((r) => isRoomHidden(inbox.state, r)), [inbox.rooms, inbox.state]);
 
   // 새 1:1 대화 후보 — 내가 들어간 모든 캠프 전체방의 사람 (지금 캠프 먼저)
   const people = useMemo<ChatPerson[]>(() => {
@@ -112,6 +118,22 @@ function ChatScreen({ uid, user }: { uid: string; user: User }) {
   const closeRoom = useCallback(() => {
     router.push('/chat');
   }, [router]);
+
+  const onPin = useCallback((id: string, pinned: boolean) => {
+    setChatRoomPinned(db, uid, id, pinned).catch((e) => {
+      logger.warn('채팅방 고정 실패:', e);
+      toast.error(L('chat.webActionFailed'));
+    });
+  }, [uid]);
+  const onHide = useCallback((id: string, hidden: boolean) => {
+    setChatRoomHidden(db, uid, id, hidden)
+      .then(() => { if (hidden) toast(L('chat.hideHint')); })
+      .catch((e) => {
+        logger.warn('채팅방 숨기기 실패:', e);
+        toast.error(L('chat.webActionFailed'));
+      });
+    if (hidden && id === roomId) router.push('/chat');
+  }, [uid, roomId, router]);
 
   const startDm = useCallback(async (userId: string) => {
     try {
@@ -141,6 +163,9 @@ function ChatScreen({ uid, user }: { uid: string; user: User }) {
           onOpenRoom={openRoom}
           onNewDm={() => setNewDmOpen(true)}
           banner={<ChatPushBanner uid={uid} />}
+          hiddenRooms={hiddenRooms}
+          onPin={onPin}
+          onHide={onHide}
         />
       </aside>
       {roomId ? (
@@ -150,6 +175,7 @@ function ChatScreen({ uid, user }: { uid: string; user: User }) {
           myUid={uid}
           myName={String(user.name ?? '')}
           state={inbox.state}
+          currentGeneration={groups.generation}
           onBack={closeRoom}
           onStartDm={startDm}
         />

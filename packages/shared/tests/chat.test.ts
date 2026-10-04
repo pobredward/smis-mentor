@@ -221,3 +221,124 @@ describe('chat — 대화 내용 검색', () => {
     expect(C.splitByQuery('hello', '')).toEqual([{ text: 'hello', hit: false }]);
   });
 });
+
+describe('chat 2차 — 그룹방 · 고정 · 숨김', () => {
+  const J = 'jc29';
+  const E = (group: string, groupRole: string) => [{ id: J, group, groupRole }];
+  const people = [
+    { userId: 'adm', name: '관리자', role: 'admin', status: 'active', jobCodeIds: [J], jobExperiences: E('manager', '매니저') },
+    { userId: 'jm', name: '주니어매니저', role: 'mentor', status: 'active', jobCodeIds: [J], jobExperiences: E('junior', '매니저') },
+    { userId: 'js', name: '주니어부매', role: 'mentor', status: 'active', jobCodeIds: [J], jobExperiences: E('junior', '부매니저') },
+    { userId: 'j1', name: '주니어담임', role: 'mentor', status: 'active', jobCodeIds: [J], jobExperiences: [{ id: J, group: '주니어', groupRole: '담임', classCode: 'J01' }] },
+    { userId: 's1', name: '시니어담임', role: 'mentor', status: 'active', jobCodeIds: [J], jobExperiences: E('senior', '담임') },
+    { userId: 'c1', name: '공통', role: 'mentor', status: 'active', jobCodeIds: [J], jobExperiences: E('common', '수업') },
+    { userId: 'f1', name: 'Amy', role: 'foreign', status: 'active', jobCodeIds: [J], jobExperiences: E('junior', 'Speaking') },
+  ];
+  it('그룹마다 매니저 + 그 그룹 멘토 (원어민 · 공통 제외)', () => {
+    const plan = C.campGroupRoomPlan(people, { jobCodeId: J, campCode: 'J29', generation: '29기' });
+    expect(plan.map((p) => [p.id, p.memberIds])).toEqual([
+      ['jc29_group_junior', ['adm', 'j1', 'jm', 'js']],
+      ['jc29_group_senior', ['adm', 'jm', 's1']],
+    ]);
+    expect(plan[0].memberInfo.js.label).toBe('Junior 부매니저');
+    expect(C.chatRoomTitle({ type: 'camp_group', groupKey: 'junior', campCode: 'J29', memberIds: [] }, 'ko')).toBe('J29 Junior방');
+    const room = { type: 'camp_group' as const, memberIds: plan[0].memberIds, memberInfo: plan[0].memberInfo };
+    expect(C.canSetNotice(room, 'js')).toBe(true);
+    expect(C.canSetNotice(room, 'j1')).toBe(false);
+    expect(C.canSetNotice(room, 'adm')).toBe(true);
+  });
+  it('목록 — 그룹방은 캠프 방 뒤, 고정한 방 · 숨긴 방', () => {
+    const r = (id: string, type: ChatRoom['type'], at: number, extra: Partial<ChatRoom> = {}) =>
+      ({ id, type, memberIds: ['me'], lastMessageAt: at ? ts(at) : null, lastMessage: at ? { kind: 'text', text: 'x', senderId: 'a', senderName: 'A' } : null, ...extra }) as ChatRoom;
+    const rooms = [
+      r('a_group_senior', 'camp_group', 1, { jobCodeId: 'a', campCode: 'J29', generation: '29기', groupKey: 'senior' }),
+      r('a_group_junior', 'camp_group', 1, { jobCodeId: 'a', campCode: 'J29', generation: '29기', groupKey: 'junior' }),
+      r('a_camp_all', 'camp_all', 1, { jobCodeId: 'a', campCode: 'J29', generation: '29기' }),
+      r('o_camp_all', 'camp_all', 5, { jobCodeId: 'o', campCode: 'J28', generation: '28기' }),
+      r('dm_1', 'dm', 10), r('dm_2', 'dm', 20), r('dm_3', 'dm', 30),
+    ];
+    const state = { pinned: { dm_1: 100, a_camp_all: 50 }, hidden: { dm_2: 25, dm_3: 25, o_camp_all: 3 } };
+    const g = C.chatRoomGroups(rooms, { activeJobCodeId: 'a', state });
+    expect(g.camps[0].rooms.map((x) => x.id)).toEqual(['a_camp_all', 'a_group_junior', 'a_group_senior']);
+    expect(g.pinned.map((x) => x.id)).toEqual(['dm_1']);
+    // dm_2 는 숨김, dm_3 은 숨긴 뒤 새 메시지라 다시 보임, J28 은 숨긴 뒤 메시지가 와서 보임
+    expect(g.dms.map((x) => x.id)).toEqual(['dm_3']);
+    expect(g.hiddenCount).toBe(1);
+    expect(g.otherGenerations.length).toBe(1);
+    expect(C.chatRoomGroups(rooms, { activeJobCodeId: 'a', state, keepEmptyDmId: 'dm_2' }).dms.map((x) => x.id)).toEqual(['dm_3', 'dm_2']);
+  });
+});
+
+describe('chat 2차 — 답장 · 멘션 · 공감 · 수정 · 투표 · 공지 · 내보내기', () => {
+  const room = { type: 'camp_all' as const, campCode: 'J29', memberIds: ['me', 'kim', 'kimj', 'mgr'], memberInfo: {
+    me: { name: '나', kind: 'mentor' as const }, kim: { name: '김민', kind: 'mentor' as const }, kimj: { name: '김민지', kind: 'mentor' as const }, mgr: { name: '매니저', kind: 'manager' as const },
+  } };
+  it('멘션 — 긴 이름 먼저, @모두는 매니저만, 이메일은 아님', () => {
+    expect(C.mentionParts('@김민지 내일 @김민 a@김민', room)).toEqual([
+      { text: '@김민지', mention: 'kimj' }, { text: ' 내일 ' }, { text: '@김민', mention: 'kim' }, { text: ' a@김민' },
+    ]);
+    expect(C.extractMentions('@모두 집결! @김민', room, 'me')).toEqual({ mentions: ['kim'], mentionAll: false });
+    expect(C.extractMentions('@모두 집결!', room, 'mgr')).toEqual({ mentions: [], mentionAll: true });
+    expect(C.extractMentions('@모두요', room, 'mgr').mentionAll).toBe(false);
+    expect(C.isMentioned({ senderId: 'mgr', mentionAll: true }, 'me')).toBe(true);
+    expect(C.mentionCandidates(room, 'me', '김').map((x) => x.uid)).toEqual(['kim', 'kimj']);
+  });
+  it('공감 · 수정 가능 시간', () => {
+    expect(C.reactionSummary({ a: 'heart', b: 'check', c: 'check', d: 'bogus' as never })).toEqual([
+      { key: 'check', emoji: '✅', count: 2, uids: ['b', 'c'] }, { key: 'heart', emoji: '❤️', count: 1, uids: ['a'] },
+    ]);
+    const now = 100 * 3600000;
+    const m = { senderId: 'me', kind: 'text' as const, createdAt: ts(now - 23 * 3600000) };
+    expect(C.canEditChatMessage(m, 'me', now)).toBe(true);
+    expect(C.canEditChatMessage({ ...m, createdAt: ts(now - 25 * 3600000) }, 'me', now)).toBe(false);
+    expect(C.canEditChatMessage(m, 'other', now)).toBe(false);
+    expect(C.canEditChatMessage({ ...m, kind: 'media' }, 'me', now)).toBe(false);
+  });
+  it('투표', () => {
+    expect(C.makeChatPoll('메뉴', ['치킨', ' ', '치킨'])).toBe(null);
+    const poll = C.makeChatPoll(' 회식 메뉴 ', ['치킨', '피자', '치킨', '족발'], { multi: true })!;
+    expect(poll.options.map((o) => o.id + o.text)).toEqual(['o1치킨', 'o2피자', 'o3족발']);
+    const r = C.pollResults({ poll, pollVotes: { a: ['o1', 'o2'], b: ['o1'], me: ['o3'], x: ['zz'] } }, 'me');
+    expect(r.voters).toBe(3);
+    expect(r.options.map((o) => o.count)).toEqual([2, 1, 1]);
+    expect(r.mine).toEqual(['o3']);
+    expect(r.top).toEqual(['o1']);
+    expect(C.isPollClosed({ poll: { ...poll, closesAt: ts(5) } }, 10)).toBe(true);
+    expect(C.isPollClosed({ poll, pollClosed: false }, 10)).toBe(false);
+  });
+  it('공지 확인 현황 · 공지 권한', () => {
+    const r = { ...room, notice: { setBy: 'mgr', senderId: 'mgr' } as never };
+    expect(C.noticeAckSummary(r, { kim: 1 })).toEqual({ acked: ['kim'], pending: ['kimj', 'me'].sort((a, b) => ({ kimj: '김민지', me: '나' } as Record<string, string>)[a].localeCompare(({ kimj: '김민지', me: '나' } as Record<string, string>)[b], 'ko')) });
+    expect(C.canSetNotice(room, 'mgr')).toBe(true);
+    expect(C.canSetNotice(room, 'kim')).toBe(false);
+    expect(C.canSetNotice({ type: 'dm', memberIds: ['a', 'b'] }, 'a')).toBe(true);
+  });
+  it('읽지 않은 곳 · 답장 요약 · 내보내기', () => {
+    const list = [
+      { senderId: 'kim', createdAt: ts(new Date(2026, 9, 4, 9, 0).getTime()), kind: 'text' as const },
+      { senderId: 'me', createdAt: ts(new Date(2026, 9, 4, 9, 1).getTime()), kind: 'text' as const },
+      { senderId: 'kim', createdAt: ts(new Date(2026, 9, 4, 9, 2).getTime()), kind: 'text' as const },
+    ];
+    expect(C.firstUnreadIndex(list, new Date(2026, 9, 4, 9, 0, 30).getTime(), 'me')).toBe(2);
+    expect(C.firstUnreadIndex(list, 0, 'me')).toBe(-1);
+    const ref = C.chatReplyRefOf({ id: 'm1', senderId: 'kim', senderName: '김민', kind: 'media', text: '', media: [{ kind: 'image', url: 'u', path: 'p', thumbUrl: 't' }] });
+    expect(ref).toEqual({ id: 'm1', senderId: 'kim', senderName: '김민', kind: 'media', text: '', thumbUrl: 't' });
+    expect(C.chatReplyPreview(ref, 'ko')).toBe('사진');
+    const txt = C.chatExportText(room, [
+      { kind: 'text', text: '안녕', senderId: 'kim', senderName: '김민', createdAt: list[0].createdAt },
+      { kind: 'text', text: '네', senderId: 'me', senderName: '나', createdAt: list[1].createdAt, editedAt: list[2].createdAt, replyTo: { id: 'x', senderId: 'kim', senderName: '김민', kind: 'text', text: '안녕' } },
+      { kind: 'media', text: '', media: [{ kind: 'image', url: 'https://x/1', path: 'p' }], senderId: 'kim', senderName: '김민', createdAt: list[2].createdAt },
+    ], { lang: 'ko', myUid: 'me', includeMediaLinks: true, exportedAt: new Date(2026, 9, 4, 12, 0) });
+    expect(txt.split('\n')).toEqual([
+      'SMIS 채팅 — J29 전체방', '내보낸 날짜: 2026년 10월 4일 일요일 오후 12:00', '대화 상대 4명', '',
+      '--------------- 2026년 10월 4일 일요일 ---------------',
+      '[김민] [오전 9:00] 안녕',
+      '[나] [오전 9:01] (김민에게 답장: 안녕) 네 (수정됨)',
+      '[김민] [오전 9:02] 사진 1장', '    https://x/1', '',
+    ]);
+    expect(C.chatExportFileName(room, 'ko', 'me', new Date(2026, 9, 4))).toBe('SMIS_채팅_J29_전체방_20261004.txt');
+    expect(C.scheduleTimeError(new Date(Date.now() + 30000))).toBe('past');
+    expect(C.scheduleTimeError(new Date(Date.now() + 3600000))).toBe(null);
+    expect(C.formatChatDuration(65000)).toBe('1:05');
+  });
+});

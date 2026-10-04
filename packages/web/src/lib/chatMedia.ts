@@ -276,6 +276,11 @@ function saveBlob(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(href), 60_000);
 }
 
+/** 글 파일 저장 (대화 내보내기) — 메모장 등에서 한글이 깨지지 않게 BOM 을 붙인다 */
+export function saveTextFile(name: string, text: string) {
+  saveBlob(new Blob(['\ufeff', text], { type: 'text/plain;charset=utf-8' }), name);
+}
+
 /** 파일 한 개 저장 — 정말 받지 못했을 때만(네트워크·CORS 오류) 새 탭으로 연다 (false) */
 export async function downloadChatFile(url: string, name: string): Promise<boolean> {
   try {

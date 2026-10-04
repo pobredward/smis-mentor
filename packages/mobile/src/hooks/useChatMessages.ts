@@ -44,6 +44,8 @@ export interface ChatMessagesState {
   revealMessage: (messageId: string) => boolean;
   /** uid → 그 방을 마지막으로 본 시각(ms) */
   reads: Record<string, number>;
+  /** 읽은 시각을 한 번이라도 받았는가 ('여기까지 읽었습니다' 기준 시각을 잡을 때) */
+  readsLoaded: boolean;
   error: Error | null;
 }
 
@@ -54,6 +56,7 @@ export function useChatMessages(roomId: string, enabled: boolean): ChatMessagesS
   const [hasMore, setHasMore] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [reads, setReads] = useState<Record<string, number>>({});
+  const [readsLoaded, setReadsLoaded] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const liveRef = useRef<ChatMessageView[]>([]);
@@ -69,6 +72,7 @@ export function useChatMessages(roomId: string, enabled: boolean): ChatMessagesS
     setLoaded(false);
     setHasMore(false);
     setReads({});
+    setReadsLoaded(false);
     setError(null);
     liveRef.current = [];
     olderRef.current = [];
@@ -110,7 +114,18 @@ export function useChatMessages(roomId: string, enabled: boolean): ChatMessagesS
         },
       },
     );
-    const offReads = subscribeChatReads(db, roomId, setReads, (e) => logger.warn('채팅 읽음 구독 실패:', e));
+    const offReads = subscribeChatReads(
+      db,
+      roomId,
+      (r) => {
+        setReads(r);
+        setReadsLoaded(true);
+      },
+      (e) => {
+        logger.warn('채팅 읽음 구독 실패:', e);
+        setReadsLoaded(true);
+      },
+    );
     return () => {
       offMessages();
       offReads();
@@ -201,5 +216,5 @@ export function useChatMessages(roomId: string, enabled: boolean): ChatMessagesS
     return [...older.filter((m) => !liveIds.has(m.id)), ...live];
   }, [older, live]);
 
-  return { messages, loaded, hasMore, loadingOlder, loadOlder, provideHistory, revealMessage, reads, error };
+  return { messages, loaded, hasMore, loadingOlder, loadOlder, provideHistory, revealMessage, reads, readsLoaded, error };
 }

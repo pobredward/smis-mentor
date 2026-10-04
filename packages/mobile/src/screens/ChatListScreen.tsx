@@ -1,7 +1,8 @@
 /**
  * 채팅 탭 — 방 목록 (기수별)
- *  1) 지금 기수의 캠프 방 — 캠프가 2개 이상이면 위에 [All][J29][E29][S29]… 버튼으로 골라 본다
- *  2) 1:1 대화 (최근 순)  3) 지난 기수 (접힘, 기수 › 캠프별)
+ *  1) 지금 기수의 캠프 방·그룹방 (늘 위에 고정) — 캠프가 2개 이상이면 위에 [All][J29][E29][S29]… 버튼으로 골라 본다
+ *  2) 고정한 대화  3) 1:1 대화 (최근 순)  4) 지난 기수 (접힘, 기수 › 캠프별)  5) 숨긴 채팅방 n개
+ * 길게 누르면 고정 · 숨기기 (1:1 · 지난 기수 방만 — 지금 기수 캠프 방은 늘 고정)
  * 방 목록·안 읽은 수는 MainTabs 가 구독해 둔 것(useChatStore)을 읽는다.
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
@@ -22,8 +23,12 @@ import {
   chatRoomGroups,
   filterCampGroups,
   getCurrentLocale,
+  isRoomHidden,
   isRoomMuted,
   isUserBlocked,
+  setChatRoomHidden,
+  setChatRoomPinned,
+  chatRoomTitle,
   logger,
   resolveActiveJobCodeId,
   totalUnread,
@@ -36,6 +41,8 @@ import { useChatStore } from '../hooks/useChatUnread';
 import { mobileAuthenticatedPost } from '../services/apiClient';
 import { ChatRoomRow } from '../components/chat/ChatRoomRow';
 import { NewDmSheet } from '../components/chat/NewDmSheet';
+import { ChatSheet, ChatSheetOption } from '../components/chat/ChatSheet';
+import { db } from '../config/firebase';
 import { CHAT_COLORS } from '../components/chat/chatTheme';
 import type { MainTabScreenProps } from '../navigation/types';
 
@@ -45,7 +52,9 @@ type ListItem =
   | { type: 'generation'; key: string; title: string }
   /** 지난 기수 안의 캠프 코드 */
   | { type: 'sub'; key: string; title: string }
-  | { type: 'room'; key: string; room: ChatRoom };
+  | { type: 'room'; key: string; room: ChatRoom }
+  /** 맨 아래 '숨긴 채팅방 n개' */
+  | { type: 'hidden'; key: string; count: number };
 
 /** 캠프 버튼 — 'all' 또는 jobCodeId */
 const FILTER_ALL = 'all';
@@ -61,6 +70,10 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
   const [otherOpen, setOtherOpen] = useState(false);
   // 지금 기수에서 볼 캠프 (이 화면이 살아 있는 동안 기억)
   const [campFilter, setCampFilter] = useState<string>(FILTER_ALL);
+  // 길게 누른 방 (고정 · 숨기기 메뉴) · 숨긴 방 목록
+  const [menuRoom, setMenuRoom] = useState<ChatRoom | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [hiddenOpen, setHiddenOpen] = useState(false);
   const [dmSheetOpen, setDmSheetOpen] = useState(false);
   const [busyUid, setBusyUid] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -100,9 +113,11 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
   }, [navigation]);
 
   const groups = useMemo(
-    () => chatRoomGroups(rooms, { activeJobCodeId, keepEmptyDmId }),
-    [rooms, activeJobCodeId, keepEmptyDmId],
+    () => chatRoomGroups(rooms, { activeJobCodeId, keepEmptyDmId, state }),
+    [rooms, activeJobCodeId, keepEmptyDmId, state],
   );
+  /** 지금 기수의 캠프 방 · 그룹방 — 늘 고정 (고정 해제 · 숨기기 불가) */
+  const presetIds = useMemo(() => new Set(groups.camps.flatMap((c) => c.rooms.map((r) => r.id))), [groups]);
   const showCampChips = groups.camps.length >= 2;
   // 고른 캠프가 목록에서 사라지면(배정 해제 등) 전체로
   const selectedFilter = groups.camps.some((c) => c.jobCodeId === campFilter) ? campFilter : FILTER_ALL;
@@ -122,12 +137,17 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
       out.push({ type: 'header', key: `h_camp_${camp.jobCodeId}`, title: L('chat.campRooms', { camp: camp.campCode || camp.jobCodeId }) });
       pushRooms(camp.rooms);
     });
-    // 2) 1:1 대화
+    // 2) 고정한 대화
+    if (groups.pinned.length) {
+      out.push({ type: 'header', key: 'h_pinned', title: L('chat.pinnedSection') });
+      pushRooms(groups.pinned);
+    }
+    // 3) 1:1 대화
     if (groups.dms.length) {
       out.push({ type: 'header', key: 'h_dms', title: L('chat.sectionDms') });
       pushRooms(groups.dms);
     }
-    // 3) 지난 기수 (접힘)
+    // 4) 지난 기수 (접힘)
     if (groups.otherGenerations.length) {
       const pastRooms = groups.otherGenerations.flatMap((g) => g.camps.flatMap((c) => c.rooms));
       out.push({
@@ -148,6 +168,8 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
         });
       }
     }
+    // 5) 숨긴 채팅방
+    if (groups.hiddenCount > 0) out.push({ type: 'hidden', key: 'hidden', count: groups.hiddenCount });
     return out;
     // lang: 화면 언어가 바뀌면 머리글도 다시
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -214,12 +236,31 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
   );
 
   // 새 1:1 대화 후보 — 지금 기수 캠프 먼저 (같은 사람이면 지금 캠프의 역할 표시가 쓰인다)
-  const dmSourceRooms = useMemo(
-    () => [
-      ...groups.camps.flatMap((c) => c.rooms),
-      ...groups.otherGenerations.flatMap((g) => g.camps.flatMap((c) => c.rooms)),
-    ],
-    [groups],
+  const dmSourceRooms = useMemo(() => [...groups.camps.flatMap((c) => c.rooms), ...rooms], [groups, rooms]);
+
+  // 숨긴 방 목록 · 길게 누른 방 메뉴
+  const hiddenRooms = useMemo(() => rooms.filter((r) => isRoomHidden(state, r)), [rooms, state]);
+  const openRowMenu = useCallback((room: ChatRoom) => {
+    setMenuRoom(room);
+    setMenuOpen(true);
+  }, []);
+  const menuIsPreset = !!menuRoom && presetIds.has(menuRoom.id);
+  const menuPinned = !!menuRoom && !!state.pinned?.[menuRoom.id];
+  const togglePin = useCallback(() => {
+    setMenuOpen(false);
+    if (!menuRoom || !uid) return;
+    setChatRoomPinned(db, uid, menuRoom.id, !menuPinned).catch((e) => Alert.alert(L('common.error'), e instanceof Error ? e.message : ''));
+  }, [menuRoom, uid, menuPinned]);
+  const hideRoom = useCallback(() => {
+    setMenuOpen(false);
+    if (!menuRoom || !uid) return;
+    setChatRoomHidden(db, uid, menuRoom.id, true).catch((e) => Alert.alert(L('common.error'), e instanceof Error ? e.message : ''));
+  }, [menuRoom, uid]);
+  const unhide = useCallback(
+    (roomId: string) => {
+      setChatRoomHidden(db, uid, roomId, false).catch((e) => Alert.alert(L('common.error'), e instanceof Error ? e.message : ''));
+    },
+    [uid],
   );
 
   const renderItem = useCallback(
@@ -254,6 +295,15 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
       if (item.type === 'sub') {
         return <Text style={styles.sub}>{item.title}</Text>;
       }
+      if (item.type === 'hidden') {
+        return (
+          <TouchableOpacity style={styles.hiddenRow} onPress={() => setHiddenOpen(true)} activeOpacity={0.6}>
+            <Ionicons name="eye-off-outline" size={16} color={CHAT_COLORS.sub} />
+            <Text style={styles.hiddenText}>{L('chat.hiddenN', { n: item.count })}</Text>
+            <Ionicons name="chevron-forward" size={15} color={CHAT_COLORS.muted} />
+          </TouchableOpacity>
+        );
+      }
       const room = item.room;
       return (
         <ChatRoomRow
@@ -263,11 +313,13 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
           unread={unreadOf(state, room.id)}
           muted={isRoomMuted(state, room.id)}
           lastFromBlocked={!!room.lastMessage?.senderId && isUserBlocked(state, room.lastMessage.senderId)}
+          pinned={presetIds.has(room.id) || !!state.pinned?.[room.id]}
           onPress={openRoom}
+          onLongPress={openRowMenu}
         />
       );
     },
-    [uid, lang, state, openRoom],
+    [uid, lang, state, openRoom, presetIds, openRowMenu],
   );
 
   if (!roomsReady) {
@@ -304,6 +356,37 @@ export function ChatListScreen({ navigation }: MainTabScreenProps<'Chat'>) {
           )
         }
       />
+      {/* 길게 누른 방 — 고정 · 숨기기 (지금 기수 캠프 방은 안내만) */}
+      <ChatSheet visible={menuOpen} onClose={() => setMenuOpen(false)} title={menuRoom ? chatRoomTitle(menuRoom, lang, uid) : ''}>
+        {menuIsPreset ? (
+          <Text style={styles.presetNote}>{L('chat.presetPinned')}</Text>
+        ) : (
+          <>
+            <ChatSheetOption icon={menuPinned ? 'pin' : 'pin-outline'} label={menuPinned ? L('chat.unpin') : L('chat.pin')} onPress={togglePin} />
+            <ChatSheetOption icon="eye-off-outline" label={L('chat.hideRoom')} onPress={hideRoom} />
+            <Text style={styles.presetNote}>{L('chat.hideHint')}</Text>
+          </>
+        )}
+        <ChatSheetOption label={L('common.cancel')} onPress={() => setMenuOpen(false)} />
+      </ChatSheet>
+
+      {/* 숨긴 채팅방 — 다시 보이기 */}
+      <ChatSheet visible={hiddenOpen} onClose={() => setHiddenOpen(false)} title={L('chat.showHidden')} heightRatio={0.6}>
+        <FlatList
+          data={hiddenRooms}
+          keyExtractor={(r) => r.id}
+          renderItem={({ item: room }) => (
+            <View style={styles.hiddenItem}>
+              <Text style={styles.hiddenTitle} numberOfLines={1}>{chatRoomTitle(room, lang, uid)}</Text>
+              <TouchableOpacity style={styles.unhideBtn} onPress={() => unhide(room.id)}>
+                <Text style={styles.unhideText}>{L('chat.unhideRoom')}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+          ListEmptyComponent={<Text style={styles.presetNote}>—</Text>}
+        />
+      </ChatSheet>
+
       <NewDmSheet
         visible={dmSheetOpen}
         rooms={dmSourceRooms}
@@ -343,6 +426,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerBadgeText: { color: '#ffffff', fontSize: 10.5, fontWeight: '700' },
+  presetNote: { fontSize: 13, color: CHAT_COLORS.sub, paddingHorizontal: 20, paddingVertical: 10 },
+  hiddenRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 16 },
+  hiddenText: { flex: 1, fontSize: 13.5, color: CHAT_COLORS.sub },
+  hiddenItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: CHAT_COLORS.border,
+  },
+  hiddenTitle: { flex: 1, fontSize: 15, color: CHAT_COLORS.text },
+  unhideBtn: { borderWidth: 1, borderColor: CHAT_COLORS.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  unhideText: { fontSize: 13, color: CHAT_COLORS.primary, fontWeight: '600' },
   generation: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 2, fontSize: 13, fontWeight: '700', color: CHAT_COLORS.text },
   sub: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 2, fontSize: 12, fontWeight: '600', color: CHAT_COLORS.muted },
   chipBar: {

@@ -222,7 +222,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         {
           photosPermission: '이 앱은 프로필 사진과 분실물 사진·영상을 업로드하기 위해 사진 라이브러리에 접근합니다.',
           cameraPermission: '이 앱은 프로필 사진과 분실물 사진·영상을 촬영하기 위해 카메라에 접근합니다.',
-          microphonePermission: '이 앱은 분실물 영상을 촬영할 때 소리를 녹음하기 위해 마이크에 접근합니다.',
+          // expo-audio 와 같은 문구 (NSMicrophoneUsageDescription 은 하나라서 둘 다 같게)
+          microphonePermission: '이 앱은 채팅방 음성 메시지를 녹음하고 분실물 영상을 촬영할 때 소리를 녹음하기 위해 마이크를 사용합니다.',
         },
       ],
       [
@@ -249,6 +250,16 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ],
       // 채팅 동영상 재생 — 백그라운드 재생·PiP 는 쓰지 않는다 (옵션 없이 등록하면 네이티브 설정을 바꾸지 않음)
       'expo-video',
+      [
+        // 채팅 음성 메시지 — 녹음(RECORD_AUDIO · NSMicrophoneUsageDescription)만. 백그라운드 재생·녹음은 쓰지 않는다
+        'expo-audio',
+        {
+          microphonePermission: '이 앱은 채팅방 음성 메시지를 녹음하고 분실물 영상을 촬영할 때 소리를 녹음하기 위해 마이크를 사용합니다.',
+          recordAudioAndroid: true,
+          enableBackgroundPlayback: false,
+          enableBackgroundRecording: false,
+        },
+      ],
       'expo-web-browser',
       'expo-apple-authentication',
       '@react-native-community/datetimepicker',

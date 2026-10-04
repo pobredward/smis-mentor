@@ -5,9 +5,12 @@
  * 메시지가 저장되면 서버(Functions)가 방의 마지막 메시지 · 안 읽은 수 · 푸시를 처리한다.
  */
 import {
+  addDoc,
   collection,
+  deleteDoc,
   deleteField,
   doc,
+  FieldPath,
   getDocs,
   limit,
   onSnapshot,
@@ -31,14 +34,19 @@ import type {
   ChatMediaItem,
   ChatMessage,
   ChatMessageView,
+  ChatPoll,
+  ChatReactionKey,
+  ChatReplyRef,
   ChatReportReason,
   ChatRoom,
+  ChatScheduledMessage,
   ChatUserState,
 } from '../../types/chat';
 import { CHAT_LIMITS, cleanChatText } from '../../utils/chat';
 
 export const CHAT_ROOMS = 'chatRooms';
 export const CHAT_USER_STATE = 'chatUserState';
+export const CHAT_SCHEDULED = 'chatScheduled';
 
 const roomOf = (d: DocumentSnapshot<DocumentData>): ChatRoom => ({ id: d.id, ...(d.data() as Omit<ChatRoom, 'id'>) });
 const messageOf = (d: DocumentSnapshot<DocumentData>): ChatMessageView => ({
@@ -156,28 +164,61 @@ export interface SendChatMessageInput {
   text?: string;
   media?: ChatMediaItem[];
   clientId: string;
+  /** 'voice' 면 media 에 음성 하나 · 'poll' 이면 poll */
+  kind?: 'text' | 'media' | 'voice' | 'poll';
+  poll?: ChatPoll;
+  replyTo?: ChatReplyRef | null;
+  mentions?: string[];
+  mentionAll?: boolean;
+  silent?: boolean;
 }
 
-/** 메시지 보내기 — 글만, 사진·동영상만, 둘 다 */
+/** 메시지 보내기 — 글 · 사진/동영상 · 음성 · 투표 (답장 · 멘션 · 조용히 보내기 함께) */
 export async function sendChatMessage(db: Firestore, roomId: string, input: SendChatMessageInput): Promise<string> {
   const text = cleanChatText(input.text ?? '');
   const media = (input.media ?? []).slice(0, CHAT_LIMITS.mediaMax).map(cleanMedia);
-  if (!text && media.length === 0) throw new Error('empty message');
+  const kind = input.kind === 'poll' ? 'poll' : input.kind === 'voice' ? 'voice' : media.length ? 'media' : 'text';
+  if (kind === 'poll' && !input.poll) throw new Error('empty poll');
+  if (kind === 'voice' && media.length !== 1) throw new Error('voice needs one audio');
+  if (kind !== 'poll' && !text && media.length === 0) throw new Error('empty message');
   const ref = input.id ? doc(db, CHAT_ROOMS, roomId, 'messages', input.id) : doc(collection(db, CHAT_ROOMS, roomId, 'messages'));
-  await setDoc(ref, {
+  const data: Record<string, unknown> = {
     senderId: input.senderId,
     senderName: String(input.senderName ?? '').slice(0, 60),
-    kind: media.length ? 'media' : 'text',
-    text,
-    media,
+    kind,
+    text: kind === 'poll' ? '' : text,
+    media: kind === 'poll' ? [] : media,
     clientId: input.clientId,
     createdAt: serverTimestamp(),
-  });
+  };
+  if (input.replyTo) data.replyTo = cleanReply(input.replyTo);
+  if (input.mentions?.length) data.mentions = [...new Set(input.mentions)].slice(0, 100);
+  if (input.mentionAll) data.mentionAll = true;
+  if (input.silent) data.silent = true;
+  if (kind === 'poll' && input.poll) data.poll = cleanPoll(input.poll);
+  await setDoc(ref, data);
   return ref.id;
 }
 
+function cleanReply(r: ChatReplyRef): ChatReplyRef {
+  const out: ChatReplyRef = { id: r.id, senderId: r.senderId, senderName: String(r.senderName ?? '').slice(0, 60), kind: r.kind, text: String(r.text ?? '').slice(0, CHAT_LIMITS.replyTextMax) };
+  if (r.thumbUrl) out.thumbUrl = r.thumbUrl;
+  return out;
+}
+
+function cleanPoll(p: ChatPoll): ChatPoll {
+  const out: ChatPoll = {
+    question: String(p.question ?? '').slice(0, CHAT_LIMITS.pollQuestionMax),
+    options: (p.options ?? []).slice(0, CHAT_LIMITS.pollOptionsMax).map((o) => ({ id: String(o.id), text: String(o.text ?? '').slice(0, CHAT_LIMITS.pollOptionMax) })),
+    multi: !!p.multi,
+    anonymous: !!p.anonymous,
+  };
+  if (p.closesAt) out.closesAt = p.closesAt;
+  return out;
+}
+
 function cleanMedia(m: ChatMediaItem): ChatMediaItem {
-  const out: ChatMediaItem = { kind: m.kind === 'video' ? 'video' : 'image', url: m.url, path: m.path };
+  const out: ChatMediaItem = { kind: m.kind === 'video' || m.kind === 'audio' ? m.kind : 'image', url: m.url, path: m.path };
   if (m.thumbUrl) out.thumbUrl = m.thumbUrl;
   if (m.thumbPath) out.thumbPath = m.thumbPath;
   if (m.w) out.w = Math.round(m.w);
@@ -187,6 +228,39 @@ function cleanMedia(m: ChatMediaItem): ChatMediaItem {
   if (m.contentType) out.contentType = m.contentType;
   if (m.original) out.original = true;
   return out;
+}
+
+/** 글 고치기 — 내 글 메시지, 보낸 뒤 24시간 안 (규칙이 검사) */
+export async function editChatMessage(db: Firestore, roomId: string, messageId: string, text: string): Promise<void> {
+  const clean = cleanChatText(text);
+  if (!clean) throw new Error('empty message');
+  await updateDoc(doc(db, CHAT_ROOMS, roomId, 'messages', messageId), { text: clean, editedAt: serverTimestamp() });
+}
+
+/** 공감 달기 · 바꾸기 · 지우기 (key = null) — 한 사람 하나 */
+export async function setChatReaction(db: Firestore, roomId: string, messageId: string, uid: string, key: ChatReactionKey | null): Promise<void> {
+  await updateDoc(doc(db, CHAT_ROOMS, roomId, 'messages', messageId), new FieldPath('reactions', uid), key ?? deleteField());
+}
+
+/** 투표 — optionIds 가 비면 내 투표 취소 */
+export async function voteChatPoll(db: Firestore, roomId: string, messageId: string, uid: string, optionIds: string[]): Promise<void> {
+  const ids = [...new Set(optionIds)].slice(0, CHAT_LIMITS.pollOptionsMax);
+  await updateDoc(doc(db, CHAT_ROOMS, roomId, 'messages', messageId), new FieldPath('pollVotes', uid), ids.length ? ids : deleteField());
+}
+
+/** 투표 마감 (만든 사람) */
+export async function closeChatPoll(db: Firestore, roomId: string, messageId: string): Promise<void> {
+  await updateDoc(doc(db, CHAT_ROOMS, roomId, 'messages', messageId), { pollClosed: true });
+}
+
+/** 공지 '확인' — 공지 메시지에 내 확인 시각 */
+export async function ackChatNotice(db: Firestore, roomId: string, messageId: string, uid: string): Promise<void> {
+  await updateDoc(doc(db, CHAT_ROOMS, roomId, 'messages', messageId), new FieldPath('acks', uid), serverTimestamp());
+}
+
+/** 메시지 한 개 (실시간) — 공지 확인 현황 등 */
+export function subscribeChatMessage(db: Firestore, roomId: string, messageId: string, cb: (m: ChatMessageView | null) => void, onError?: (e: Error) => void): Unsubscribe {
+  return onSnapshot(doc(db, CHAT_ROOMS, roomId, 'messages', messageId), (d) => cb(d.exists() ? messageOf(d) : null), (e) => onError?.(e));
 }
 
 /** 모두에게서 삭제 (보낸 사람) — 사진·동영상 파일은 서버가 지운다 */
@@ -215,6 +289,68 @@ export async function setChatRoomMuted(db: Firestore, uid: string, roomId: strin
 /** 사람 차단·해제 — 그 사람 메시지를 가리고 알림도 받지 않는다 */
 export async function setChatUserBlocked(db: Firestore, uid: string, otherUid: string, blocked: boolean): Promise<void> {
   await setDoc(doc(db, CHAT_USER_STATE, uid), { blocked: { [otherUid]: blocked ? true : deleteField() }, updatedAt: serverTimestamp() }, { merge: true });
+}
+
+/** 방 위에 고정 · 해제 (미리 만든 방은 늘 고정이라 부르지 않는다) */
+export async function setChatRoomPinned(db: Firestore, uid: string, roomId: string, pinned: boolean): Promise<void> {
+  await setDoc(doc(db, CHAT_USER_STATE, uid), { pinned: { [roomId]: pinned ? Date.now() : deleteField() }, updatedAt: serverTimestamp() }, { merge: true });
+}
+
+/** 방 숨기기 · 다시 보이기 — 숨기면 고정도 푼다. 숨긴 뒤 새 메시지가 오면 다시 보인다 */
+export async function setChatRoomHidden(db: Firestore, uid: string, roomId: string, hidden: boolean): Promise<void> {
+  await setDoc(doc(db, CHAT_USER_STATE, uid), {
+    hidden: { [roomId]: hidden ? Date.now() : deleteField() },
+    ...(hidden ? { pinned: { [roomId]: deleteField() }, unread: { [roomId]: 0 } } : {}),
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
+/** 예약 메시지 만들기 (글만) — 서버가 그 시각에 보낸다 */
+export async function scheduleChatMessage(
+  db: Firestore,
+  input: { roomId: string; senderId: string; senderName: string; text: string; sendAt: Date; mentions?: string[]; mentionAll?: boolean; silent?: boolean },
+): Promise<string> {
+  const text = cleanChatText(input.text);
+  if (!text) throw new Error('empty message');
+  const data: Record<string, unknown> = {
+    roomId: input.roomId,
+    senderId: input.senderId,
+    senderName: String(input.senderName ?? '').slice(0, 60),
+    text,
+    sendAt: Timestamp.fromDate(input.sendAt),
+    createdAt: serverTimestamp(),
+  };
+  if (input.mentions?.length) data.mentions = [...new Set(input.mentions)].slice(0, 100);
+  if (input.mentionAll) data.mentionAll = true;
+  if (input.silent) data.silent = true;
+  const ref = await addDoc(collection(db, CHAT_SCHEDULED), data);
+  return ref.id;
+}
+
+/** 내 예약 메시지 (모든 방) — 화면에서 방으로 거른다 */
+export function subscribeMyScheduledChatMessages(db: Firestore, uid: string, cb: (list: ChatScheduledMessage[]) => void, onError?: (e: Error) => void): Unsubscribe {
+  return onSnapshot(
+    query(collection(db, CHAT_SCHEDULED), where('senderId', '==', uid)),
+    (snap) => cb(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<ChatScheduledMessage, 'id'>) })).sort((a, b) => a.sendAt.toMillis() - b.sendAt.toMillis())),
+    (e) => onError?.(e),
+  );
+}
+
+export async function cancelScheduledChatMessage(db: Firestore, id: string): Promise<void> {
+  await deleteDoc(doc(db, CHAT_SCHEDULED, id));
+}
+
+/** 사진·동영상 모아보기 — 사진·동영상 메시지만 최신 순으로 한 쪽씩 (색인: messages kind + createdAt) */
+export async function loadChatMediaPage(
+  db: Firestore,
+  roomId: string,
+  opts: { before?: DocumentSnapshot<DocumentData> | null; pageSize?: number } = {},
+): Promise<{ messages: ChatMessageView[]; hasMore: boolean; oldest: DocumentSnapshot<DocumentData> | null }> {
+  const n = opts.pageSize ?? 60;
+  const base = query(collection(db, CHAT_ROOMS, roomId, 'messages'), where('kind', '==', 'media'), orderBy('createdAt', 'desc'), limit(n));
+  const snap: QuerySnapshot<DocumentData> = await getDocs(opts.before ? query(base, startAfter(opts.before)) : base);
+  const docs = snap.docs;
+  return { messages: docs.map(messageOf).filter((m) => !m.deleted), hasMore: docs.length >= n, oldest: docs[docs.length - 1] ?? opts.before ?? null };
 }
 
 /** 메시지 신고 → 관리자 '신고' 목록 (같은 메시지는 한 번만) */

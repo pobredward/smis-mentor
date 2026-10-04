@@ -5,7 +5,7 @@
  * 대화방이 좁은 화면에서 탭바 위를 덮으므로(z-60) 그보다 위(z-100)에 띄운다.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { FiX } from 'react-icons/fi';
+import { FiCheck, FiX } from 'react-icons/fi';
 import { L, type ChatReportReason } from '@smis-mentor/shared';
 
 export interface ChatMenuAction {
@@ -13,7 +13,25 @@ export interface ChatMenuAction {
   label: string;
   icon?: ReactNode;
   danger?: boolean;
+  /** 켜고 끄는 항목 — 오른쪽에 체크 */
+  checked?: boolean;
+  /** 누를 수 없는 안내 줄 */
+  note?: boolean;
   onSelect: () => void;
+}
+
+function ActionLabel({ a }: { a: ChatMenuAction }) {
+  return (
+    <>
+      {a.icon}
+      <span className="min-w-0 flex-1">{a.label}</span>
+      {a.checked !== undefined && (
+        <span className={`h-4 w-4 shrink-0 rounded border flex items-center justify-center ${a.checked ? 'border-blue-500 bg-blue-500 text-white' : 'border-gray-300'}`}>
+          {a.checked && <FiCheck size={11} />}
+        </span>
+      )}
+    </>
+  );
 }
 
 export interface ChatMenuAnchor {
@@ -31,7 +49,7 @@ function useEscape(onClose: () => void) {
   }, [onClose]);
 }
 
-export function ChatActionMenu({ anchor, actions, title, onClose }: { anchor: ChatMenuAnchor; actions: ChatMenuAction[]; title?: string; onClose: () => void }) {
+export function ChatActionMenu({ anchor, actions, title, header, onClose }: { anchor: ChatMenuAnchor; actions: ChatMenuAction[]; title?: string; header?: ReactNode; onClose: () => void }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   useEscape(onClose);
@@ -46,6 +64,7 @@ export function ChatActionMenu({ anchor, actions, title, onClose }: { anchor: Ch
   }, [anchor]);
 
   const run = (a: ChatMenuAction) => {
+    if (a.note) return;
     onClose();
     a.onSelect();
   };
@@ -55,16 +74,17 @@ export function ChatActionMenu({ anchor, actions, title, onClose }: { anchor: Ch
       <div className="fixed top-0 left-0 right-0 bottom-0 z-[100] bg-black/40 flex items-end" onClick={onClose}>
         <div className="w-full bg-white rounded-t-2xl pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 shadow-xl" onClick={(e) => e.stopPropagation()} role="menu">
           {title && <div className="px-5 pt-1 pb-2 text-xs text-gray-500 truncate">{title}</div>}
+          {header && <div className="px-3 pb-1 border-b border-gray-100">{header}</div>}
           {actions.map((a) => (
             <button
               key={a.key}
               type="button"
               role="menuitem"
+              aria-disabled={a.note || undefined}
               onClick={() => run(a)}
-              className={`w-full flex items-center gap-3 px-5 py-3.5 text-[15px] text-left active:bg-gray-100 ${a.danger ? 'text-red-600' : 'text-gray-800'}`}
+              className={`w-full flex items-center gap-3 px-5 py-3.5 text-[15px] text-left ${a.note ? 'text-gray-500 text-sm cursor-default' : 'active:bg-gray-100'} ${a.danger ? 'text-red-600' : a.note ? '' : 'text-gray-800'}`}
             >
-              {a.icon}
-              {a.label}
+              <ActionLabel a={a} />
             </button>
           ))}
           <button type="button" onClick={onClose} className="w-full px-5 py-3.5 text-[15px] text-gray-500 border-t border-gray-100 mt-1">
@@ -82,18 +102,19 @@ export function ChatActionMenu({ anchor, actions, title, onClose }: { anchor: Ch
         role="menu"
         onClick={(e) => e.stopPropagation()}
         style={{ left: pos?.left ?? anchor.x, top: pos?.top ?? anchor.y, visibility: pos ? 'visible' : 'hidden' }}
-        className="absolute min-w-[180px] max-w-[260px] bg-white rounded-xl shadow-xl border border-gray-100 py-1.5"
+        className={`absolute ${header ? 'min-w-[300px]' : 'min-w-[180px]'} max-w-[320px] bg-white rounded-xl shadow-xl border border-gray-100 py-1.5`}
       >
+        {header && <div className="px-1 pb-1 mb-1 border-b border-gray-100">{header}</div>}
         {actions.map((a) => (
           <button
             key={a.key}
             type="button"
             role="menuitem"
+            aria-disabled={a.note || undefined}
             onClick={() => run(a)}
-            className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left hover:bg-gray-50 ${a.danger ? 'text-red-600' : 'text-gray-800'}`}
+            className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-left ${a.note ? 'text-xs text-gray-500 cursor-default' : 'hover:bg-gray-50'} ${a.danger ? 'text-red-600' : a.note ? '' : 'text-gray-800'}`}
           >
-            {a.icon}
-            {a.label}
+            <ActionLabel a={a} />
           </button>
         ))}
       </div>

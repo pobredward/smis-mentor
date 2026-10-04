@@ -1,9 +1,10 @@
 /**
- * 채팅 대화방 — 말풍선 목록(위로 올리면 이전 메시지) · 읽음 표시 · 사진·동영상 묶음 보내기 · 메시지 메뉴
+ * 채팅 대화방 — 말풍선 목록(위로 올리면 이전 메시지) · 읽음 표시 · 사진·동영상 묶음 · 음성 · 투표 · 메시지 메뉴
  *
  * 글은 sendChatMessage 를 부르면 Firestore 가 바로 '보내는 중' 메시지로 목록에 넣어 준다.
- * 사진·동영상은 파일을 올리는 동안 보낼 편지함(useChatOutbox)의 말풍선으로 보여 준다.
- * 대화 내용 검색(카톡처럼): 처음 검색할 때 방 전체 메시지를 한 번 불러와 기기에서 찾는다.
+ * 사진·동영상·음성은 파일을 올리는 동안 보낼 편지함(useChatOutbox)의 말풍선으로 보여 준다.
+ * 대화 내용 검색 · 내보내기 · 불러온 범위 밖으로 이동은 방 전체 메시지를 한 번 불러와(useChatHistory) 쓴다.
+ * 2차: 답장 · 공감 · @멘션 · 수정 · 공지(+확인) · 조용히 보내기 · 읽지 않은 곳부터 · 투표 · 예약 · 음성 · 모아보기 · 내보내기
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -13,11 +14,9 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  AppState,
   BackHandler,
   Keyboard,
   KeyboardAvoidingView,
-  Linking,
   Platform,
   StyleSheet,
   useWindowDimensions,
@@ -28,57 +27,92 @@ import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import * as Sharing from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
 import {
-  CHAT_LIMITS,
+  CHAT_REACTION_EMOJI,
   L,
+  canBeNotice,
+  canEditChatMessage,
+  canSetNotice,
+  chatExportFileName,
+  chatExportText,
   chatMessageLayout,
   chatRoomDescription,
+  chatRoomGeneration,
+  chatRoomGroups,
   chatRoomTitle,
-  cleanChatText,
+  closeChatPoll,
   deleteChatMessage,
+  firstUnreadIndex,
   getCurrentLocale,
+  isMentioned,
+  isPresetRoom,
   isRoomMuted,
   isUserBlocked,
-  loadAllChatMessages,
   logger,
   markChatRoomRead,
-  normalizeChatSearch,
+  newChatClientId,
+  noticeAckSummary,
+  pollResults,
+  reactionSummary,
   reportChatMessage,
-  searchChatMessages,
+  resolveActiveJobCodeId,
+  scheduleChatMessage,
+  scheduleTimeError,
+  sendChatMessage,
+  setChatReaction,
+  setChatRoomHidden,
   setChatRoomMuted,
+  setChatRoomPinned,
   setChatUserBlocked,
+  subscribeChatMessage,
   subscribeChatRoom,
   unreadOf,
   unreadReaders,
+  voteChatPoll,
+  ackChatNotice,
+  cancelScheduledChatMessage,
+  extractMentions,
   type ChatMessage,
   type ChatMessageView,
+  type ChatPoll,
+  type ChatReactionKey,
   type ChatReportReason,
   type ChatRoom,
+  type ChatScheduledMessage,
 } from '@smis-mentor/shared';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { useChatStore } from '../hooks/useChatUnread';
 import { messageMillis, useChatMessages } from '../hooks/useChatMessages';
 import { chatOutbox, useChatOutbox } from '../hooks/useChatOutbox';
+import { useChatHistory } from '../hooks/useChatHistory';
+import { useChatJump } from '../hooks/useChatJump';
+import { useChatSearch } from '../hooks/useChatSearch';
+import { useChatComposer } from '../hooks/useChatComposer';
+import { useChatScheduled } from '../hooks/useChatScheduled';
+import { useAppActive, useKeyboardVisible } from '../hooks/useDeviceState';
 import { clearOpenChatRoom, setOpenChatRoom } from '../services/chatPresence';
 import { mobileAuthenticatedPost } from '../services/apiClient';
-import {
-  ChatMediaError,
-  IMAGE_MAX_MB,
-  VIDEO_MAX_MB,
-  captureChatMedia,
-  oversizedOf,
-  pickChatMediaFromLibrary,
-  type ChatPickedAsset,
-} from '../services/chatMedia';
-import { MessageRow, type ChatRow } from '../components/chat/MessageRow';
+import { MessageRow, type ChatRow, type MessageRowActions } from '../components/chat/MessageRow';
 import { ChatComposer } from '../components/chat/ChatComposer';
+import { EditBar, MentionPicker, ReplyBar, ScheduledBar, SilentBar } from '../components/chat/ComposerBars';
 import { ChatSheet, ChatSheetOption } from '../components/chat/ChatSheet';
 import { MembersSheet } from '../components/chat/MembersSheet';
 import { ReportSheet } from '../components/chat/ReportSheet';
 import { MediaViewer } from '../components/chat/MediaViewer';
 import { useChatToast } from '../components/chat/ChatToast';
 import { ChatSearchInput, ChatSearchNav } from '../components/chat/ChatSearchBar';
+import { ReactionPickerRow } from '../components/chat/ChatReactions';
+import { UidListSheet, type UidListTab } from '../components/chat/UidListSheet';
+import { NoticeBanner } from '../components/chat/NoticeBanner';
+import { PollCreateSheet } from '../components/chat/PollCreateSheet';
+import { ScheduleCreateSheet, ScheduledListSheet, scheduleLabel } from '../components/chat/ScheduleSheets';
+import { VoiceRecorderBar } from '../components/chat/VoiceRecorderBar';
+import { stopChatVoice } from '../components/chat/VoiceBubble';
+import { ExportSheet } from '../components/chat/ExportSheet';
+import { ChatGalleryModal } from '../components/chat/ChatGalleryModal';
 import { saveChatMediaWithFeedback } from '../components/chat/saveWithFeedback';
 import { CHAT_COLORS } from '../components/chat/chatTheme';
 import type { RootStackScreenProps } from '../navigation/types';
@@ -87,34 +121,24 @@ import type { RootStackScreenProps } from '../navigation/types';
 const NEAR_BOTTOM_PX = 120;
 /** 시트를 닫은 뒤 다른 시트·알림창·고르기 화면을 띄우기까지 (iOS 는 모달이 겹치면 안 뜬다) */
 const AFTER_SHEET_MS = 350;
-
-function useAppActive(): boolean {
-  const [active, setActive] = useState(AppState.currentState === 'active');
-  useEffect(() => {
-    const sub = AppState.addEventListener('change', (s) => setActive(s === 'active'));
-    return () => sub.remove();
-  }, []);
-  return active;
-}
-
-function useKeyboardVisible(): boolean {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-    const a = Keyboard.addListener(showEvt, () => setVisible(true));
-    const b = Keyboard.addListener(hideEvt, () => setVisible(false));
-    return () => {
-      a.remove();
-      b.remove();
-    };
-  }, []);
-  return visible;
-}
+/** '여기까지 읽었습니다'를 찾으려고 들어올 때 더 불러오는 최대 쪽 수 */
+const UNREAD_PAGES_MAX = 6;
+const DIVIDER_KEY = 'unread_divider';
 
 const later = (fn: () => void) => setTimeout(fn, AFTER_SHEET_MS);
 const errorMessage = (e: unknown) => (e instanceof Error && e.message ? e.message : L('chat.sendFailed'));
 const isPermissionDenied = (e: unknown) => (e as { code?: string } | null)?.code === 'permission-denied';
+const confirm = (title: string, message: string | undefined, okText: string, onOk: () => void, destructive = false) =>
+  Alert.alert(title, message, [
+    { text: L('common.cancel'), style: 'cancel' },
+    { text: okText, style: destructive ? 'destructive' : 'default', onPress: onOk },
+  ]);
+
+type SheetState =
+  | { kind: 'reactions'; message: ChatMessageView }
+  | { kind: 'voters'; title: string; uids: string[] }
+  | { kind: 'acks' }
+  | null;
 
 export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'ChatRoom'>) {
   const { roomId } = route.params;
@@ -127,7 +151,9 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
   const isFocused = useIsFocused();
   const appActive = useAppActive();
   const keyboardVisible = useKeyboardVisible();
-  const { state } = useChatStore();
+  const store = useChatStore();
+  const { state } = store;
+  const [toastNode, showToast] = useChatToast(16);
 
   // ── 방 ────────────────────────────────────────────────────────────
   const [room, setRoom] = useState<ChatRoom | null | undefined>(undefined);
@@ -140,15 +166,39 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
   }, [roomId]);
   const isMember = !!room && !!uid && (room.memberIds ?? []).includes(uid);
 
-  const { messages, loaded, loadingOlder, hasMore, loadOlder, provideHistory, revealMessage, reads, error } = useChatMessages(roomId, isMember);
+  const {
+    messages,
+    loaded,
+    loadingOlder,
+    hasMore,
+    loadOlder,
+    provideHistory,
+    revealMessage,
+    reads,
+    readsLoaded,
+    error,
+  } = useChatMessages(roomId, isMember);
   const outbox = useChatOutbox(roomId);
   const visibleOutbox = useMemo(() => outbox.filter((it) => it.status !== 'sent'), [outbox]);
+  const history = useChatHistory(roomId, isMember, provideHistory);
+  const scheduled = useChatScheduled(uid, roomId, isMember);
+
+  // 지금 기수 — 지난 기수 방 · 1:1 은 고정·숨기기를 할 수 있다 (지금 기수 캠프 방은 늘 고정)
+  const activeJobCodeId = resolveActiveJobCodeId(userData) ?? null;
+  const currentGeneration = useMemo(
+    () => chatRoomGroups(store.rooms, { activeJobCodeId }).generation,
+    [store.rooms, activeJobCodeId],
+  );
+  const canPinOrHide = !!room && (room.type === 'dm' || (!!currentGeneration && chatRoomGeneration(room) !== currentGeneration));
 
   // 지금 이 방을 보고 있다 — 이 방 알림은 배너·소리 없이
   useFocusEffect(
     useCallback(() => {
       setOpenChatRoom(roomId);
-      return () => clearOpenChatRoom(roomId);
+      return () => {
+        clearOpenChatRoom(roomId);
+        stopChatVoice();
+      };
     }, [roomId]),
   );
 
@@ -173,11 +223,27 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
     }
   }, []);
 
+  // ── 읽지 않은 곳부터 ('여기까지 읽었습니다') ───────────────────────
+  // 들어올 때의 내 마지막 읽은 시각 — 읽음 표시를 하기 전에 잡는다
+  const [entryReadMs, setEntryReadMs] = useState<number | null>(null);
+  const [divider, setDivider] = useState<{ id: string | null } | null>(null);
+  const [mentionDismissed, setMentionDismissed] = useState(false);
+  const unreadPagesRef = useRef(0);
+  useEffect(() => {
+    setEntryReadMs(null);
+    setDivider(null);
+    setMentionDismissed(false);
+    unreadPagesRef.current = 0;
+  }, [roomId]);
+  useEffect(() => {
+    if (readsLoaded && isMember && uid && entryReadMs === null) setEntryReadMs(reads[uid] ?? 0);
+  }, [readsLoaded, isMember, uid, entryReadMs, reads]);
+
   const rows = useMemo<ChatRow[]>(() => {
     const pseudo: Array<Pick<ChatMessage, 'senderId' | 'createdAt' | 'kind'>> = visibleOutbox.map((it) => ({
       senderId: uid,
       createdAt: null,
-      kind: it.kind === 'media' ? 'media' : 'text',
+      kind: it.kind === 'media' ? 'media' : it.kind === 'voice' ? 'voice' : 'text',
     }));
     const all: Array<Pick<ChatMessage, 'senderId' | 'createdAt' | 'kind'>> = [...messages, ...pseudo];
     const layout = chatMessageLayout(all, uid);
@@ -185,14 +251,52 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
       const prev = all[i - 1];
       return !prev || prev.senderId !== all[i].senderId || layout[i].showDay || prev.kind === 'system' || all[i].kind === 'system';
     };
-    const out: ChatRow[] = messages.map((m, i) => ({ type: 'message', key: m.id, message: m, layout: layout[i], firstInRun: startsRun(i) }));
+    const out: ChatRow[] = [];
+    messages.forEach((m, i) => {
+      if (divider?.id === m.id) out.push({ type: 'divider', key: DIVIDER_KEY });
+      out.push({ type: 'message', key: m.id, message: m, layout: layout[i], firstInRun: startsRun(i) });
+    });
     visibleOutbox.forEach((item, j) => {
       const i = messages.length + j;
       out.push({ type: 'outbox', key: `o_${item.clientId}`, item, layout: layout[i], firstInRun: startsRun(i) });
     });
     // 뒤집힌 목록 — 최신이 맨 앞(화면 맨 아래)
     return out.reverse();
-  }, [messages, visibleOutbox, uid]);
+  }, [messages, visibleOutbox, uid, divider]);
+
+  const { jumpTo, scrollToKey, flashId, onScrollToIndexFailed, cancelPending } = useChatJump({
+    rows,
+    listRef,
+    revealMessage,
+    ensureHistory: history.ensure,
+  });
+
+  // 들어올 때: 읽은 곳이 불러온 범위보다 예전이면 더 불러오고, '여기까지 읽었습니다' 줄을 정한 뒤 그 자리로
+  useEffect(() => {
+    if (divider || entryReadMs === null || !loaded) return;
+    const oldest = messages[0] ? messageMillis(messages[0]) : 0;
+    const needMore = entryReadMs > 0 && hasMore && oldest > entryReadMs && unreadPagesRef.current < UNREAD_PAGES_MAX;
+    if (needMore) {
+      if (!loadingOlder) {
+        unreadPagesRef.current += 1;
+        loadOlder();
+      }
+      return;
+    }
+    if (loadingOlder) return;
+    const idx = entryReadMs > 0 ? firstUnreadIndex(messages, entryReadMs, uid) : -1;
+    const id = idx >= 0 ? messages[idx].id : null;
+    setDivider({ id });
+    // 안 읽은 게 한 화면보다 많으면 그 줄이 위쪽에 오게
+    if (id && messages.length - idx > 6) scrollToKey(DIVIDER_KEY, 0.85);
+  }, [divider, entryReadMs, loaded, messages, hasMore, loadingOlder, loadOlder, uid, scrollToKey]);
+
+  // 나를 언급한 안 읽은 메시지 — 떠 있는 칩 '@ 나를 언급'
+  const mentionTargetId = useMemo(() => {
+    if (!entryReadMs || !divider || mentionDismissed) return null;
+    const m = messages.find((x) => messageMillis(x) > entryReadMs && !x.deleted && isMentioned(x, uid));
+    return m?.id ?? null;
+  }, [entryReadMs, divider, mentionDismissed, messages, uid]);
 
   // 새 메시지: 내가 보냈거나 맨 아래 근처면 내려가고, 위를 보고 있으면 [새 메시지 ↓]
   const lastId = messages.length ? messages[messages.length - 1].id : '';
@@ -229,7 +333,8 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
     enteredRef.current = false;
   }, [roomId]);
   useEffect(() => {
-    if (!isMember || !loaded || !isFocused || !appActive || !uid) return;
+    // 들어올 때의 읽은 시각(entryReadMs)을 잡은 뒤에만
+    if (!isMember || !loaded || !isFocused || !appActive || !uid || entryReadMs === null) return;
     const first = !enteredRef.current;
     if (!first && (!needsRead || !nearBottom)) return;
     const t = setTimeout(() => {
@@ -237,288 +342,70 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
       markChatRoomRead(db, roomId, uid).catch((e) => logger.warn('채팅 읽음 표시 실패:', e));
     }, first ? 250 : 800);
     return () => clearTimeout(t);
-  }, [isMember, loaded, isFocused, appActive, uid, roomId, needsRead, nearBottom, latestOtherAt, roomUnread]);
+  }, [isMember, loaded, isFocused, appActive, uid, roomId, needsRead, nearBottom, latestOtherAt, roomUnread, entryReadMs]);
 
-  // ── 보내기 ────────────────────────────────────────────────────────
-  const [text, setText] = useState('');
-  const [tray, setTray] = useState<ChatPickedAsset[]>([]);
-  const trayRef = useRef<ChatPickedAsset[]>([]);
-  trayRef.current = tray;
-  const [original, setOriginal] = useState(false);
+  // ── 입력창 ────────────────────────────────────────────────────────
+  const composer = useChatComposer({ roomId, room, uid, myName, scrollToLatest, showToast });
   const [attachOpen, setAttachOpen] = useState(false);
-  const [toastNode, showToast] = useChatToast(16);
+  const [pollOpen, setPollOpen] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduledListOpen, setScheduledListOpen] = useState(false);
 
-  const addToTray = useCallback((picked: ChatPickedAsset[]) => {
-    if (!picked.length) return;
-    const tooBig = picked.filter((a) => oversizedOf(a, false) === 'video');
-    const ok = picked.filter((a) => !tooBig.includes(a));
-    const merged = [...trayRef.current, ...ok];
-    const overflow = merged.length > CHAT_LIMITS.mediaMax;
-    setTray(merged.slice(0, CHAT_LIMITS.mediaMax));
-    const notes: string[] = [];
-    if (tooBig.length) notes.push(L('chat.videoTooLarge', { max: VIDEO_MAX_MB }));
-    if (overflow) notes.push(L('chat.selectUpTo', { n: CHAT_LIMITS.mediaMax }));
-    if (notes.length) Alert.alert(notes.join('\n'));
-  }, []);
+  // ── 대화 내용 검색 ────────────────────────────────────────────────
+  const onHistoryFailed = useCallback(() => showToast(L('chat.loadFailed')), [showToast]);
+  const search = useChatSearch({ messages, history, blocked: state.blocked, jumpTo, onLoadFailed: onHistoryFailed });
+  const searchClose = search.closeSearch;
+  const closeSearch = useCallback(() => {
+    searchClose();
+    cancelPending();
+  }, [searchClose, cancelPending]);
 
-  const pickFromLibrary = useCallback(async () => {
-    const remaining = CHAT_LIMITS.mediaMax - trayRef.current.length;
-    if (remaining <= 0) {
-      Alert.alert(L('chat.selectUpTo', { n: CHAT_LIMITS.mediaMax }));
-      return;
-    }
-    try {
-      addToTray(await pickChatMediaFromLibrary({ original, limit: remaining }));
-    } catch (e) {
-      logger.warn('사진 고르기 실패:', e);
-      const err = e as { code?: string; message?: string } | null;
-      if (/permission/i.test(`${err?.code ?? ''} ${err?.message ?? ''}`)) {
-        Alert.alert(L('common.permissionRequired'), L('chat.permissionPhotos'), [
-          { text: L('common.cancel'), style: 'cancel' },
-          { text: L('common.openSettings'), onPress: () => { Linking.openSettings().catch(() => {}); } },
-        ]);
-      } else {
-        Alert.alert(L('common.error'), errorMessage(e));
-      }
-    }
-  }, [original, addToTray]);
+  // Android 뒤로 가기 — 검색 · 녹음 중이면 그것만 닫는다
+  const recording = composer.recording;
+  const cancelRecording = composer.cancelRecording;
+  useFocusEffect(
+    useCallback(() => {
+      if (!search.open && !recording) return undefined;
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (recording) cancelRecording();
+        else closeSearch();
+        return true;
+      });
+      return () => sub.remove();
+    }, [search.open, recording, cancelRecording, closeSearch]),
+  );
 
-  const takeWithCamera = useCallback(async () => {
-    if (trayRef.current.length >= CHAT_LIMITS.mediaMax) {
-      Alert.alert(L('chat.selectUpTo', { n: CHAT_LIMITS.mediaMax }));
-      return;
-    }
-    try {
-      addToTray(await captureChatMedia({ original }));
-    } catch (e) {
-      if (e instanceof ChatMediaError && e.code === 'permission') {
-        Alert.alert(L('common.permissionRequired'), L('chat.appPermissionCamera'), [
-          { text: L('common.cancel'), style: 'cancel' },
-          { text: L('common.openSettings'), onPress: () => { Linking.openSettings().catch(() => {}); } },
-        ]);
-      } else {
-        logger.warn('카메라 실패:', e);
-        Alert.alert(L('common.error'), errorMessage(e));
-      }
-    }
-  }, [original, addToTray]);
+  // ── 공지 ──────────────────────────────────────────────────────────
+  const notice = room?.notice ?? null;
+  const [noticeMsg, setNoticeMsg] = useState<ChatMessageView | null>(null);
+  useEffect(() => {
+    setNoticeMsg(null);
+    if (!isMember || !notice?.messageId) return;
+    return subscribeChatMessage(db, roomId, notice.messageId, setNoticeMsg, (e) => logger.warn('공지 메시지 구독 실패:', e));
+  }, [isMember, roomId, notice?.messageId]);
+  const ackSummary = useMemo(
+    () => (room && notice ? noticeAckSummary(room, noticeMsg?.acks) : { acked: [], pending: [] }),
+    [room, notice, noticeMsg?.acks],
+  );
+  const canNotice = !!room && canSetNotice(room, uid);
 
-  const send = useCallback(() => {
-    if (!uid || text.length > CHAT_LIMITS.textMax) return;
-    const body = cleanChatText(text);
-    const sender = { uid, name: myName };
-    if (tray.length) {
-      // 너무 큰 것은 빼고 안내 (동영상은 늘, 사진은 원본일 때)
-      const tooBig = tray.filter((a) => oversizedOf(a, original));
-      const ok = tray.filter((a) => !tooBig.includes(a));
-      if (tooBig.length) {
-        const kinds = new Set(tooBig.map((a) => a.kind));
-        const notes = [
-          kinds.has('image') ? L('chat.imageTooLarge', { max: IMAGE_MAX_MB }) : '',
-          kinds.has('video') ? L('chat.videoTooLarge', { max: VIDEO_MAX_MB }) : '',
-        ].filter(Boolean);
-        Alert.alert(notes.join('\n'));
-      }
-      if (!ok.length) {
-        setTray([]);
-        return;
-      }
-      chatOutbox.sendMedia(roomId, sender, ok, { original, text: body || undefined });
-      setTray([]);
-      setText('');
-    } else if (body) {
-      chatOutbox.sendText(roomId, sender, body);
-      setText('');
-    } else {
-      return;
-    }
-    scrollToLatest(true);
-  }, [uid, myName, text, tray, original, roomId, scrollToLatest]);
-
-  const retry = useCallback((clientId: string) => chatOutbox.retry(roomId, clientId), [roomId]);
-  const discard = useCallback(
-    (clientId: string) => {
-      const it = chatOutbox.discard(roomId, clientId);
-      // 사진과 함께 입력했던 글은 입력창으로 되돌린다
-      if (it?.kind === 'media' && it.text) setText((cur) => (cur.trim() ? cur : it.text ?? ''));
+  const postNotice = useCallback(
+    (messageId: string | null) => {
+      mobileAuthenticatedPost('/api/chat/notice', { roomId, messageId }).catch((e) =>
+        Alert.alert(L('common.error'), errorMessage(e)),
+      );
     },
     [roomId],
   );
 
-  // ── 대화 내용 검색 ────────────────────────────────────────────────
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchText, setSearchText] = useState('');
-  /** 입력을 250ms 묶은 검색어 */
-  const [query, setQuery] = useState('');
-  /** 방 전체 메시지 (처음 검색할 때 한 번 불러와 화면이 있는 동안 둔다) */
-  const [history, setHistory] = useState<ChatMessageView[] | null>(null);
-  /** 불러오는 중이면 지금까지 받은 개수 */
-  const [historyLoading, setHistoryLoading] = useState<number | null>(null);
-  const [historyFailed, setHistoryFailed] = useState(false);
-  const [currentHitId, setCurrentHitId] = useState<string | null>(null);
-  /** 결과로 이동한 메시지 — 잠깐 밝힌다 */
-  const [flashId, setFlashId] = useState<string | null>(null);
-  const [jumpTick, setJumpTick] = useState(0);
-  const pendingJumpRef = useRef<string | null>(null);
-  const scrollRetryRef = useRef(0);
-  const historyRequestedRef = useRef(false);
-
-  const loadHistory = useCallback(() => {
-    if (historyRequestedRef.current || !isMember) return;
-    historyRequestedRef.current = true;
-    setHistoryFailed(false);
-    setHistoryLoading(0);
-    loadAllChatMessages(db, roomId, { onProgress: (n) => setHistoryLoading(n) })
-      .then((all) => {
-        setHistory(all);
-        // 이제 위로 올려 더 보기 · 결과로 이동은 이 기록에서 (Firestore 를 다시 읽지 않음)
-        provideHistory(all);
-      })
-      .catch((e) => {
-        logger.warn('대화 내용 불러오기 실패:', e);
-        historyRequestedRef.current = false;
-        setHistoryFailed(true);
-        showToast(L('chat.loadFailed'));
-      })
-      .finally(() => setHistoryLoading(null));
-  }, [isMember, roomId, provideHistory, showToast]);
-
-  const openSearch = useCallback(() => {
-    setSearchOpen(true);
-    loadHistory();
-  }, [loadHistory]);
-
-  const closeSearch = useCallback(() => {
-    setSearchOpen(false);
-    setSearchText('');
-    setQuery('');
-    setCurrentHitId(null);
-    setFlashId(null);
-    pendingJumpRef.current = null;
-    Keyboard.dismiss();
-  }, []);
-
-  // Android 뒤로 가기 — 검색 중이면 검색만 닫는다
-  useFocusEffect(
-    useCallback(() => {
-      if (!searchOpen) return undefined;
-      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-        closeSearch();
-        return true;
-      });
-      return () => sub.remove();
-    }, [searchOpen, closeSearch]),
-  );
-
-  useEffect(() => {
-    if (!searchOpen) return;
-    const t = setTimeout(() => setQuery(searchText), 250);
-    return () => clearTimeout(t);
-  }, [searchText, searchOpen]);
-
-  // 찾을 메시지 — 방 전체 기록 + 그 뒤로 온(또는 바뀐) 메시지. 기록을 못 불러왔으면 지금 가진 것만
-  const searchPool = useMemo(() => {
-    if (!searchOpen) return null;
-    if (!history) return historyFailed ? messages : null;
-    const map = new Map<string, ChatMessageView>();
-    history.forEach((m) => map.set(m.id, m));
-    messages.forEach((m) => map.set(m.id, m));
-    return [...map.values()];
-  }, [searchOpen, history, historyFailed, messages]);
-  const searchReady = !!searchPool;
-  /** 결과 id — 최신 것부터 (차단한 사람 메시지는 찾지 않는다) */
-  const hits = useMemo(
-    () => (searchPool && query ? searchChatMessages(searchPool, query, state.blocked) : []),
-    [searchPool, query, state.blocked],
-  );
-  const hitSet = useMemo(() => new Set(hits), [hits]);
-  const hitsRef = useRef(hits);
-  hitsRef.current = hits;
-  const currentIdx = currentHitId ? hits.indexOf(currentHitId) : -1;
-
-  /** 이 메시지로 이동 — 목록에 없으면 받아 둔 기록에서 그 메시지까지 채운 뒤 */
-  const jumpTo = useCallback(
-    (id: string) => {
-      if (!revealMessage(id)) return;
-      pendingJumpRef.current = id;
-      scrollRetryRef.current = 0;
-      setFlashId(id);
-      setJumpTick((n) => n + 1);
-    },
-    [revealMessage],
-  );
-
-  useEffect(() => {
-    const id = pendingJumpRef.current;
-    if (!id) return;
-    const index = rows.findIndex((r) => r.type === 'message' && r.message.id === id);
-    if (index < 0) return; // 목록에 들어오면 다시
-    pendingJumpRef.current = null;
-    const frame = requestAnimationFrame(() => {
-      listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [rows, jumpTick]);
-
-  // 아직 그려지지 않은(높이를 모르는) 줄 — 어림한 위치로 먼저 간 뒤 다시
-  const onScrollToIndexFailed = useCallback((info: { index: number; averageItemLength: number }) => {
-    listRef.current?.scrollToOffset({ offset: Math.max(0, info.averageItemLength * info.index), animated: false });
-    if (scrollRetryRef.current >= 5) return;
-    scrollRetryRef.current += 1;
-    setTimeout(() => {
-      listRef.current?.scrollToIndex({ index: info.index, viewPosition: 0.5, animated: true });
-    }, 150);
-  }, []);
-
-  useEffect(() => {
-    if (!flashId) return;
-    const t = setTimeout(() => setFlashId(null), 1800);
-    return () => clearTimeout(t);
-  }, [flashId, jumpTick]);
-
-  // 검색어가 바뀌면(또는 기록을 다 불러오면) 가장 최근 결과로
-  useEffect(() => {
-    if (!searchOpen || !searchReady) return;
-    const first = hitsRef.current[0] ?? null;
-    setCurrentHitId(first);
-    if (first) jumpTo(first);
-  }, [query, searchOpen, searchReady, jumpTo]);
-
-  const goToHit = useCallback(
-    (i: number) => {
-      const id = hits[i];
-      if (!id) return;
-      setCurrentHitId(id);
-      jumpTo(id);
-    },
-    [hits, jumpTo],
-  );
-  /** ↑ 이전(더 예전) 결과 */
-  const goOlder = useCallback(() => {
-    if (!hits.length) return;
-    goToHit(currentIdx < 0 ? 0 : Math.min(hits.length - 1, currentIdx + 1));
-  }, [hits.length, currentIdx, goToHit]);
-  /** ↓ 다음(더 최근) 결과 */
-  const goNewer = useCallback(() => {
-    if (currentIdx > 0) goToHit(currentIdx - 1);
-  }, [currentIdx, goToHit]);
-  /** 키보드 [검색] — 아직 묶이지 않은 검색어면 바로 찾고, 아니면 이전 결과로 */
-  const submitSearch = useCallback(() => {
-    if (searchText !== query) {
-      setQuery(searchText);
-      return;
-    }
-    goOlder();
-  }, [searchText, query, goOlder]);
-
-  let searchStatus = '';
-  if (historyLoading !== null) searchStatus = L('chat.searching', { n: historyLoading });
-  else if (!normalizeChatSearch(query)) searchStatus = '';
-  else if (!hits.length) searchStatus = L('chat.searchNoResults');
-  else searchStatus = L('chat.searchCount', { i: Math.max(0, currentIdx) + 1, n: hits.length });
-
-  // ── 머리글 동작 ───────────────────────────────────────────────────
+  // ── 머리글 · 방 메뉴 ──────────────────────────────────────────────
+  const [roomMenuOpen, setRoomMenuOpen] = useState(false);
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const muted = isRoomMuted(state, roomId);
+  const pinned = !!state.pinned?.[roomId];
+
   const toggleMute = useCallback(() => {
     if (!uid) return;
     setChatRoomMuted(db, uid, roomId, !muted)
@@ -531,7 +418,58 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
     else navigation.navigate('MainTabs', { screen: 'Chat' });
   }, [navigation]);
 
-  const [membersOpen, setMembersOpen] = useState(false);
+  const togglePin = useCallback(() => {
+    setChatRoomPinned(db, uid, roomId, !pinned).catch((e) => Alert.alert(L('common.error'), errorMessage(e)));
+  }, [uid, roomId, pinned]);
+
+  const hideRoom = useCallback(() => {
+    setChatRoomHidden(db, uid, roomId, true)
+      .then(() => {
+        showToast(L('chat.hideHint'));
+        goBack();
+      })
+      .catch((e) => Alert.alert(L('common.error'), errorMessage(e)));
+  }, [uid, roomId, showToast, goBack]);
+
+  const exportChat = useCallback(
+    async (includeLinks: boolean) => {
+      if (!room) return;
+      const all = await history.ensure();
+      if (!all) {
+        Alert.alert(L('chat.loadFailed'));
+        return;
+      }
+      try {
+        const map = new Map<string, ChatMessageView>();
+        all.forEach((m) => map.set(m.id, m));
+        messages.forEach((m) => map.set(m.id, m));
+        const list = [...map.values()].filter((m) => !m.pending).sort((a, b) => messageMillis(a) - messageMillis(b));
+        const body = chatExportText(room, list, { lang, myUid: uid, includeMediaLinks: includeLinks });
+        const file = new File(Paths.cache, chatExportFileName(room, lang, uid));
+        if (file.exists) file.delete();
+        file.create();
+        file.write(body);
+        setExportOpen(false);
+        later(() => {
+          void (async () => {
+            try {
+              if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(file.uri, { mimeType: 'text/plain', UTI: 'public.plain-text', dialogTitle: L('chat.export') });
+              }
+              showToast(L('chat.exportDone'));
+            } catch (e) {
+              logger.warn('대화 내보내기 공유 실패:', e);
+            }
+          })();
+        });
+      } catch (e) {
+        logger.warn('대화 내보내기 실패:', e);
+        Alert.alert(L('common.error'), errorMessage(e));
+      }
+    },
+    [room, history, messages, lang, uid, showToast],
+  );
+
   const [dmBusyUid, setDmBusyUid] = useState<string | null>(null);
   const openDmWith = useCallback(
     async (otherUid: string) => {
@@ -559,6 +497,7 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
   const [actionFor, setActionFor] = useState<ChatMessageView | null>(null);
   const [actionOpen, setActionOpen] = useState(false);
   const [reportFor, setReportFor] = useState<ChatMessageView | null>(null);
+  const [sheet, setSheet] = useState<SheetState>(null);
   const [viewer, setViewer] = useState<{ message: ChatMessageView; index: number } | null>(null);
   // 보기 화면을 열 때마다 새로 그린다 (시작 칸 · 재생 상태 초기화)
   const [viewerSeq, setViewerSeq] = useState(0);
@@ -568,29 +507,34 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
     [room],
   );
 
-  const actionInfo = useMemo(() => {
+  const menu = useMemo(() => {
     const m = actionFor;
-    if (!m) return null;
+    if (!m || !room) return null;
     const mine = m.senderId === uid;
     const blocked = !mine && isUserBlocked(state, m.senderId);
     const hidden = blocked && !revealed.has(m.id);
+    const live = !m.deleted && !hidden && !m.pending;
+    const mediaItems = (m.media ?? []).filter((x) => x.kind === 'image' || x.kind === 'video');
     return {
       m,
       mine,
       blocked,
-      canCopy: !m.deleted && !hidden && !!m.text,
-      mediaCount: !m.deleted && !hidden ? (m.media ?? []).length : 0,
+      canReact: live && m.kind !== 'system',
+      myReaction: (m.reactions?.[uid] ?? null) as ChatReactionKey | null,
+      canReply: live,
+      canCopy: live && !!m.text && m.kind === 'text',
+      canEdit: live && canEditChatMessage(m, uid),
+      canNotice: live && canSetNotice(room, uid) && canBeNotice(m),
+      mediaCount: live && m.kind === 'media' ? mediaItems.length : 0,
       canDelete: mine && !m.deleted && !m.pending,
+      canReport: !mine && !m.deleted,
     };
-  }, [actionFor, uid, state, revealed]);
-
-  const menu = actionInfo;
+  }, [actionFor, room, uid, state, revealed]);
 
   const openActions = useCallback(
     (m: ChatMessageView) => {
-      const mine = m.senderId === uid;
-      // 지워진 내 메시지는 할 수 있는 게 없다
-      if (mine && m.deleted) return;
+      // 지워진 내 메시지 · 알림 메시지는 할 수 있는 게 없다
+      if ((m.senderId === uid && m.deleted) || m.kind === 'system') return;
       Keyboard.dismiss();
       setActionFor(m);
       setActionOpen(true);
@@ -598,20 +542,55 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
     [uid],
   );
   const closeActions = useCallback(() => setActionOpen(false), []);
+  const openActionsRef = useRef(openActions);
+  openActionsRef.current = openActions;
+
+  const react = useCallback(
+    (key: ChatReactionKey | null) => {
+      const m = menu?.m;
+      closeActions();
+      if (!m) return;
+      setChatReaction(db, roomId, m.id, uid, key).catch((e) => Alert.alert(L('common.error'), errorMessage(e)));
+    },
+    [menu, closeActions, roomId, uid],
+  );
+
+  const doReply = useCallback(() => {
+    const m = menu?.m;
+    closeActions();
+    if (m) later(() => composer.startReply(m));
+  }, [menu, closeActions, composer]);
 
   const doCopy = useCallback(() => {
-    const m = actionInfo?.m;
+    const m = menu?.m;
     closeActions();
     if (!m?.text) return;
     Clipboard.setStringAsync(m.text)
       .then(() => showToast(L('chat.copied')))
       .catch(() => {});
-  }, [actionInfo, closeActions, showToast]);
+  }, [menu, closeActions, showToast]);
+
+  const doEdit = useCallback(() => {
+    const m = menu?.m;
+    closeActions();
+    if (m) later(() => composer.startEdit(m));
+  }, [menu, closeActions, composer]);
+
+  const doNotice = useCallback(() => {
+    const m = menu?.m;
+    closeActions();
+    if (!m) return;
+    if (notice && notice.messageId !== m.id) {
+      later(() => confirm(L('chat.setNotice'), L('chat.noticeReplaceConfirm'), L('common.ok'), () => postNotice(m.id)));
+    } else {
+      postNotice(m.id);
+    }
+  }, [menu, closeActions, notice, postNotice]);
 
   const doSave = useCallback(() => {
-    const m = actionInfo?.m;
+    const m = menu?.m;
     closeActions();
-    const media = m?.media ?? [];
+    const media = (m?.media ?? []).filter((x) => x.kind === 'image' || x.kind === 'video');
     if (!m || !media.length) return;
     showToast(L('chat.appSaving', { done: 0, total: media.length }));
     later(() => {
@@ -620,31 +599,24 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
         at: new Date(messageMillis(m) || Date.now()),
       });
     });
-  }, [actionInfo, closeActions, showToast, room?.campCode]);
+  }, [menu, closeActions, showToast, room?.campCode]);
 
   const doDelete = useCallback(() => {
-    const m = actionInfo?.m;
+    const m = menu?.m;
     closeActions();
     if (!m) return;
     later(() =>
-      Alert.alert(L('chat.deleteForAll'), L('chat.deleteConfirm'), [
-        { text: L('common.cancel'), style: 'cancel' },
-        {
-          text: L('common.delete'),
-          style: 'destructive',
-          onPress: () => {
-            deleteChatMessage(db, roomId, m.id).catch((e) => Alert.alert(L('common.error'), errorMessage(e)));
-          },
-        },
-      ]),
+      confirm(L('chat.deleteForAll'), L('chat.deleteConfirm'), L('common.delete'), () => {
+        deleteChatMessage(db, roomId, m.id).catch((e) => Alert.alert(L('common.error'), errorMessage(e)));
+      }, true),
     );
-  }, [actionInfo, closeActions, roomId]);
+  }, [menu, closeActions, roomId]);
 
   const doReport = useCallback(() => {
-    const m = actionInfo?.m;
+    const m = menu?.m;
     closeActions();
     if (m) later(() => setReportFor(m));
-  }, [actionInfo, closeActions]);
+  }, [menu, closeActions]);
 
   const submitReport = useCallback(
     async (reason: ChatReportReason, detail: string) => {
@@ -668,53 +640,168 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
   );
 
   const doBlock = useCallback(() => {
-    const info = actionInfo;
+    const info = menu;
     closeActions();
     if (!info || info.mine || !uid) return;
     const otherUid = info.m.senderId;
     const name = senderNameOf(info.m);
     const next = !info.blocked;
     later(() =>
-      Alert.alert(next ? L('chat.block') : L('chat.unblock'), next ? L('chat.blockConfirm', { name }) : L('chat.appUnblockConfirm', { name }), [
-        { text: L('common.cancel'), style: 'cancel' },
-        {
-          text: next ? L('chat.block') : L('chat.unblock'),
-          style: next ? 'destructive' : 'default',
-          onPress: () => {
-            setChatUserBlocked(db, uid, otherUid, next)
-              .then(() => showToast(next ? L('chat.blockedDone') : L('chat.unblockedDone')))
-              .catch((e) => Alert.alert(L('common.error'), errorMessage(e)));
-          },
+      confirm(
+        next ? L('chat.block') : L('chat.unblock'),
+        next ? L('chat.blockConfirm', { name }) : L('chat.appUnblockConfirm', { name }),
+        next ? L('chat.block') : L('chat.unblock'),
+        () => {
+          setChatUserBlocked(db, uid, otherUid, next)
+            .then(() => showToast(next ? L('chat.blockedDone') : L('chat.unblockedDone')))
+            .catch((e) => Alert.alert(L('common.error'), errorMessage(e)));
         },
-      ]),
+        next,
+      ),
     );
-  }, [actionInfo, closeActions, uid, senderNameOf, showToast]);
+  }, [menu, closeActions, uid, senderNameOf, showToast]);
 
-  const reveal = useCallback((id: string) => setRevealed((s) => new Set(s).add(id)), []);
-  const openMedia = useCallback((m: ChatMessageView, index: number) => {
-    Keyboard.dismiss();
-    setViewerSeq((n) => n + 1);
-    setViewer({ message: m, index });
+  // ── 말풍선 동작 (한 번 만든 것을 계속 넘긴다) ─────────────────────
+  const latest = useRef({ room, uid, roomId, composer, jumpTo, showToast });
+  latest.current = { room, uid, roomId, composer, jumpTo, showToast };
+  const rowActions = useMemo<MessageRowActions>(
+    () => ({
+      onReveal: (id) => setRevealed((s) => new Set(s).add(id)),
+      onLongPress: (m) => openActionsRef.current(m),
+      onOpenMedia: (m, index) => {
+        Keyboard.dismiss();
+        setViewerSeq((n) => n + 1);
+        setViewer({ message: m, index });
+      },
+      onRetry: (clientId) => chatOutbox.retry(latest.current.roomId, clientId),
+      onDiscard: (clientId) => {
+        const it = chatOutbox.discard(latest.current.roomId, clientId);
+        // 사진과 함께 입력했던 글은 입력창으로 되돌린다
+        if (it?.kind === 'media' && it.text) latest.current.composer.setText((cur) => (cur.trim() ? cur : it.text ?? ''));
+      },
+      onJumpTo: (id) => {
+        void latest.current.jumpTo(id);
+      },
+      onShowReactions: (m) => setSheet({ kind: 'reactions', message: m }),
+      onReply: (m) => latest.current.composer.startReply(m),
+      onVote: async (m, ids) => {
+        try {
+          await voteChatPoll(db, latest.current.roomId, m.id, latest.current.uid, ids);
+        } catch (e) {
+          Alert.alert(L('common.error'), errorMessage(e));
+        }
+      },
+      onClosePoll: (m) =>
+        confirm(L('chat.pollClose'), L('chat.pollCloseConfirm'), L('chat.pollClose'), () => {
+          closeChatPoll(db, latest.current.roomId, m.id).catch((e) => Alert.alert(L('common.error'), errorMessage(e)));
+        }, true),
+      onShowVoters: (m, optionId) => {
+        const r = pollResults(m, latest.current.uid);
+        const o = r.options.find((x) => x.id === optionId);
+        if (o) setSheet({ kind: 'voters', title: o.text, uids: o.uids });
+      },
+    }),
+    [],
+  );
+
+  // ── 보내기 (투표 · 예약) ──────────────────────────────────────────
+  const createPoll = useCallback(
+    async (poll: ChatPoll) => {
+      try {
+        await sendChatMessage(db, roomId, {
+          senderId: uid,
+          senderName: myName,
+          kind: 'poll',
+          poll,
+          clientId: newChatClientId(),
+          silent: composer.silent || undefined,
+        });
+        setPollOpen(false);
+        scrollToLatest(true);
+      } catch (e) {
+        Alert.alert(L('common.error'), errorMessage(e));
+      }
+    },
+    [roomId, uid, myName, composer.silent, scrollToLatest],
+  );
+
+  const createSchedule = useCallback(
+    async (sendAt: Date, body: string) => {
+      if (!room) return;
+      const err = scheduleTimeError(sendAt);
+      if (err) {
+        Alert.alert(err === 'past' ? L('chat.schedulePast') : L('chat.scheduleTooFar'));
+        return;
+      }
+      try {
+        const mention = extractMentions(body, room, uid);
+        await scheduleChatMessage(db, {
+          roomId,
+          senderId: uid,
+          senderName: myName,
+          text: body,
+          sendAt,
+          mentions: mention.mentions,
+          mentionAll: mention.mentionAll,
+          silent: composer.silent,
+        });
+        setScheduleOpen(false);
+        if (composer.text.trim()) composer.setText('');
+        showToast(L('chat.scheduleSet', { at: scheduleLabel(sendAt) }));
+      } catch (e) {
+        Alert.alert(L('common.error'), errorMessage(e));
+      }
+    },
+    [room, roomId, uid, myName, composer, showToast],
+  );
+
+  const cancelScheduled = useCallback((item: ChatScheduledMessage) => {
+    confirm(L('chat.scheduleCancel'), L('chat.scheduleCancelConfirm'), L('chat.scheduleCancel'), () => {
+      cancelScheduledChatMessage(db, item.id).catch((e) => Alert.alert(L('common.error'), errorMessage(e)));
+    }, true);
   }, []);
+
+  // ── 시트 내용 (공감한 사람 · 투표한 사람 · 공지 확인) ──────────────
+  const sheetTabs = useMemo<{ title: string; tabs: UidListTab[] } | null>(() => {
+    if (!sheet) return null;
+    if (sheet.kind === 'reactions') {
+      const list = reactionSummary(sheet.message.reactions);
+      const reactions = sheet.message.reactions ?? {};
+      const badgeOf = (u: string) => (reactions[u] ? CHAT_REACTION_EMOJI[reactions[u]] : '');
+      return {
+        title: L('chat.reactionsTitle'),
+        tabs: [
+          { key: 'all', label: L('chat.filterAll'), uids: list.flatMap((r) => r.uids), badgeOf },
+          ...list.map((r) => ({ key: r.key, label: r.emoji, uids: r.uids, badgeOf })),
+        ],
+      };
+    }
+    if (sheet.kind === 'voters') return { title: sheet.title, tabs: [{ key: 'v', label: '', uids: sheet.uids }] };
+    return {
+      title: L('chat.notice'),
+      tabs: [
+        { key: 'acked', label: L('chat.ackedList'), uids: ackSummary.acked },
+        { key: 'pending', label: L('chat.pendingList'), uids: ackSummary.pending },
+      ],
+    };
+  }, [sheet, ackSummary]);
 
   // ── 그리기 ────────────────────────────────────────────────────────
   const bubbleMaxWidth = Math.round(Math.min(width * 0.7, 360));
   const renderItem = useCallback(
     ({ item }: { item: ChatRow }) => {
-      if (item.type === 'outbox') {
+      if (item.type !== 'message') {
         return (
           <MessageRow
             row={item}
             lang={lang}
+            myUid={uid}
+            room={room ?? null}
             unread={null}
             blocked={false}
             revealed={false}
             bubbleMaxWidth={bubbleMaxWidth}
-            onReveal={reveal}
-            onLongPress={openActions}
-            onOpenMedia={openMedia}
-            onRetry={retry}
-            onDiscard={discard}
+            actions={rowActions}
           />
         );
       }
@@ -724,22 +811,20 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
         <MessageRow
           row={item}
           lang={lang}
+          myUid={uid}
+          room={room ?? null}
           sender={room?.memberInfo?.[m.senderId]}
           unread={room ? unreadReaders(m, room.memberIds ?? [], reads) : null}
           blocked={!mine && isUserBlocked(state, m.senderId)}
           revealed={revealed.has(m.id)}
           bubbleMaxWidth={bubbleMaxWidth}
-          highlight={searchOpen && hitSet.has(m.id) ? query : undefined}
+          highlight={search.open && search.hitSet.has(m.id) ? search.query : undefined}
           flash={flashId === m.id}
-          onReveal={reveal}
-          onLongPress={openActions}
-          onOpenMedia={openMedia}
-          onRetry={retry}
-          onDiscard={discard}
+          actions={rowActions}
         />
       );
     },
-    [lang, uid, room, reads, state, revealed, bubbleMaxWidth, searchOpen, hitSet, query, flashId, reveal, openActions, openMedia, retry, discard],
+    [lang, uid, room, reads, state, revealed, bubbleMaxWidth, search.open, search.hitSet, search.query, flashId, rowActions],
   );
 
   const title = room ? chatRoomTitle(room, lang, uid) : '';
@@ -755,19 +840,25 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
         <View style={styles.headerTitleLine}>
           <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
           {room && room.type !== 'dm' ? <Text style={styles.headerCount}>{memberCount}</Text> : null}
+          {muted ? <Ionicons name="notifications-off" size={13} color={CHAT_COLORS.muted} style={styles.headerMuted} /> : null}
         </View>
         {description ? <Text style={styles.headerDesc} numberOfLines={1}>{description}</Text> : null}
       </View>
       {isMember ? (
         <>
-          <TouchableOpacity onPress={openSearch} style={styles.headerBtn} hitSlop={6} accessibilityLabel={L('chat.search')}>
-            <Ionicons name="search" size={21} color={searchOpen ? CHAT_COLORS.primary : CHAT_COLORS.text} />
+          <TouchableOpacity onPress={search.openSearch} style={styles.headerBtn} hitSlop={6} accessibilityLabel={L('chat.search')}>
+            <Ionicons name="search" size={21} color={search.open ? CHAT_COLORS.primary : CHAT_COLORS.text} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={toggleMute} style={styles.headerBtn} hitSlop={6} accessibilityLabel={muted ? L('chat.unmute') : L('chat.mute')}>
-            <Ionicons name={muted ? 'notifications-off-outline' : 'notifications-outline'} size={22} color={muted ? CHAT_COLORS.muted : CHAT_COLORS.text} />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setMembersOpen(true)} style={styles.headerBtn} hitSlop={6} accessibilityLabel={L('chat.membersTitle')}>
-            <Ionicons name="people-outline" size={23} color={CHAT_COLORS.text} />
+          <TouchableOpacity
+            onPress={() => {
+              Keyboard.dismiss();
+              setRoomMenuOpen(true);
+            }}
+            style={styles.headerBtn}
+            hitSlop={6}
+            accessibilityLabel={L('chat.roomMenu')}
+          >
+            <Ionicons name="ellipsis-vertical" size={21} color={CHAT_COLORS.text} />
           </TouchableOpacity>
         </>
       ) : null}
@@ -798,11 +889,47 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
   }
 
   const viewerMessage = viewer?.message;
+  const viewerMedia = (viewerMessage?.media ?? []).filter((x) => x.kind === 'image' || x.kind === 'video');
+  const bottomInset = keyboardVisible ? 0 : insets.bottom;
+  const replyName = composer.replyTo ? room.memberInfo?.[composer.replyTo.senderId]?.name || composer.replyTo.senderName : '';
+
+  const composerBars = (
+    <>
+      {scheduled.length ? <ScheduledBar count={scheduled.length} onPress={() => setScheduledListOpen(true)} /> : null}
+      {composer.silent ? <SilentBar onOff={composer.toggleSilent} /> : null}
+      {composer.editTarget ? <EditBar onClose={composer.cancelEdit} /> : null}
+      {composer.replyTo ? (
+        <ReplyBar reply={composer.replyTo} name={replyName} lang={lang} onClose={() => composer.setReplyTo(null)} />
+      ) : null}
+      <MentionPicker options={composer.mentionOptions} onPick={composer.pickMention} />
+    </>
+  );
+
   return (
     <View style={styles.root}>
       {header}
-      {searchOpen ? (
-        <ChatSearchInput value={searchText} onChangeText={setSearchText} onSubmit={submitSearch} onClose={closeSearch} />
+      {search.open ? (
+        <ChatSearchInput value={search.text} onChangeText={search.setText} onSubmit={search.submit} onClose={closeSearch} />
+      ) : null}
+      {notice && !search.open ? (
+        <NoticeBanner
+          roomId={roomId}
+          notice={notice}
+          lang={lang}
+          canAck={uid !== notice.setBy && uid !== notice.senderId}
+          acked={!!noticeMsg?.acks?.[uid]}
+          ackedCount={ackSummary.acked.length}
+          pendingCount={ackSummary.pending.length}
+          canClear={canNotice}
+          onPress={() => {
+            void jumpTo(notice.messageId);
+          }}
+          onAck={() => {
+            ackChatNotice(db, roomId, notice.messageId, uid).catch((e) => Alert.alert(L('common.error'), errorMessage(e)));
+          }}
+          onShowAcks={() => setSheet({ kind: 'acks' })}
+          onClear={() => confirm(L('chat.clearNotice'), L('chat.appNoticeClearConfirm'), L('chat.clearNotice'), () => postNotice(null), true)}
+        />
       ) : null}
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <View style={styles.listWrap}>
@@ -837,6 +964,23 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
               </View>
             }
           />
+          {mentionTargetId ? (
+            <View style={styles.mentionChipWrap} pointerEvents="box-none">
+              <TouchableOpacity
+                style={styles.mentionChip}
+                onPress={() => {
+                  setMentionDismissed(true);
+                  void jumpTo(mentionTargetId);
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.mentionChipText}>{L('chat.mentionJump')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setMentionDismissed(true)} hitSlop={10} style={styles.mentionClose}>
+                <Ionicons name="close" size={14} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+          ) : null}
           {showNewButton ? (
             <TouchableOpacity style={styles.newButton} onPress={() => scrollToLatest(true)} activeOpacity={0.85}>
               <Text style={styles.newButtonText}>{L('chat.newMessages')}</Text>
@@ -845,43 +989,59 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
           ) : null}
           {toastNode}
         </View>
-        {searchOpen ? (
+        {search.open ? (
           // 검색 중에는 입력창 대신 결과 이동 막대 (카톡처럼)
           <ChatSearchNav
-            status={searchStatus}
-            loading={historyLoading !== null}
-            canOlder={hits.length > 0 && currentIdx < hits.length - 1}
-            canNewer={currentIdx > 0}
-            onOlder={goOlder}
-            onNewer={goNewer}
-            bottomInset={keyboardVisible ? 0 : insets.bottom}
+            status={search.status}
+            loading={search.loading}
+            canOlder={search.hits.length > 0 && search.currentIdx < search.hits.length - 1}
+            canNewer={search.currentIdx > 0}
+            onOlder={search.goOlder}
+            onNewer={search.goNewer}
+            bottomInset={bottomInset}
+          />
+        ) : composer.recording ? (
+          <VoiceRecorderBar
+            bottomInset={bottomInset}
+            onDone={composer.finishRecording}
+            onCancel={composer.cancelRecording}
+            onError={composer.recordingFailed}
           />
         ) : (
           <ChatComposer
-            text={text}
-            onChangeText={setText}
-            tray={tray}
-            original={original}
-            onToggleOriginal={setOriginal}
-            onRemoveFromTray={(key) => setTray((list) => list.filter((a) => a.key !== key))}
+            text={composer.text}
+            onChangeText={composer.setText}
+            onSelectionChange={(e) => composer.setCursor(e.nativeEvent.selection.end)}
+            inputRef={composer.inputRef}
+            topBars={composerBars}
+            tray={composer.tray}
+            original={composer.original}
+            onToggleOriginal={composer.setOriginal}
+            onRemoveFromTray={composer.removeFromTray}
             onPressAttach={() => {
               Keyboard.dismiss();
               setAttachOpen(true);
             }}
-            onSend={send}
-            bottomInset={keyboardVisible ? 0 : insets.bottom}
+            onSend={composer.send}
+            onLongPressSend={composer.toggleSilent}
+            silent={composer.silent}
+            editing={!!composer.editTarget}
+            onPressMic={() => {
+              void composer.startRecording();
+            }}
+            bottomInset={bottomInset}
           />
         )}
       </KeyboardAvoidingView>
 
-      {/* [+] 사진·동영상 / 카메라 */}
+      {/* [+] 사진·동영상 / 카메라 / 투표 / 예약 메시지 */}
       <ChatSheet visible={attachOpen} onClose={() => setAttachOpen(false)}>
         <ChatSheetOption
           icon="images-outline"
           label={L('chat.attach')}
           onPress={() => {
             setAttachOpen(false);
-            later(() => { void pickFromLibrary(); });
+            later(() => { void composer.pickFromLibrary(); });
           }}
         />
         <ChatSheetOption
@@ -889,28 +1049,40 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
           label={L('chat.camera')}
           onPress={() => {
             setAttachOpen(false);
-            later(() => { void takeWithCamera(); });
+            later(() => { void composer.takeWithCamera(); });
+          }}
+        />
+        <ChatSheetOption
+          icon="stats-chart-outline"
+          label={L('chat.poll')}
+          onPress={() => {
+            setAttachOpen(false);
+            later(() => setPollOpen(true));
+          }}
+        />
+        <ChatSheetOption
+          icon="alarm-outline"
+          label={L('chat.schedule')}
+          onPress={() => {
+            setAttachOpen(false);
+            later(() => setScheduleOpen(true));
           }}
         />
         <ChatSheetOption label={L('common.cancel')} onPress={() => setAttachOpen(false)} />
       </ChatSheet>
 
-      {/* 메시지 메뉴 */}
+      {/* 메시지 메뉴 — 공감 줄 → 답장 · 복사 · 수정 · 공지 · 저장 · 삭제 · 신고 · 차단 */}
       <ChatSheet visible={actionOpen} onClose={closeActions}>
+        {menu?.canReact ? <ReactionPickerRow mine={menu.myReaction} onPick={react} /> : null}
+        {menu?.canReply ? <ChatSheetOption icon="arrow-undo-outline" label={L('chat.reply')} onPress={doReply} /> : null}
         {menu?.canCopy ? <ChatSheetOption icon="copy-outline" label={L('chat.copy')} onPress={doCopy} /> : null}
+        {menu?.canEdit ? <ChatSheetOption icon="create-outline" label={L('chat.edit')} onPress={doEdit} /> : null}
+        {menu?.canNotice ? <ChatSheetOption icon="megaphone-outline" label={L('chat.setNotice')} onPress={doNotice} /> : null}
         {menu?.mediaCount ? (
-          <ChatSheetOption
-            icon="download-outline"
-            label={menu.mediaCount > 1 ? L('chat.saveAll') : L('chat.save')}
-            onPress={doSave}
-          />
+          <ChatSheetOption icon="download-outline" label={menu.mediaCount > 1 ? L('chat.saveAll') : L('chat.save')} onPress={doSave} />
         ) : null}
-        {menu?.canDelete ? (
-          <ChatSheetOption icon="trash-outline" label={L('chat.deleteForAll')} destructive onPress={doDelete} />
-        ) : null}
-        {menu && !menu.mine && !menu.m.deleted ? (
-          <ChatSheetOption icon="flag-outline" label={L('chat.report')} destructive onPress={doReport} />
-        ) : null}
+        {menu?.canDelete ? <ChatSheetOption icon="trash-outline" label={L('chat.deleteForAll')} destructive onPress={doDelete} /> : null}
+        {menu?.canReport ? <ChatSheetOption icon="flag-outline" label={L('chat.report')} destructive onPress={doReport} /> : null}
         {menu && !menu.mine ? (
           <ChatSheetOption
             icon={menu.blocked ? 'person-add-outline' : 'ban-outline'}
@@ -919,6 +1091,65 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
           />
         ) : null}
         <ChatSheetOption label={L('common.cancel')} onPress={closeActions} />
+      </ChatSheet>
+
+      {/* 방 메뉴 (⋮) */}
+      <ChatSheet visible={roomMenuOpen} onClose={() => setRoomMenuOpen(false)} title={L('chat.roomMenu')}>
+        <ChatSheetOption
+          icon="images-outline"
+          label={L('chat.gallery')}
+          onPress={() => {
+            setRoomMenuOpen(false);
+            later(() => setGalleryOpen(true));
+          }}
+        />
+        <ChatSheetOption
+          icon="share-outline"
+          label={L('chat.export')}
+          onPress={() => {
+            setRoomMenuOpen(false);
+            later(() => setExportOpen(true));
+          }}
+        />
+        <ChatSheetOption
+          icon={muted ? 'notifications-outline' : 'notifications-off-outline'}
+          label={muted ? L('chat.unmute') : L('chat.mute')}
+          onPress={() => {
+            setRoomMenuOpen(false);
+            toggleMute();
+          }}
+        />
+        <ChatSheetOption
+          icon="people-outline"
+          label={L('chat.members', { n: memberCount })}
+          onPress={() => {
+            setRoomMenuOpen(false);
+            later(() => setMembersOpen(true));
+          }}
+        />
+        {canPinOrHide ? (
+          <>
+            <ChatSheetOption
+              icon={pinned ? 'pin' : 'pin-outline'}
+              label={pinned ? L('chat.unpin') : L('chat.pin')}
+              onPress={() => {
+                setRoomMenuOpen(false);
+                togglePin();
+              }}
+            />
+            <ChatSheetOption
+              icon="eye-off-outline"
+              label={L('chat.hideRoom')}
+              onPress={() => {
+                setRoomMenuOpen(false);
+                later(() => confirm(L('chat.hideRoom'), L('chat.hideHint'), L('chat.hideRoom'), hideRoom));
+              }}
+            />
+          </>
+        ) : isPresetRoom(room) ? (
+          <Text style={styles.presetNote}>{L('chat.presetPinned')}</Text>
+        ) : null}
+        <ChatSheetOption label={L('common.cancel')} onPress={() => setRoomMenuOpen(false)} />
       </ChatSheet>
 
       <ReportSheet visible={!!reportFor} onClose={() => setReportFor(null)} onSubmit={submitReport} />
@@ -932,14 +1163,56 @@ export function ChatRoomScreen({ navigation, route }: RootStackScreenProps<'Chat
         onPressMember={openDmWith}
       />
 
+      <UidListSheet
+        visible={!!sheet}
+        title={sheetTabs?.title ?? ''}
+        tabs={sheetTabs?.tabs ?? []}
+        memberInfo={room.memberInfo}
+        myUid={uid}
+        onClose={() => setSheet(null)}
+      />
+
+      <PollCreateSheet visible={pollOpen} onClose={() => setPollOpen(false)} onCreate={createPoll} />
+
+      <ScheduleCreateSheet
+        visible={scheduleOpen}
+        composerText={composer.text}
+        hasMedia={composer.tray.length > 0}
+        onClose={() => setScheduleOpen(false)}
+        onSubmit={createSchedule}
+      />
+      <ScheduledListSheet
+        visible={scheduledListOpen}
+        items={scheduled}
+        onClose={() => setScheduledListOpen(false)}
+        onCancelItem={cancelScheduled}
+      />
+
+      <ExportSheet
+        visible={exportOpen}
+        loadingCount={history.loading}
+        onClose={() => setExportOpen(false)}
+        onExport={(links) => {
+          void exportChat(links);
+        }}
+      />
+
+      <ChatGalleryModal
+        visible={galleryOpen}
+        roomId={roomId}
+        campCode={room.campCode}
+        memberInfo={room.memberInfo}
+        onClose={() => setGalleryOpen(false)}
+      />
+
       <MediaViewer
         key={viewerSeq}
         visible={!!viewer}
-        media={viewerMessage?.media ?? []}
+        media={viewerMedia}
         startIndex={viewer?.index ?? 0}
         senderName={viewerMessage ? senderNameOf(viewerMessage) : ''}
         at={viewerMessage ? new Date(messageMillis(viewerMessage) || Date.now()) : null}
-        campCode={room?.campCode}
+        campCode={room.campCode}
         onClose={() => setViewer(null)}
       />
     </View>
@@ -966,7 +1239,9 @@ const styles = StyleSheet.create({
   headerTitleLine: { flexDirection: 'row', alignItems: 'center' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: CHAT_COLORS.text, flexShrink: 1 },
   headerCount: { fontSize: 14, color: CHAT_COLORS.muted, marginLeft: 6 },
+  headerMuted: { marginLeft: 4 },
   headerDesc: { fontSize: 12, color: CHAT_COLORS.sub, marginTop: 1 },
+  presetNote: { fontSize: 13, color: CHAT_COLORS.sub, paddingHorizontal: 20, paddingVertical: 12 },
 
   listWrap: { flex: 1, backgroundColor: CHAT_COLORS.roomBg },
   listContent: { paddingTop: 10, paddingBottom: 6 },
@@ -986,4 +1261,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   newButtonText: { color: '#ffffff', fontSize: 13, fontWeight: '600' },
+  mentionChipWrap: {
+    position: 'absolute',
+    top: 10,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: CHAT_COLORS.primary,
+    borderRadius: 18,
+    paddingLeft: 4,
+    paddingRight: 8,
+  },
+  mentionChip: { paddingHorizontal: 10, paddingVertical: 8 },
+  mentionChipText: { color: '#ffffff', fontSize: 13, fontWeight: '700' },
+  mentionClose: { paddingLeft: 2 },
 });

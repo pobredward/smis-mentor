@@ -13,9 +13,14 @@ import {
   newChatClientId,
   newChatMessageId,
   sendChatMessage,
+  uploadChatFile,
+  chatMediaPath,
+  CHAT_LIMITS,
   type ChatMediaItem,
+  type ChatReplyRef,
 } from '@smis-mentor/shared';
 import { db, storage } from '../config/firebase';
+import { sendChatVoiceMessage } from '../services/chatSend';
 import {
   ChatMediaError,
   IMAGE_MAX_MB,
@@ -33,12 +38,20 @@ export interface ChatOutboxEntry {
   fraction: number;
 }
 
+/** 메시지에 함께 붙는 것 — 답장 · 멘션 · 조용히 보내기 */
+export interface ChatSendExtra {
+  replyTo?: ChatReplyRef | null;
+  mentions?: string[];
+  mentionAll?: boolean;
+  silent?: boolean;
+}
+
 export interface ChatOutboxItem {
   clientId: string;
   roomId: string;
   /** 사진 경로·메시지 문서 id (미리 만든다) */
   messageId: string;
-  kind: 'media' | 'text';
+  kind: 'media' | 'text' | 'voice';
   createdAt: number;
   /** uploading: 올리는 중 · sent: 메시지를 썼다(목록에서는 Firestore 메시지가 대신 보인다) · failed */
   status: 'uploading' | 'sent' | 'failed';
@@ -48,6 +61,12 @@ export interface ChatOutboxItem {
   text?: string;
   error?: string;
   sender: { uid: string; name: string };
+  /** 답장 · 멘션 · 조용히 (글·사진 묶음 · 음성) */
+  extra?: ChatSendExtra;
+  /** 뒤에 따로 보낼 글의 멘션 */
+  textExtra?: ChatSendExtra;
+  /** 음성 — 녹음 파일 */
+  voice?: { uri: string; durationMs: number; result?: { url: string; path: string; size: number } };
 }
 
 const EMPTY: ChatOutboxItem[] = [];
@@ -89,21 +108,34 @@ function errorText(e: unknown): string {
   return L('chat.sendFailed');
 }
 
-function addFailedText(roomId: string, sender: ChatOutboxItem['sender'], text: string, clientId: string = newChatClientId()) {
+function addFailedText(roomId: string, sender: ChatOutboxItem['sender'], text: string, clientId: string, extra?: ChatSendExtra) {
   setRoom(roomId, (list) => [
     ...list.filter((it) => it.clientId !== clientId),
     {
       clientId, roomId, messageId: '', kind: 'text', createdAt: Date.now(), status: 'failed',
-      entries: [], original: false, text, sender, error: L('chat.sendFailed'),
+      entries: [], original: false, text, sender, error: L('chat.sendFailed'), extra,
     },
   ]);
 }
 
+const extraFields = (x?: ChatSendExtra) => ({
+  ...(x?.replyTo ? { replyTo: x.replyTo } : {}),
+  ...(x?.mentions?.length ? { mentions: x.mentions } : {}),
+  ...(x?.mentionAll ? { mentionAll: true } : {}),
+  ...(x?.silent ? { silent: true } : {}),
+});
+
 /** 글 보내기 — Firestore 가 거절하면(권한 등) 실패 말풍선으로 남긴다 */
-function sendText(roomId: string, sender: ChatOutboxItem['sender'], text: string, clientId: string = newChatClientId()): void {
-  sendChatMessage(db, roomId, { senderId: sender.uid, senderName: sender.name, text, clientId }).catch((e) => {
+function sendText(
+  roomId: string,
+  sender: ChatOutboxItem['sender'],
+  text: string,
+  extra?: ChatSendExtra,
+  clientId: string = newChatClientId(),
+): void {
+  sendChatMessage(db, roomId, { senderId: sender.uid, senderName: sender.name, text, clientId, ...extraFields(extra) }).catch((e) => {
     logger.warn('채팅 글 보내기 실패:', e);
-    addFailedText(roomId, sender, text, clientId);
+    addFailedText(roomId, sender, text, clientId, extra);
   });
 }
 
@@ -137,9 +169,10 @@ async function runMedia(roomId: string, clientId: string): Promise<void> {
     patchItem(roomId, clientId, (it) => ({ ...it, status: 'sent', text: undefined }));
     const sending = sendChatMessage(db, roomId, {
       id: done.messageId, senderId: done.sender.uid, senderName: done.sender.name, media, clientId,
+      ...extraFields({ replyTo: done.extra?.replyTo, silent: done.extra?.silent }),
     });
     // 함께 입력한 글은 사진 묶음 다음에 따로 한 메시지로 (카톡처럼)
-    if (followText) sendText(roomId, done.sender, followText);
+    if (followText) sendText(roomId, done.sender, followText, done.textExtra);
     await sending;
     removeItem(roomId, clientId);
   } catch (e) {
@@ -153,7 +186,7 @@ function sendMedia(
   roomId: string,
   sender: ChatOutboxItem['sender'],
   assets: ChatPickedAsset[],
-  opts: { original: boolean; text?: string },
+  opts: { original: boolean; text?: string; extra?: ChatSendExtra; textExtra?: ChatSendExtra },
 ): void {
   if (!assets.length) return;
   const clientId = newChatClientId();
@@ -168,9 +201,77 @@ function sendMedia(
     original: opts.original,
     text: opts.text,
     sender,
+    extra: opts.extra,
+    textExtra: opts.textExtra,
   };
   setRoom(roomId, (list) => [...list, item]);
   void runMedia(roomId, clientId);
+}
+
+async function runVoice(roomId: string, clientId: string): Promise<void> {
+  const start = getItem(roomId, clientId);
+  if (!start?.voice) return;
+  patchItem(roomId, clientId, (it) => ({ ...it, status: 'uploading', error: undefined }));
+  try {
+    let result = start.voice.result;
+    if (!result) {
+      const blob = await (await fetch(start.voice.uri)).blob();
+      try {
+        if (blob.size > CHAT_LIMITS.audioMaxBytes) throw new Error('audio too large');
+        const path = chatMediaPath(roomId, start.sender.uid, start.messageId, 0, 'm4a');
+        const url = await uploadChatFile(storage, path, blob, 'audio/mp4');
+        result = { url, path, size: blob.size };
+      } finally {
+        try {
+          (blob as unknown as { close?: () => void }).close?.();
+        } catch {
+          // 무시
+        }
+      }
+      patchItem(roomId, clientId, (it) => ({ ...it, voice: it.voice ? { ...it.voice, result } : it.voice }));
+    }
+    const done = getItem(roomId, clientId);
+    if (!done?.voice) return;
+    patchItem(roomId, clientId, (it) => ({ ...it, status: 'sent' }));
+    await sendChatVoiceMessage(roomId, {
+      id: done.messageId,
+      senderId: done.sender.uid,
+      senderName: done.sender.name,
+      clientId,
+      audio: { ...result, durationMs: done.voice.durationMs },
+      replyTo: done.extra?.replyTo,
+      silent: done.extra?.silent,
+    });
+    removeItem(roomId, clientId);
+  } catch (e) {
+    logger.warn('채팅 음성 보내기 실패:', e);
+    patchItem(roomId, clientId, (it) => ({ ...it, status: 'failed', error: L('chat.sendFailed') }));
+  }
+}
+
+/** 음성 메시지 보내기 — m4a(AAC) 녹음 파일 */
+function sendVoice(
+  roomId: string,
+  sender: ChatOutboxItem['sender'],
+  voice: { uri: string; durationMs: number },
+  extra?: ChatSendExtra,
+): void {
+  const clientId = newChatClientId();
+  const item: ChatOutboxItem = {
+    clientId,
+    roomId,
+    messageId: newChatMessageId(db, roomId),
+    kind: 'voice',
+    createdAt: Date.now(),
+    status: 'uploading',
+    entries: [],
+    original: false,
+    sender,
+    extra,
+    voice: { uri: voice.uri, durationMs: voice.durationMs },
+  };
+  setRoom(roomId, (list) => [...list, item]);
+  void runVoice(roomId, clientId);
 }
 
 /** 다시 보내기 */
@@ -179,7 +280,11 @@ function retry(roomId: string, clientId: string): void {
   if (!it || it.status !== 'failed') return;
   if (it.kind === 'text') {
     removeItem(roomId, clientId);
-    sendText(roomId, it.sender, it.text ?? '', clientId);
+    sendText(roomId, it.sender, it.text ?? '', it.extra, clientId);
+    return;
+  }
+  if (it.kind === 'voice') {
+    void runVoice(roomId, clientId);
     return;
   }
   void runMedia(roomId, clientId);
@@ -190,6 +295,7 @@ function discard(roomId: string, clientId: string): ChatOutboxItem | undefined {
   const it = getItem(roomId, clientId);
   if (!it) return undefined;
   removeItem(roomId, clientId);
+  if (it.voice?.result?.path) deleteObject(storageRef(storage, it.voice.result.path)).catch(() => {});
   it.entries.forEach((e) => {
     const paths = [e.result?.path, e.result?.thumbPath].filter((p): p is string => !!p);
     paths.forEach((p) => {
@@ -199,7 +305,7 @@ function discard(roomId: string, clientId: string): ChatOutboxItem | undefined {
   return it;
 }
 
-export const chatOutbox = { sendText, sendMedia, retry, discard };
+export const chatOutbox = { sendText, sendMedia, sendVoice, retry, discard };
 
 /** 이 방의 보낼 편지함 (보내는 중 · 실패) */
 export function useChatOutbox(roomId: string): ChatOutboxItem[] {

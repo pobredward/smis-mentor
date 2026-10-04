@@ -3,6 +3,8 @@
  *  1) 방의 마지막 메시지 · 시각 · 메시지 수
  *  2) 받는 사람의 안 읽은 수 +1 (chatUserState/{uid}.unread.{roomId}) — 차단한 사람의 메시지는 세지 않는다
  *  3) 푸시 — 앱(Expo) + 웹 브라우저(FCM). 알림 설정 '채팅'을 껐거나, 그 방 알림을 껐거나, 보낸 사람을 차단했으면 보내지 않는다
+ *     · @멘션(나 · @모두)과 공지 등록은 방 알림을 꺼 둬도 보낸다 (제목도 따로)
+ *     · 조용히 보내기(silent)는 소리·진동 없이 (Android 'chat-silent' 채널 · 웹 silent)
  * 메시지가 '모두에게서 삭제'되면 사진·동영상 파일을 지우고, 마지막 메시지였으면 방 미리보기도 바꾼다.
  *
  * 방 이름·미리보기 문구는 packages/shared/src/utils/chat.ts · i18n chat.* 와 같게 유지한다
@@ -18,6 +20,10 @@ const SITE = 'https://smis-mentor.com';
 const STAFF = ['admin', 'mentor', 'foreign'];
 
 type Lang = 'ko' | 'en';
+const GROUP_LABEL: Record<string, string> = {
+  spring: 'Spring', summer: 'Summer', autumn: 'Autumn', winter: 'Winter', junior: 'Junior', middle: 'Middle', senior: 'Senior',
+  common: 'Common', manager: '운영진', short1: '단기 1', short2: '단기 2', short3: '단기 3', short4: '단기 4',
+};
 const ROOM_LABEL: Record<string, Record<Lang, string>> = {
   camp_all: { ko: '전체방', en: 'Everyone' },
   camp_mentor: { ko: '멘토방', en: 'Mentors & Managers' },
@@ -35,13 +41,21 @@ interface MessageDoc {
   media?: MediaItem[];
   createdAt?: admin.firestore.Timestamp;
   deleted?: boolean;
+  mentions?: string[];
+  mentionAll?: boolean;
+  silent?: boolean;
+  poll?: { question?: string } | null;
+  systemType?: string;
+  editedAt?: admin.firestore.Timestamp | null;
 }
 interface RoomDoc {
   type?: string;
   campCode?: string | null;
+  groupKey?: string | null;
   memberIds?: string[];
   lastMessage?: { messageId?: string } | null;
   lastMessageAt?: admin.firestore.Timestamp | null;
+  notice?: { messageId?: string } | null;
 }
 interface UserDoc {
   name?: string;
@@ -71,18 +85,23 @@ function counts(media?: MediaItem[]) {
 }
 
 function preview(m: MessageDoc, lang: Lang): string {
-  const c = counts(m.media);
   const text = String(m.text ?? '').replace(/\s+/g, ' ').trim();
+  const cut = (v: string) => (v.length > 180 ? `${v.slice(0, 179)}…` : v);
+  if (m.kind === 'voice') return lang === 'en' ? 'Voice message' : '음성 메시지';
+  if (m.kind === 'poll') return cut(`${lang === 'en' ? 'Poll' : '투표'}: ${String(m.poll?.question ?? '')}`);
+  if (m.kind === 'system' && m.systemType === 'notice') return cut(text || (lang === 'en' ? 'A notice was posted' : '공지가 등록되었어요'));
+  const c = counts(m.media);
   let media = '';
   if (c.images && c.videos) media = lang === 'en' ? `${c.images} photo(s) · ${c.videos} video(s)` : `사진 ${c.images}장 · 동영상 ${c.videos}개`;
   else if (c.images) media = lang === 'en' ? `${c.images} photo(s)` : `사진 ${c.images}장`;
   else if (c.videos) media = c.videos === 1 ? (lang === 'en' ? 'Video' : '동영상') : lang === 'en' ? `${c.videos} videos` : `동영상 ${c.videos}개`;
-  const out = text && media ? `${media} · ${text}` : text || media;
-  return out.length > 180 ? `${out.slice(0, 179)}…` : out;
+  return cut(text && media ? `${media} · ${text}` : text || media);
 }
 
 function roomTitle(room: RoomDoc, lang: Lang): string {
-  const label = ROOM_LABEL[String(room.type)]?.[lang] ?? '';
+  const label = room.type === 'camp_group'
+    ? (lang === 'en' ? `${GROUP_LABEL[String(room.groupKey)] ?? room.groupKey ?? ''} Group` : `${GROUP_LABEL[String(room.groupKey)] ?? room.groupKey ?? ''}방`)
+    : ROOM_LABEL[String(room.type)]?.[lang] ?? '';
   return [room.campCode, label].filter(Boolean).join(' ');
 }
 
@@ -145,11 +164,11 @@ export const chatOnMessageCreated = onDocumentCreated(
     const { roomId, messageId } = event.params as { roomId: string; messageId: string };
     const roomRef = fdb().collection('chatRooms').doc(roomId);
     const at = m.createdAt ?? admin.firestore.Timestamp.now();
-    const c = counts(m.media);
+    const c = m.kind === 'voice' ? { images: 0, videos: 0 } : counts(m.media);
     const last: Record<string, unknown> = {
       messageId,
       kind: m.kind ?? 'text',
-      text: String(m.text ?? '').slice(0, 200),
+      text: String(m.kind === 'poll' ? m.poll?.question ?? '' : m.text ?? '').slice(0, 200),
       senderId: m.senderId ?? '',
       senderName: m.senderName ?? '',
     };
@@ -205,31 +224,48 @@ export const chatOnMessageCreated = onDocumentCreated(
     if (gone) return;
     const expoMessages: ExpoPushMessage[] = [];
     const expoOwner: string[] = [];
-    const webByLang = new Map<string, { tokens: string[]; owners: string[]; title: string; body: string }>();
+    const webByLang = new Map<string, { tokens: string[]; owners: string[]; title: string; body: string; silent: boolean }>();
     for (const uid of counted) {
       const u = users.get(uid);
       const s = states.get(uid) ?? {};
       if (!u || !STAFF.includes(String(u.role)) || ['inactive', 'deleted', 'temp'].includes(String(u.status ?? 'active'))) continue;
       const ns = u.notificationSettings ?? {};
-      if (ns.generalNotifications === false || ns.chat === false || s.muted?.[roomId]) continue;
+      // @멘션 · 공지 등록은 방 알림을 꺼 둬도 온다 (전체 알림 · '채팅' 알림을 껐으면 안 온다)
+      const mentioned = !!m.mentionAll || (m.mentions ?? []).includes(uid);
+      const isNotice = m.kind === 'system' && m.systemType === 'notice';
+      if (ns.generalNotifications === false || ns.chat === false || (s.muted?.[roomId] && !mentioned && !isNotice)) continue;
       const lang = langOf(u);
       const body0 = preview(m, lang);
       const isDm = room.type === 'dm';
-      const title = isDm ? String(m.senderName ?? '') : roomTitle(room, lang);
-      const body = isDm ? body0 : `${m.senderName ?? ''}: ${body0}`;
+      const rt = isDm ? String(m.senderName ?? '') : roomTitle(room, lang);
+      const sender = String(m.senderName ?? '');
+      let title = rt;
+      let body = isDm ? body0 : `${sender}: ${body0}`;
+      if (isNotice) {
+        title = `${lang === 'en' ? '[Notice]' : '[공지]'} ${roomTitle(room, lang) || sender}`;
+        body = body0;
+      } else if (mentioned) {
+        title = m.mentionAll
+          ? (lang === 'en' ? `${sender} mentioned everyone` : `${sender}님이 모두를 언급했어요`)
+          : (lang === 'en' ? `${sender} mentioned you` : `${sender}님이 회원님을 언급했어요`);
+        body = isDm ? body0 : `${rt} · ${body0}`;
+      }
+      const silent = !!m.silent && !isNotice;
       const unreadSum = Object.entries(s.unread ?? {}).reduce((a, [, v]) => a + (Number(v) > 0 ? Number(v) : 0), 0);
       const badge = unreadSum + 1;
       Object.keys(u.pushTokens ?? {}).filter((tk) => Expo.isExpoPushToken(tk)).forEach((tk) => {
         expoMessages.push({
-          to: tk, title, body, sound: 'default', badge, priority: 'high', channelId: 'default',
-          data: { type: 'chat', roomId, messageId },
+          to: tk, title, body, badge, priority: 'high',
+          // 조용히 보내기 — 소리 없이 (Android 는 앱이 만든 'chat-silent' 채널: 소리·진동 없음)
+          ...(silent ? { channelId: 'chat-silent' } : { sound: 'default', channelId: 'default' }),
+          data: { type: 'chat', roomId, messageId, ...(mentioned ? { mention: true } : {}), ...(isNotice ? { notice: true } : {}) },
         });
         expoOwner.push(uid);
       });
       const web = Object.keys(u.webPushTokens ?? {});
       if (web.length) {
-        const key = `${title}\u0000${body}`;
-        const g = webByLang.get(key) ?? { tokens: [], owners: [], title, body };
+        const key = `${title}\u0000${body}\u0000${silent ? 1 : 0}`;
+        const g = webByLang.get(key) ?? { tokens: [], owners: [], title, body, silent };
         web.forEach((tk) => { g.tokens.push(tk); g.owners.push(uid); });
         webByLang.set(key, g);
       }
@@ -264,7 +300,7 @@ export const chatOnMessageCreated = onDocumentCreated(
           notification: { title: g.title, body: g.body },
           data: { type: 'chat', roomId, messageId },
           webpush: {
-            notification: { icon: `${SITE}/android-icon-192x192.png`, tag: `chat-${roomId}`, renotify: true },
+            notification: { icon: `${SITE}/android-icon-192x192.png`, tag: `chat-${roomId}`, renotify: !g.silent, silent: g.silent },
             fcmOptions: { link: `${SITE}/chat?room=${encodeURIComponent(roomId)}` },
           },
         }).then(async (res) => {
@@ -286,8 +322,21 @@ export const chatOnMessageUpdated = onDocumentUpdated(
   async (event) => {
     const before = event.data?.before.data() as MessageDoc | undefined;
     const after = event.data?.after.data() as MessageDoc | undefined;
-    if (!before || !after || before.deleted || !after.deleted) return;
+    if (!before || !after) return;
     const { roomId, messageId } = event.params as { roomId: string; messageId: string };
+    // 글을 고쳤으면 — 마지막 메시지였다면 방 미리보기도, 방 공지였다면 공지 글도 고친 글로
+    if (!after.deleted && after.editedAt && String(before.text ?? '') !== String(after.text ?? '')) {
+      const ref = fdb().collection('chatRooms').doc(roomId);
+      await fdb().runTransaction(async (tx) => {
+        const room = (await tx.get(ref)).data() as RoomDoc | undefined;
+        const patch: Record<string, unknown> = {};
+        if (room?.lastMessage?.messageId === messageId) patch['lastMessage.text'] = String(after.text ?? '').slice(0, 200);
+        if (room?.notice?.messageId === messageId) patch['notice.text'] = String(after.text ?? '').slice(0, 500); // shared CHAT_LIMITS.noticeTextMax
+        if (Object.keys(patch).length) tx.update(ref, patch);
+      });
+      return;
+    }
+    if (before.deleted || !after.deleted) return;
     const bucket = admin.storage().bucket(BUCKET);
     // 보낸 사람 폴더(chat/{roomId}/{senderId}/…)의 파일만 — media.path 는 클라이언트가 쓴 값이라,
     // 같은 방 다른 사람 파일 경로를 넣고 지우면 Storage 규칙(올린 본인만 삭제)을 넘어 남의 사진이 지워졌다.
@@ -296,17 +345,35 @@ export const chatOnMessageUpdated = onDocumentUpdated(
     const paths = senderId ? (before.media ?? []).flatMap((x) => [x.path, x.thumbPath]).filter((p): p is string => !!p && p.startsWith(prefix)) : [];
     await Promise.all(paths.map((p) => bucket.file(p).delete({ ignoreNotFound: true }).catch((e) => console.warn('채팅 파일 삭제 실패', p, e))));
     const roomRef = fdb().collection('chatRooms').doc(roomId);
+    // 이 메시지를 공지로 올린 '공지 등록' 알림 메시지들 (글을 복사해 두므로 함께 지운다)
+    const noticeLogs = roomRef.collection('messages').where('noticeOf', '==', messageId);
     await fdb().runTransaction(async (tx) => {
-      const snap = await tx.get(roomRef);
+      const [snap, logs] = await Promise.all([tx.get(roomRef), tx.get(noticeLogs)]);
       const room = snap.data() as RoomDoc | undefined;
-      if (room?.lastMessage?.messageId === messageId) {
-        tx.update(roomRef, {
+      if (!room) return;
+      const patch: Record<string, unknown> = {};
+      if (room.lastMessage?.messageId === messageId) {
+        Object.assign(patch, {
           'lastMessage.deleted': true,
           'lastMessage.text': '',
           'lastMessage.imageCount': admin.firestore.FieldValue.delete(),
           'lastMessage.videoCount': admin.firestore.FieldValue.delete(),
         });
       }
+      // 지운 메시지가 방 공지였으면 공지를 내린다 — 그대로 두면 공지 띠(notice.text)에 지운 글이 계속 보였다
+      if (room.notice?.messageId === messageId) patch.notice = null;
+      logs.docs.forEach((d) => { if (d.data().text) tx.update(d.ref, { text: '' }); });
+      if (room.lastMessage?.messageId && logs.docs.some((d) => d.id === room.lastMessage?.messageId)) patch['lastMessage.text'] = '';
+      if (Object.keys(patch).length) tx.update(roomRef, patch);
     });
+    // 지운 메시지에 남은 내용도 비운다 — 투표 질문·항목·표, 공감, 확인, 답장 인용 (규칙상 보낸 사람은 글·사진만 비울 수 있다)
+    const msgRef = roomRef.collection('messages').doc(messageId);
+    const FVd = admin.firestore.FieldValue.delete();
+    await msgRef.update({ poll: FVd, pollVotes: FVd, pollClosed: FVd, reactions: FVd, acks: FVd, replyTo: FVd, mentions: FVd, mentionAll: FVd })
+      .catch((e) => console.warn('지운 메시지 정리 실패', messageId, e));
+    // 이 메시지를 인용한 답장들 — 인용 글·작은 그림을 지운다 (화면에는 '삭제된 메시지입니다')
+    const quoting = await roomRef.collection('messages').where('replyTo.id', '==', messageId).get();
+    await Promise.all(quoting.docs.map((d) => d.ref.update({ 'replyTo.text': '', 'replyTo.thumbUrl': FVd, 'replyTo.deleted': true })
+      .catch((e) => console.warn('인용 정리 실패', d.id, e))));
   },
 );

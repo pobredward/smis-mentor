@@ -907,3 +907,5 @@ export const auditUserChanges = firestoreV2.onDocumentUpdatedWithAuthContext(
 export { chatOnMessageCreated, chatOnMessageUpdated } from './chat';
 // 채팅 — 캠프 코드를 만들면 방 5개, 배정이 바뀌면 방 사람 맞추기 (functions/src/chatSync.ts)
 export { chatOnUserWritten, chatOnJobCodeWritten } from './chatSync';
+// 채팅 — 예약 메시지를 1분마다 보낸다 (functions/src/chatScheduled.ts)
+export { chatSendScheduled } from './chatScheduled';

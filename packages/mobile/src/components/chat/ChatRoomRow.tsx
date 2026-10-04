@@ -24,10 +24,14 @@ interface ChatRoomRowProps {
   muted: boolean;
   /** 마지막 메시지를 보낸 사람을 내가 차단했다 */
   lastFromBlocked: boolean;
+  /** 위에 고정 (지금 기수 캠프 방 · 내가 고정한 방) */
+  pinned?: boolean;
   onPress: (roomId: string) => void;
+  /** 길게 누르기 — 고정 · 숨기기 메뉴 */
+  onLongPress?: (room: ChatRoom) => void;
 }
 
-function ChatRoomRowImpl({ room, myUid, lang, unread, muted, lastFromBlocked, onPress }: ChatRoomRowProps) {
+function ChatRoomRowImpl({ room, myUid, lang, unread, muted, lastFromBlocked, pinned, onPress, onLongPress }: ChatRoomRowProps) {
   const title = chatRoomTitle(room, lang, myUid);
   const isCamp = room.type !== 'dm';
   const at = room.lastMessageAt?.toDate?.() ?? null;
@@ -35,7 +39,13 @@ function ChatRoomRowImpl({ room, myUid, lang, unread, muted, lastFromBlocked, on
     ? L('chat.blockedMessage')
     : chatPreviewText(room.lastMessage, lang);
   return (
-    <TouchableOpacity style={styles.row} onPress={() => onPress(room.id)} activeOpacity={0.6}>
+    <TouchableOpacity
+      style={styles.row}
+      onPress={() => onPress(room.id)}
+      onLongPress={onLongPress ? () => onLongPress(room) : undefined}
+      delayLongPress={400}
+      activeOpacity={0.6}
+    >
       <RoomAvatar room={room} myUid={myUid} size={50} />
       <View style={styles.body}>
         <View style={styles.line}>
@@ -43,6 +53,7 @@ function ChatRoomRowImpl({ room, myUid, lang, unread, muted, lastFromBlocked, on
             <Text style={styles.title} numberOfLines={1}>{title}</Text>
             {isCamp ? <Text style={styles.count}>{room.memberIds?.length ?? 0}</Text> : null}
             {muted ? <Ionicons name="notifications-off" size={13} color={CHAT_COLORS.muted} style={styles.mutedIcon} /> : null}
+            {pinned ? <Ionicons name="pin" size={12} color={CHAT_COLORS.muted} style={styles.mutedIcon} /> : null}
           </View>
           <Text style={styles.time}>{chatListTimeLabel(at, lang)}</Text>
         </View>

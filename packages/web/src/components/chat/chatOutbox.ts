@@ -22,7 +22,7 @@ import {
 } from '@smis-mentor/shared';
 import { db, storage } from '@/lib/firebase';
 import { ChatMediaError, prepareChatImage, prepareChatVideo, type PreparedChatMedia } from '@/lib/chatMedia';
-import type { ChatOutgoing, ChatTrayItem } from './chatTypes';
+import type { ChatOutgoing, ChatSendExtra, ChatTrayItem } from './chatTypes';
 
 interface Entry extends ChatOutgoing {
   uid: string;
@@ -31,7 +31,13 @@ interface Entry extends ChatOutgoing {
   original: boolean;
   /** 이번 시도에서 올린 Storage 경로 (지우기·다시 보내기 때 정리) */
   uploaded: string[];
+  extra?: ChatSendExtra;
+  /** 음성 메시지 */
+  voice?: { blob: Blob; durationMs: number };
 }
+
+/** 답장 · 조용히 — 사진·음성 메시지에 붙는 것 (멘션은 글 메시지에) */
+const mediaExtra = (x?: ChatSendExtra) => ({ replyTo: x?.replyTo ?? undefined, silent: x?.silent || undefined });
 
 let entries: Entry[] = [];
 let views: ChatOutgoing[] = [];
@@ -39,7 +45,7 @@ const listeners = new Set<() => void>();
 const byRoomCache = new Map<string, { src: ChatOutgoing[]; out: ChatOutgoing[] }>();
 
 function publish() {
-  views = entries.map(({ uid: _u, senderName: _s, files: _f, original: _o, uploaded: _p, ...v }) => ({ ...v, items: [...v.items] }));
+  views = entries.map(({ uid: _u, senderName: _s, files: _f, original: _o, uploaded: _p, extra: _x, voice: _v, ...v }) => ({ ...v, items: [...v.items] }));
   byRoomCache.clear();
   listeners.forEach((l) => l());
 }
@@ -122,16 +128,94 @@ async function pool<T>(list: T[], n: number, fn: (item: T, i: number) => Promise
   if (firstError != null) throw firstError;
 }
 
-function sendText(roomId: string, uid: string, senderName: string, text: string, clientId = newChatClientId()) {
-  sendChatMessage(db, roomId, { senderId: uid, senderName, text, clientId }).catch((e) => {
+function sendText(roomId: string, uid: string, senderName: string, text: string, extra?: ChatSendExtra, clientId = newChatClientId()) {
+  sendChatMessage(db, roomId, {
+    senderId: uid,
+    senderName,
+    text,
+    clientId,
+    replyTo: extra?.replyTo ?? undefined,
+    mentions: extra?.mentions?.length ? extra.mentions : undefined,
+    mentionAll: extra?.mentionAll || undefined,
+    silent: extra?.silent || undefined,
+  }).catch((e) => {
     logger.warn('채팅 글 보내기 실패:', e);
     toast.error(L('chat.sendFailed'));
     entries = [...entries, {
       clientId, roomId, kind: 'text', text, items: [], status: 'failed', progress: 0, done: 0, createdAt: Date.now(),
-      uid, senderName, files: [], original: false, uploaded: [],
+      uid, senderName, files: [], original: false, uploaded: [], extra,
     }];
     publish();
   });
+}
+
+/** 음성 메시지 올리기 → 보내기 (m4a · audio/mp4) */
+async function runVoice(e: Entry) {
+  if (!e.voice) return;
+  e.status = 'uploading';
+  e.progress = 0;
+  e.done = 0;
+  e.uploaded = [];
+  const messageId = newChatMessageId(db, e.roomId);
+  e.messageId = messageId;
+  publish();
+  const path = chatMediaPath(e.roomId, e.uid, messageId, 0, 'm4a');
+  let url: string;
+  try {
+    url = await uploadChatFile(storage, path, e.voice.blob, 'audio/mp4', (sent, total) => {
+      e.progress = total ? sent / total : 0;
+      publishSoon();
+    });
+    e.uploaded.push(path);
+  } catch (err) {
+    logger.warn('음성 메시지 올리기 실패:', err);
+    if (!entries.includes(e)) return;
+    e.status = 'failed';
+    publish();
+    toast.error(L('chat.sendFailed'));
+    return;
+  }
+  if (!entries.includes(e)) {
+    cleanupUploads(e.uploaded);
+    return;
+  }
+  e.status = 'sent';
+  e.progress = 1;
+  e.done = 1;
+  publish();
+  const item: ChatMediaItem = { kind: 'audio', url, path, durationMs: Math.round(e.voice.durationMs), size: e.voice.blob.size, contentType: 'audio/mp4' };
+  sendChatMessage(db, e.roomId, { id: messageId, kind: 'voice', senderId: e.uid, senderName: e.senderName, media: [item], clientId: e.clientId, ...mediaExtra(e.extra) }).catch((err) => {
+    logger.warn('음성 메시지 쓰기 실패:', err);
+    if (!entries.includes(e)) return;
+    e.status = 'failed';
+    publish();
+    toast.error(L('chat.sendFailed'));
+  });
+}
+
+/** 음성 메시지 보내기 */
+export function queueChatVoice(args: { roomId: string; uid: string; senderName: string; blob: Blob; durationMs: number; extra?: ChatSendExtra }) {
+  const e: Entry = {
+    clientId: newChatClientId(),
+    roomId: args.roomId,
+    kind: 'voice',
+    text: '',
+    items: [],
+    durationMs: args.durationMs,
+    status: 'uploading',
+    progress: 0,
+    done: 0,
+    createdAt: Date.now(),
+    uid: args.uid,
+    senderName: args.senderName,
+    files: [],
+    original: false,
+    uploaded: [],
+    extra: args.extra,
+    voice: { blob: args.blob, durationMs: args.durationMs },
+  };
+  entries = [...entries, e];
+  void runVoice(e);
 }
 
 async function runMedia(e: Entry) {
@@ -223,29 +307,29 @@ async function runMedia(e: Entry) {
     entries = entries.filter((x) => x !== e);
     revokeItems(e);
     publish();
-    if (e.text) sendText(e.roomId, e.uid, e.senderName, e.text);
+    if (e.text) sendText(e.roomId, e.uid, e.senderName, e.text, e.extra);
     return;
   }
 
   e.status = 'sent';
   e.progress = 1;
   publish();
-  sendChatMessage(db, e.roomId, { id: messageId, senderId: e.uid, senderName: e.senderName, media: list, clientId: e.clientId }).catch((err) => {
+  sendChatMessage(db, e.roomId, { id: messageId, senderId: e.uid, senderName: e.senderName, media: list, clientId: e.clientId, ...mediaExtra(e.extra) }).catch((err) => {
     logger.warn('채팅 사진 메시지 쓰기 실패:', err);
     if (!entries.includes(e)) return;
     e.status = 'failed';
     publish();
     toast.error(L('chat.sendFailed'));
   });
-  // 카톡처럼 — 묶음 다음에 글을 따로 (같은 순서로 쓰이므로 글이 뒤에 온다)
+  // 카톡처럼 — 묶음 다음에 글을 따로 (같은 순서로 쓰이므로 글이 뒤에 온다). 답장은 묶음에, 멘션은 글에
   if (e.text) {
-    sendText(e.roomId, e.uid, e.senderName, e.text);
+    sendText(e.roomId, e.uid, e.senderName, e.text, { mentions: e.extra?.mentions, mentionAll: e.extra?.mentionAll, silent: e.extra?.silent });
     e.text = '';
   }
 }
 
 /** 사진·동영상 묶음 보내기 (글이 있으면 묶음 뒤에 따로) */
-export function queueChatMedia(args: { roomId: string; uid: string; senderName: string; files: ChatTrayItem[]; original: boolean; text?: string }) {
+export function queueChatMedia(args: { roomId: string; uid: string; senderName: string; files: ChatTrayItem[]; original: boolean; text?: string; extra?: ChatSendExtra }) {
   if (!args.files.length) return;
   const e: Entry = {
     clientId: newChatClientId(),
@@ -262,15 +346,16 @@ export function queueChatMedia(args: { roomId: string; uid: string; senderName: 
     files: args.files,
     original: args.original,
     uploaded: [],
+    extra: args.extra,
   };
   entries = [...entries, e];
   void runMedia(e);
 }
 
 /** 글 보내기 — 보통은 Firestore 가 바로 '보내는 중' 메시지를 보여 주고, 실패할 때만 여기 남는다 */
-export function sendChatText(args: { roomId: string; uid: string; senderName: string; text: string }) {
+export function sendChatText(args: { roomId: string; uid: string; senderName: string; text: string; extra?: ChatSendExtra }) {
   if (!args.text) return;
-  sendText(args.roomId, args.uid, args.senderName, args.text);
+  sendText(args.roomId, args.uid, args.senderName, args.text, args.extra);
 }
 
 /** 다시 보내기 */
@@ -280,12 +365,13 @@ export function retryChatOutgoing(clientId: string) {
   if (e.kind === 'text') {
     entries = entries.filter((x) => x !== e);
     publish();
-    sendText(e.roomId, e.uid, e.senderName, e.text);
+    sendText(e.roomId, e.uid, e.senderName, e.text, e.extra);
     return;
   }
   // 올린 파일 경로는 덮어쓸 수 없으므로(규칙) 새 메시지 id 로 처음부터
   cleanupUploads(e.uploaded);
-  void runMedia(e);
+  if (e.kind === 'voice') void runVoice(e);
+  else void runMedia(e);
 }
 
 /** 지우기 — 함께 보내려던 글을 돌려준다 (입력창에 되돌리기) */

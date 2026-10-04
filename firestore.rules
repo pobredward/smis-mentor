@@ -808,13 +808,14 @@ service cloud.firestore {
 
       match /messages/{messageId} {
         allow read: if isChatMember(roomId);
+        // 보내기 — 글 · 사진/동영상(media) · 음성(voice, 파일 1개) · 투표(poll). 답장 · 멘션 · 조용히 보내기를 함께 붙일 수 있다
         allow create: if (
           isActiveUser() &&
           isChatMember(roomId) &&
           request.resource.data.senderId == request.auth.uid &&
-          request.resource.data.keys().hasOnly(['senderId', 'senderName', 'kind', 'text', 'media', 'clientId', 'createdAt']) &&
+          request.resource.data.keys().hasOnly(['senderId', 'senderName', 'kind', 'text', 'media', 'clientId', 'createdAt', 'replyTo', 'mentions', 'mentionAll', 'silent', 'poll']) &&
           request.resource.data.keys().hasAll(['senderId', 'senderName', 'kind', 'text', 'media', 'clientId', 'createdAt']) &&
-          request.resource.data.kind in ['text', 'media'] &&
+          request.resource.data.kind in ['text', 'media', 'voice', 'poll'] &&
           request.resource.data.createdAt == request.time &&
           request.resource.data.senderName is string &&
           request.resource.data.senderName.size() <= 60 &&
@@ -824,8 +825,33 @@ service cloud.firestore {
           request.resource.data.media.size() <= 10 &&
           request.resource.data.clientId is string &&
           request.resource.data.clientId.size() <= 64 &&
-          (request.resource.data.text.size() > 0 || request.resource.data.media.size() > 0) &&
-          (request.resource.data.kind == 'media') == (request.resource.data.media.size() > 0)
+          (
+            (request.resource.data.kind == 'text' && request.resource.data.text.size() > 0 && request.resource.data.media.size() == 0) ||
+            (request.resource.data.kind == 'media' && request.resource.data.media.size() > 0) ||
+            (request.resource.data.kind == 'voice' && request.resource.data.media.size() == 1) ||
+            (
+              request.resource.data.kind == 'poll' &&
+              request.resource.data.media.size() == 0 &&
+              request.resource.data.text.size() == 0 &&
+              'poll' in request.resource.data &&
+              request.resource.data.poll.question is string &&
+              request.resource.data.poll.question.size() > 0 &&
+              request.resource.data.poll.question.size() <= 300 &&
+              request.resource.data.poll.options is list &&
+              request.resource.data.poll.options.size() >= 2 &&
+              request.resource.data.poll.options.size() <= 10
+            )
+          ) &&
+          (!('poll' in request.resource.data) || request.resource.data.kind == 'poll') &&
+          (!('replyTo' in request.resource.data) || (request.resource.data.replyTo is map && request.resource.data.replyTo.id is string)) &&
+          (!('mentions' in request.resource.data) || (request.resource.data.mentions is list && request.resource.data.mentions.size() <= 100)) &&
+          (!('silent' in request.resource.data) || request.resource.data.silent is bool) &&
+          // @모두 — 캠프 방 · 그룹방의 매니저만
+          (
+            !('mentionAll' in request.resource.data) ||
+            request.resource.data.mentionAll == false ||
+            (chatRoomDoc(roomId).data.type != 'dm' && chatRoomDoc(roomId).data.memberInfo[request.auth.uid].kind == 'manager')
+          )
         );
         // 모두에게서 삭제 — 보낸 사람 (관리자는 들어가 있는 방에서 신고 처리용으로)
         allow update: if (
@@ -836,6 +862,68 @@ service cloud.firestore {
           request.resource.data.deletedAt == request.time &&
           request.resource.data.text == '' &&
           request.resource.data.media.size() == 0
+        );
+        // 글 고치기 — 보낸 사람, 글 메시지, 보낸 뒤 24시간 안
+        allow update: if (
+          isChatMember(roomId) &&
+          resource.data.senderId == request.auth.uid &&
+          resource.data.kind == 'text' &&
+          resource.data.get('deleted', false) != true &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'editedAt']) &&
+          request.resource.data.text is string &&
+          request.resource.data.text.size() > 0 &&
+          request.resource.data.text.size() <= 5000 &&
+          request.resource.data.editedAt == request.time &&
+          request.time < resource.data.createdAt + duration.value(24, 'h')
+        );
+        // 공감 — 방 사람 누구나, 자기 것만 (한 사람 하나)
+        allow update: if (
+          isChatMember(roomId) &&
+          resource.data.get('deleted', false) != true &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']) &&
+          request.resource.data.reactions is map &&
+          request.resource.data.reactions.diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([request.auth.uid]) &&
+          (
+            !(request.auth.uid in request.resource.data.reactions) ||
+            request.resource.data.reactions[request.auth.uid] in ['check', 'heart', 'like', 'laugh', 'wow', 'sad']
+          )
+        );
+        // 투표 — 방 사람 누구나, 자기 표만, 마감 전
+        allow update: if (
+          isChatMember(roomId) &&
+          resource.data.kind == 'poll' &&
+          resource.data.get('deleted', false) != true &&
+          resource.data.get('pollClosed', false) != true &&
+          (resource.data.poll.get('closesAt', null) == null || request.time < resource.data.poll.closesAt) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pollVotes']) &&
+          request.resource.data.pollVotes is map &&
+          request.resource.data.pollVotes.diff(resource.data.get('pollVotes', {})).affectedKeys().hasOnly([request.auth.uid]) &&
+          (
+            !(request.auth.uid in request.resource.data.pollVotes) ||
+            (
+              request.resource.data.pollVotes[request.auth.uid] is list &&
+              request.resource.data.pollVotes[request.auth.uid].size() >= 1 &&
+              request.resource.data.pollVotes[request.auth.uid].size() <= (resource.data.poll.multi == true ? 10 : 1)
+            )
+          )
+        );
+        // 투표 마감 — 만든 사람
+        allow update: if (
+          isChatMember(roomId) &&
+          resource.data.senderId == request.auth.uid &&
+          resource.data.kind == 'poll' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pollClosed']) &&
+          request.resource.data.pollClosed == true
+        );
+        // 공지 '확인' — 지금 공지인 메시지에만, 자기 것만
+        allow update: if (
+          isChatMember(roomId) &&
+          chatRoomDoc(roomId).data.get('notice', null) != null &&
+          chatRoomDoc(roomId).data.notice.messageId == messageId &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['acks']) &&
+          request.resource.data.acks is map &&
+          request.resource.data.acks.diff(resource.data.get('acks', {})).affectedKeys().hasOnly([request.auth.uid]) &&
+          request.resource.data.acks[request.auth.uid] == request.time
         );
         allow delete: if false;
       }
@@ -856,12 +944,44 @@ service cloud.firestore {
       allow read: if isOwner(uid);
       allow create, update: if (
         isOwner(uid) &&
-        request.resource.data.keys().hasOnly(['unread', 'muted', 'blocked', 'updatedAt']) &&
+        request.resource.data.keys().hasOnly(['unread', 'muted', 'blocked', 'hidden', 'pinned', 'updatedAt']) &&
         (!('unread' in request.resource.data) || request.resource.data.unread is map) &&
         (!('muted' in request.resource.data) || request.resource.data.muted is map) &&
-        (!('blocked' in request.resource.data) || request.resource.data.blocked is map)
+        (!('blocked' in request.resource.data) || request.resource.data.blocked is map) &&
+        (!('hidden' in request.resource.data) || request.resource.data.hidden is map) &&
+        (!('pinned' in request.resource.data) || request.resource.data.pinned is map)
       );
       allow delete: if false;
+    }
+
+    // 예약 메시지 — 보낸 사람만 보고 지운다. 그 시각에 Functions(chatSendScheduled)가 방에 보낸다 (글만)
+    match /chatScheduled/{scheduledId} {
+      allow read, delete: if isAuthenticated() && resource.data.senderId == request.auth.uid;
+      allow create: if (
+        isActiveUser() &&
+        request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.roomId is string &&
+        isChatMember(request.resource.data.roomId) &&
+        request.resource.data.keys().hasOnly(['roomId', 'senderId', 'senderName', 'text', 'sendAt', 'createdAt', 'mentions', 'mentionAll', 'silent']) &&
+        request.resource.data.keys().hasAll(['roomId', 'senderId', 'senderName', 'text', 'sendAt', 'createdAt']) &&
+        request.resource.data.text is string &&
+        request.resource.data.text.size() > 0 &&
+        request.resource.data.text.size() <= 5000 &&
+        request.resource.data.senderName is string &&
+        request.resource.data.senderName.size() <= 60 &&
+        request.resource.data.sendAt is timestamp &&
+        request.resource.data.sendAt > request.time + duration.value(30, 's') &&
+        request.resource.data.sendAt < request.time + duration.value(31, 'd') &&
+        request.resource.data.createdAt == request.time &&
+        (!('mentions' in request.resource.data) || (request.resource.data.mentions is list && request.resource.data.mentions.size() <= 100)) &&
+        (!('silent' in request.resource.data) || request.resource.data.silent is bool) &&
+        (
+          !('mentionAll' in request.resource.data) ||
+          request.resource.data.mentionAll == false ||
+          (chatRoomDoc(request.resource.data.roomId).data.type != 'dm' && chatRoomDoc(request.resource.data.roomId).data.memberInfo[request.auth.uid].kind == 'manager')
+        )
+      );
+      allow update: if false;
     }
 
     // ──────────────────────────────────────────────────────────────

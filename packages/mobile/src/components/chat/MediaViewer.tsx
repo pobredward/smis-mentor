@@ -23,6 +23,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { L, chatDayLabel, chatTimeLabel, getCurrentLocale, type ChatMediaItem } from '@smis-mentor/shared';
 import { saveChatMediaWithFeedback } from './saveWithFeedback';
 
+/** 사진·동영상 모아보기처럼 여러 메시지의 것을 함께 볼 때 — 칸마다 보낸 사람 · 시각 · 그 메시지 안 순서 */
+export interface MediaViewerItemMeta {
+  senderName: string;
+  at: Date | null;
+  index: number;
+}
+
 interface MediaViewerProps {
   visible: boolean;
   media: ChatMediaItem[];
@@ -31,6 +38,8 @@ interface MediaViewerProps {
   at: Date | null;
   campCode?: string | null;
   onClose: () => void;
+  /** 칸마다 다른 메시지일 때 (있으면 [모두 저장]은 숨긴다) */
+  itemMeta?: MediaViewerItemMeta[];
 }
 
 function ViewerVideo({ uri, width, height }: { uri: string; width: number; height: number }) {
@@ -118,7 +127,7 @@ function ViewerPage({
   return image;
 }
 
-export function MediaViewer({ visible, media, startIndex, senderName, at, campCode, onClose }: MediaViewerProps) {
+export function MediaViewer({ visible, media, startIndex, senderName: senderNameAll, at: atAll, campCode, onClose, itemMeta }: MediaViewerProps) {
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [index, setIndex] = useState(startIndex);
@@ -138,10 +147,18 @@ export function MediaViewer({ visible, media, startIndex, senderName, at, campCo
     [width, media.length],
   );
 
+  const meta = itemMeta?.[index];
+  const senderName = meta ? meta.senderName : senderNameAll;
+  const at = meta ? meta.at : atAll;
+
   const save = useCallback(
     async (all: boolean) => {
       if (saving) return;
-      const entries = all ? media.map((item, i) => ({ item, index: i })) : media[index] ? [{ item: media[index], index }] : [];
+      const entries = all
+        ? media.map((item, i) => ({ item, index: i }))
+        : media[index]
+          ? [{ item: media[index], index: meta ? meta.index : index }]
+          : [];
       if (!entries.length) return;
       setSaving({ done: 0, total: entries.length });
       await saveChatMediaWithFeedback(entries, {
@@ -151,7 +168,7 @@ export function MediaViewer({ visible, media, startIndex, senderName, at, campCo
       });
       setSaving(null);
     },
-    [saving, media, index, campCode, at],
+    [saving, media, index, meta, campCode, at],
   );
 
   const n = media.length;
@@ -203,7 +220,7 @@ export function MediaViewer({ visible, media, startIndex, senderName, at, campCo
             <Ionicons name="download-outline" size={20} color="#ffffff" />
             <Text style={styles.actionText}>{L('chat.save')}</Text>
           </TouchableOpacity>
-          {n > 1 ? (
+          {n > 1 && !itemMeta ? (
             <TouchableOpacity style={styles.action} onPress={() => save(true)} disabled={!!saving}>
               <Ionicons name="albums-outline" size={20} color="#ffffff" />
               <Text style={styles.actionText}>{L('chat.saveAll')}</Text>

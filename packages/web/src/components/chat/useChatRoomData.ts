@@ -137,13 +137,25 @@ export function useChatMessages(roomId: string, enabled: boolean) {
   return { messages, loaded, hasMore, loadingOlder, loadOlder };
 }
 
-/** 방 사람들이 마지막으로 본 시각 (uid → ms) */
-export function useChatReads(roomId: string, enabled: boolean): { reads: Record<string, number>; loaded: boolean } {
+/**
+ * 방 사람들이 마지막으로 본 시각 (uid → ms).
+ * initial: 처음 받은 값 — 방에 들어올 때의 내 마지막 읽은 시각('여기까지 읽었습니다')에 쓴다 (읽음 표시를 하기 전)
+ */
+export function useChatReads(roomId: string, enabled: boolean): { reads: Record<string, number>; loaded: boolean; initial: Record<string, number> | null } {
   const [reads, setReads] = useState<Record<string, number>>({});
+  const [initial, setInitial] = useState<Record<string, number> | null>(null);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     if (!enabled) return;
-    return subscribeChatReads(db, roomId, (r) => { setReads(r); setLoaded(true); }, (e) => logger.warn('채팅 읽음 구독 오류:', e));
+    return subscribeChatReads(db, roomId, (r) => {
+      setReads(r);
+      setInitial((v) => v ?? r);
+      setLoaded(true);
+    }, (e) => {
+      logger.warn('채팅 읽음 구독 오류:', e);
+      setInitial((v) => v ?? {});
+      setLoaded(true);
+    });
   }, [roomId, enabled]);
-  return { reads, loaded };
+  return { reads, loaded, initial };
 }

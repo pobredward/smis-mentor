@@ -117,11 +117,84 @@ export const sameInfo = (a: MemberInfo | null | undefined, b: MemberInfo | null 
 
 export interface RoomLike { memberIds?: string[]; memberInfo?: Record<string, MemberInfo>; campCode?: string | null; generation?: string | null }
 
-export function roomNeedsSync(room: RoomLike | null | undefined, plan: RoomPlan): boolean {
+export function roomNeedsSync(room: RoomLike | null | undefined, plan: Pick<RoomPlan, 'campCode' | 'generation' | 'memberIds' | 'memberInfo'>): boolean {
   if (!room) return true;
   if ((room.campCode ?? '') !== plan.campCode) return true;
   if ((room.generation ?? null) !== plan.generation) return true;
   const a = [...(room.memberIds ?? [])].sort();
   if (a.length !== plan.memberIds.length || a.some((v, i) => v !== plan.memberIds[i])) return true;
   return plan.memberIds.some((uid) => !sameInfo(room.memberInfo?.[uid], plan.memberInfo[uid]));
+}
+
+// ── 그룹방 — shared campGroupRoomPlan · chatGroupKeyOf 와 같게 ─────────────────────
+// 그룹마다 하나: 캠프 매니저(관리자 포함) + 그 그룹 멘토(부매니저 포함). 원어민 없음. 멘토가 있는 그룹만.
+
+/** shared GROUP_ALIASES · normalizeGroupKey 와 같게 */
+const GROUP_ALIASES: Record<string, string> = {
+  junior: 'junior', 주니어: 'junior', middle: 'middle', 미들: 'middle', senior: 'senior', 시니어: 'senior',
+  spring: 'spring', 스프링: 'spring', summer: 'summer', 서머: 'summer', autumn: 'autumn', 어텀: 'autumn', winter: 'winter', 윈터: 'winter',
+  common: 'common', 공통: 'common',
+  short1: 'short1', 단기1: 'short1', short2: 'short2', 단기2: 'short2', short3: 'short3', 단기3: 'short3', short4: 'short4', 단기4: 'short4',
+  manager: 'manager', 매니저: 'manager', 운영진: 'manager', all: 'manager', 전체: 'manager',
+};
+const normalizeGroupKey = (name: string | undefined | null): string => {
+  if (!name) return '';
+  const cleaned = name.replace(/group/gi, '').trim().toLowerCase();
+  return GROUP_ALIASES[cleaned] ?? cleaned;
+};
+/** shared CAMP_GROUP_ORDER · groupRank 와 같게 */
+const CAMP_GROUP_ORDER = ['junior', 'middle', 'senior', 'spring', 'summer', 'autumn', 'winter', 'common', 'short1', 'short2', 'short3', 'short4', 'manager'];
+const groupRank = (k: string): number => {
+  const i = CAMP_GROUP_ORDER.indexOf(normalizeGroupKey(k));
+  return i >= 0 ? i : CAMP_GROUP_ORDER.indexOf('common') - 0.5;
+};
+export const GROUP_ROOM_EXCLUDED = ['', 'manager', 'common', 'all'];
+export const groupRoomId = (jobCodeId: string, groupKey: string) => `${jobCodeId}_group_${groupKey}`;
+
+export function groupKeyOf(u: UserLike | null | undefined, jobCodeId: string): string {
+  const exp = (u?.jobExperiences ?? []).find((e) => e?.id === jobCodeId);
+  const k = normalizeGroupKey(String(exp?.group ?? ''));
+  return GROUP_ROOM_EXCLUDED.includes(k) ? '' : k;
+}
+
+export interface GroupRoomPlan {
+  id: string;
+  type: 'camp_group';
+  groupKey: string;
+  jobCodeId: string;
+  campCode: string;
+  generation: string | null;
+  memberIds: string[];
+  memberInfo: Record<string, MemberInfo>;
+}
+
+export function groupRoomPlan(
+  users: UserLike[],
+  camp: { jobCodeId: string; campCode: string; generation: string | null; generationIds: readonly string[] },
+): GroupRoomPlan[] {
+  const managers: Array<{ uid: string; u: UserLike }> = [];
+  const byGroup = new Map<string, Array<{ uid: string; u: UserLike }>>();
+  users.forEach((u) => {
+    const uid = String(u.userId ?? '');
+    const kind = uid ? memberKindOf(u, camp.jobCodeId, camp.generationIds) : null;
+    if (kind === 'manager') managers.push({ uid, u });
+    else if (kind === 'mentor') {
+      const g = groupKeyOf(u, camp.jobCodeId);
+      if (!g) return;
+      if (!byGroup.has(g)) byGroup.set(g, []);
+      byGroup.get(g)!.push({ uid, u });
+    }
+  });
+  return [...byGroup.keys()]
+    .sort((a, b) => groupRank(a) - groupRank(b) || a.localeCompare(b))
+    .map((groupKey) => {
+      const memberInfo: Record<string, MemberInfo> = {};
+      managers.forEach((p) => { memberInfo[p.uid] = memberInfoOf(p.u, 'manager', camp.jobCodeId); });
+      byGroup.get(groupKey)!.forEach((p) => { memberInfo[p.uid] = memberInfoOf(p.u, 'mentor', camp.jobCodeId); });
+      return {
+        id: groupRoomId(camp.jobCodeId, groupKey), type: 'camp_group' as const, groupKey,
+        jobCodeId: camp.jobCodeId, campCode: camp.campCode, generation: camp.generation,
+        memberIds: Object.keys(memberInfo).sort(), memberInfo,
+      };
+    });
 }

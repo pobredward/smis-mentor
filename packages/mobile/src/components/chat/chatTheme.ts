@@ -35,6 +35,8 @@ export const ROOM_AVATAR: Record<Exclude<ChatRoomType, 'dm'>, { color: string; i
   camp_mentor_only: { color: '#0ea5e9', icon: 'chatbubbles' },
   camp_foreign: { color: '#8b5cf6', icon: 'globe-outline' },
   camp_foreign_only: { color: '#ec4899', icon: 'earth' },
+  // 그룹방 (Junior · Summer …) — 캠프 방과 다른 색
+  camp_group: { color: '#f59e0b', icon: 'people-circle' },
 };
 
 /** 사람 자리별 순서 · 문구 키 */

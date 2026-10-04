@@ -45,6 +45,16 @@ async function setupAndroidNotificationChannels(): Promise<void> {
     vibrationPattern: [0, 250, 250, 250],
     lightColor: '#3b82f6',
   });
+  // 채팅 '조용히 보내기' — 서버가 이 채널로 보낸다 (소리·진동 없이)
+  await Notifications.setNotificationChannelAsync('chat-silent', {
+    name: '채팅 (조용히)',
+    importance: Notifications.AndroidImportance.LOW,
+    sound: null,
+    vibrationPattern: null,
+    enableVibrate: false,
+    lightColor: '#3b82f6',
+    description: '조용히 보내기로 온 채팅 메시지 (소리·진동 없음)',
+  });
   await Notifications.setNotificationChannelAsync('task-reminders', {
     name: '업무 알림',
     importance: Notifications.AndroidImportance.HIGH,

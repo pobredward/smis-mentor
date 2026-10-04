@@ -25,6 +25,10 @@ export interface ChatLightboxProps {
   at: Date | null;
   campCode?: string | null;
   onClose: () => void;
+  /** 모아보기 — 칸마다 보낸 사람·시각이 다를 때 (있으면 [모두 저장]은 숨긴다) */
+  metas?: Array<{ senderName: string; at: Date | null }>;
+  /** 저장 파일 이름 (칸마다) */
+  names?: string[];
 }
 
 /** 저장 파일 이름들 (말풍선 하나 기준) */
@@ -58,7 +62,7 @@ export async function saveChatMedia(items: ChatMediaItem[], opts: { campCode?: s
   }
 }
 
-export default function ChatLightbox({ items, startIndex, senderName, at, campCode, onClose }: ChatLightboxProps) {
+export default function ChatLightbox({ items, startIndex, senderName, at, campCode, onClose, metas, names }: ChatLightboxProps) {
   const [index, setIndex] = useState(() => Math.min(Math.max(0, startIndex), items.length - 1));
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -86,17 +90,26 @@ export default function ChatLightbox({ items, startIndex, senderName, at, campCo
 
   if (!item) return null;
 
+  const meta = metas?.[index];
+  const curAt = meta ? meta.at : at;
+  const curSender = meta ? meta.senderName : senderName;
   const save = async (all: boolean) => {
     if (saving) return;
     setSaving(true);
     try {
-      await saveChatMedia(items, { campCode, at, index: all ? undefined : index });
+      if (names?.[index] && !all) {
+        const ok = await downloadChatFile(item.url, names[index]);
+        if (ok) toast.success(L('chat.saved'));
+        else toast.error(L('chat.saveFailed'));
+      } else {
+        await saveChatMedia(items, { campCode, at, index: all ? undefined : index });
+      }
     } finally {
       setSaving(false);
     }
   };
 
-  const timeText = at ? `${chatDayLabel(at, lang)} ${chatTimeLabel(at, lang)}` : '';
+  const timeText = curAt ? `${chatDayLabel(curAt, lang)} ${chatTimeLabel(curAt, lang)}` : '';
 
   return (
     <div
@@ -118,7 +131,7 @@ export default function ChatLightbox({ items, startIndex, senderName, at, campCo
           <FiX size={22} />
         </button>
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold truncate">{senderName}</div>
+          <div className="text-sm font-semibold truncate">{curSender}</div>
           {timeText && <div className="text-xs text-white/60 truncate">{timeText}</div>}
         </div>
         {n > 1 && <div className="text-sm tabular-nums text-white/80 px-1">{L('chat.photoN', { i: index + 1, n })}</div>}
@@ -132,7 +145,7 @@ export default function ChatLightbox({ items, startIndex, senderName, at, campCo
           <FiDownload size={16} />
           <span className="hidden sm:inline">{L('chat.save')}</span>
         </button>
-        {n > 1 && (
+        {n > 1 && !metas && (
           <button
             type="button"
             onClick={() => save(true)}

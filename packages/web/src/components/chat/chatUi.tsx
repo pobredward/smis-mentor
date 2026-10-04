@@ -4,7 +4,17 @@
 import { Fragment, type ReactNode } from 'react';
 import { FiGlobe, FiUsers } from 'react-icons/fi';
 import { HiOutlineAcademicCap } from 'react-icons/hi2';
-import { L, splitByQuery, type ChatMemberKind, type ChatRoomType } from '@smis-mentor/shared';
+import {
+  L,
+  chatGroupLabel,
+  chatTimeLabel,
+  mentionParts,
+  splitByQuery,
+  type ChatMemberInfo,
+  type ChatMemberKind,
+  type ChatRoomType,
+  type Locale,
+} from '@smis-mentor/shared';
 
 /** Timestamp(또는 비슷한 것) → ms. 없으면 0 */
 export const tsMillis = (ts: { toMillis?: () => number } | null | undefined): number =>
@@ -30,6 +40,16 @@ export const KIND_ORDER: ChatMemberKind[] = ['manager', 'mentor', 'foreign'];
 // 주소 뒤에 붙은 문장부호는 빼고 링크로
 const URL_RE = /(https?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]}])/g;
 
+/** 짧은 날짜·시각 — "10월 5일 오후 3:00" / "Oct 5, 3:00 PM" */
+export function shortDateTime(d: Date, lang: Locale): string {
+  const day = lang === 'en' ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : `${d.getMonth() + 1}월 ${d.getDate()}일`;
+  return lang === 'en' ? `${day}, ${chatTimeLabel(d, lang)}` : `${day} ${chatTimeLabel(d, lang)}`;
+}
+
+/** 달 머리글 — "2026년 10월" / "October 2026" */
+export const monthLabel = (d: Date, lang: Locale): string =>
+  d.toLocaleDateString(lang === 'en' ? 'en-US' : 'ko-KR', { year: 'numeric', month: 'long' });
+
 /** 검색어 자리를 노란 형광펜으로 */
 function marked(text: string, highlight?: { query: string; markClass: string }): ReactNode {
   if (!highlight?.query) return text;
@@ -38,33 +58,48 @@ function marked(text: string, highlight?: { query: string; markClass: string }):
   return parts.map((p, i) => (p.hit ? <mark key={i} className={highlight.markClass}>{p.text}</mark> : <Fragment key={i}>{p.text}</Fragment>));
 }
 
-/**
- * 글 속 http(s) 주소를 링크로 (줄바꿈은 whitespace-pre-wrap 이 유지).
- * highlight 를 주면 검색어 자리를 표시한다 (링크 안 글자도 — 링크는 그대로 눌린다)
- */
-export function linkify(text: string, linkClass: string, highlight?: { query: string; markClass: string }): ReactNode {
-  const parts = text.split(URL_RE);
-  if (parts.length === 1) return marked(text, highlight);
+export interface RichTextOptions {
+  linkClass: string;
+  /** 검색어 표시 */
+  highlight?: { query: string; markClass: string };
+  /** @멘션 표시 — 방 사람 이름으로 찾는다 */
+  mentions?: { memberInfo: Record<string, ChatMemberInfo>; myUid: string; className: string; meClassName: string };
+}
+
+/** 글 한 조각 — @멘션 자리를 굵게 (나를 부른 것은 더 진하게), 그 안에서도 검색어 표시 */
+function mentioned(text: string, opts: RichTextOptions): ReactNode {
+  if (!opts.mentions || !text.includes('@')) return marked(text, opts.highlight);
+  const parts = mentionParts(text, { memberInfo: opts.mentions.memberInfo });
+  if (!parts.some((p) => p.mention)) return marked(text, opts.highlight);
+  const me = opts.mentions.myUid;
   return parts.map((p, i) =>
-    i % 2 === 1 ? (
-      <a
-        key={i}
-        href={p}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={linkClass}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {marked(p, highlight)}
-      </a>
+    p.mention ? (
+      <span key={i} className={p.mention === me || p.mention === 'all' ? opts.mentions!.meClassName : opts.mentions!.className}>
+        {marked(p.text, opts.highlight)}
+      </span>
     ) : (
-      <Fragment key={i}>{marked(p, highlight)}</Fragment>
+      <Fragment key={i}>{marked(p.text, opts.highlight)}</Fragment>
     ),
   );
 }
 
-/** 캠프 방 종류별 색 · 아이콘 */
-const ROOM_STYLE: Record<Exclude<ChatRoomType, 'dm'>, { bg: string; icon: 'all' | 'mentor' | 'foreign' }> = {
+/** 말풍선 글 — 링크 · @멘션 · 검색어 (줄바꿈은 whitespace-pre-wrap 이 유지) */
+export function richText(text: string, opts: RichTextOptions): ReactNode {
+  const parts = text.split(URL_RE);
+  if (parts.length === 1) return mentioned(text, opts);
+  return parts.map((p, i) =>
+    i % 2 === 1 ? (
+      <a key={i} href={p} target="_blank" rel="noopener noreferrer" className={opts.linkClass} onClick={(e) => e.stopPropagation()}>
+        {marked(p, opts.highlight)}
+      </a>
+    ) : (
+      <Fragment key={i}>{mentioned(p, opts)}</Fragment>
+    ),
+  );
+}
+
+/** 캠프 방 종류별 색 · 아이콘 (그룹방은 주황 동그라미 + 그룹 첫 글자) */
+const ROOM_STYLE: Record<Exclude<ChatRoomType, 'dm' | 'camp_group'>, { bg: string; icon: 'all' | 'mentor' | 'foreign' }> = {
   camp_all: { bg: 'bg-blue-500', icon: 'all' },
   camp_mentor: { bg: 'bg-emerald-500', icon: 'mentor' },
   camp_mentor_only: { bg: 'bg-teal-600', icon: 'mentor' },
@@ -94,9 +129,17 @@ export function PersonAvatar({ name, photo, size = 40 }: { name?: string | null;
   );
 }
 
-/** 방 아바타 — 캠프 방은 종류별 색 동그라미 + 아이콘, DM 은 상대 사진·첫 글자 */
-export function RoomAvatar({ type, peerName, peerPhoto, size = 44 }: { type: ChatRoomType; peerName?: string | null; peerPhoto?: string | null; size?: number }) {
+/** 방 아바타 — 캠프 방은 종류별 색 동그라미 + 아이콘, 그룹방은 주황 + 그룹 첫 글자, DM 은 상대 사진·첫 글자 */
+export function RoomAvatar({ type, peerName, peerPhoto, groupKey, size = 44 }: { type: ChatRoomType; peerName?: string | null; peerPhoto?: string | null; groupKey?: string | null; size?: number }) {
   if (type === 'dm') return <PersonAvatar name={peerName} photo={peerPhoto} size={size} />;
+  if (type === 'camp_group') {
+    const letter = (chatGroupLabel(groupKey).trim()[0] ?? 'G').toUpperCase();
+    return (
+      <div style={{ ...avatarSize(size), fontSize: Math.round(size * 0.42) }} className="bg-orange-500 rounded-full text-white font-bold flex items-center justify-center shrink-0" aria-hidden="true">
+        {letter}
+      </div>
+    );
+  }
   const st = ROOM_STYLE[type];
   const iconSize = Math.round(size * 0.48);
   return (
