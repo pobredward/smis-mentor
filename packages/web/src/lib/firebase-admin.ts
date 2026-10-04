@@ -23,8 +23,7 @@ function initializeFirebaseAdmin() {
     hasClientEmail: !!clientEmail,
     hasPrivateKey: !!privateKey,
     privateKeyLength: privateKey?.length || 0,
-    privateKeyStart: privateKey?.substring(0, 30),
-    privateKeyEnd: privateKey?.substring(privateKey.length - 30),
+    // 키 내용(앞뒤 일부 포함)은 로그에 남기지 않는다 — 형식 확인은 아래 표시로 충분
     hasBeginMarker: privateKey?.includes('-----BEGIN PRIVATE KEY-----'),
     hasEndMarker: privateKey?.includes('-----END PRIVATE KEY-----'),
   });
