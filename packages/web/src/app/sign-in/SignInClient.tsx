@@ -37,6 +37,7 @@ import { handleAppleAuthError } from '@/lib/appleAuthService';
 import { auth } from '@/lib/firebase';
 import { signInWithCustomToken } from 'firebase/auth';
 import { resolveSocialLogin, linkSocialWithPassword, socialProviderLabel, AuthApiError } from '@smis-mentor/shared';
+import { usePhoneAuth } from '@/components/auth/PhoneAuthDialog';
 
 /**
  * 새 소셜 로그인 흐름 — 서버(/api/auth/social)가 사용자를 찾고 판정한다 (공개 조회 API 를 쓰지 않음).
@@ -98,6 +99,8 @@ export function SignInClient() {
     setLastLogin(readLastLogin());
   }, []);
   const lastUsedFor = (method: LastLoginMethod) => (lastLogin?.method === method ? lastLogin : null);
+  // 새 흐름: 문자 인증 창 (전화번호로 로그인 · 가입 번호 확인)
+  const [phoneDialog, startPhoneAuth] = usePhoneAuth();
   
   const {
     register,
@@ -214,6 +217,38 @@ export function SignInClient() {
     }
   };
   
+  // 새 흐름 — 전화번호로 로그인 (문자 인증 → 서버가 그 번호의 계정을 찾는다)
+  const handlePhoneLogin = async () => {
+    const r = await startPhoneAuth({ purpose: 'login' });
+    if (!r) return;
+    if (r.action === 'LOGIN') {
+      setIsLoading(true);
+      try {
+        await signInWithCustomToken(auth, r.customToken);
+        rememberLastLogin('phone');
+        toast.success('로그인에 성공했습니다!');
+        const params = new URLSearchParams(window.location.search);
+        router.push(safeRedirect(params.get('redirect')) || '/');
+      } catch (error) {
+        logger.error('전화번호 로그인 오류:', error);
+        toast.error('로그인 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+    if (r.action === 'NO_ACCOUNT') {
+      // 번호 확인 표는 이 탭에 저장됐다 — 가입 단계에서 같은 번호를 쓰면 다시 묻지 않는다
+      toast(
+        r.hasTemp
+          ? '미리 등록된 계정이 있어요. 회원가입을 마치면 그 계정으로 이어집니다.'
+          : '이 번호로 가입된 계정이 없어요. 회원가입을 진행해주세요.',
+        { duration: 6000, icon: 'ℹ️' },
+      );
+      router.push('/sign-up');
+    }
+  };
+
   // 새 흐름 — 소셜 증명만 서버에 보내고 서버 판정대로 (LOGIN · LINK_ACTIVE · NEED_PHONE)
   const handleSocialV2 = async (data: SocialUserData) => {
     setIsLoading(true);
@@ -709,6 +744,12 @@ export function SignInClient() {
       firebaseAuthUid: socialData.firebaseAuthUid,
     });
     
+    // 새 흐름: 그 번호의 주인인지 문자로 확인 (관리자가 미리 만든 계정을 이름 + 번호만으로 가져가지 못하게)
+    if (AUTH_V2) {
+      const verified = await startPhoneAuth({ purpose: 'verify', phone: data.phoneNumber });
+      if (!verified) return;
+    }
+
     setIsLoading(true);
     try {
       const result = await checkTempAccountByPhone(
@@ -1152,6 +1193,26 @@ export function SignInClient() {
                   disabled={isLoading}
                 />
               </LastLoginMark>
+
+              {AUTH_V2 && (
+                <LastLoginMark active={!!lastUsedFor('phone')}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    fullWidth
+                    disabled={isLoading}
+                    onClick={() => void handlePhoneLogin()}
+                    className="!border-2 !border-gray-300 hover:!border-gray-400 !bg-white !text-gray-800 !font-medium !py-3"
+                  >
+                    <span className="flex items-center justify-center gap-3">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5" aria-hidden="true">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+                      </svg>
+                      <span>전화번호로 로그인</span>
+                    </span>
+                  </Button>
+                </LastLoginMark>
+              )}
             </div>
             
             {/* 비밀번호 찾기 / 회원가입 버튼 */}
@@ -1254,6 +1315,9 @@ export function SignInClient() {
         } 계정과 연동하려면 기존 비밀번호를 입력해주세요.`}
         isLoading={isLoading}
       />
+
+      {/* 문자 인증 (새 흐름) */}
+      {phoneDialog}
     </Layout>
   );
 } 

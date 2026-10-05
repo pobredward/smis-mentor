@@ -5,6 +5,7 @@
  *                         (Firestore 규칙에서 users 의 비인증 list 가 막혔으므로 서버가 대신 조회)
  *  - requestCustomToken : /api/auth/create-custom-token — 소셜 증명(proof)으로 Custom Token 발급
  *  - resolveSocialLogin · linkSocialWithPassword : 새 소셜 로그인 흐름 (/api/auth/social*) — 서버가 사용자를 찾고 판정한다
+ *  - phoneAuthViaApi    : 전화번호 로그인 · 인증 (/api/auth/phone)
  *
  * 서버가 Timestamp 를 { __ts: millis } 로 직렬화하므로 클라이언트 Timestamp 로 되살린다.
  */
@@ -162,8 +163,35 @@ export async function unlinkSocialAccount(apiBaseUrl: string, idToken: string, p
   if (!res.ok) throw await readError(res, '연결 해제 중 오류가 발생했습니다.');
 }
 
+// ── 전화번호 로그인 · 인증 (/api/auth/phone) ─────────────────────────
+
+/**
+ * 결과 (web lib/phoneLoginServer.ts 와 같은 모양)
+ *  - LOGIN      : 이 번호의 계정으로 customToken 로그인
+ *  - NO_ACCOUNT : 이 번호로 가입한 계정이 없다 — phoneTicket 을 가지고 가입 (hasTemp: 관리자가 미리 만든 계정이 있음)
+ *  - VERIFIED   : purpose 'verify' — 번호 확인 표만 (가입 · temp 계정 찾기)
+ * phoneTicket 은 30분 동안 쓸 수 있고 complete-signup 이 확인한다.
+ */
+export type PhoneAuthPurpose = 'login' | 'verify';
+export type PhoneAuthResult =
+  | { action: 'LOGIN'; userId: string; customToken: string }
+  | { action: 'NO_ACCOUNT'; phoneTicket: string; phone: string; hasTemp: boolean }
+  | { action: 'VERIFIED'; phoneTicket: string; phone: string };
+
+/** idToken = 전화 인증으로 받은 Firebase ID 토큰 (웹은 보조 앱, 앱은 네이티브 인증의 것 — 본 로그인 세션과 따로) */
+export async function phoneAuthViaApi(apiBaseUrl: string, idToken: string, purpose: PhoneAuthPurpose): Promise<PhoneAuthResult> {
+  const res = await fetch(`${apiBaseUrl}/api/auth/phone`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken, purpose }),
+  });
+  if (!res.ok) throw await readError(res, '전화번호 인증 중 오류가 발생했습니다.');
+  const json = (await res.json()) as { result: PhoneAuthResult };
+  return json.result;
+}
+
 /** 'google' · 'google.com' · 'naver' … → 화면에 보이는 이름 */
 export function socialProviderLabel(p: string): string {
   const n = String(p || '').replace('.com', '').toLowerCase();
-  return n === 'google' ? 'Google' : n === 'apple' ? 'Apple' : n === 'naver' ? '네이버' : n === 'kakao' ? '카카오' : n === 'password' ? '이메일' : p;
+  return n === 'google' ? 'Google' : n === 'apple' ? 'Apple' : n === 'naver' ? '네이버' : n === 'kakao' ? '카카오' : n === 'password' ? '이메일' : n === 'phone' ? '전화번호' : p;
 }

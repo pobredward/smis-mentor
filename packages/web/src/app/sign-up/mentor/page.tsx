@@ -13,6 +13,10 @@ import FormInput from '@/components/common/FormInput';
 import Button from '@/components/common/Button';
 import Modal from '@/components/common/Modal';
 import ProgressSteps from '@/components/common/ProgressSteps';
+import { usePhoneAuth } from '@/components/auth/PhoneAuthDialog';
+
+/** 새 로그인 흐름(문자 인증) — 로그인 화면과 같은 설정 */
+const AUTH_V2 = process.env.NEXT_PUBLIC_AUTH_V2 === '1';
 
 const step1Schema = z.object({
   name: z.string().min(2, '이름은 최소 2자 이상이어야 합니다.'),
@@ -34,6 +38,8 @@ export default function MentorSignUpStep1() {
   const [deletedUserId, setDeletedUserId] = useState<string>('');
   const [jobCodesInfo, setJobCodesInfo] = useState<{generation: string, code: string, name: string}[]>([]);
   const [userName, setUserName] = useState('');
+  // 새 흐름: 입력한 번호의 주인인지 문자로 확인 (관리자가 미리 만든 계정을 이어받을 때 필요)
+  const [phoneDialog, startPhoneAuth] = usePhoneAuth();
   
   const {
     register,
@@ -44,6 +50,10 @@ export default function MentorSignUpStep1() {
   });
   
   const onSubmit = async (data: Step1FormValues) => {
+    if (AUTH_V2) {
+      const verified = await startPhoneAuth({ purpose: 'verify', phone: data.phoneNumber });
+      if (!verified) return;
+    }
     setIsLoading(true);
     try {
       // SessionStorage에 저장
@@ -484,6 +494,7 @@ export default function MentorSignUpStep1() {
           </div>
         </Modal>
       )}
+    {phoneDialog}
     </Layout>
   );
 }

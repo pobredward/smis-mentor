@@ -47,13 +47,13 @@ export function identityRefOf(identity: VerifiedIdentity): IdentityRef | null {
   };
 }
 
-async function issueToken(uid: string, data: Record<string, unknown>, provider: string): Promise<string> {
+export async function issueToken(uid: string, data: Record<string, unknown>, provider: string): Promise<string> {
   const email = typeof data.email === 'string' ? data.email.toLowerCase() : undefined;
   await ensureAuthUser(uid, email, typeof data.name === 'string' ? data.name : undefined);
   return getAdminAuth().createCustomToken(uid, { provider });
 }
 
-function assertUsable(data: Record<string, unknown>) {
+export function assertUsable(data: Record<string, unknown>) {
   if (data.status === 'inactive') throw new IdentityError(403, 'ACCOUNT_INACTIVE', '탈퇴한 계정입니다.');
   if (data.status === 'deleted') throw new IdentityError(403, 'ACCOUNT_DELETED', '삭제된 계정입니다.');
 }

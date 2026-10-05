@@ -7,7 +7,7 @@
  * - 저장소(AsyncStorage·localStorage)는 각 앱이 다룬다. 여기는 키·직렬화·검증만.
  */
 
-export type LastLoginMethod = 'password' | 'google' | 'naver' | 'apple' | 'kakao';
+export type LastLoginMethod = 'password' | 'google' | 'naver' | 'apple' | 'kakao' | 'phone';
 
 export interface LastLoginInfo {
   method: LastLoginMethod;
@@ -20,7 +20,7 @@ export interface LastLoginInfo {
 /** 기기 저장소 키 (mobile AsyncStorage · web localStorage 공용) */
 export const LAST_LOGIN_STORAGE_KEY = '@smis_last_login';
 
-const METHODS: ReadonlyArray<LastLoginMethod> = ['password', 'google', 'naver', 'apple', 'kakao'];
+const METHODS: ReadonlyArray<LastLoginMethod> = ['password', 'google', 'naver', 'apple', 'kakao', 'phone'];
 const isMethod = (v: unknown): v is LastLoginMethod => typeof v === 'string' && (METHODS as string[]).includes(v);
 
 /** 소셜 providerId('google.com', 'apple.com', 'naver', 'kakao', 'password') → 로그인 방법. 모르는 값이면 null */

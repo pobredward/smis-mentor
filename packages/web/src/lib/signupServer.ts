@@ -10,6 +10,7 @@
 import { getAdminAuth, getAdminFirestore, adminFieldValue } from '@/lib/firebase-admin';
 import { sendVerificationEmail } from '@/lib/emailVerification';
 import { findIdentityOwner, identityProviderOf, linkIdentity, storedProviderId, type IdentityRef } from '@/lib/authIdentity';
+import { readPhoneTicket, recordPhoneIdentity } from '@/lib/phoneLoginServer';
 import type { DecodedIdToken } from 'firebase-admin/auth';
 import { Timestamp } from 'firebase-admin/firestore';
 import {
@@ -17,6 +18,8 @@ import {
   normalizeNameForMatch,
   normalizePhoneForMatch,
   phoneQueryVariants,
+  samePhone,
+  maskE164,
   logger,
   getAgeFromRRN,
   type CompleteSignupInput,
@@ -206,7 +209,17 @@ export async function completeSignup(uid: string, tokenEmail: string | undefined
         throw new SignupError(409, 'IDENTITY_TAKEN', kind === 'foreign' ? 'This social account is already linked to another account. Please sign in.' : '이 소셜 계정은 이미 다른 계정에 연결되어 있습니다. 로그인해주세요.');
       }
     }
+    // 문자 인증을 마친 번호 (표가 유효하고 입력한 번호와 같을 때만)
+    const ticketPhone = readPhoneTicket(input?.phoneTicket);
+    const verifiedPhone = ticketPhone && samePhone(profile.phoneNumber, ticketPhone) ? ticketPhone : null;
+    if (input?.phoneTicket && !verifiedPhone) logger.warn('⚠️ 번호 확인 표가 만료됐거나 입력 번호와 다름 — 확인 안 된 번호로 처리');
+
     const temp = await findTempAccount(kind, profile, email, str(input.tempUserId, 128));
+    // 관리자가 미리 만든 멘토 계정을 이어받으려면 그 번호의 문자 인증이 필요하다 (이름 + 번호만으로 남의 계정을 여는 것 막기)
+    // 옛 앱은 문자 인증이 없어, 새 앱이 퍼진 뒤 AUTH_TEMP_CLAIM_REQUIRES_PHONE=1 로 켠다
+    if (temp && kind === 'mentor' && !verifiedPhone && process.env.AUTH_TEMP_CLAIM_REQUIRES_PHONE === '1') {
+      throw new SignupError(403, 'PHONE_VERIFY_REQUIRED', '전화번호 문자 인증이 필요합니다. 앱을 최신 버전으로 업데이트한 뒤 다시 시도해주세요.');
+    }
     if (!temp && kind === 'mentor' && await phoneInUse(String(profile.phoneNumber), uid)) {
       throw new SignupError(409, 'PHONE_IN_USE', '이 전화번호는 이미 가입되어 있습니다.');
     }
@@ -232,7 +245,8 @@ export async function completeSignup(uid: string, tokenEmail: string | undefined
       address: '', addressDetail: '', profileImage: '', selfIntroduction: '', jobMotivation: kind === 'foreign' ? 'Foreign Teacher Application' : '',
       feedback: '', partTimeJobs: [],
       // 이메일 인증: 비밀번호 가입만 필요 (구글·애플·네이버·카카오는 제공자가 확인한 이메일)
-      isEmailVerified: authUser.emailVerified || providerId !== 'password', isPhoneVerified: kind === 'mentor', isProfileCompleted: false,
+      isEmailVerified: authUser.emailVerified || providerId !== 'password', isPhoneVerified: verifiedPhone ? true : kind === 'mentor', isProfileCompleted: false,
+      ...(verifiedPhone && { phoneVerifiedAt: Timestamp.now() }),
       isTermsAgreed: true, isPersonalAgreed: true, isAddressVerified: kind === 'mentor', isProfileImageUploaded: false,
       // temp 계정에서 이어받는 값 (관리자가 넣어 둔 것)
       ...(temp && {
@@ -308,6 +322,11 @@ export async function completeSignup(uid: string, tokenEmail: string | undefined
     if (verified) {
       await linkIdentity(uid, { ...verified, email }).catch((e) => logger.warn('⚠️ 가입 신원 연결표 기록 실패:', (e as Error)?.message));
     }
+    // 문자 인증한 번호는 전화번호 로그인 연결표에
+    if (verifiedPhone) {
+      await recordPhoneIdentity(uid, verifiedPhone).catch((e) => logger.warn('⚠️ 전화번호 연결표 기록 실패:', (e as Error)?.message));
+      logger.info('📱 가입 — 문자 인증한 번호:', { phone: maskE164(verifiedPhone) });
+    }
     // 소셜 가입인데 Auth 에 인증 표시가 없으면 맞춰 둔다
     if (providerId !== 'password' && !authUser.emailVerified) {
       await getAdminAuth().updateUser(uid, { emailVerified: true }).catch(() => undefined);
@@ -318,7 +337,7 @@ export async function completeSignup(uid: string, tokenEmail: string | undefined
       verificationSent = await sendVerificationEmail(idToken, kind === 'foreign' ? 'en' : 'ko');
     }
 
-    logger.info('✅ 가입 완료:', { uid, role, claimedTemp: !!temp, tempId: temp?.id, verificationSent });
+    logger.info('✅ 가입 완료:', { uid, role, claimedTemp: !!temp, tempId: temp?.id, verificationSent, phoneVerified: !!verifiedPhone });
     return { userId: uid, role, claimedTemp: !!temp, needsEmailVerification: providerId === 'password' && !authUser.emailVerified, verificationSent };
   } catch (e) {
     if (input?.rollbackAuthOnFailure) await rollbackAuth(uid);

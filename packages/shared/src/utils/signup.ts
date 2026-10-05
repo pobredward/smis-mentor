@@ -43,6 +43,8 @@ export interface CompleteSignupInput {
   tempUserId?: string;
   /** 비밀번호 가입 등 방금 만든 Auth 계정이면 true — 실패 시 서버가 Auth 계정을 지워 반쪽 계정이 남지 않게 한다 */
   rollbackAuthOnFailure?: boolean;
+  /** 문자 인증을 마친 번호의 서명 표 (/api/auth/phone) — 있으면 그 번호를 '확인된 번호'로 쓰고 temp 계정을 그 번호로 찾는다 */
+  phoneTicket?: string;
 }
 
 export interface CompleteSignupResult {
