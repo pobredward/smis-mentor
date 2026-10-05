@@ -4,7 +4,7 @@ import { writeAuditLog } from '@/lib/auditLog';
 import { logger, PARENT_EDITABLE_CHILD_FIELDS, type ChildProfile, type CampEnrollment, type EnrollmentStatus } from '@smis-mentor/shared';
 import {
   CampStudentError, listCampEnrollments, searchChildren, createChild, createEnrollment, updateChild, updateEnrollment,
-  setChildSsn, setEnrollmentsStatus, removeEnrollment, importCampStudents, upsertFamily, setFamilyMemberSsn, getEnrollment,
+  setChildSsn, setEnrollmentsStatus, removeEnrollment, importCampStudents, upsertFamily, setFamilyMemberSsn, getEnrollment, campRef,
 } from '@/lib/campStudentsServer';
 
 /**
@@ -18,6 +18,7 @@ import {
  *   remove  { studentId }                                     잘못 넣은 참가 지우기 (확정은 먼저 취소)
  *   import  { table: string[][], dryRun, status? }            엑셀 · 시트 붙여넣기 (1행 헤더)
  *   family  { familyId, family, ssn?: { [보호자 번호]: 주민번호 } }  가족 캠프 가족 만들기 · 고치기
+ *   settings { applicationOpen }                              학부모 앱 신청 받기 켜기 · 끄기
  */
 
 const STATUSES: EnrollmentStatus[] = ['applied', 'confirmed', 'cancelled'];
@@ -82,7 +83,8 @@ export async function GET(request: NextRequest) {
     }
     const campCode = str(sp.get('camp'), 20).toUpperCase();
     if (!CAMP_RE.test(campCode)) return NextResponse.json({ error: '캠프 코드를 확인해주세요.' }, { status: 400 });
-    return NextResponse.json({ campCode, ...(await listCampEnrollments(campCode)) });
+    const [list, camp] = await Promise.all([listCampEnrollments(campCode), campRef(campCode).get()]);
+    return NextResponse.json({ campCode, applicationOpen: camp.get('applicationOpen') === true, ...list });
   } catch (e) {
     return fail(e);
   }
@@ -178,6 +180,12 @@ export async function POST(request: NextRequest) {
         for (const [pid, v] of Object.entries(ssnMap).slice(0, 10)) if (str(v, 20)) await setFamilyMemberSsn(campCode, familyId, str(pid, 40), str(v, 20));
         await audit({ familyId, ssn: Object.keys(ssnMap).length > 0 });
         return NextResponse.json({ ok: true });
+      }
+      case 'settings': {
+        const applicationOpen = body.applicationOpen === true;
+        await campRef(campCode).set({ campCode, applicationOpen, applicationUpdatedAt: new Date().toISOString(), applicationUpdatedBy: by }, { merge: true });
+        await audit({ applicationOpen });
+        return NextResponse.json({ ok: true, applicationOpen });
       }
       default:
         return NextResponse.json({ error: '알 수 없는 작업입니다.' }, { status: 400 });

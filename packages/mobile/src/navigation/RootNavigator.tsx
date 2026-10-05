@@ -17,6 +17,8 @@ import { useAuth } from '../context/AuthContext';
 import { ProfileEditScreen } from '../screens/ProfileEditScreen';
 import { LessonPlanScreen } from '../screens/LessonPlanScreen';
 import { ChatRoomScreen } from '../screens/ChatRoomScreen';
+import { ParentChildFormScreen } from '../screens/ParentChildFormScreen';
+import { ParentApplicationScreen } from '../screens/ParentApplicationScreen';
 import { L } from '@smis-mentor/shared';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -66,6 +68,16 @@ function AppStack() {
       }}
     >
       <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen
+        name="ParentChildForm"
+        component={ParentChildFormScreen}
+        options={{ headerShown: true, title: '아이 등록', headerBackTitle: '홈', presentation: 'card', animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="ParentApplication"
+        component={ParentApplicationScreen}
+        options={{ headerShown: true, title: '캠프 신청', headerBackTitle: '홈', presentation: 'card', animation: 'slide_from_right' }}
+      />
       <Stack.Screen
         name="ProfileEdit"
         component={ProfileEditScreen}

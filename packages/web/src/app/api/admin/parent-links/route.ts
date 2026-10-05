@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 import { writeAuditLog } from '@/lib/auditLog';
-import { addParentLink, getParentLinks, listLinkCandidates, removeParentLink, ParentLinkError } from '@/lib/parentLinksServer';
+import { linkChild, listLinkCandidates, listParentChildren, ParentLinkError } from '@/lib/parentLinksServer';
 import { logger } from '@smis-mentor/shared';
 
 /**
- * 관리자: 학부모 계정에 아이(캠프 학생) 연결
- * GET    ?parentUid=…                 → 연결된 아이 목록
- * GET    ?parentUid=…&campCode=J29    → 그 캠프 학생 목록 (보호자 번호가 같은 학생이 앞, 연락처는 주지 않음)
- * POST   { parentUid, campCode, studentId }  → 연결
- * DELETE { parentUid, campCode, studentId }  → 해제
+ * 관리자: 학부모 계정에 아이 연결 (아이 문서 parentIds)
+ * GET    ?parentUid=…                → 연결된 아이 (+ 참가한 캠프)
+ * GET    ?parentUid=…&candidates=1&q=… → 연결 후보 (검색어 없으면 학부모 번호와 보호자 번호가 같은 아이, 연락처는 주지 않음)
+ * POST   { parentUid, childId }      → 연결
+ * DELETE { parentUid, childId }      → 해제
  */
 const fail = (e: unknown) => {
   if (e instanceof ParentLinkError) return NextResponse.json({ error: e.message }, { status: e.status });
@@ -24,32 +24,28 @@ export async function GET(request: NextRequest) {
   if (denied) return denied;
   const sp = new URL(request.url).searchParams;
   const parentUid = clean(sp.get('parentUid'));
-  const campCode = clean(sp.get('campCode'), 20);
   if (!parentUid) return NextResponse.json({ error: 'parentUid 가 필요합니다.' }, { status: 400 });
   try {
-    if (campCode) return NextResponse.json({ students: await listLinkCandidates(parentUid, campCode) });
-    return NextResponse.json({ children: await getParentLinks(parentUid) });
+    if (sp.get('candidates')) return NextResponse.json({ candidates: await listLinkCandidates(parentUid, clean(sp.get('q'), 50)) });
+    return NextResponse.json({ children: await listParentChildren(parentUid) });
   } catch (e) {
     return fail(e);
   }
 }
 
-async function change(request: NextRequest, op: 'add' | 'remove') {
+async function change(request: NextRequest, linked: boolean) {
   const auth = await getAuthenticatedUser(request);
   const denied = requireAdmin(auth);
   if (denied) return denied;
   const body = await request.json().catch(() => ({}));
   const parentUid = clean(body?.parentUid);
-  const campCode = clean(body?.campCode, 20);
-  const studentId = clean(body?.studentId);
-  if (!parentUid || !campCode || !studentId) return NextResponse.json({ error: 'parentUid · campCode · studentId 가 필요합니다.' }, { status: 400 });
+  const childId = clean(body?.childId, 40);
+  if (!parentUid || !childId) return NextResponse.json({ error: 'parentUid · childId 가 필요합니다.' }, { status: 400 });
   try {
-    const children = op === 'add'
-      ? await addParentLink(parentUid, campCode, studentId, auth!.firebaseUid)
-      : await removeParentLink(parentUid, campCode, studentId);
+    const children = await linkChild(parentUid, childId, linked);
     await writeAuditLog({
       action: 'PARENT_CHILD_LINK', category: 'ACCOUNT', performedBy: auth!.firebaseUid, performedByName: (auth!.user as any)?.name,
-      targetUserId: parentUid, metadata: { op, campCode, studentId }, request,
+      targetUserId: parentUid, metadata: { op: linked ? 'add' : 'remove', childId }, request,
     });
     return NextResponse.json({ children });
   } catch (e) {
@@ -57,5 +53,5 @@ async function change(request: NextRequest, op: 'add' | 'remove') {
   }
 }
 
-export const POST = (request: NextRequest) => change(request, 'add');
-export const DELETE = (request: NextRequest) => change(request, 'remove');
+export const POST = (request: NextRequest) => change(request, true);
+export const DELETE = (request: NextRequest) => change(request, false);

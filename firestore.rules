@@ -90,10 +90,9 @@ service cloud.firestore {
       allow read: if isCampStaff();
     }
 
-    // 학부모 ↔ 아이 연결 — 학부모 본인 · 관리자 읽기, 쓰기는 서버(/api/admin/parent-links)만
+    // (예전) 학부모 ↔ 아이 연결 — 지금은 아이 문서 parentIds 로 잇는다. 쓰지 않음
     match /parentLinks/{uid} {
-      allow read: if isOwner(uid) || isAdmin();
-      allow write: if false;
+      allow read, write: if false;
     }
 
     match /users/{userId} {

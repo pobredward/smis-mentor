@@ -28,6 +28,10 @@ export type RootStackParamList = {
   ChatRoom: { roomId: string };
   /** 원어민 레슨플랜 — bookKey(내 교재) · planId(문서) · sample(샘플: speaking·reading·writing) */
   LessonPlan: { bookKey?: string; planId?: string; sample?: string };
+  /** 학부모 — 아이 등록(childId 없음) · 정보 고치기 */
+  ParentChildForm: { childId?: string };
+  /** 학부모 — 캠프 신청(campCode 없음) · 신청서 고치기 */
+  ParentApplication: { childId: string; campCode?: string; studentId?: string };
 };
 
 // Bottom Tabs (메인 하단 탭)

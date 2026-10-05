@@ -94,7 +94,7 @@ export const RolePermissions: Record<UserRole, Permission> = {
     canManageApplications: false,
     canEvaluate: false,
   },
-  parent: {  // 학부모: 캠프 운영 권한 없음 (자기 아이 정보는 parentLinks 로 따로)
+  parent: {  // 학부모: 캠프 운영 권한 없음 (자기 아이는 children.parentIds 로)
     canViewAllStudents: false,
     canViewOwnStudents: false,
     canEditStudentData: false,

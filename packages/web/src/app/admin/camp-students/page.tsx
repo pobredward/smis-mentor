@@ -91,6 +91,7 @@ export default function CampStudentsPage() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Student | 'new' | null>(null);
   const [familyEditing, setFamilyEditing] = useState<CampFamily | 'new' | null>(null);
+  const [applicationOpen, setApplicationOpen] = useState(false);
 
   const campType: CampType = camp ? campTypeOfCode(camp) : 'EJ';
 
@@ -110,9 +111,10 @@ export default function CampStudentsPage() {
     if (!code) return;
     setLoading(true);
     try {
-      const res = await authenticatedGet<{ students: Student[]; families: CampFamily[] }>(`/api/admin/camp-students?camp=${encodeURIComponent(code)}`);
+      const res = await authenticatedGet<{ students: Student[]; families: CampFamily[]; applicationOpen: boolean }>(`/api/admin/camp-students?camp=${encodeURIComponent(code)}`);
       setStudents(res.students);
       setFamilies(res.families ?? []);
+      setApplicationOpen(!!res.applicationOpen);
       setSelected(new Set());
     } catch (e) {
       toast.error((e as Error).message || '명단을 불러오지 못했습니다.');
@@ -159,6 +161,18 @@ export default function CampStudentsPage() {
       toast.error((e as Error).message || '바꾸지 못했습니다.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const toggleApplication = async () => {
+    const next = !applicationOpen;
+    if (!window.confirm(next ? `${camp} 캠프를 학부모 앱에 열까요? 학부모가 아이를 이 캠프에 신청할 수 있게 됩니다.` : `${camp} 학부모 신청을 닫을까요? 이미 들어온 신청은 그대로 남습니다.`)) return;
+    try {
+      await authenticatedPost('/api/admin/camp-students', { action: 'settings', campCode: camp, applicationOpen: next });
+      setApplicationOpen(next);
+      toast.success(next ? '학부모 신청을 받습니다.' : '학부모 신청을 닫았습니다.');
+    } catch (e) {
+      toast.error((e as Error).message || '바꾸지 못했습니다.');
     }
   };
 
@@ -228,6 +242,10 @@ export default function CampStudentsPage() {
                   <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="이름 · 보호자 번호 · 반번호"
                     className="border rounded-lg px-3 py-1.5 text-sm w-56" />
                   <div className="flex-1" />
+                  <button onClick={toggleApplication} title="학부모 앱에서 이 캠프 참가 신청을 받을지"
+                    className={`px-3 py-1.5 text-sm rounded-lg border ${applicationOpen ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white text-gray-600'}`}>
+                    학부모 신청 {applicationOpen ? '받는 중' : '닫힘'}
+                  </button>
                   <button onClick={() => setEditing('new')} className="px-3 py-1.5 text-sm rounded-lg bg-blue-600 text-white hover:bg-blue-700">+ 학생 추가</button>
                   <button onClick={exportCsv} disabled={!students.length} className="px-3 py-1.5 text-sm rounded-lg border bg-white hover:bg-gray-50 disabled:opacity-40">CSV 내보내기</button>
                   <button onClick={() => load(camp)} className="px-3 py-1.5 text-sm rounded-lg border bg-white hover:bg-gray-50">새로고침</button>
