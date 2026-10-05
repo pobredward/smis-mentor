@@ -600,7 +600,7 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
 export const EXCLUDED_COLLECTIONS: Record<string, string> = {
   patientRecords: '학생 건강 정보(민감 정보)',
   regularMedications: '학생 상시 복용약(민감 정보)',
-  stSheetCache: '학생 명단 원본 — 연락처·주민번호·여권 포함. 대신 read_page("/camp/roster/{code}") 로 개인정보 제거 명단 사용',
+  stSheetCache: '학생 명단 — 목록용(연락처 포함), 설문·상담·주소·여권은 하위 details/{학생} 문서. 대신 read_page("/camp/roster/{code}") 로 개인정보 제거 명단 사용',
   familySTSheetCache: '가족 캠프 명단 원본 (위와 동일)',
   stSheetOverrides: '학생 시트 수정 내역',
   students: '학생 이력',

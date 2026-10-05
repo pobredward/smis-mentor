@@ -5,13 +5,14 @@ import SsnReveal from '@/components/common/SsnReveal';
 import { useRouter } from 'next/navigation';
 import Layout from '@/components/common/Layout';
 import {
+  stSheetService,
   loadAllStudentRecords,
   filterStudents,
   groupStudentResults,
   StudentGroup,
   StudentHistoryResult,
 } from '@/lib/stSheetService';
-import { STSheetStudent, FamilyUnit, toDriveImageUrl } from '@smis-mentor/shared';
+import { STSheetStudent, FamilyUnit, toDriveImageUrl, mergeStudentDetail } from '@smis-mentor/shared';
 import { IoSearch, IoArrowBack, IoCalendar, IoPerson, IoCall } from 'react-icons/io5';
 import { formatDateTimeKo as toDisplayDate } from '@smis-mentor/shared';
 
@@ -86,7 +87,23 @@ function SectionTitle({ title }: { title: string }) {
 }
 
 // 캠프별 상세 정보 패널
-function CampDetail({ campCode, student }: { campCode: string; student: STSheetStudent }) {
+
+/** 목록에 없는 상세 칸(설문 · 상담 · 주소 · 여권 · 특이사항)을 읽어 합친다 */
+function useStudentWithDetail(campCode: string, student: STSheetStudent): STSheetStudent {
+  const [full, setFull] = useState(student);
+  useEffect(() => {
+    let alive = true;
+    setFull(student);
+    stSheetService.getStudentDetailFields(campCode, student)
+      .then((d) => { if (alive && d) setFull(mergeStudentDetail(student, d)); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [campCode, student]);
+  return full;
+}
+
+function CampDetail({ campCode, student: listed }: { campCode: string; student: STSheetStudent }) {
+  const student = useStudentWithDetail(campCode, listed);
   const syncDate = toDisplayDate(student.lastSyncedAt);
 
   return (

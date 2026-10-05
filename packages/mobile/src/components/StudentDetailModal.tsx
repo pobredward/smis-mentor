@@ -23,6 +23,7 @@ import { requestContactsPermission, getContactsPermissionStatus, saveSingleParen
 import { ContactsPermissionDisclosureModal } from './ContactsPermissionDisclosureModal';
 import { authenticatedFetch } from '../utils/apiClient';
 import { db } from '../config/firebase';
+import { stSheetService } from '../services/stSheet';
 import { StudentAllowanceTab, useStudentAllowance } from './StudentAllowanceTab';
 import { StudentDevicesTab, useStudentDevices, useDeviceContext } from './StudentDevicesTab';
 import { StudentMemoCard } from './StudentMemoCard';
@@ -168,7 +169,11 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
     });
   }, [visible, initialIndex, campType]);
 
-  const merge = useCallback((s: STSheetStudent): STSheetStudent => {
+  // 상세 칸 (설문 · 레벨 테스트 · 상담 · 주소 · 여권 · 특이사항) — 목록에는 없어서 학생마다 한 번 읽는다
+  const [details, setDetails] = useState<Record<string, Partial<STSheetStudent>>>({});
+  const merge = useCallback((s0: STSheetStudent): STSheetStudent => {
+    const d = details[s0.studentId];
+    const s = d ? { ...s0, ...d } : s0;
     const o = overrides[s.studentId];
     if (!o) return s;
     return {
@@ -176,10 +181,22 @@ export const StudentDetailModal: React.FC<StudentDetailModalProps> = ({
       ...(o as Partial<STSheetStudent>),
       displayFields: { ...(s.displayFields ?? {}), ...((o.displayFields as Record<string, string> | undefined) ?? {}) },
     };
-  }, [overrides]);
+  }, [overrides, details]);
 
   const base = students[currentIndex] ?? students[0];
   const student = useMemo(() => (base ? merge(base) : undefined), [base, merge]);
+
+  useEffect(() => {
+    if (!visible || !campCode || !base || details[base.studentId]) return;
+    const id = base.studentId;
+    let alive = true;
+    stSheetService.getStudentDetailFields(campCode, base).then((d) => {
+      if (!alive) return;
+      const { studentId: _id, name: _name, ...fields } = d ?? { studentId: id };
+      setDetails(prev => ({ ...prev, [id]: fields as Partial<STSheetStudent> }));
+    }).catch((e) => logger.warn('[StudentDetailModal] 학생 상세 조회 실패', e));
+    return () => { alive = false; };
+  }, [visible, campCode, base, details]);
 
   // 보건 기록 (현재 학생)
   useEffect(() => {

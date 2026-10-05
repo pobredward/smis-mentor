@@ -19,7 +19,7 @@ const path = require('path');
 const fs = require('fs');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
-const { COLLECTIONS, SUBCOLLECTIONS } = require('./plan.cjs');
+const { COLLECTIONS, SUBCOLLECTIONS, ST_DETAIL_FIELDS } = require('./plan.cjs');
 
 /** 웹 lib/encryption.ts encryptRRN 과 같은 형식 — AES-256-GCM, base64(iv 16 + tag 16 + 암호문). 키는 RRN_ENCRYPTION_KEY (웹과 같은 값) */
 function seal(plain) {
@@ -126,6 +126,32 @@ const TRANSFORMS = {
       out.push({ path: `stSheetSensitive/${d.id}`, data: { ...x, entries } });
     }
     stat.notes.push(`stSheetSensitive: 지난 캠프 ${docs.length - out.length}개는 옮기지 않음 (export 보관 후 삭제) — 남긴 캠프 ${[...current].join(', ')}`);
+    return out;
+  },
+  async splitRoster(docs, stat) {
+    const DETAIL = new Set(ST_DETAIL_FIELDS);
+    const out = [];
+    let detailDocs = 0;
+    for (const d of docs) {
+      const x = d.data();
+      const list = Array.isArray(x.data) ? x.data : [];
+      const light = [];
+      for (const s of list) {
+        const l = {};
+        const det = {};
+        for (const [k, v] of Object.entries(s || {})) {
+          if (DETAIL.has(k)) { if (v !== undefined && v !== null && v !== '') det[k] = v; } else l[k] = v;
+        }
+        light.push(l);
+        if (Object.keys(det).length) {
+          const key = String(s.studentId || `row${s.rowNumber ?? ''}`);
+          out.push({ path: `stSheetCache/${d.id}/details/${key}`, data: { ...det, studentId: String(s.studentId || ''), name: String(s.name || '') } });
+          detailDocs++;
+        }
+      }
+      out.push({ path: `stSheetCache/${d.id}`, data: { ...x, data: light } });
+    }
+    stat.notes.push(`stSheetCache: 명단 ${docs.length}개 → 학생 상세 ${detailDocs}개로 나눔`);
     return out;
   },
   async devicesDropPastLockCodes(docs, stat) {

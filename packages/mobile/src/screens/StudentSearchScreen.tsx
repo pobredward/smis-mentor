@@ -16,13 +16,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AdminStackScreenProps } from '../navigation/types';
 import {
+  stSheetService,
   loadAllStudentRecords,
   filterStudents,
   groupStudentResults,
   StudentGroup,
   StudentHistoryResult,
 } from '../services/stSheet';
-import { STSheetStudent, FamilyUnit, toDriveImageUrl } from '@smis-mentor/shared';
+import { STSheetStudent, FamilyUnit, toDriveImageUrl, mergeStudentDetail } from '@smis-mentor/shared';
 import { formatDateTimeKo as toDisplayDate } from '@smis-mentor/shared';
 
 const DEBOUNCE_MS = 200;
@@ -100,7 +101,23 @@ const infoStyles = StyleSheet.create({
 
 // ─── 일반 캠프 상세 패널 ─────────────────────────────────────
 
-function CampDetail({ student }: { student: STSheetStudent }) {
+
+/** 목록에 없는 상세 칸(설문 · 상담 · 주소 · 여권 · 특이사항)을 읽어 합친다 */
+function useStudentWithDetail(campCode: string, student: STSheetStudent): STSheetStudent {
+  const [full, setFull] = useState(student);
+  useEffect(() => {
+    let alive = true;
+    setFull(student);
+    stSheetService.getStudentDetailFields(campCode, student)
+      .then((d) => { if (alive && d) setFull(mergeStudentDetail(student, d)); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [campCode, student]);
+  return full;
+}
+
+function CampDetail({ campCode, student: listed }: { campCode: string; student: STSheetStudent }) {
+  const student = useStudentWithDetail(campCode, listed);
   const syncDate = toDisplayDate(student.lastSyncedAt);
 
   return (
@@ -476,7 +493,7 @@ function StudentCard({ group }: StudentCardProps) {
             studentId={found.student.studentId}
           />
         ) : (
-          <CampDetail key={expandedCamp} student={found.student} />
+          <CampDetail key={expandedCamp} campCode={found.campCode} student={found.student} />
         );
       })()}
 

@@ -6,6 +6,8 @@
  *
  * 권한: admin만 호출 가능
  */
+import { writeStudentDetails } from '@/lib/stDetailsServer';
+import { splitStudentRecord, studentKeyOf, type StudentDetailDoc } from '@smis-mentor/shared';
 import { sealSensitive, type SensitiveEntry } from '@/lib/stSensitive';
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
@@ -223,11 +225,23 @@ export async function POST(request: NextRequest) {
         Object.fromEntries(Object.entries(s).filter(([, v]) => v !== undefined)),
       );
 
+      // 명단 나누기: 목록용 가벼운 명단(캐시 문서) + 학생별 상세(설문 · 상담 · 주소 · 여권 · 특이사항)
+      const lightStudents: Record<string, unknown>[] = [];
+      const details = new Map<string, StudentDetailDoc>();
+      for (const s of sanitized) {
+        const { light, detail } = splitStudentRecord(s);
+        lightStudents.push(light);
+        if (detail) details.set(studentKeyOf(s as { studentId: string; rowNumber?: number }), detail);
+      }
+      // 상세를 먼저 쓴다 — 목록이 아직 없는 상세를 가리키지 않게
+      const det = await writeStudentDetails(campCode, details);
+      logger.info(`[${campCode}] 학생 상세 ${det.written}명 저장 · 지난 상세 ${det.removed}건 삭제`);
+
       // 캐시 저장 + 오버라이드 초기화 + availableHeaders 저장 병렬 실행
       await Promise.all([
         db.collection('stSheetCache').doc(campCode).set({
           campCode,
-          data: sanitized,
+          data: lightStudents,
           lastSyncedAt: new Date().toISOString(),
           syncedBy: authCtx.firebaseUid,
           syncedByName: authCtx.user.name ?? 'Admin',

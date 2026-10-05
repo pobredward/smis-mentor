@@ -13,7 +13,7 @@ import {
   type STSheetFieldConfig, type FieldSectionConfig, type PatientRecord, type StudentTabId, type MessageKey,
 } from '@smis-mentor/shared';
 import { useAuth } from '@/contexts/AuthContext';
-import { placementOverrideService, type STSheetStudent, type CampCode, type CampType } from '@/lib/stSheetService';
+import { placementOverrideService, stSheetService, type STSheetStudent, type CampCode, type CampType } from '@/lib/stSheetService';
 import { authenticatedPost } from '@/lib/apiClient';
 import { db } from '@/lib/firebase';
 import StudentAllowanceTab, { useStudentAllowance } from './StudentAllowanceTab';
@@ -93,6 +93,18 @@ export default function StudentDetailModal({
       const merged = placementOverrideService.mergeOverride(base, ov);
       setPatches(prev => ({ ...prev, [base.studentId]: { ...merged, ...(prev[base.studentId] ?? {}) } }));
     }).catch(() => {});
+    return () => { alive = false; };
+  }, [campCode, base]);
+
+  // 상세 칸 (설문 · 레벨 테스트 · 상담 · 주소 · 여권 · 특이사항) — 목록에는 없어서 학생이 바뀔 때 한 번 읽어 합친다
+  useEffect(() => {
+    if (!campCode || !base) return;
+    let alive = true;
+    stSheetService.getStudentDetailFields(campCode, base).then((d) => {
+      if (!alive || !d) return;
+      const { studentId: _id, name: _name, ...fields } = d;
+      setPatches(prev => ({ ...prev, [base.studentId]: { ...fields, ...(prev[base.studentId] ?? {}) } }));
+    }).catch((e) => logger.warn('[StudentDetailModal] 학생 상세 조회 실패', e));
     return () => { alive = false; };
   }, [campCode, base]);
 

@@ -327,6 +327,12 @@ service cloud.firestore {
       allow read: if isCampStaff();
       // 쓰기는 서버(Cloud Functions/Admin SDK)를 통해서만 가능
       allow write: if false;
+
+      // 학생별 상세 (설문 · 상담 · 주소 · 여권 · 특이사항) — 명단과 같은 사람이 읽고, 쓰기는 동기화 서버만
+      match /details/{studentKey} {
+        allow read: if isCampStaff();
+        allow write: if false;
+      }
     }
 
     // ──────────────────────────────────────────────────────────────

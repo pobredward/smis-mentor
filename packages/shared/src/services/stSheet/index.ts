@@ -8,6 +8,7 @@ import { type Firestore, collection, doc, getDoc, getDocs } from 'firebase/fires
 import type { STSheetStudent, CampCode, CampType, FamilyUnit } from '../../types/student';
 import { CAMP_SHEET_CONFIG } from '../../types/student';
 import { logger } from '../../utils/logger';
+import { ST_DETAIL_SUBCOLLECTION, studentKeyOf, mergeStudentDetail, type StudentDetailDoc } from '../../utils/studentRecordSplit';
 
 export interface SyncSTSheetResponse {
   success: boolean;
@@ -58,7 +59,8 @@ export function createStSheetService(db: Firestore, opts: { sync: (campCode: Cam
         return students;
       }
 
-      // 일반 캠프: stSheetCache 만 읽는다. 실제 캐시가 없으면 빈 배열 (빈 화면 표시)
+      // 일반 캠프: stSheetCache 의 가벼운 명단만 읽는다 (설문 · 상담 · 주소 등 상세는 getStudentDetail).
+      // 실제 캐시가 없으면 빈 배열 (빈 화면 표시)
       const cacheSnap = await getDoc(doc(db, 'stSheetCache', campCode));
       const data = cacheSnap.exists() ? cacheSnap.data()?.data : undefined;
       return Array.isArray(data) ? (data as STSheetStudent[]) : [];
@@ -99,11 +101,25 @@ export function createStSheetService(db: Firestore, opts: { sync: (campCode: Cam
       try {
         const students = await service.getCachedData(campCode);
         const student = students.find(s => s.studentId === studentId);
-        return student || null;
+        if (!student) return null;
+        return mergeStudentDetail(student, await service.getStudentDetailFields(campCode, student));
       } catch (error) {
         logger.error('학생 상세 정보 조회 실패:', error);
         throw error;
       }
+    },
+
+    /**
+     * 한 학생의 상세 칸 (설문 · 레벨 테스트 · 상담 · 주소 · 여권 · 특이사항) — stSheetCache/{캠프}/details/{학생 키}.
+     * 가족 캠프나 상세 문서가 없으면 null (예전 형식 명단은 목록에 다 들어 있다).
+     */
+    getStudentDetailFields: async (
+      campCode: string,
+      student: Pick<STSheetStudent, 'studentId'> & { rowNumber?: number },
+    ): Promise<StudentDetailDoc | null> => {
+      if (CAMP_SHEET_CONFIG[campCode as CampCode]?.type === 'F') return null;
+      const snap = await getDoc(doc(db, 'stSheetCache', campCode, ST_DETAIL_SUBCOLLECTION, studentKeyOf(student)));
+      return snap.exists() ? (snap.data() as StudentDetailDoc) : null;
     },
 
     getCampType: (campCode: CampCode): CampType => {

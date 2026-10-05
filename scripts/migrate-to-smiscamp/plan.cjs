@@ -46,7 +46,7 @@ const COLLECTIONS = {
   lessonMaterialTemplates: { mode: 'transform', reason: '수업자료 템플릿 — 지운 것 빼고', transform: 'dropDeleted' },
   lessonMaterials: { mode: 'transform', reason: '수업자료 — 빈 껍데기 · 중복 정리, 섹션은 남은 문서로 모음', transform: 'lessonMaterial', drop: ['migratedAt'] },
   lessonPlans: keep('레슨플랜'),
-  stSheetCache: keep('학생 명단'),
+  stSheetCache: { mode: 'transform', reason: '학생 명단 — 목록용 명단 + 학생별 상세(details) 로 나눔', transform: 'splitRoster' },
   familySTSheetCache: keep('가족 캠프 명단'),
   stSheetSensitive: { mode: 'transform', reason: '학생 주민번호 — 지금 · 다가오는 캠프만, 암호화해서 (지난 캠프는 export 보관 후 삭제)', transform: 'sealCurrentSensitive' },
   stSheetFieldConfig: keep('명단 칸 설정'),
@@ -98,4 +98,19 @@ const SUBCOLLECTIONS = {
   students: skip('stSheetOverrides 아래 임시값'),
 };
 
-module.exports = { COLLECTIONS, SUBCOLLECTIONS, USER_DROP };
+/** 학생 상세 문서에만 두는 칸 — packages/shared/src/utils/studentRecordSplit.ts ST_DETAIL_FIELDS 와 같게 */
+const ST_DETAIL_FIELDS = [
+  'notes', 'ssn', 'region', 'address', 'addressDetail', 'email', 'shirtSize',
+  'passportName', 'passportNumber', 'passportExpiry', 'etc',
+  'surveyMbti', 'surveyCampDecision', 'surveyCampExpectation', 'surveyCampExperience', 'surveyGameTime', 'surveySnsTime',
+  'surveySchoolType', 'surveyAcademyPeriod', 'surveyNativeClassHours', 'surveySpeakingRatio', 'surveyLikesEnglish',
+  'surveyGoodAtEnglish', 'surveyTalkFirst', 'surveyManyFriends', 'surveyGroupLeader', 'surveyFollowRules',
+  'surveyListenTeacher', 'surveyHappyHome', 'surveyListenParents', 'surveySleepHours', 'surveyGoodAtStudy',
+  'surveyPresentation', 'surveyGrowthMindset', 'surveyAsksQuestions', 'surveyNoHomeworkDelay', 'surveyFollowPlan',
+  'surveyFocusInClass', 'surveyAcademyCount', 'surveyAcademyTypes',
+  'placementSpeaking', 'placementReading', 'placementWriting',
+  'finalSpeaking', 'finalReading', 'finalWriting',
+  'classCounsel1', 'classCounsel2', 'classCounsel3', 'unitCounsel1', 'unitCounsel2', 'unitCounsel3', 'managerCounsel',
+];
+
+module.exports = { COLLECTIONS, SUBCOLLECTIONS, USER_DROP, ST_DETAIL_FIELDS };
