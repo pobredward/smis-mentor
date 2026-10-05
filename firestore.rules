@@ -148,7 +148,13 @@ service cloud.firestore {
     // ──────────────────────────────────────────────────────────────
     match /jobCodes/{jobCodeId} {
       allow read: if true;
-      allow create, update: if isAdmin();
+      allow create: if isAdmin();
+      // 캠프 코드(code)는 캠프에 딸린 데이터의 열쇠라 바꿀 수 없다 (비어 있던 옛 문서만 한 번 채울 수 있음).
+      // 같은 코드가 둘 생기지 않게 하는 건 앱 · 웹 코드(shared campKey · admin)가 맡는다.
+      allow update: if isAdmin() && (
+        !('code' in resource.data) || resource.data.code == '' ||
+        request.resource.data.code == resource.data.code
+      );
       allow delete: if isAdmin();
     }
 

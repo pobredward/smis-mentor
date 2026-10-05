@@ -34,6 +34,7 @@ import {
   type TimetableGuide,
 } from '@smis-mentor/shared';
 import type { Viewer } from '@/lib/ai-content/site';
+import { jobCodeIdOfServer } from '@/lib/campKeyServer';
 import type { CollectionSpec } from './datamodel';
 
 /** datamodel 의 FieldSpec.clean 값 — 저장 전 정리·검증 방식 */
@@ -103,13 +104,10 @@ export class CampRef {
   /** 캠프 기간 (한국 날짜) */
   period() {
     if (!this.periodP) {
-      this.periodP = this.db
-        .collection('jobCodes')
-        .where('code', '==', this.campCode)
-        .limit(1)
-        .get()
+      this.periodP = jobCodeIdOfServer(this.campCode)
+        .then((id) => (id ? this.db.collection('jobCodes').doc(id).get() : null))
         .then((s) => {
-          const d = s.docs[0]?.data();
+          const d = s?.data();
           return d ? { start: kstYmd(d.startDate), end: kstYmd(d.endDate) } : null;
         })
         .catch(() => null);

@@ -33,8 +33,7 @@ export interface LodgingBundle {
 export const lodgingQueryKey = (jobCodeId: string) => ['lodging', jobCodeId] as const;
 
 export async function loadLodgingBundle(jobCodeId: string, isAdmin: boolean): Promise<LodgingBundle> {
-  const jobCode = (await jobCodesService.getJobCodeById(jobCodeId)) as { code?: string } | null;
-  const campCode = jobCode?.code ?? '';
+  const campCode = (await jobCodesService.campCodeOf(jobCodeId)) ?? '';
   const campType = campCode ? stSheetService.getCampType(campCode as CampCode) : null;
   const building = lodgingBuildingFor(campType);
   if (!campCode || !building) {

@@ -172,13 +172,13 @@ export function useCampDataPrefetch() {
       const { stSheetService, jobCodesService } = await import('../services');
       
       // 1. jobCodeId로 캠프 코드 가져오기
-      const jobCodes = await jobCodesService.getJobCodesByIds([jobCodeId]);
-      if (jobCodes.length === 0 || !jobCodes[0].code) {
+      const found = await jobCodesService.campCodeOf(jobCodeId);
+      if (!found) {
         logger.info('  ⚠️ 반명단: 캠프 코드 없음');
         return;
       }
       
-      const campCode = jobCodes[0].code as import('@smis-mentor/shared').CampCode;
+      const campCode = found as import('@smis-mentor/shared').CampCode;
       
       // 2. ST시트 학생 데이터 프리페칭
       const students = await queryClient.fetchQuery({
@@ -202,13 +202,13 @@ export function useCampDataPrefetch() {
       const { stSheetService, jobCodesService } = await import('../services');
       
       // 1. jobCodeId로 캠프 코드 가져오기
-      const jobCodes = await jobCodesService.getJobCodesByIds([jobCodeId]);
-      if (jobCodes.length === 0 || !jobCodes[0].code) {
+      const found = await jobCodesService.campCodeOf(jobCodeId);
+      if (!found) {
         logger.info('  ⚠️ 방명단: 캠프 코드 없음');
         return;
       }
       
-      const campCode = jobCodes[0].code as import('@smis-mentor/shared').CampCode;
+      const campCode = found as import('@smis-mentor/shared').CampCode;
       
       // 2. ST시트 학생 데이터 프리페칭 (반명단과 동일한 데이터, 필터만 다름)
       const students = await queryClient.fetchQuery({
@@ -301,11 +301,11 @@ export function useCampDataPrefetch() {
         
         try {
           const { getLessonMaterials, getLessonMaterialTemplates, getSections } = await import('../services/lessonMaterialService');
-          const { getUserJobCodesInfo } = await import('../services/authService');
+          const { jobCodesService } = await import('../services');
           
-          // 1. 활성화된 jobCode 가져오기
-          const activeJobCodes = await getUserJobCodesInfo([userData.activeJobExperienceId]);
-          const activeCodesList = activeJobCodes.map(jc => jc.code);
+          // 1. 활성화된 캠프 코드 (shared campKey 변환표)
+          const activeCode = await jobCodesService.campCodeOf(userData.activeJobExperienceId);
+          const activeCodesList = activeCode ? [activeCode] : [];
           logger.info(`   활성 코드: ${activeCodesList.join(', ')}`);
           
           // 2. 템플릿 가져오기

@@ -33,6 +33,7 @@ import {
   excitingDates,
   localYmd,
   EXCITING_CATEGORY,
+  campCodeOf,
   type CampTimetable,
   type DerivedGroup,
 } from '@smis-mentor/shared';
@@ -122,13 +123,20 @@ export default function ScheduleContent() {
     enabled: !!activeJobCodeId,
   });
 
+  /** 캠프 기간(시작·종료일)용 — 캠프 코드는 아래 변환표에서 바로 */
   const { data: jobCode } = useQuery({
     queryKey: ['jobCode', activeJobCodeId],
     queryFn: () => getJobCodeById(activeJobCodeId!),
     enabled: !!activeJobCodeId,
     staleTime: 10 * 60 * 1000,
   });
-  const campCode = jobCode?.code ?? '';
+  /** jobCodes 문서 id → 캠프 코드 (shared campKey) — 캠프 설정 조회들이 jobCode 문서를 기다리지 않게 */
+  const { data: campCode = '' } = useQuery({
+    queryKey: ['campCodeOf', activeJobCodeId],
+    queryFn: async () => (await campCodeOf(db, activeJobCodeId!)) ?? '',
+    enabled: !!activeJobCodeId,
+    staleTime: 10 * 60 * 1000,
+  });
 
   const { data: campGroups = [] } = useQuery({
     queryKey: ['campGroups', campCode],

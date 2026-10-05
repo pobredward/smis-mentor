@@ -19,6 +19,7 @@
 import { getAdminFirestore, adminFieldValue } from './firebase-admin';
 import { notificationAllowed, pushReachOf, lostNotifyRecipients, isCampStaffRole, isStockGroupOf, STOCK_MANAGER_GROUP_ROLES, type NotifyUserLike, localeOfUser, t, type Locale } from '@smis-mentor/shared';
 import { notifySupply } from './supplyNotify';
+import { jobCodeIdOfServer } from './campKeyServer';
 import * as admin from 'firebase-admin';
 
 interface DoseLike {
@@ -374,8 +375,8 @@ export async function runStockOp(uid: string, input: StockOp): Promise<{ from?: 
   const userSnap = await db.doc(`users/${uid}`).get();
   const user = userSnap.data() as { name?: string; role?: string; jobExperiences?: Array<{ id: string; group?: string; groupRole?: string }> } | undefined;
   if (!user || !isCampStaffRole(user.role)) throw new StockOpError(403, '캠프 스태프만 사용할 수 있습니다.');
-  const jobCodes = await db.collection('jobCodes').where('code', '==', campCode).get();
-  const exp = user.jobExperiences?.find(e => jobCodes.docs.some(d => d.id === e.id));
+  const jobCodeId = await jobCodeIdOfServer(campCode);
+  const exp = jobCodeId ? user.jobExperiences?.find(e => e.id === jobCodeId) : undefined;
   const isAdmin = user.role === 'admin';
   const isSub = !!exp?.groupRole && STOCK_MANAGER_GROUP_ROLES.includes(exp.groupRole);
   const byName = String(user.name ?? '').trim() || '이름 없음';

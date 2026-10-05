@@ -1,5 +1,5 @@
 /**
- * 캠프 선생님 표 (campRosters/{jobCodeId}) 서버 로직 — Admin SDK 전용
+ * 캠프 선생님 표 (campRosters/{campCode}) 서버 로직 — Admin SDK 전용
  *
  * - 불러오기: 표 문서 + (S캠프) 민감 칸은 개인 저장소에서 원본을 채워 돌려준다
  * - 매칭: 행마다 이름으로 사용자 후보를 찾아 준다 (동명이인·없는 사람은 관리자가 고른다)
@@ -52,7 +52,29 @@ export async function getJobCode(jobCodeId: string) {
   return { id: snap.id, code, name: String(d.name ?? ''), generation: String(d.generation ?? ''), tier: rosterTierOf(code) as CampRosterTier };
 }
 
-export const rosterRef = (jobCodeId: string) => getAdminFirestore().collection('campRosters').doc(jobCodeId);
+/**
+ * campRosters 문서 — 캠프 열쇠(campCode)가 문서 id. 예전 문서(jobCodeId)는 옛 앱이 읽으므로 이관 전까지 같이 쓴다.
+ * 읽을 때는 campCode 문서 → 없으면 예전 문서.
+ */
+const rosterRefs = (jc: { id: string; code: string }) => {
+  const col = getAdminFirestore().collection('campRosters');
+  return { main: col.doc(jc.code || jc.id), legacy: col.doc(jc.id) };
+};
+
+export async function readRosterDoc(jc: { id: string; code: string }): Promise<CampRosterDoc | null> {
+  const { main, legacy } = rosterRefs(jc);
+  const snap = await main.get();
+  if (snap.exists) return snap.data() as CampRosterDoc;
+  if (legacy.id === main.id) return null;
+  const old = await legacy.get();
+  return old.exists ? (old.data() as CampRosterDoc) : null;
+}
+
+async function writeRosterDoc(jc: { id: string; code: string }, data: CampRosterDoc): Promise<void> {
+  const { main, legacy } = rosterRefs(jc);
+  await main.set(data);
+  if (legacy.id !== main.id) await legacy.set(data); // 옛 앱용 — 이관 후 지운다
+}
 
 export async function loadUsers(jobCodeId: string): Promise<UserLite[]> {
   const snap = await getAdminFirestore().collection('users').get();
@@ -81,8 +103,7 @@ async function sensitiveCellsOf(uid: string, jobCodeId: string, code: string): P
 /** 불러오기 — 표 문서 (S 캠프 멘토 줄에는 민감 칸 원본을 채운다) */
 export async function loadCampRoster(jobCodeId: string) {
   const jc = await getJobCode(jobCodeId);
-  const snap = await rosterRef(jobCodeId).get();
-  const doc = (snap.exists ? snap.data() : null) as CampRosterDoc | null;
+  const doc = await readRosterDoc(jc);
   let mentors = doc?.mentors ?? [];
   const revealed = jc.tier === 'S' && mentors.some((r) => r.userId);
   if (jc.tier === 'S') {
@@ -119,8 +140,7 @@ export async function previewCampRoster(jobCodeId: string, input: { mentors: Cam
   const jc = await getJobCode(jobCodeId);
   const users = await loadUsers(jobCodeId);
   const byId = new Map(users.map((u) => [u.id, u]));
-  const prevSnap = await rosterRef(jobCodeId).get();
-  const prev = (prevSnap.exists ? prevSnap.data() : null) as CampRosterDoc | null;
+  const prev = await readRosterDoc(jc);
 
   const matchAll = (kind: CampRosterKind, rows: CampRosterRow[]): RosterMatch[] =>
     rows.map((r, index) => {
@@ -302,8 +322,7 @@ export async function saveCampRoster(
 
   // 3) 표에서 빠진 사람 — 확인받은 사람만 배정 해제
   const keep = new Set(seen.keys());
-  const prevSnap = await rosterRef(jobCodeId).get();
-  const prev = (prevSnap.exists ? prevSnap.data() : null) as CampRosterDoc | null;
+  const prev = await readRosterDoc(jc);
   const allowed = new Set(removalsOf(jobCodeId, users, keep, prev).map((c) => c.userId));
   const removed: string[] = [];
   for (const uid of input.removeUserIds ?? []) {
@@ -354,7 +373,7 @@ export async function saveCampRoster(
     jobCodeId, campCode: jc.code, tier: jc.tier, mentors: pub(mentors, colsM), foreign: pub(foreign, colsF),
     updatedAt: new Date().toISOString(), updatedBy: by.uid, updatedByName: by.name ?? '',
   };
-  await rosterRef(jobCodeId).set(doc);
+  await writeRosterDoc(jc, doc);
 
   // 7) 캠프 채팅방 사람 맞추기 — 같은 기수 전부 (관리자 배정은 기수 단위). 실패해도 명단 저장은 끝난 것
   try {

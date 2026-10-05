@@ -190,8 +190,8 @@ export function InventoryScreen() {
   const [campCode, setCampCode] = useState<CampCode | null>(null);
   useEffect(() => {
     if (!activeJobCodeId) return;
-    jobCodesService.getJobCodesByIds([activeJobCodeId]).then(codes => {
-      if (codes.length > 0 && codes[0].code) setCampCode(codes[0].code as CampCode);
+    jobCodesService.campCodeOf(activeJobCodeId).then(code => {
+      if (code) setCampCode(code as CampCode);
     }).catch(() => {});
   }, [activeJobCodeId]);
 

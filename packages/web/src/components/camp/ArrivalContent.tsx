@@ -38,9 +38,9 @@ export default function ArrivalContent() {
         return;
       }
       try {
-        const jobCodes = await jobCodesService.getJobCodesByIds([activeJobCodeId]);
-        if (jobCodes.length > 0 && jobCodes[0].code) {
-          const code = jobCodes[0].code as CampCode;
+        const found = await jobCodesService.campCodeOf(activeJobCodeId);
+        if (found) {
+          const code = found as CampCode;
           const type = stSheetService.getCampType(code);
           setCampCode(code);
           setCampType(type);

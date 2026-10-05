@@ -3,6 +3,7 @@ import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { getCampProfileStatus, privateRef, revealCampProfile, CAMP_PROFILE_ROLES, audienceOf } from '@/lib/campProfileServer';
 import { writeAuditLog } from '@/lib/auditLog';
+import { campCodeOfServer, jobCodeIdOfServer } from '@/lib/campKeyServer';
 import { buildRosterRow, applyRosterEdit, RosterEditError, SENSITIVE_ROSTER_FIELDS } from '@/lib/campRosterServer';
 import { logger, campProfileTierOf, missingCampProfileFields, bankCountryDef, type CampProfileDoc } from '@smis-mentor/shared';
 
@@ -36,14 +37,14 @@ export async function GET(request: NextRequest) {
     const db = getAdminFirestore();
     let jobCodeId: string;
     if (jobCodeIdParam) {
-      const d = await db.collection('jobCodes').doc(jobCodeIdParam).get();
-      if (!d.exists) return NextResponse.json({ error: '캠프 코드를 찾을 수 없습니다.' }, { status: 404 });
-      jobCodeId = d.id;
-      campCode = String(d.data()?.code ?? '');
+      const found = await campCodeOfServer(jobCodeIdParam);
+      if (!found) return NextResponse.json({ error: '캠프 코드를 찾을 수 없습니다.' }, { status: 404 });
+      jobCodeId = jobCodeIdParam;
+      campCode = found;
     } else {
-      const jc = await db.collection('jobCodes').where('code', '==', campCode).limit(1).get();
-      if (jc.empty) return NextResponse.json({ error: '캠프 코드를 찾을 수 없습니다.' }, { status: 404 });
-      jobCodeId = jc.docs[0].id;
+      const found = await jobCodeIdOfServer(campCode);
+      if (!found) return NextResponse.json({ error: '캠프 코드를 찾을 수 없습니다.' }, { status: 404 });
+      jobCodeId = found;
     }
     const code = campCode as string;
     const tier = campProfileTierOf([code]);
@@ -78,15 +79,14 @@ export async function PATCH(request: NextRequest) {
   if (!userId || !jobCodeId || !field) return NextResponse.json({ error: '요청 형식이 올바르지 않습니다.' }, { status: 400 });
   try {
     const db = getAdminFirestore();
-    const jc = await db.collection('jobCodes').doc(jobCodeId).get();
-    if (!jc.exists) return NextResponse.json({ error: '캠프 코드를 찾을 수 없습니다.' }, { status: 404 });
+    const code = await campCodeOfServer(jobCodeId);
+    if (!code) return NextResponse.json({ error: '캠프 코드를 찾을 수 없습니다.' }, { status: 404 });
     await applyRosterEdit(userId, jobCodeId, field, body.value);
     const sensitive = SENSITIVE_ROSTER_FIELDS.has(field);
     await writeAuditLog({
       action: 'CAMP_PROFILE_UPDATE', category: 'PRIVACY', performedBy: auth!.firebaseUid, performedByName: (auth!.user as any)?.name,
       targetUserId: userId, metadata: { by: 'admin-roster', field, ...(sensitive ? {} : { value: body.value ?? '' }) }, request,
     });
-    const code = String(jc.data()?.code ?? '');
     const row = await buildRosterRow(await db.collection('users').doc(userId).get(), jobCodeId, code, campProfileTierOf([code]), body.reveal === true);
     return NextResponse.json({ row });
   } catch (e) {
@@ -110,9 +110,8 @@ export async function POST(request: NextRequest) {
   if (!jobCodeId || !edits.length) return NextResponse.json({ error: '요청 형식이 올바르지 않습니다.' }, { status: 400 });
   if (edits.length > 1000) return NextResponse.json({ error: '한 번에 1000칸까지 붙여넣을 수 있습니다.' }, { status: 400 });
   const db = getAdminFirestore();
-  const jc = await db.collection('jobCodes').doc(jobCodeId).get();
-  if (!jc.exists) return NextResponse.json({ error: '캠프 코드를 찾을 수 없습니다.' }, { status: 404 });
-  const code = String(jc.data()?.code ?? '');
+  const code = await campCodeOfServer(jobCodeId);
+  if (!code) return NextResponse.json({ error: '캠프 코드를 찾을 수 없습니다.' }, { status: 404 });
 
   let saved = 0;
   const failed: Array<{ userId: string; field: string; error: string }> = [];

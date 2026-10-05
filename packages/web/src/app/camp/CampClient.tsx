@@ -59,9 +59,9 @@ export default function CampClient({ initialTab, initialDate }: CampClientProps)
   useEffect(() => {
     if (!activeCampId) return;
     let alive = true;
-    jobCodesService.getJobCodesByIds([activeCampId]).then(codes => {
-      if (!alive || !codes.length || !codes[0].code) return;
-      const type = stSheetService.getCampType(codes[0].code as CampCode);
+    jobCodesService.campCodeOf(activeCampId).then(code => {
+      if (!alive || !code) return;
+      const type = stSheetService.getCampType(code as CampCode);
       setCampType(type);
       try { window.localStorage.setItem(`SMIS_CAMP_TYPE_${activeCampId}`, type); } catch { /* noop */ }
     }).catch(() => {});

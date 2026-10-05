@@ -12,6 +12,7 @@
 import { randomUUID } from 'crypto';
 import * as admin from 'firebase-admin';
 import { getAdminFirestore, getAdminStorage } from './firebase-admin';
+import { jobCodeIdOfServer } from './campKeyServer';
 import {
   JOB_EXPERIENCE_GROUPS,
   JOB_EXPERIENCE_GROUP_ROLES,
@@ -70,9 +71,10 @@ interface Actor {
   viewer: TaskViewer;
 }
 
-async function jobCodeIdsFor(db: Db, campCode: string): Promise<string[]> {
-  const snap = await db.collection('jobCodes').where('code', '==', campCode).get();
-  return snap.docs.map(d => d.id);
+/** 캠프 코드 → jobCode 문서 id (코드는 유일 — 없으면 빈 배열) */
+async function jobCodeIdsFor(campCode: string): Promise<string[]> {
+  const id = await jobCodeIdOfServer(campCode);
+  return id ? [id] : [];
 }
 
 /** 캠프 코드(예: J28) 기준으로 이 사용자의 권한 계산 */
@@ -80,7 +82,7 @@ async function actorFor(db: Db, uid: string, campCode: string): Promise<Actor> {
   const snap = await db.doc(`users/${uid}`).get();
   const user = snap.data() as { name?: string; role?: string; jobExperiences?: Array<{ id: string; group?: string; groupRole?: string }> } | undefined;
   if (!user || !isCampStaffRole(user.role)) throw new TaskApiError(403, '캠프 스태프만 사용할 수 있습니다.');
-  const ids = await jobCodeIdsFor(db, campCode);
+  const ids = await jobCodeIdsFor(campCode);
   // 이 캠프 코드의 jobCode 중 내가 배정된 것 (부매니저 판정용)
   const jobCodeId = ids.find(id => user.jobExperiences?.some(e => e.id === id)) ?? ids[0];
   return {
@@ -389,7 +391,7 @@ export async function remindTask(uid: string, taskId: string): Promise<{
   }
 
   // 이 캠프 코드의 모든 jobCode 에 배정된 사람
-  const ids = await jobCodeIdsFor(db, task.campCode);
+  const ids = await jobCodeIdsFor(task.campCode);
   const seen = new Map<string, CampUser>();
   for (const id of ids) {
     const us = await db.collection('users').where('jobCodeIds', 'array-contains', id).get();

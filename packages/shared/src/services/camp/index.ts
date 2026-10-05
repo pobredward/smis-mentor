@@ -13,6 +13,7 @@ import { cleanLodging, type CampLodging } from '../../types/lodging';
 import type { CampDayPlan } from '../../types/campDayPlan';
 import type { CampRosterDoc } from '../../types/campRoster';
 import { ref, uploadBytes, getDownloadURL, type FirebaseStorage } from 'firebase/storage';
+import { campCodeOf } from '../campKey';
 
 /**
  * campSettings/{campCode} 문서 읽기 — 한 화면에서 한 번만.
@@ -209,11 +210,17 @@ export const getCampDayPlan = async (db: Firestore, campCode: string): Promise<C
 };
 
 /**
- * campRosters/{jobCodeId} — 관리자가 붙여넣은 캠프 선생님 표 (그룹·반·영어 이름·강의실·항공·방)
+ * campRosters/{campCode} — 관리자가 붙여넣은 캠프 선생님 표 (그룹·반·영어 이름·강의실·항공·방)
  * 스태프 읽기 전용 (저장은 관리자 페이지 → 서버). 민감 정보는 들어 있지 않다.
+ * 캠프 열쇠는 campCode — 아직 옮기지 않은 예전 문서(jobCodeId)도 읽는다.
  */
 export const getCampRoster = async (db: Firestore, jobCodeId: string): Promise<CampRosterDoc | null> => {
   if (!jobCodeId) return null;
-  const snap = await getDoc(doc(db, 'campRosters', jobCodeId));
-  return snap.exists() ? (snap.data() as CampRosterDoc) : null;
+  const code = await campCodeOf(db, jobCodeId);
+  if (code) {
+    const snap = await getDoc(doc(db, 'campRosters', code));
+    if (snap.exists()) return snap.data() as CampRosterDoc;
+  }
+  const old = await getDoc(doc(db, 'campRosters', jobCodeId));
+  return old.exists() ? (old.data() as CampRosterDoc) : null;
 };

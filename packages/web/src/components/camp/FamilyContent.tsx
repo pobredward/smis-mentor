@@ -212,9 +212,9 @@ export default function FamilyContent() {
   // 캠프 코드 로드
   useEffect(() => {
     if (!activeJobCodeId) { setLoading(false); return; }
-    jobCodesService.getJobCodesByIds([activeJobCodeId]).then(codes => {
-      if (codes.length > 0 && codes[0].code) {
-        setCampCode(codes[0].code as CampCode);
+    jobCodesService.campCodeOf(activeJobCodeId).then(code => {
+      if (code) {
+        setCampCode(code as CampCode);
       } else {
         setLoading(false);
       }

@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import type { JobExperienceGroupRole } from '../../types/camp';
 import { logger } from '../../utils/logger';
+import { invalidateCampKeys, isCampCodeTaken, jobCodeIdOf, normalizeCampCode } from '../campKey';
 
 // 채용 코드 타입은 legacy 한 벌을 쓴다 (예전 로컬 사본은 createdAt 이 선택이라 web 타입과 어긋났음)
 import type { JobCode, JobCodeWithId, JobGroup, JobCodeWithGroup } from '../../types/legacy';
@@ -216,6 +217,49 @@ export const adminReactivateUser = async (db: Firestore, userId: string) => {
 
 // ==================== JobCode 관련 함수 ====================
 
+/** 캠프 코드 규칙(비어 있음 · 겹침 · 변경)에 걸렸을 때 — 화면은 message 를 그대로 보여 주면 된다 */
+export class CampCodeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CampCodeError';
+  }
+}
+
+export const isCampCodeError = (e: unknown): e is CampCodeError => e instanceof Error && e.name === 'CampCodeError';
+
+/**
+ * 새 캠프 코드 검사 — campCode(jobCodes.code)는 캠프 데이터 여러 곳의 열쇠라 비어 있거나 겹치면 안 된다.
+ * 통과하면 앞뒤 공백을 뺀 코드를 돌려준다. (web · mobile 의 jobCodes 생성 함수가 함께 쓴다)
+ */
+export async function assertNewCampCode(db: Firestore, code: unknown, exceptId?: string): Promise<string> {
+  const c = normalizeCampCode(code);
+  if (!c) throw new CampCodeError('캠프 코드를 입력해 주세요.');
+  if (await isCampCodeTaken(db, c, exceptId)) throw new CampCodeError(`캠프 코드 ${c} 는 이미 있습니다.`);
+  return c;
+}
+
+/**
+ * 캠프 코드 변경 막기 — 고치는 값에 code 가 있으면 지금 값과 같은지 확인하고, 저장할 값에서는 뺀다.
+ * (예전 문서처럼 코드가 비어 있을 때만 새 코드를 채울 수 있다)
+ */
+export async function guardCampCodeUpdate<T extends { code?: unknown }>(
+  db: Firestore,
+  jobCodeId: string,
+  data: T
+): Promise<Omit<T, 'code'> & { code?: string }> {
+  const { code, ...rest } = data;
+  if (code === undefined) return rest;
+  const snap = await getDoc(doc(db, 'jobCodes', jobCodeId));
+  const current = normalizeCampCode(snap.data()?.code);
+  const next = normalizeCampCode(code);
+  if (current) {
+    if (next !== current) throw new CampCodeError('캠프 코드는 바꿀 수 없습니다 — 여러 기록의 열쇠입니다. 새 캠프를 만들어 주세요.');
+    return rest;
+  }
+  if (!next) return rest;
+  return { ...rest, code: await assertNewCampCode(db, next, jobCodeId) };
+}
+
 // 모든 JobCode 조회
 export const adminGetAllJobCodes = async (db: Firestore): Promise<JobCodeWithId[]> => {
   try {
@@ -237,8 +281,10 @@ export const adminCreateJobCode = async (
   db: Firestore,
   jobCodeData: Omit<JobCode, 'createdAt' | 'updatedAt'>
 ) => {
+  const code = await assertNewCampCode(db, jobCodeData.code);
   try {
-    const docRef = await addDoc(collection(db, 'jobCodes'), jobCodeData);
+    const docRef = await addDoc(collection(db, 'jobCodes'), { ...jobCodeData, code });
+    invalidateCampKeys();
     return docRef.id;
   } catch (error) {
     logger.error('업무 코드 생성 실패:', error);
@@ -250,6 +296,7 @@ export const adminCreateJobCode = async (
 export const adminDeleteJobCode = async (db: Firestore, jobCodeId: string) => {
   try {
     await deleteDoc(doc(db, 'jobCodes', jobCodeId));
+    invalidateCampKeys();
     return true;
   } catch (error) {
     logger.error('업무 코드 삭제 실패:', error);
@@ -263,8 +310,10 @@ export const adminUpdateJobCode = async (
   jobCodeId: string,
   jobCodeData: Partial<JobCode>
 ) => {
+  const data = await guardCampCodeUpdate(db, jobCodeId, jobCodeData);
   try {
-    await updateDoc(doc(db, 'jobCodes', jobCodeId), jobCodeData);
+    await updateDoc(doc(db, 'jobCodes', jobCodeId), data);
+    invalidateCampKeys();
     return true;
   } catch (error) {
     logger.error('업무 코드 업데이트 실패:', error);
@@ -445,17 +494,11 @@ export const adminGetUsersByJobCode = async (
   code: string
 ): Promise<User[]> => {
   try {
-    const jobCodesRef = collection(db, 'jobCodes');
-    const codeQuery = query(
-      jobCodesRef,
-      where('generation', '==', generation),
-      where('code', '==', code)
-    );
-    const jobCodeSnapshot = await getDocs(codeQuery);
+    // 캠프 코드는 유일 — generation 은 예전 호출 모양을 맞추려고 남겨 둔다 (조회에는 안 씀)
+    const jobCodeId = await jobCodeIdOf(db, code);
+    if (!jobCodeId) return [];
 
-    if (jobCodeSnapshot.empty) return [];
-
-    return adminGetUsersByJobCodeId(db, jobCodeSnapshot.docs[0].id);
+    return adminGetUsersByJobCodeId(db, jobCodeId);
   } catch (error) {
     logger.error('직무 코드별 사용자 조회 실패:', error);
     throw error;

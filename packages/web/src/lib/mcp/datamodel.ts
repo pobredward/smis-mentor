@@ -102,7 +102,10 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
       eduDates: { type: 'object[]', description: '대면 교육일 목록(timestamp[])' },
     },
     serverManaged: AUDIT_FIELDS,
-    notes: ['업무(campTasks)·카테고리·홈 메시지는 code 로, 교육 페이지(campPages)·자료 링크(generationResources)는 문서 ID 로 캠프를 가리킨다.'],
+    notes: [
+      '캠프 열쇠는 code(campCode) — 캠프에 딸린 데이터는 campCode 로 묶는다 (2026-10). code 는 유일하고 바꿀 수 없다.',
+      '사람의 캠프 배정(users.jobExperiences · jobCodeIds)과 교육 페이지(campPages.jobCodeId)는 문서 ID 도 함께 적는다 (옛 앱 호환).',
+    ],
   },
 
   campPages: {
@@ -114,6 +117,7 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
     idOnCreate: 'uuid',
     fields: {
       jobCodeId: str('캠프 jobCodes 문서 ID', { required: true, writable: true, ref: { collection: 'jobCodes', by: 'id' } }),
+      campCode: str('캠프 코드 (jobCodeId 캠프의 code 와 같아야 함 — 캠프 열쇠)', { writable: true, ref: { collection: 'jobCodes', by: 'code' } }),
       category: str('탭 분류', { required: true, writable: true, enum: ['education', 'schedule', 'guide'] }),
       title: str('페이지 제목', { required: true, writable: true }),
       targetRole: str('대상. common=전체, mentor=한국인 멘토, foreign=원어민, expired=만료(관리자만 표시)', {
@@ -127,16 +131,15 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
     },
     serverManaged: AUDIT_FIELDS,
     notes: [
-      '다른 캠프로 복사할 때: 원본을 get_document(includeLarge) 로 읽고, jobCodeId 를 대상 캠프 ID 로 바꾸고, 본문의 날짜·장소·캠프명·기수를 치환한 뒤 create 한다. 이미지 URL 은 그대로 써도 열린다.',
+      '다른 캠프로 복사할 때: 원본을 get_document(includeLarge) 로 읽고, jobCodeId · campCode 를 대상 캠프 것으로 바꾸고, 본문의 날짜·장소·캠프명·기수를 치환한 뒤 create 한다. 이미지 URL 은 그대로 써도 열린다.',
       'order 는 대상 캠프의 같은 category 안에서 중복되지 않게 정한다 (기존 최대값+1 부터).',
     ],
   },
 
   generationResources: {
     name: 'generationResources',
-    description: '캠프별 자료 링크 묶음(교육/시간표/인솔표 탭의 외부 링크). 문서 ID = 캠프 jobCodes 문서 ID.',
+    description: '캠프별 자료 링크 묶음(교육/시간표/인솔표 탭의 외부 링크, 옛 방식). 새 문서 ID = 캠프 코드(campCode) — 여기서 보이는 것은 같은 내용을 유지하는 예전 문서(문서 ID = jobCodes 문서 ID). 고치기는 앱 · 웹 화면에서.',
     read: 'mentor',
-    write: { ops: ['create', 'update'] },
     scope: { kind: 'doc-id-camp-id' },
     idOnCreate: 'required',
     fields: {

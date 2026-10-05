@@ -14,6 +14,7 @@ import {
 import { User } from '../../types/legacy';
 import { logger } from '../../utils/logger';
 import { NotFoundError, DatabaseError } from '../../errors';
+import { jobCodeIdOf } from '../campKey';
 
 // ==================== User 관련 서비스 ====================
 
@@ -403,20 +404,12 @@ export const getUsersByJobCode = async (
   code: string
 ): Promise<User[]> => {
   try {
-    // jobCodes 컬렉션에서 해당 코드와 세대에 맞는 문서 ID 찾기
-    const jobCodesRef = collection(db, 'jobCodes');
-    const codeQuery = query(
-      jobCodesRef,
-      where('generation', '==', generation),
-      where('code', '==', code)
-    );
-    const jobCodeSnapshot = await getDocs(codeQuery);
-
-    if (jobCodeSnapshot.empty) {
+    // 캠프 코드 → jobCodes 문서 id (코드는 유일 — generation 은 예전 호출 모양을 맞추려고 남겨 둔다, 조회에는 안 씀)
+    const jobCodeId = await jobCodeIdOf(db, code);
+    if (!jobCodeId) {
       return [];
     }
 
-    const jobCodeId = jobCodeSnapshot.docs[0].id;
     return getUsersByJobCodeId(db, jobCodeId);
   } catch (error) {
     logger.error('직무 코드별 사용자 조회 실패:', error);

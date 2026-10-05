@@ -33,9 +33,9 @@ export function RosterScreen() {
     let alive = true;
     const key = `SMIS_CAMP_TYPE_${activeJobCodeId}`;
     AsyncStorage.getItem(key).then((v) => { if (alive && v) setCampType((cur) => cur ?? v); }).catch(() => {});
-    jobCodesService.getJobCodesByIds([activeJobCodeId]).then((codes) => {
-      if (!alive || !codes.length || !codes[0].code) return;
-      const type = stSheetService.getCampType(codes[0].code as CampCode);
+    jobCodesService.campCodeOf(activeJobCodeId).then((code) => {
+      if (!alive || !code) return;
+      const type = stSheetService.getCampType(code as CampCode);
       setCampType(type);
       AsyncStorage.setItem(key, type).catch(() => {});
     }).catch(() => {});

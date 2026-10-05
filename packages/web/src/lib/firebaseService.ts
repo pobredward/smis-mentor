@@ -52,6 +52,10 @@ import {
   deleteJobBoardInterview,
   type ApplicantInterviewInfo,
   type ApplicantInterviewInfoResponse,
+  jobCodeIdOf,
+  invalidateCampKeys,
+  assertNewCampCode,
+  guardCampCodeUpdate,
 } from '@smis-mentor/shared';
 import { authenticatedGet, authenticatedPost } from './apiClient';
 
@@ -439,19 +443,15 @@ export const getUserJobCodesInfo = async (jobExperiences: Array<{id: string, gro
             ...jobExperienceDoc.data() 
           } as JobExperience;
           
-          // 관련 JobCode 정보 가져오기
-          const jobCodeQuery = query(
-            collection(db, 'jobCodes'),
-            where('generation', '==', jobExperience.refGeneration),
-            where('code', '==', jobExperience.refCode)
-          );
-          
-          const jobCodeSnapshot = await getDocs(jobCodeQuery);
-          if (!jobCodeSnapshot.empty) {
+          // 관련 JobCode 정보 가져오기 (캠프 코드는 유일 → 기수까지 맞는지 확인)
+          const refId = await jobCodeIdOf(db, jobExperience.refCode);
+          const refDoc = refId ? await getDoc(doc(db, 'jobCodes', refId)) : null;
+          const refData = refDoc?.exists() ? (refDoc.data() as JobCode) : null;
+          if (refDoc && refData && refData.generation === jobExperience.refGeneration) {
             logger.info(`jobExperience에서 참조하는 JobCode 찾음: ${jobExperience.refGeneration}-${jobExperience.refCode}`);
             return {
-              id: jobCodeSnapshot.docs[0].id,
-              ...jobCodeSnapshot.docs[0].data() as JobCode,
+              id: refDoc.id,
+              ...refData,
               group
             } as JobCodeWithGroup;
           } else {
@@ -460,20 +460,14 @@ export const getUserJobCodesInfo = async (jobExperiences: Array<{id: string, gro
         } else {
           logger.info(`'${idOrCode}'는 직접 코드로 간주하고 검색합니다.`);
           // 2.2. jobExperiences 컬렉션에 없는 경우, idOrCode를 직접 코드로 간주하고 검색
-          const jobCodeQuery = query(
-            collection(db, 'jobCodes'),
-            where('code', '==', idOrCode),
-            // 세대 기준 내림차순 정렬(최신 세대가 먼저 오도록)
-            // generation 형식이 'G25'와 같은 형태일 경우 문자열 정렬로도 최신 세대가 먼저 옴
-            orderBy('generation', 'desc')
-          );
-          
-          const jobCodeSnapshot = await getDocs(jobCodeQuery);
-          if (!jobCodeSnapshot.empty) {
-            const jobCode = jobCodeSnapshot.docs[0].data() as JobCode;
+          // 캠프 코드는 유일 — 코드 → 문서 id 로 바꿔 읽는다
+          const codeId = await jobCodeIdOf(db, idOrCode);
+          const codeDoc = codeId ? await getDoc(doc(db, 'jobCodes', codeId)) : null;
+          if (codeDoc?.exists()) {
+            const jobCode = codeDoc.data() as JobCode;
             logger.info(`코드 '${idOrCode}'에 해당하는 JobCode 찾음: ${jobCode.generation}-${jobCode.code}`);
             return {
-              id: jobCodeSnapshot.docs[0].id,
+              id: codeDoc.id,
               ...jobCode,
               group
             } as JobCodeWithGroup;
@@ -1289,8 +1283,11 @@ export const getAllJobCodes = async () => {
 };
 
 export const createJobCode = async (jobCodeData: Omit<JobCode, 'id'>) => {
+  // 캠프 코드는 여러 기록의 열쇠 — 비었거나 이미 있으면 막는다
+  const code = await assertNewCampCode(db, jobCodeData.code);
   try {
-    const docRef = await addDoc(collection(db, 'jobCodes'), jobCodeData);
+    const docRef = await addDoc(collection(db, 'jobCodes'), { ...jobCodeData, code });
+    invalidateCampKeys();
     return docRef.id;
   } catch (error) {
     logger.error('업무 코드 생성 실패:', error);
@@ -1301,6 +1298,7 @@ export const createJobCode = async (jobCodeData: Omit<JobCode, 'id'>) => {
 export const deleteJobCode = async (jobCodeId: string) => {
   try {
     await deleteDoc(doc(db, 'jobCodes', jobCodeId));
+    invalidateCampKeys();
     return true;
   } catch (error) {
     logger.error('업무 코드 삭제 실패:', error);
@@ -1309,8 +1307,11 @@ export const deleteJobCode = async (jobCodeId: string) => {
 };
 
 export const updateJobCode = async (jobCodeId: string, jobCodeData: Partial<JobCode>) => {
+  // 캠프 코드는 만든 뒤 바꿀 수 없다 (바뀌었으면 오류, 같으면 저장 값에서 뺀다)
+  const data = await guardCampCodeUpdate(db, jobCodeId, jobCodeData);
   try {
-    await updateDoc(doc(db, 'jobCodes', jobCodeId), jobCodeData);
+    await updateDoc(doc(db, 'jobCodes', jobCodeId), data);
+    invalidateCampKeys();
     return true;
   } catch (error) {
     logger.error('업무 코드 업데이트 실패:', error);

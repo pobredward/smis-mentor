@@ -78,9 +78,9 @@ export const StudentList: React.FC<StudentListProps> = ({
       }
       
       try {
-        const jobCodes = await jobCodesService.getJobCodesByIds([activeJobCodeId]);
-        if (jobCodes.length > 0 && jobCodes[0].code) {
-          const code = jobCodes[0].code as CampCode;
+        const found = await jobCodesService.campCodeOf(activeJobCodeId);
+        if (found) {
+          const code = found as CampCode;
           logger.info('캠프 코드 로드 성공:', code);
           setCampCode(code);
           setSelectedMentor(null); // 캠프 변경 시 멘토 선택 초기화

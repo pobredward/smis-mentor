@@ -10,6 +10,7 @@ import {
   FamilySTSheetCache,
   createStSheetService,
   createStudentHistoryLoader,
+  campCodeOf,
   type SyncSTSheetResponse,
 } from '@smis-mentor/shared';
 import { db } from './firebase';
@@ -39,6 +40,9 @@ export { campSortKey, filterStudents, groupStudentResults } from '@smis-mentor/s
 export type { StudentHistoryResult, StudentGroup, SyncSTSheetResponse } from '@smis-mentor/shared';
 
 export const jobCodesService = {
+  /** jobCodes 문서 id → 캠프 코드 (shared campKey 변환표 — 없으면 null). 코드만 필요하면 이것을 쓴다 */
+  campCodeOf: (jobCodeId: string): Promise<string | null> => campCodeOf(db, jobCodeId),
+
   getJobCodesByIds: async (jobExperiences: Array<{ id: string }> | string[]): Promise<JobCode[]> => {
     if (!jobExperiences || jobExperiences.length === 0) {
       return [];

@@ -1,6 +1,6 @@
 'use client';
 import { compareCampCodes } from '@smis-mentor/shared';
-import { logger } from '@smis-mentor/shared';
+import { logger, isCampCodeError } from '@smis-mentor/shared';
 
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -193,7 +193,8 @@ export default function JobGenerate() {
       loadJobCodes();
     } catch (error) {
       logger.error('업무 저장 오류:', error);
-      toast.error('업무 저장 중 오류가 발생했습니다.');
+      // 캠프 코드 규칙(겹침 · 변경)에 걸리면 그 이유를 그대로 보여 준다
+      toast.error(isCampCodeError(error) ? error.message : '업무 저장 중 오류가 발생했습니다.');
     } finally {
       setIsLoading(false);
     }
@@ -313,13 +314,22 @@ export default function JobGenerate() {
                     {...register('generation')}
                   />
 
-                  <FormInput
-                    label="코드"
-                    type="text"
-                    placeholder="예: J25"
-                    error={errors.code?.message}
-                    {...register('code')}
-                  />
+                  <div>
+                    <FormInput
+                      label="코드"
+                      type="text"
+                      placeholder="예: J25"
+                      error={errors.code?.message}
+                      readOnly={isEditing}
+                      className={isEditing ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}
+                      {...register('code')}
+                    />
+                    {isEditing && (
+                      <p className="-mt-3 mb-4 text-xs text-gray-500">
+                        캠프 코드는 여러 기록의 열쇠라 바꿀 수 없습니다. 바꾸려면 새 캠프를 만들어 주세요.
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <FormInput

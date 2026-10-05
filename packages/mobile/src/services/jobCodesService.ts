@@ -1,4 +1,4 @@
-import { logger } from '@smis-mentor/shared';
+import { logger, campCodeOf } from '@smis-mentor/shared';
 import {
   collection,
   query,
@@ -20,6 +20,9 @@ export interface JobCode {
 }
 
 const jobCodesService = {
+  /** jobCodes 문서 id → 캠프 코드 (shared campKey 변환표 — 없으면 null). 코드만 필요하면 이것을 쓴다 */
+  campCodeOf: (jobCodeId: string): Promise<string | null> => campCodeOf(db, jobCodeId),
+
   /**
    * 모든 jobCodes 조회 (관리자용)
    */

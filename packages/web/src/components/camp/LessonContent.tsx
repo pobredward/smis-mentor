@@ -24,12 +24,13 @@ import {
   updateSection,
   type LessonMaterialData,
 } from '@/lib/lessonMaterialService';
-import { getUserJobCodesInfo, getUsersByJobCodeId } from '@/lib/firebaseService';
+import { getUsersByJobCodeId } from '@/lib/firebaseService';
 import { campQueryKeys } from '@/hooks/useCampDataPrefetch';
 import LessonPlanHub from '@/components/lessonPlan/LessonPlanHub';
 import {
   L,
   audienceOf,
+  campCodeOf,
   checkLessonLinks,
   hasLessonLink,
   lessonProgress,
@@ -67,11 +68,11 @@ const processedKey = (uid: string, jobCodeId: string) => ['processedLesson2', ui
 /** 내 수업 자료 — 규칙·중복 처리는 shared 의 loadLessonBundle (앱과 같은 코드) */
 async function loadLesson(user: { userId: string; role?: string; jobExperiences?: any[] }, jobCodeId: string): Promise<LessonState> {
   const viewer = lessonViewerOf(user as any, jobCodeId);
-  const [info] = await getUserJobCodesInfo([jobCodeId]);
+  const code = (await campCodeOf(db, jobCodeId)) ?? '';
   const bundle = await loadLessonBundle(db, {
     userId: user.userId,
     viewer,
-    code: String(info?.code ?? ''),
+    code,
     jobCodeId,
     withPlaceholders: true,
     members: () => getUsersByJobCodeId(jobCodeId) as any,

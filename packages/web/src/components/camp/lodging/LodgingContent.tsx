@@ -29,10 +29,10 @@ import {
   type LodgingPlaceSetting,
   type LodgingRoomSetting,
   type LodgingRoomView,
-  type STSheetStudent, L } from '@smis-mentor/shared';
+  type STSheetStudent, L, campCodeOf } from '@smis-mentor/shared';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
-import { getJobCodeById, getUsersByJobCodeId } from '@/lib/firebaseService';
+import { getUsersByJobCodeId } from '@/lib/firebaseService';
 import { stSheetService, type CampCode } from '@/lib/stSheetService';
 import LodgingFloorGrid from './LodgingFloorGrid';
 import LodgingB1Map from './LodgingB1Map';
@@ -58,12 +58,13 @@ export default function LodgingContent() {
     : undefined;
   const activeJobCodeId = adminActiveCampId || userData?.activeJobExperienceId || userData?.jobExperiences?.[0]?.id;
 
-  const { data: jobCode } = useQuery({
-    queryKey: ['jobCode', activeJobCodeId],
-    queryFn: () => getJobCodeById(activeJobCodeId!),
+  // jobCodes 문서 id → 캠프 코드 (shared campKey) — 코드만 쓰므로 jobCode 문서는 읽지 않는다
+  const { data: foundCampCode } = useQuery({
+    queryKey: ['campCodeOf', activeJobCodeId],
+    queryFn: async () => (await campCodeOf(db, activeJobCodeId!)) ?? '',
     enabled: !!activeJobCodeId,
   });
-  const campCode = (jobCode?.code ?? '') as CampCode | '';
+  const campCode = (foundCampCode ?? '') as CampCode | '';
   const campType = campCode ? stSheetService.getCampType(campCode as CampCode) : null;
   const building = useMemo(() => lodgingBuildingFor(campType), [campType]);
 
@@ -265,7 +266,7 @@ export default function LodgingContent() {
   if (!activeJobCodeId) {
     return <Empty title={L('lodging.noActiveCamp')} body={L('lodging.activateACampOnMy')} />;
   }
-  if (!jobCode) {
+  if (foundCampCode === undefined) {
     return (
       <div className="space-y-3 pt-2">
         <div className="h-7 w-72 animate-pulse rounded-full bg-gray-100" />

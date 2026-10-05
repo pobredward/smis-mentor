@@ -1,6 +1,6 @@
 import { compareCampCodes } from '@smis-mentor/shared';
 import React, { useState, useEffect } from 'react';
-import { logger } from '@smis-mentor/shared';
+import { logger, isCampCodeError } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -154,7 +154,8 @@ export function JobGenerateScreen({
       await loadJobCodes();
     } catch (error) {
       logger.error('업무 생성/수정 오류:', error);
-      Alert.alert('오류', `업무 ${isEditing ? '수정' : '생성'} 중 오류가 발생했습니다.`);
+      // 캠프 코드 규칙(겹침 · 변경)에 걸리면 그 이유를 그대로 보여 준다
+      Alert.alert('오류', isCampCodeError(error) ? error.message : `업무 ${isEditing ? '수정' : '생성'} 중 오류가 발생했습니다.`);
     } finally {
       setIsLoading(false);
     }
@@ -288,14 +289,20 @@ export function JobGenerateScreen({
               name="code"
               render={({ field: { onChange, value } }) => (
                 <TextInput
-                  style={[styles.input, errors.code && styles.inputError]}
+                  style={[styles.input, errors.code && styles.inputError, isEditing && styles.inputReadOnly]}
                   value={value}
                   onChangeText={onChange}
+                  editable={!isEditing}
                   placeholder="예: E27"
                 />
               )}
             />
             {errors.code && <Text style={styles.errorText}>{errors.code.message}</Text>}
+            {isEditing && (
+              <Text style={styles.hintText}>
+                캠프 코드는 여러 기록의 열쇠라 바꿀 수 없습니다. 바꾸려면 새 캠프를 만들어 주세요.
+              </Text>
+            )}
           </View>
 
           {/* Name */}
@@ -558,6 +565,15 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#ef4444',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  inputReadOnly: {
+    backgroundColor: '#f3f4f6',
+    color: '#6b7280',
+  },
+  hintText: {
+    color: '#6b7280',
     fontSize: 12,
     marginTop: 4,
   },

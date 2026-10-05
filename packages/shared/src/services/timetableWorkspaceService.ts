@@ -47,7 +47,7 @@ export async function loadTimetableWorkspace(
   args: { campCode: string; jobCodeId: string }
 ): Promise<TimetableWorkspaceData> {
   const [snap, settings] = await Promise.all([
-    getDocs(query(collection(db, TIMETABLES), where('jobCodeId', '==', args.jobCodeId))),
+    getDocs(query(collection(db, TIMETABLES), where('campCode', '==', args.campCode))), // 캠프 열쇠는 campCode
     getCampSettingsDoc(db, args.campCode, { fresh: true }),
   ]);
   const tables: CampTimetable[] = [];

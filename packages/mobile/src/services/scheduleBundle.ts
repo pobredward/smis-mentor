@@ -52,13 +52,14 @@ export interface ScheduleBundle {
 export const scheduleQueryKey = (jobCodeId: string) => ['schedule', jobCodeId, 'timetable'] as const;
 
 export async function loadScheduleBundle(jobCodeId: string): Promise<ScheduleBundle> {
-  const jobCode = (await jobCodesService.getJobCodeById(jobCodeId)) as
-    | { code?: string; startDate?: { toDate?: () => Date }; endDate?: { toDate?: () => Date } }
-    | null;
-  const campCode = jobCode?.code ?? '';
+  // 캠프 코드는 변환표(shared campKey)에서 — jobCode 문서는 기간(시작·종료일)에만 쓰므로 아래 조회들과 함께 읽는다
+  const campCode = (await jobCodesService.campCodeOf(jobCodeId)) ?? '';
 
-  const [timetables, members, settingGroups, classInfo, books, timetableCommon, timetableGuides, dayPlan] =
+  const [jobCode, timetables, members, settingGroups, classInfo, books, timetableCommon, timetableGuides, dayPlan] =
     await Promise.all([
+    jobCodesService.getJobCodeById(jobCodeId).then(
+      (j) => j as { code?: string; startDate?: { toDate?: () => Date }; endDate?: { toDate?: () => Date } } | null
+    ),
     campTimetableService.listByJobCodeId(jobCodeId),
     getUsersByJobCodeId(jobCodeId),
     campCode ? getCampGroups(db, campCode) : Promise.resolve([]),

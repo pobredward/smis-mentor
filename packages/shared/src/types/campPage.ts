@@ -6,6 +6,8 @@ export type CampPageRole = 'common' | 'mentor' | 'foreign' | 'expired';
 export interface CampPage {
   id: string;
   jobCodeId: string;
+  /** 캠프 열쇠 (jobCodes.code) — 2026-10 부터 이것으로 찾는다 */
+  campCode?: string;
   category: CampPageCategory;
   title: string;
   targetRole: CampPageRole;

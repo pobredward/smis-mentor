@@ -683,6 +683,8 @@ export interface STSheetConfig {
 
 export interface GenerationResources {
   jobCodeId: string;
+  /** 캠프 열쇠 (= code) — 문서 id 도 이것 (예전 문서는 jobCodeId) */
+  campCode?: string;
   generation: string;
   code: string;
   educationLinks: ResourceLink[];

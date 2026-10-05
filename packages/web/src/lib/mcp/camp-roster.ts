@@ -20,11 +20,12 @@ import {
   prepRosterRows,
   profileUpdatesOf,
   removalsOf,
-  rosterRef,
+  readRosterDoc,
   saveCampRoster,
   type UserLite,
 } from '@/lib/campRosterSheetServer';
 import { getAdminFirestore } from '@/lib/firebase-admin';
+import { jobCodeIdOfServer } from '@/lib/campKeyServer';
 import { writeAuditLog } from '@/lib/auditLog';
 import { clearAiContentCache } from '@/lib/ai-content/data';
 import { canAccess, type Viewer } from '@/lib/ai-content/site';
@@ -82,9 +83,9 @@ function requireAdmin(viewer: Viewer) {
 async function resolveCamp(camp: string) {
   const code = String(camp ?? '').trim().toUpperCase();
   if (!code) throw new DataToolError('camp(캠프 코드, 예: J29)가 필요합니다.');
-  const snap = await getAdminFirestore().collection('jobCodes').where('code', '==', code).limit(1).get();
-  if (snap.empty) throw new DataToolError(`캠프 코드 ${code} 를 찾을 수 없습니다. list_camps 로 확인하세요.`);
-  return getJobCode(snap.docs[0].id);
+  const jobCodeId = await jobCodeIdOfServer(code);
+  if (!jobCodeId) throw new DataToolError(`캠프 코드 ${code} 를 찾을 수 없습니다. list_camps 로 확인하세요.`);
+  return getJobCode(jobCodeId);
 }
 
 const publicCols = (kind: CampRosterKind, tier: CampRosterTier) => rosterColumnsOf(kind, tier).filter((c) => !c.sensitive);
@@ -117,7 +118,7 @@ const docRows = (doc: CampRosterDoc | null, kind: CampRosterKind): Row[] =>
 export async function getCampRosterForMcp(input: { camp: string }, viewer: Viewer) {
   requireAdmin(viewer);
   const jc = await resolveCamp(input.camp);
-  const doc = ((await rosterRef(jc.id).get()).data() ?? null) as CampRosterDoc | null;
+  const doc = await readRosterDoc(jc);
   const users = await loadUsers(jc.id);
   const byId = new Map(users.map((u) => [u.id, u]));
   const strip = (kind: CampRosterKind) => {
@@ -241,7 +242,7 @@ export async function writeCampRosterForMcp(input: WriteRosterInput, viewer: Vie
       throw new DataToolError('보관 시간(30분)이 지났습니다. dry-run 부터 다시 하세요.');
     }
     const plan = JSON.parse(String(d.plan)) as Plan;
-    const cur = ((await rosterRef(plan.jobCodeId).get()).data() ?? null) as CampRosterDoc | null;
+    const cur = await readRosterDoc({ id: plan.jobCodeId, code: plan.camp });
     if ((cur?.updatedAt ?? null) !== plan.rosterUpdatedAt) {
       throw new DataToolError('dry-run 뒤에 이 캠프 선생님 표가 바뀌었습니다 (다른 관리자 저장). dry-run 부터 다시 하세요.');
     }
@@ -268,7 +269,7 @@ export async function writeCampRosterForMcp(input: WriteRosterInput, viewer: Vie
 
   // dry-run
   const jc = await resolveCamp(input.camp);
-  const doc = ((await rosterRef(jc.id).get()).data() ?? null) as CampRosterDoc | null;
+  const doc = await readRosterDoc(jc);
   const errors: string[] = [];
   const hasTable = Array.isArray(input.mentors) || Array.isArray(input.foreign);
   const hasChanges = Array.isArray(input.changes) && input.changes.length > 0;

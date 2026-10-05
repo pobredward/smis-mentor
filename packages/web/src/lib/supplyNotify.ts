@@ -17,6 +17,7 @@
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getAdminFirestore } from './firebase-admin';
+import { jobCodeIdOfServer } from './campKeyServer';
 import {
   notificationAllowed, pushReachOf, STOCK_MANAGER_GROUP_ROLES, isStockGroupOf, localeOfUser, t,
   type NotificationKey, type NotificationSettings, type PushReachState, type Locale, type MessageKey, type MessageVars,
@@ -63,18 +64,9 @@ export type SupplyNotifyEvent =
 
 const won = (n: number | undefined, lang: Locale) => t(lang, 'push.won', { n: (n ?? 0).toLocaleString(lang === 'en' ? 'en-US' : 'ko-KR') });
 
-async function jobCodeIdOf(campCode: string): Promise<string | undefined> {
-  const db = getAdminFirestore();
-  const snap = await db.collection('jobCodes').where('code', '==', campCode).get();
-  if (snap.empty) return undefined;
-  // 같은 코드가 여러 기수에 있으면 가장 최근 기수
-  const docs = [...snap.docs].sort((a, b) => Number(b.data().generation ?? 0) - Number(a.data().generation ?? 0));
-  return docs[0].id;
-}
-
 async function campUsers(campCode: string): Promise<UserLite[]> {
   const db = getAdminFirestore();
-  const jobCodeId = await jobCodeIdOf(campCode);
+  const jobCodeId = await jobCodeIdOfServer(campCode);
   if (!jobCodeId) return [];
   const snap = await db.collection('users').where('jobCodeIds', 'array-contains', jobCodeId).get();
   return snap.docs.map((d: Doc) => {

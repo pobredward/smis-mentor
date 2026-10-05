@@ -36,12 +36,12 @@ import {
   updateSection,
   type LessonMaterialData,
 } from '../services/lessonMaterialService';
-import { getUserJobCodesInfo } from '../services/authService';
 import { getUsersByJobCodeId } from '../services/userService';
 import { LessonPlanHubCard } from './LessonPlanScreen';
 import {
   L,
   audienceOf,
+  campCodeOf,
   checkLessonLinks,
   hasLessonLink,
   lessonProgress,
@@ -78,11 +78,11 @@ function linkModeOf(topic: Topic, viewer: LessonViewer): LinkMode {
 /** 내 수업 자료 — 규칙·중복 처리는 shared 의 loadLessonBundle (web 과 같은 코드) */
 async function loadLesson(user: any, jobCodeId: string): Promise<LessonState> {
   const viewer = lessonViewerOf(user, jobCodeId);
-  const [info] = await getUserJobCodesInfo([jobCodeId]);
+  const code = (await campCodeOf(db, jobCodeId)) ?? '';
   const bundle = await loadLessonBundle(db, {
     userId: user.userId,
     viewer,
-    code: String(info?.code ?? ''),
+    code,
     jobCodeId,
     withPlaceholders: true,
     members: () => getUsersByJobCodeId(jobCodeId) as any,

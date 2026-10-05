@@ -14,6 +14,7 @@ import {
   type Firestore,
 } from 'firebase/firestore';
 import { newId as uuidv4 } from '../utils/id';
+import { campCodeOf } from './campKey';
 import type { CampPage, CampPageCategory, CampPageRole } from '../types/campPage';
 
 export class CampPageService {
@@ -42,9 +43,13 @@ export class CampPageService {
       ? Math.max(...existingPages.map(p => p.order))
       : -1;
 
+    // 캠프 열쇠는 campCode (jobCodeId 는 옛 앱이 찾으므로 같이 적는다)
+    const campCode = (await campCodeOf(this.db, data.jobCodeId)) ?? undefined;
+
     const newPage: CampPage = {
       id: pageId,
       jobCodeId: data.jobCodeId,
+      ...(campCode ? { campCode } : {}),
       category: data.category,
       title: data.title,
       targetRole: data.targetRole,
@@ -60,6 +65,7 @@ export class CampPageService {
     const docRef = doc(this.db, 'campPages', pageId);
     await setDoc(docRef, {
       jobCodeId: newPage.jobCodeId,
+      ...(campCode ? { campCode } : {}),
       category: newPage.category,
       title: newPage.title,
       targetRole: newPage.targetRole,
@@ -122,17 +128,22 @@ export class CampPageService {
   }
 
   // 카테고리별 페이지 목록 조회 (클라이언트 정렬)
+  // 캠프 열쇠는 campCode. campCode 가 아직 없는 예전 문서는 jobCodeId 로 한 번 더 찾는다 (이관 뒤에는 오지 않음)
   async getPagesByCategory(
     jobCodeId: string,
     category: CampPageCategory
   ): Promise<CampPage[]> {
-    const q = query(
-      collection(this.db, 'campPages'),
-      where('jobCodeId', '==', jobCodeId),
-      where('category', '==', category)
-    );
-
-    const querySnapshot = await getDocs(q);
+    const campCode = await campCodeOf(this.db, jobCodeId);
+    let querySnapshot = campCode
+      ? await getDocs(query(collection(this.db, 'campPages'), where('campCode', '==', campCode), where('category', '==', category)))
+      : null;
+    if (!querySnapshot || querySnapshot.empty) {
+      querySnapshot = await getDocs(query(
+        collection(this.db, 'campPages'),
+        where('jobCodeId', '==', jobCodeId),
+        where('category', '==', category)
+      ));
+    }
     const pages: CampPage[] = [];
 
     querySnapshot.forEach((doc) => {

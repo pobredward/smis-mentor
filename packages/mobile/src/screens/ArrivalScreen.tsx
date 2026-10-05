@@ -19,9 +19,9 @@ export function ArrivalScreen() {
   const activeJobCodeId = resolveActiveJobCodeId(userData); // 관리자 임시 캠프 포함
   useEffect(() => {
     if (!activeJobCodeId) { setCampCode(null); return; }
-    jobCodesService.getJobCodesByIds([activeJobCodeId]).then((codes) => {
-      if (codes.length > 0 && codes[0].code) {
-        const code = codes[0].code as CampCode;
+    jobCodesService.campCodeOf(activeJobCodeId).then((found) => {
+      if (found) {
+        const code = found as CampCode;
         setCampCode(code);
         setCampType(stSheetService.getCampType(code));
       }

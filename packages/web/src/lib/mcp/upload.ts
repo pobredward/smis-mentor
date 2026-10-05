@@ -14,6 +14,7 @@ import { isIP } from 'net';
 import { Timestamp } from 'firebase-admin/firestore';
 import { guideKeyOf, guideMediaPath } from '@smis-mentor/shared';
 import { getAdminFirestore, getAdminStorage } from '@/lib/firebase-admin';
+import { jobCodeIdOfServer } from '@/lib/campKeyServer';
 import { canAccess, type Viewer } from '@/lib/ai-content/site';
 import { DataToolError } from './data-tools';
 
@@ -218,8 +219,7 @@ export async function uploadMedia(input: UploadInput, viewer: Viewer) {
   const target = input.target ?? 'timetableGuide';
 
   const db = getAdminFirestore();
-  const camp = await db.collection('jobCodes').where('code', '==', campCode).limit(1).get();
-  if (camp.empty) throw new DataToolError(`캠프 코드 "${campCode}" 가 없습니다.`);
+  if (!(await jobCodeIdOfServer(campCode))) throw new DataToolError(`캠프 코드 "${campCode}" 가 없습니다.`);
 
   let bytes: Buffer;
   let source: string;

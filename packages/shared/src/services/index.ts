@@ -4,6 +4,7 @@ export * from './stSheet';
 export * from './fieldConfig';
 export * from './camp';
 export * from './campPageService';
+export * from './campKey';
 export * from './campTimetableService';
 export * from './timetableWorkspaceService';
 export * from './user';

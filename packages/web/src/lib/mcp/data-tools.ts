@@ -14,6 +14,7 @@ import { clearAiContentCache, getCamps } from '@/lib/ai-content/data';
 import { computeEvaluationSummary, guideKeyOf, type EvaluationSummarySource } from '@smis-mentor/shared';
 import { COLLECTIONS, DATA_TOOL_LIMITS, EXCLUDED_COLLECTIONS, RECIPES, type CollectionSpec, type FieldSpec, type WriteOp } from './datamodel';
 import { cleanSettingsFields, patchSummary, type CleanedFields } from './camp-settings';
+import { campCodeOfServer, jobCodeIdOfServer } from '@/lib/campKeyServer';
 
 // ─── 타입 ─────────────────────────────────────────────────────────────────
 
@@ -758,18 +759,22 @@ async function crossChecks(
     if (sameOrder.length) warnings.push(`order ${merged.order} 는 같은 탭에 이미 있습니다 ("${sameOrder[0].data()?.title}"). 기존 최대 order: ${Math.max(-1, ...dup.docs.map((d) => Number(d.data()?.order ?? -1)))}`);
   }
 
-  if (spec.name === 'generationResources' && mode === 'create' && id && merged.jobCodeId !== id) errors.push(`문서 ID(${id}) 와 jobCodeId(${String(merged.jobCodeId)}) 가 같아야 합니다`);
+  // 교육 페이지 — 캠프 열쇠(campCode)가 jobCodeId 캠프의 코드와 같아야 한다. 새로 만들 때는 꼭 넣는다
+  if (spec.name === 'campPages' && (mode === 'create' || 'jobCodeId' in merged || 'campCode' in merged) && str('jobCodeId')) {
+    const want = await campCodeOfServer(str('jobCodeId'));
+    if (!want) errors.push(`jobCodeId(${str('jobCodeId')}) 캠프를 찾을 수 없습니다`);
+    else if (mode === 'create' && !str('campCode')) errors.push(`campCode 가 필요합니다 (이 캠프는 ${want})`);
+    else if (str('campCode') && str('campCode') !== want) errors.push(`campCode(${str('campCode')}) 가 jobCodeId 캠프의 코드(${want}) 와 다릅니다`);
+  }
 
   if (spec.name === 'campHomeMessages' && mode === 'create' && id) {
-    const camp = await db.collection('jobCodes').where('code', '==', id).limit(1).get();
-    if (camp.empty) errors.push(`문서 ID 는 캠프 코드여야 합니다 ("${id}" 캠프 없음)`);
+    if (!(await jobCodeIdOfServer(id))) errors.push(`문서 ID 는 캠프 코드여야 합니다 ("${id}" 캠프 없음)`);
   }
 
   if (spec.name === 'campSettings' && id) {
     if (str('campCode') && merged.campCode !== id) errors.push(`campCode(${str('campCode')}) 는 문서 ID(${id}) 와 같아야 합니다`);
     if (mode === 'create') {
-      const camp = await db.collection('jobCodes').where('code', '==', id).limit(1).get();
-      if (camp.empty) errors.push(`문서 ID 는 캠프 코드여야 합니다 ("${id}" 캠프 없음)`);
+      if (!(await jobCodeIdOfServer(id))) errors.push(`문서 ID 는 캠프 코드여야 합니다 ("${id}" 캠프 없음)`);
     }
   }
 

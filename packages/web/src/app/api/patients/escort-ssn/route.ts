@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/authMiddleware';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { writeAuditLog } from '@/lib/auditLog';
+import { jobCodeIdOfServer } from '@/lib/campKeyServer';
 import { logger, myActiveEscortVisit } from '@smis-mentor/shared';
 
 /**
@@ -30,8 +31,7 @@ export async function GET(request: NextRequest) {
     let viaVisitId: string | null = null;
     if (!isAdmin) {
       // 같은 캠프 소속 확인
-      const jc = await db.collection('jobCodes').where('code', '==', rec.campCode).limit(1).get();
-      const jobCodeId = jc.empty ? null : jc.docs[0].id;
+      const jobCodeId = await jobCodeIdOfServer(rec.campCode);
       const ids: string[] = Array.isArray(me.jobCodeIds) ? me.jobCodeIds : (me.jobExperiences ?? []).map((e: any) => e?.id);
       if (!jobCodeId || !ids.includes(jobCodeId)) {
         return NextResponse.json({ error: '이 캠프의 기록이 아닙니다.' }, { status: 403 });

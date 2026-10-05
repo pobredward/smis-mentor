@@ -251,10 +251,10 @@ export function LocationSharingScreen() {
     }
 
     jobCodesService
-      .getJobCodesByIds([activeJobCodeId])
-      .then((codes) => {
-        if (codes.length > 0 && codes[0].code) {
-          setCampCode(codes[0].code);
+      .campCodeOf(activeJobCodeId)
+      .then((code) => {
+        if (code) {
+          setCampCode(code);
         }
       })
       .catch(() => {})
