@@ -36,6 +36,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // iOS 유니버설 링크 — 확장자 없는 파일이라 JSON 으로 알려 준다 (Apple 은 리디렉션 없이 이 주소를 읽는다)
+        source: '/.well-known/apple-app-site-association',
+        headers: [{ key: 'Content-Type', value: 'application/json' }],
+      },
+      {
         // Android 앱 링크 인증을 위한 Digital Asset Links 파일 설정
         source: '/.well-known/assetlinks.json',
         headers: [

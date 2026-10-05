@@ -18,7 +18,18 @@
 const path = require('path');
 const fs = require('fs');
 const admin = require('firebase-admin');
+const crypto = require('crypto');
 const { COLLECTIONS, SUBCOLLECTIONS } = require('./plan.cjs');
+
+/** 웹 lib/encryption.ts encryptRRN 과 같은 형식 — AES-256-GCM, base64(iv 16 + tag 16 + 암호문). 키는 RRN_ENCRYPTION_KEY (웹과 같은 값) */
+function seal(plain) {
+  const key = Buffer.from(process.env.RRN_ENCRYPTION_KEY || '', 'base64');
+  if (key.length !== 32) throw new Error('RRN_ENCRYPTION_KEY(32바이트 base64)가 필요합니다 — 웹과 같은 값');
+  const iv = crypto.randomBytes(16);
+  const c = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const enc = Buffer.concat([c.update(String(plain), 'utf8'), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), enc]).toString('base64');
+}
 
 const arg = (name) => { const i = process.argv.indexOf(name); return i > 0 ? process.argv[i + 1] : undefined; };
 const has = (name) => process.argv.includes(name);
@@ -26,7 +37,7 @@ const SOURCE = arg('--source');
 const TARGET = arg('--target');
 const WRITE = has('--write');
 const VERIFY = has('--verify');
-const NEW_BUCKET = arg('--new-bucket') || 'smiscamp.firebasestorage.app';
+const NEW_BUCKET = arg('--new-bucket') || 'smiscamp-bacba.firebasestorage.app';
 const ONLY = (arg('--only') || '').split(',').map((s) => s.trim()).filter(Boolean);
 const REPORT = arg('--report');
 const OLD_BUCKETS = ['smis-mentor.firebasestorage.app', 'smis-mentor.appspot.com'];
@@ -85,8 +96,46 @@ async function campCodes() {
   return campCodeById;
 }
 
+/** 끝나지 않은 캠프 (끝난 날이 오늘 이후 — 지금 · 다가오는 캠프) */
+let currentCampSet = null;
+async function currentCamps() {
+  if (!currentCampSet) {
+    const now = Date.now() - 24 * 60 * 60 * 1000;
+    const snap = await src.collection('jobCodes').get();
+    const endOf = (v) => (v && typeof v.toDate === 'function' ? v.toDate().getTime() : v ? new Date(v).getTime() : NaN);
+    currentCampSet = new Set(snap.docs.filter((d) => endOf(d.get('endDate')) >= now).map((d) => String(d.get('code') || '').trim()).filter(Boolean));
+  }
+  return currentCampSet;
+}
+
 /** 원본 문서들 → [{ path, data }] (하위 문서 경로 포함) */
 const TRANSFORMS = {
+  async sealCurrentSensitive(docs, stat) {
+    const current = await currentCamps();
+    const out = [];
+    for (const d of docs) {
+      if (!current.has(d.id)) { stat.skipped++; continue; }
+      const x = d.data();
+      const entries = {};
+      let sealed = 0;
+      for (const [k, v] of Object.entries(x.entries || {})) {
+        if (v && v.ssnEnc) entries[k] = { ssnEnc: v.ssnEnc };
+        else if (v && v.ssn) { entries[k] = { ssnEnc: WRITE ? seal(v.ssn) : '(미리보기)' }; sealed++; }
+      }
+      stat.notes.push(`stSheetSensitive/${d.id}: ${sealed}건 암호화`);
+      out.push({ path: `stSheetSensitive/${d.id}`, data: { ...x, entries } });
+    }
+    stat.notes.push(`stSheetSensitive: 지난 캠프 ${docs.length - out.length}개는 옮기지 않음 (export 보관 후 삭제) — 남긴 캠프 ${[...current].join(', ')}`);
+    return out;
+  },
+  async devicesDropPastLockCodes(docs, stat) {
+    const current = await currentCamps();
+    return docs.map((d) => {
+      const x = { ...d.data() };
+      if (!current.has(String(x.campCode || '')) && 'lockCode' in x) { delete x.lockCode; stat.dropped.lockCode = (stat.dropped.lockCode || 0) + 1; }
+      return { path: `studentDevices/${d.id}`, data: x };
+    });
+  },
   async jobBoard(docs, stat) {
     const out = [];
     const FIELDS = ['interviewBaseLink', 'interviewBaseNotes', 'interviewBaseDuration'];

@@ -39,3 +39,11 @@
 - users 버리는 필드: 빈 password, rrnLast · birthDate · ssn 등 죽은 필드, 쓰기만 하던 표시, 기기 상태(새 앱이 다시 등록), phone(phoneNumber 와 같음)
 - 모든 문자열의 Storage 주소 버킷 → 새 버킷 (경로 · 토큰은 그대로)
 - 계획에 없는 컬렉션은 옮기지 않고 보고서에 남긴다
+
+## 전환 당일 도구
+- **옛 프로젝트 잠금** (appConfig 읽기만 열고 나머지 읽기 · 쓰기 금지, 새 업로드 금지):
+  `firebase deploy --only firestore:rules,storage --project smis-mentor --config scripts/migrate-to-smiscamp/lock/firebase.json`
+  되돌리기: main 에서 `firebase deploy --only firestore:rules,storage --project smis-mentor`
+- **예약 작업 멈춤 · 만들기**: `scripts/smiscamp-scheduler.cjs` (옛 프로젝트 `--pause`, 새 프로젝트 `--create --invoker <firebase-adminsdk 주소>`)
+- **웹 점검 모드** (Vercel 환경 변수, `packages/web/src/proxy.ts`): `MAINTENANCE_MODE=all`(화면 + API) · `1`(화면만), `MAINTENANCE_BYPASS_TOKEN` 으로 시험하는 사람만 통과
+- **학생 주민번호**: `stSheetSensitive` 는 지금 · 다가오는 캠프만 옮기고 암호화한다 → `--write` 때 `RRN_ENCRYPTION_KEY`(웹과 같은 값) 환경 변수가 필요

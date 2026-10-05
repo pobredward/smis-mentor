@@ -6,6 +6,7 @@
  *
  * 권한: admin만 호출 가능
  */
+import { sealSensitive, type SensitiveEntry } from '@/lib/stSensitive';
 import { NextRequest, NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import { FieldValue } from 'firebase-admin/firestore';
@@ -126,11 +127,11 @@ export async function POST(request: NextRequest) {
       const totalStudents = families.reduce((s, f) => s + f.students.length, 0);
 
       // 주민번호 원본은 관리자 전용 컬렉션(stSheetSensitive)에만 두고, 스태프가 읽는 캐시에는 가린 값만 저장
-      const familySensitive: Record<string, { ssn: string }> = {};
+      const familySensitive: Record<string, SensitiveEntry> = {};
       for (const f of families) {
         for (const person of [...(f.parents ?? []), ...(f.students ?? [])] as Array<{ id: string; ssn?: string }>) {
           if (person.ssn) {
-            familySensitive[`${f.familyId}__${person.id}`] = { ssn: person.ssn };
+            familySensitive[`${f.familyId}__${person.id}`] = sealSensitive(person.ssn);
             person.ssn = maskSsnForStaff(person.ssn);
           }
         }
@@ -209,10 +210,10 @@ export async function POST(request: NextRequest) {
       if (skipped > 0) logger.info(`[${campCode}] 빈 슬롯/이월자/취소자 ${skipped}명 제외`);
 
       // 주민번호 원본 분리: 스태프 캐시에는 "YYMMDD-G******" 만 (나이·학년 계산은 앞자리+성별 자리로 충분)
-      const studentSensitive: Record<string, { ssn: string }> = {};
+      const studentSensitive: Record<string, SensitiveEntry> = {};
       for (const st of active) {
         if (st.ssn) {
-          studentSensitive[st.studentId || `row${(st as any).rowNumber ?? ''}`] = { ssn: st.ssn };
+          studentSensitive[st.studentId || `row${(st as any).rowNumber ?? ''}`] = sealSensitive(st.ssn);
           st.ssn = maskSsnForStaff(st.ssn);
         }
       }

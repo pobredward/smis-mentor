@@ -147,7 +147,172 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "shareTokens",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "isActive",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
-  "fieldOverrides": []
+  "fieldOverrides": [
+    {
+      "collectionGroup": "rateLimits",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "mcpOAuthCodes",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "mcpOAuthRefreshTokens",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "mcpPendingWrites",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "shareTokens",
+      "fieldPath": "expiresAt",
+      "ttl": true,
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "stSheetCache",
+      "fieldPath": "data",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "familySTSheetCache",
+      "fieldPath": "families",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "stSheetSensitive",
+      "fieldPath": "entries",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "campPages",
+      "fieldPath": "content",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "chatRooms",
+      "fieldPath": "memberInfo",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "campSettings",
+      "fieldPath": "groups",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "campSettings",
+      "fieldPath": "classInfo",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "campSettings",
+      "fieldPath": "timetableCommon",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "campSettings",
+      "fieldPath": "dayPlan",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "campSettings",
+      "fieldPath": "timetableGuides",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "campSettings",
+      "fieldPath": "lodging",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "appSettings",
+      "fieldPath": "books",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "appSettings",
+      "fieldPath": "bundles",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "appSettings",
+      "fieldPath": "codes",
+      "indexes": []
+    },
+    {
+      "collectionGroup": "appSettings",
+      "fieldPath": "bands",
+      "indexes": []
+    }
+  ]
 }

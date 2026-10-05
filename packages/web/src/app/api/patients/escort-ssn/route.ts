@@ -1,3 +1,4 @@
+import { openSensitive, type SensitiveEntry } from '@/lib/stSensitive';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/authMiddleware';
 import { getAdminFirestore } from '@/lib/firebase-admin';
@@ -44,9 +45,9 @@ export async function GET(request: NextRequest) {
     }
 
     const sens = await db.collection('stSheetSensitive').doc(rec.campCode).get();
-    const entries = (sens.data()?.entries ?? {}) as Record<string, { ssn?: string }>;
-    const entry = entries[rec.studentId] ?? Object.entries(entries).find(([k]) => k.endsWith(`__${rec.studentId}`))?.[1];
-    if (!entry?.ssn) {
+    const entries = (sens.data()?.entries ?? {}) as Record<string, SensitiveEntry>;
+    const ssn = openSensitive(entries[rec.studentId] ?? Object.entries(entries).find(([k]) => k.endsWith(`__${rec.studentId}`))?.[1]);
+    if (!ssn) {
       return NextResponse.json({ error: '주민번호 원본이 없습니다. 관리자에게 시트 동기화를 요청해주세요.' }, { status: 404 });
     }
 
@@ -59,7 +60,7 @@ export async function GET(request: NextRequest) {
       metadata: { recordId, visitId: viaVisitId, asAdmin: isAdmin },
       request,
     });
-    return NextResponse.json({ ssn: entry.ssn });
+    return NextResponse.json({ ssn });
   } catch (e) {
     logger.error('인솔자 주민번호 조회 실패:', e);
     return NextResponse.json({ error: '조회에 실패했습니다.' }, { status: 500 });

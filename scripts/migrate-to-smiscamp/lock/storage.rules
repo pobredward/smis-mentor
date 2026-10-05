@@ -1,0 +1,9 @@
+rules_version = '2';
+// 전환 당일 옛 버킷 잠금 — 새 업로드 금지 (다운로드 토큰이 붙은 기존 주소는 규칙과 상관없이 열린다)
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

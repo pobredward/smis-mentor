@@ -1,0 +1,12 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["3V8G7Y74HY.com.smis.smiscamp"],
+        "components": [
+          { "/": "/camp/tasks/*", "comment": "업무 상세 — 앱에서 열기 (Android intentFilters 와 같은 범위)" }
+        ]
+      }
+    ]
+  }
+}

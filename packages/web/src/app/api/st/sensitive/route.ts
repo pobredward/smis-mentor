@@ -1,3 +1,4 @@
+import { openSensitive, type SensitiveEntry } from '@/lib/stSensitive';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
@@ -26,8 +27,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const snap = await getAdminFirestore().collection('stSheetSensitive').doc(campCode).get();
-    const entry = snap.exists ? (snap.data()?.entries?.[key] as { ssn?: string } | undefined) : undefined;
-    if (!entry?.ssn) {
+    const ssn = openSensitive(snap.exists ? (snap.data()?.entries?.[key] as SensitiveEntry | undefined) : undefined);
+    if (!ssn) {
       return NextResponse.json({ error: '원본 정보가 없습니다. 시트를 다시 동기화해주세요.' }, { status: 404 });
     }
     await writeAuditLog({
@@ -39,7 +40,7 @@ export async function GET(request: NextRequest) {
       metadata: { campCode, key, field: 'ssn' },
       request,
     });
-    return NextResponse.json({ ssn: entry.ssn });
+    return NextResponse.json({ ssn });
   } catch (e) {
     logger.error('학생 민감정보 조회 실패:', e);
     return NextResponse.json({ error: '조회에 실패했습니다.' }, { status: 500 });

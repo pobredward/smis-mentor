@@ -1,0 +1,14 @@
+rules_version = '2';
+// 전환 당일 옛 프로젝트(smis-mentor) 잠금 — 복사하는 동안 옛 앱 · 웹이 쓰지 못하게.
+// 옛 앱은 시작할 때 appConfig 를 읽어 '새 앱 설치' 창을 띄우므로 appConfig 읽기만 연다.
+// 되돌리기: main 의 firestore.rules 를 다시 배포 (firebase deploy --only firestore:rules --project smis-mentor)
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /appConfig/{doc} {
+      allow read: if true;
+    }
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
