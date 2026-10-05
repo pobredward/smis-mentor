@@ -167,7 +167,6 @@ export interface CampSettings {
   lodging?: CampLodging;
   /** 원어민 레슨플랜 구글 드라이브 폴더 (utils/lessonPlanDrive.ts) */
   lessonPlanDrive?: import('../utils/lessonPlanDrive').LessonPlanDriveSetting;
-  useTemporaryData?: boolean;
   updatedAt?: string;
 }
 
@@ -469,7 +468,7 @@ export function isFeverLevel(value: unknown): value is FeverLevel {
 /**
  * 최초보고·경과보고에서 실제로 먹인 약 1건.
  * 저장 시 inventoryItems.stocks[groupId]에서 quantity만큼 차감되고,
- * 수정 시 차이만큼만, 삭제 시 전량 복구된다 (services/inventory.applyDoseStockChanges).
+ * 수정 시 차이만큼만, 삭제 시 전량 복구된다 (서버 onPatientRecordWritten 이 원장 inventoryDoseLedger 와 비교해 반영).
  */
 export interface MedicationDose {
   id: string;

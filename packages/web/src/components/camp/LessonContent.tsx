@@ -34,6 +34,7 @@ import {
   hasLessonLink,
   lessonProgress,
   lessonViewerOf,
+  ensureLessonTopicSaved,
   loadLessonBundle,
   logger,
   resolveActiveJobCodeId,
@@ -45,7 +46,7 @@ import {
   type LessonViewer,
 } from '@smis-mentor/shared';
 
-/** 본인 수업 탭에서는 대주제 문서가 항상 있다 (없으면 불러올 때 만든다) */
+/** 본인 수업 탭에서는 대주제가 항상 있다 (문서가 없으면 고정 id 의 가상 대주제 — 처음 저장할 때 만든다) */
 type Topic = LessonTopic & { material: LessonMaterialData };
 type LessonState = Omit<LessonBundle, 'topics' | 'custom'> & { topics: Topic[]; custom: Topic[] };
 
@@ -72,7 +73,7 @@ async function loadLesson(user: { userId: string; role?: string; jobExperiences?
     viewer,
     code: String(info?.code ?? ''),
     jobCodeId,
-    createMissing: true,
+    withPlaceholders: true,
     members: () => getUsersByJobCodeId(jobCodeId) as any,
   });
   return bundle as LessonState;
@@ -158,6 +159,10 @@ export default function LessonContent() {
     const topic = findTopic(topicId);
     if (!topic) return false;
     try {
+      // 탭을 열기만 해서는 대주제 문서를 만들지 않는다 — 처음 저장할 때 만들고(고정 id), 바뀐 템플릿 제목도 이때 맞춘다
+      if (await ensureLessonTopicSaved(db, uid, topic)) {
+        patchTopic(topicId, (t) => ({ ...t, unsaved: false, staleTitle: false }));
+      }
       if (!section) {
         // 직접 추가하는 소제목
         const order = topic.sections.length;

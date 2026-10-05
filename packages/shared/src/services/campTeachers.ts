@@ -2,8 +2,9 @@
  * 캠프 선생님 화면 — 멘토들의 이 캠프 수업 자료 (web·mobile 공용).
  * 각자 받는 템플릿(담임·수업…)만, 칸마다 올렸는지 — 수업 탭과 같은 loadLessonBundle 을 읽기 전용으로.
  */
-import { doc, getDoc, type Firestore } from 'firebase/firestore';
+import type { Firestore } from 'firebase/firestore';
 import { createLessonMaterialService } from './lessonMaterial';
+import { getCampSettingsDoc } from './camp';
 import { loadLessonBundle } from './lessonPlanLoader';
 import { hasLessonLink, lessonProgress, lessonViewerOf, safeLessonUrl } from '../utils/lessonPlan';
 import type { TeacherLesson } from '../utils/campTeachers';
@@ -15,11 +16,11 @@ export async function loadTeacherLessons(
 ): Promise<Record<string, TeacherLesson>> {
   const { users, ids, jobCodeId, code } = opts;
   const svc = createLessonMaterialService(db);
-  const [templates, settingsSnap] = await Promise.all([
+  const [templates, settingsDoc] = await Promise.all([
     svc.getLessonMaterialTemplates(),
-    getDoc(doc(db, 'campSettings', code)).catch(() => null),
+    getCampSettingsDoc(db, code).catch(() => null),
   ]);
-  const settings = (settingsSnap?.exists() ? settingsSnap.data() : {}) as Partial<CampSettings>;
+  const settings: Partial<CampSettings> = settingsDoc ?? {};
   const strip = (title: string) => title.replace(new RegExp(`^${code}\\s*`), '').trim() || title;
   const out: Record<string, TeacherLesson> = {};
   await Promise.all(ids.map(async (uid) => {

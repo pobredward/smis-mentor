@@ -780,7 +780,7 @@ export function cleanClassInfo(info: CampClassInfo | undefined | null): CampClas
   return Object.keys(out).length ? out : null;
 }
 
-/** 저장할 반·이름 모양 (앱 updateCampTimetableCommon 과 같은 정리) */
+/** 저장할 반·이름 모양 — 담임 이름·덮어쓴 이름의 빈 값은 뺀다 */
 export function cleanCommon(v: TimetableCommonValues | undefined | null): TimetableCommonValues | null {
   if (!v) return null;
   const classes = (v.classes ?? []).map((c) => ({

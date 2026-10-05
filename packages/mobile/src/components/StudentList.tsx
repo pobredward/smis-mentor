@@ -55,9 +55,6 @@ export const StudentList: React.FC<StudentListProps> = ({
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
   const [campCode, setCampCode] = useState<CampCode | null>(null);
   const [campType, setCampType] = useState<CampType>('EJ');
-  const [isTemporaryData, setIsTemporaryData] = useState(false);
-  const [useTemporaryDataSetting, setUseTemporaryDataSetting] = useState(true);
-  const [hasRealData, setHasRealData] = useState(false);
   const [isSavingContacts, setIsSavingContacts] = useState(false);
   const [contactSaveProgress, setContactSaveProgress] = useState({ done: 0, total: 0 });
   const [bulkPreviewStudents, setBulkPreviewStudents] = useState<STSheetStudent[]>([]);
@@ -148,26 +145,6 @@ export const StudentList: React.FC<StudentListProps> = ({
     return () => { cancelled = true; };
   }, [allStudents]);
 
-  // 추가 메타데이터 로드 (isTemporaryData, useTemporaryDataSetting 등)
-  useEffect(() => {
-    const loadMetadata = async () => {
-      if (!campCode) return;
-      
-      try {
-        const isTemp = await stSheetService.isTemporaryData(campCode);
-        const useTempSetting = await stSheetService.getUseTemporaryDataSetting(campCode);
-        const hasReal = await stSheetService.hasRealData(campCode);
-        setIsTemporaryData(isTemp);
-        setUseTemporaryDataSetting(useTempSetting);
-        setHasRealData(hasReal);
-      } catch (error) {
-        logger.error('메타데이터 로드 실패:', error);
-      }
-    };
-    
-    loadMetadata();
-  }, [campCode]);
-
   // 데이터 로드 후 첫 번째 항목을 자동 선택
   useEffect(() => {
     if (allStudents.length > 0 && !selectedMentor) {
@@ -211,33 +188,6 @@ export const StudentList: React.FC<StudentListProps> = ({
     }
   };
 
-  const handleToggleTemporaryData = async () => {
-    if (!isAdmin) {
-      Alert.alert(L('students.noPermission'), L('common.onlyAdministratorsCanChangeSettings'));
-      return;
-    }
-
-    if (!campCode) {
-      Alert.alert(L('task.notice'), L('common.loadingCampCode'));
-      return;
-    }
-
-    try {
-      const newSetting = !useTemporaryDataSetting;
-      await stSheetService.setUseTemporaryDataSetting(campCode, newSetting);
-      setUseTemporaryDataSetting(newSetting);
-      
-      // React Query 캐시 무효화 후 리페칭
-      await queryClient.invalidateQueries({ queryKey: ['students', campCode] });
-      await refetch();
-      
-      Alert.alert(L('common.success'), L('common.sampleDataDisplayHasBeen', { v0: newSetting ? L('common.enabledWord') : L('common.disabledWord') }));
-    } catch (error) {
-      logger.error('설정 변경 실패:', error);
-      Alert.alert(L('common.error'), L('common.failedToChangeTheSetting'));
-    }
-  };
-
   const handleSaveContacts = async () => {
     const studentsToSave = selectedMentor ? (groupedByMentor[selectedMentor] ?? []) : allStudents;
     const validStudents = studentsToSave.filter((s) => s.parentPhone);
@@ -260,16 +210,6 @@ export const StudentList: React.FC<StudentListProps> = ({
   };
 
   const handleBulkSaveConfirm = async () => {
-    // 임시 데이터인 경우 미리보기 확인 후 저장 불가 안내
-    if (isTemporaryData) {
-      setBulkPreviewStudents([]);
-      Alert.alert(
-        L('students.cannotSaveContacts'),
-        L('students.sampleDataIsCurrentlyShown'),
-      );
-      return;
-    }
-
     const studentsToSave = bulkPreviewStudents;
     setBulkPreviewStudents([]);
 
@@ -587,7 +527,7 @@ export const StudentList: React.FC<StudentListProps> = ({
             </TouchableOpacity>
           )}
           <TouchableOpacity
-            style={[styles.saveContactsButton, isTemporaryData && styles.saveContactsButtonDisabled]}
+            style={styles.saveContactsButton}
             onPress={handleSaveContacts}
             disabled={isSavingContacts || isDeletingContacts || allStudents.length === 0}
             accessibilityLabel={L('students.saveContacts')}
@@ -613,19 +553,6 @@ export const StudentList: React.FC<StudentListProps> = ({
               >
                 <Text style={styles.syncButtonText}>
                   {syncing ? (L('students.syncing')) : (L('students.sync'))}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.toggleButton,
-                  useTemporaryDataSetting ? styles.toggleButtonActive : styles.toggleButtonInactive
-                ]}
-                onPress={handleToggleTemporaryData}
-              >
-                <Text style={styles.toggleButtonText}>
-                  {useTemporaryDataSetting
-                    ? (L('students.tempOff'))
-                    : (L('students.tempOn'))}
                 </Text>
               </TouchableOpacity>
             </>
@@ -714,21 +641,6 @@ export const StudentList: React.FC<StudentListProps> = ({
           )}
         </View>
       </Modal>
-
-      {/* 임시 데이터 안내 배너 */}
-      {isTemporaryData && (
-        <View style={styles.warningBanner}>
-          <Ionicons name="information-circle" size={16} color="#d97706" />
-          <Text style={styles.warningText}>
-            <Text style={styles.warningBold}>{L('students.temporaryData')}</Text>
-            {hasRealData
-              ? (L('students.temporaryDataDisplayIsEnabled'))
-              : filterType === 'class'
-                ? (L('students.theActualRosterWillBe'))
-                : (L('common.theActualRosterWillBe'))}
-          </Text>
-        </View>
-      )}
 
       {/* 멘토/반 선택 - 검색 중일 때는 숨김 */}
       {!searchQuery.trim() && (
@@ -1134,10 +1046,6 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 3,
   },
-  saveContactsButtonDisabled: {
-    backgroundColor: '#94a3b8',
-    shadowColor: '#94a3b8',
-  },
   deleteContactsButton: {
     width: 36,
     height: 36,
@@ -1268,46 +1176,6 @@ const styles = StyleSheet.create({
   syncButtonText: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '600' as const,
-  },
-  toggleButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 3,
-  },
-  toggleButtonActive: {
-    backgroundColor: '#f59e0b', // 주황색 (임시 데이터 표시 중)
-  },
-  toggleButtonInactive: {
-    backgroundColor: '#64748b', // 회색 (실제 데이터 표시 중)
-  },
-  toggleButtonText: {
-    color: '#fff',
-    fontSize: 13,
-    fontWeight: '600' as const,
-  },
-  warningBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fef3c7',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#fde047',
-    gap: 8,
-  },
-  warningText: {
-    flex: 1,
-    fontSize: 12,
-    color: '#92400e',
-    lineHeight: 16,
-  },
-  warningBold: {
     fontWeight: '600' as const,
   },
   filterContainer: {

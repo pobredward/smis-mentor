@@ -27,6 +27,7 @@ import {
 } from '../utils/lessonPlanEngine';
 import { lessonViewerOf, type LessonClass, type LessonViewer } from '../utils/lessonPlan';
 import { lessonClassesForViewer } from './lessonPlanLoader';
+import { getCampSettingsDoc } from './camp';
 
 const PLANS = 'lessonPlans';
 
@@ -145,7 +146,7 @@ export async function loadLessonPlanContext(db: Firestore, opts: { jobCodeId: st
   const j = (jc?.exists() ? jc.data() : {}) as Record<string, unknown>;
   const campCode = String(opts.campCode || j.code || '').trim();
   const [cs, esl, catalog, tts] = await Promise.all([
-    campCode ? getDoc(doc(db, 'campSettings', campCode)).catch(() => null) : Promise.resolve(null),
+    getCampSettingsDoc(db, campCode).catch(() => null),
     getDoc(doc(db, 'appSettings', 'eslBooks')).catch(() => null),
     getEslBookUnits(db).catch(() => ({ books: {}, bundles: {} } as EslBookUnits)),
     campCode ? getDocs(query(collection(db, 'campTimetables'), where('campCode', '==', campCode))).catch(() => null) : Promise.resolve(null),
@@ -161,7 +162,7 @@ export async function loadLessonPlanContext(db: Firestore, opts: { jobCodeId: st
     campCode,
     start: toYmd(j.startDate),
     end: toYmd(j.endDate),
-    settings: (cs?.exists() ? cs.data() : {}) as Partial<CampSettings>,
+    settings: (cs ?? {}) as Partial<CampSettings>,
     eslBooks: { codes: {}, ...(eslData ?? {}) },
     catalog,
     regularByGroup,

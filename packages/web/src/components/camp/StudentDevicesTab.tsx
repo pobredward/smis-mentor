@@ -4,10 +4,9 @@
  * 기기별 기종·잠금 해제 정보(바로 표시)·보관 위치 흐름·충전 메모, 명단 일괄 위치 변경
  */
 import { useEffect, useMemo, useState } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
 import {
   L, logger, GADGET_KINDS, DEVICE_LOCK_TYPES, DEVICE_LOCATIONS, CHARGER_TYPES, parsePattern, patternToCode,
-  deviceLocationDetail, getUsersByJobCodeId, isCampStaffRole, isCharger, matchingChargers,
+  deviceLocationDetail, getCampSettingsDoc, getUsersByJobCodeId, isCampStaffRole, isCharger, matchingChargers,
   subscribeStudentDevices, getCampDevices, addStudentDevice, updateStudentDevice, moveStudentDevices, deleteStudentDevice,
   type StudentDevice, type DeviceKind, type DeviceLockType, type DeviceLocation, type ChargerType, type MessageKey,
   type STSheetStudent, type DeviceLocationContext,
@@ -44,8 +43,8 @@ export function useDeviceContext(campCode: string | null, jobCodeId: string | un
   const [staff, setStaff] = useState<StaffOption[]>([]);
   useEffect(() => {
     if (!campCode) return;
-    getDoc(doc(db, 'campSettings', campCode))
-      .then(snap => { const d = snap.data() ?? {}; setCtx({ groups: d.groups ?? [], rooms: d.lodging?.rooms ?? {} }); })
+    getCampSettingsDoc(db, campCode)
+      .then(d => setCtx({ groups: d?.groups ?? [], rooms: d?.lodging?.rooms ?? {} }))
       .catch(e => logger.warn('[devices] campSettings', e));
   }, [campCode]);
   useEffect(() => {

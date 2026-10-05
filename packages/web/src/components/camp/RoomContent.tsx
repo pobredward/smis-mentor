@@ -21,9 +21,6 @@ export default function RoomContent() {
   const [syncing, setSyncing] = useState(false);
   const [campCode, setCampCode] = useState<CampCode | null>(null);
   const [campType, setCampType] = useState<CampType>('EJ');
-  const [isTemporaryData, setIsTemporaryData] = useState(false);
-  const [useTemporaryDataSetting, setUseTemporaryDataSetting] = useState(true);
-  const [hasRealData, setHasRealData] = useState(false);
   const [fieldConfig, setFieldConfig] = useState<STSheetFieldConfig | null>(null);
 
 
@@ -87,13 +84,7 @@ export default function RoomContent() {
         })));
       }
       
-      const isTemp = await stSheetService.isTemporaryData(campCode);
-      const useTempSetting = await stSheetService.getUseTemporaryDataSetting(campCode);
-      const hasReal = await stSheetService.hasRealData(campCode);
       setStudents(data);
-      setIsTemporaryData(isTemp);
-      setUseTemporaryDataSetting(useTempSetting);
-      setHasRealData(hasReal);
     } catch (error) {
       logger.error('❌ [RoomContent] 학생 목록 로드 실패:', error);
       alert(L('common.failedToLoadTheStudent'));
@@ -129,29 +120,6 @@ export default function RoomContent() {
       alert(L('common.syncFailed'));
     } finally {
       setSyncing(false);
-    }
-  };
-
-  const handleToggleTemporaryData = async () => {
-    if (!isAdmin) {
-      alert(L('common.onlyAdministratorsCanChangeSettings'));
-      return;
-    }
-
-    if (!campCode) {
-      alert(L('common.loadingCampCode'));
-      return;
-    }
-
-    try {
-      const newSetting = !useTemporaryDataSetting;
-      await stSheetService.setUseTemporaryDataSetting(campCode, newSetting);
-      setUseTemporaryDataSetting(newSetting);
-      await loadAllStudents();
-      alert(L('common.sampleDataDisplayHasBeen', { v0: newSetting ? L('common.enabledWord') : L('common.disabledWord') }));
-    } catch (error) {
-      logger.error('설정 변경 실패:', error);
-      alert(L('common.failedToChangeTheSetting'));
     }
   };
 
@@ -320,40 +288,10 @@ export default function RoomContent() {
               >
                 {syncing ? L('students.syncing') : L('students.sync')}
               </button>
-              <button
-                onClick={handleToggleTemporaryData}
-                className={`px-3 py-1.5 text-xs rounded-lg ${
-                  useTemporaryDataSetting
-                    ? 'bg-amber-600 text-white hover:bg-amber-700'
-                    : 'bg-gray-600 text-white hover:bg-gray-700'
-                }`}
-                title={useTemporaryDataSetting ? L('common.showingSampleData') : L('common.showingRealData')}
-              >
-                {useTemporaryDataSetting ? L('common.sampleDataOff') : L('common.sampleDataOn')}
-              </button>
             </>
           )}
         </div>
       </div>
-
-      {/* 임시 데이터 안내 배너 */}
-      {isTemporaryData && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5">
-          <div className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-amber-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <p className="text-xs text-amber-800">
-              <span className="font-semibold">{L('common.thisIsTemporaryData')}</span>
-              <span className="ml-1">
-                {hasRealData 
-                  ? (L('common.temporaryDataDisplayHasBeen'))
-                  : (L('common.theActualRosterWillBe'))}
-              </span>
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* 멘토 토글 - 성별로 2줄 */}
       {!searchQuery.trim() && (

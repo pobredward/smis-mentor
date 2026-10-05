@@ -3,11 +3,12 @@ import {
   doc,
   query,
   where,
+  orderBy,
+  limit,
   addDoc,
   setDoc,
   updateDoc,
   deleteDoc,
-  getDocs,
   arrayUnion,
   arrayRemove,
   onSnapshot,
@@ -40,7 +41,6 @@ import type {
   LostItemStatus,
 } from '../../types/inventory';
 import { stockDocId, sortInventoryItems } from '../../types/inventory';
-import type { MedicationDose } from '../../types/camp';
 import { logger } from '../../utils/logger';
 
 const ITEMS = 'inventoryItems';
@@ -135,7 +135,8 @@ export const subscribeInventoryMovements = (
 
 /**
  * 캠프 전체 입출고 기록 구독 (입출고 기록 탭).
- * 필터·검색은 화면에서 하고 여기서는 최신순으로 limitTo 건만 가져온다.
+ * 필터·검색은 화면에서 하고 여기서는 최신순으로 limitTo 건만 가져온다 —
+ * 자르기도 서버에서 (orderBy at desc + limit, 색인 campCode ↑ · at ↓). 예전엔 캠프 기록 전부를 받아 화면에서 잘랐다.
  */
 export const subscribeCampMovements = (
   db: Firestore,
@@ -145,13 +146,8 @@ export const subscribeCampMovements = (
   onError?: (error: Error) => void
 ): Unsubscribe =>
   onSnapshot(
-    query(collection(db, MOVEMENTS), where('campCode', '==', campCode)),
-    (snap) => onData(
-      snap.docs
-        .map(d => ({ id: d.id, ...d.data() }) as InventoryMovement)
-        .sort((a, b) => (b.at?.toMillis?.() ?? 0) - (a.at?.toMillis?.() ?? 0))
-        .slice(0, limitTo)
-    ),
+    query(collection(db, MOVEMENTS), where('campCode', '==', campCode), orderBy('at', 'desc'), limit(limitTo)),
+    (snap) => onData(snap.docs.map(d => ({ id: d.id, ...d.data() }) as InventoryMovement)),
     (error) => { logger.error('캠프 입출고 기록 구독 오류:', error); onError?.(error); }
   );
 
@@ -606,73 +602,10 @@ export const adjustStockTo = async (
   }], { reason: 'adjust', refLabel: '수량 조정', memo: change.reason }, by);
 };
 
-/**
- * 약 복용 기록 변경 전/후를 비교해 "차이만큼만" 재고에 반영한다.
- * - 새 기록: quantity만큼 차감
- * - 수량만 바뀜: 차이만 반영 (1→2: 1 추가 차감, 2→1: 1 복구)
- * - 약품/그룹이 바뀜: 이전 것 전량 복구 + 새 것 전량 차감
- * - 삭제된 기록: 전량 복구
- * - 그대로인 기록: 아무 것도 하지 않음 (보고서를 다시 열거나 다른 내용을 수정해도 재차감 없음)
- */
-export function diffDoseStockChanges(
-  prevDoses: MedicationDose[] | undefined,
-  nextDoses: MedicationDose[] | undefined,
-  refPatientId?: string,
-  refLabel?: string
-): StockChange[] {
-  const prev = new Map((prevDoses ?? []).map(d => [d.id, d]));
-  const next = new Map((nextDoses ?? []).map(d => [d.id, d]));
-  const changes: StockChange[] = [];
-  const label = (d: MedicationDose) => refLabel ? `${refLabel} ${d.source === 'initial' ? '최초보고' : '경과보고'}` : undefined;
-
-  next.forEach((n, id) => {
-    const p = prev.get(id);
-    if (!p) {
-      changes.push({ itemId: n.itemId, itemName: n.itemName, groupId: n.groupId, groupName: n.groupName, delta: -n.quantity, reason: 'dose', refPatientId, refDoseId: id, refLabel: label(n) });
-      return;
-    }
-    if (p.itemId === n.itemId && p.groupId === n.groupId) {
-      const diff = n.quantity - p.quantity;
-      if (diff !== 0) {
-        changes.push({ itemId: n.itemId, itemName: n.itemName, groupId: n.groupId, groupName: n.groupName, delta: -diff, reason: 'dose_adjust', refPatientId, refDoseId: id, refLabel: label(n) });
-      }
-      return;
-    }
-    // 약품 또는 그룹이 바뀐 경우: 이전 복구 + 새로 차감
-    changes.push({ itemId: p.itemId, itemName: p.itemName, groupId: p.groupId, groupName: p.groupName, delta: p.quantity, reason: 'dose_revert', refPatientId, refDoseId: id, refLabel: label(p) });
-    changes.push({ itemId: n.itemId, itemName: n.itemName, groupId: n.groupId, groupName: n.groupName, delta: -n.quantity, reason: 'dose', refPatientId, refDoseId: id, refLabel: label(n) });
-  });
-
-  prev.forEach((p, id) => {
-    if (next.has(id)) return;
-    changes.push({ itemId: p.itemId, itemName: p.itemName, groupId: p.groupId, groupName: p.groupName, delta: p.quantity, reason: 'dose_revert', refPatientId, refDoseId: id, refLabel: label(p) });
-  });
-
-  return changes;
-}
-
-/** diffDoseStockChanges 결과를 바로 반영 */
-export const applyDoseStockChanges = async (
-  db: Firestore,
-  campCode: string,
-  prevDoses: MedicationDose[] | undefined,
-  nextDoses: MedicationDose[] | undefined,
-  by: string,
-  refPatientId?: string,
-  refLabel?: string
-): Promise<void> =>
-  applyStockChanges(db, campCode, diffDoseStockChanges(prevDoses, nextDoses, refPatientId, refLabel), by);
-
 /** 복용 기록 ID 생성 */
 export function newDoseId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
-
-/** 품목 마스터 1회 조회 (스크립트/서버용) */
-export const getInventoryItemsOnce = async (db: Firestore): Promise<InventoryItem[]> => {
-  const snap = await getDocs(collection(db, ITEMS));
-  return sortInventoryItems(snap.docs.map(d => ({ id: d.id, ...d.data() }) as InventoryItem));
-};
 
 /** Firestore는 undefined 값을 거부하므로 제거 */
 function stripUndefined<T extends Record<string, unknown>>(obj: T): T {

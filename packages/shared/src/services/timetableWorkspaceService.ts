@@ -24,6 +24,7 @@ import type { CampClassInfo, CampGroup, CampSettings } from '../types/camp';
 import type { TimetableGuide } from '../types/timetableGuide';
 import type { CampDayPlan } from '../types/campDayPlan';
 import { toUpdatePayload } from '../utils/timetableDraft';
+import { getCampSettingsDoc, invalidateCampSettingsCache } from './camp';
 import type { SavePlan } from '../utils/timetableWorkspace';
 import { newId } from '../utils/id';
 
@@ -40,18 +41,18 @@ export interface TimetableWorkspaceData {
   groups: CampGroup[];
 }
 
-/** 편집기를 열 때 한 번 — 캠프의 표 전부 + 캠프 설정 */
+/** 편집기를 열 때 한 번 — 캠프의 표 전부 + 캠프 설정 (편집은 최신 값에서 — 캐시를 건너뛰고 받는다) */
 export async function loadTimetableWorkspace(
   db: Firestore,
   args: { campCode: string; jobCodeId: string }
 ): Promise<TimetableWorkspaceData> {
-  const [snap, settingsSnap] = await Promise.all([
+  const [snap, settings] = await Promise.all([
     getDocs(query(collection(db, TIMETABLES), where('jobCodeId', '==', args.jobCodeId))),
-    args.campCode ? getDoc(doc(db, SETTINGS, args.campCode)) : Promise.resolve(null),
+    getCampSettingsDoc(db, args.campCode, { fresh: true }),
   ]);
   const tables: CampTimetable[] = [];
   snap.forEach((d) => tables.push({ id: d.id, ...d.data() } as CampTimetable));
-  const s = (settingsSnap?.exists() ? settingsSnap.data() : {}) as Partial<CampSettings>;
+  const s: Partial<CampSettings> = settings ?? {};
   return {
     tables,
     common: (s.timetableCommon ?? {}) as Record<string, TimetableCommonValues>,
@@ -139,10 +140,15 @@ export async function commitTimetableWorkspace(
     else chunks.push(settingsOps);
   }
 
-  for (const ops of chunks) {
-    const batch = writeBatch(db);
-    ops.forEach((op) => op(batch));
-    await batch.commit();
+  try {
+    for (const ops of chunks) {
+      const batch = writeBatch(db);
+      ops.forEach((op) => op(batch));
+      await batch.commit();
+    }
+  } finally {
+    // 캠프 설정을 썼으면 받아 둔 설정을 버린다 — 보기 화면이 새 값을 받게
+    if (pairs.length) invalidateCampSettingsCache(ctx.campCode);
   }
   return { idMap, conflicts: [], savedAt };
 }
