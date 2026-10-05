@@ -11,7 +11,6 @@ import {
   orderBy, 
   Timestamp,
   writeBatch,
-  setDoc,
   deleteField,
   Firestore
 } from 'firebase/firestore';
@@ -19,11 +18,11 @@ import {
   Evaluation, 
   EvaluationCriteria, 
   EvaluationFormData, 
-  UserEvaluationSummary,
   EvaluationStage,
   EvaluationCriteriaItem
 } from '../../types/evaluation';
 import { logger } from '../../utils/logger';
+import { computeEvaluationSummary } from '../../utils/evaluationSummary';
 import { NotFoundError, DatabaseError } from '../../errors';
 
 // 평가 기준 템플릿 관리
@@ -276,7 +275,6 @@ export class EvaluationCriteriaService {
 // 평가 관리 서비스
 export class EvaluationService {
   private static collection = 'evaluations';
-  private static summaryCollection = 'userEvaluationSummaries';
 
   // 평가 생성
   static async createEvaluation(
@@ -393,95 +391,19 @@ export class EvaluationService {
     }
   }
 
-  // 사용자 평가 요약 업데이트
+  // 사용자 평가 요약 업데이트 — 그 사람의 평가 전부로 다시 계산해 users/{uid}.evaluationSummary 를 통째로 바꾼다
+  // (updateDoc 은 필드 값을 통째로 덮어쓴다 — 평가를 다 지운 단계가 남지 않음. 예전 userEvaluationSummaries 컬렉션은 더 이상 쓰지 않음)
   static async updateUserEvaluationSummary(db: Firestore, userId: string) {
     try {
-      const evaluations = await this.getUserEvaluations(db, userId);
-      
-      if (evaluations.length === 0) {
-        await updateDoc(doc(db, 'users', userId), {
-          evaluationSummary: deleteField(),
-          updatedAt: Timestamp.now()
-        });
-        
-        const summaryDocRef = doc(db, this.summaryCollection, userId);
-        try {
-          await deleteDoc(summaryDocRef);
-        } catch (error) {
-          console.log('요약 문서가 이미 존재하지 않습니다:', error);
-        }
-        
-        return;
-      }
-      
-      const summary: Omit<UserEvaluationSummary, 'userId'> = {
-        overallAverage: 0,
-        totalEvaluations: evaluations.length,
-        lastUpdatedAt: Timestamp.now()
-      };
-      
-      const stageGroups = {
-        documentReview: evaluations.filter(e => e.evaluationStage === '서류 전형'),
-        interview: evaluations.filter(e => e.evaluationStage === '면접 전형'),
-        faceToFaceEducation: evaluations.filter(e => e.evaluationStage === '대면 교육'),
-        campLife: evaluations.filter(e => e.evaluationStage === '캠프 생활')
-      };
-      
-      let totalScoreSum = 0;
-      let totalCount = 0;
-      
-      Object.entries(stageGroups).forEach(([stage, stageEvaluations]) => {
-        if (stageEvaluations.length > 0) {
-          const scores = stageEvaluations.map(e => e.totalScore);
-          const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
-          const highest = Math.max(...scores);
-          const lowest = Math.min(...scores);
-          const lastEvaluated = stageEvaluations.sort((a, b) => 
-            b.evaluationDate.seconds - a.evaluationDate.seconds
-          )[0].evaluationDate;
-          
-          const stageData = {
-            averageScore: average,
-            totalEvaluations: stageEvaluations.length,
-            highestScore: highest,
-            lowestScore: lowest,
-            lastEvaluatedAt: lastEvaluated,
-            evaluations: stageEvaluations.map(e => e.id)
-          };
-          
-          switch (stage) {
-            case 'documentReview':
-              summary.documentReview = stageData;
-              break;
-            case 'interview':
-              summary.interview = stageData;
-              break;
-            case 'faceToFaceEducation':
-              summary.faceToFaceEducation = stageData;
-              break;
-            case 'campLife':
-              summary.campLife = stageData;
-              break;
-          }
-          
-          totalScoreSum += average * stageEvaluations.length;
-          totalCount += stageEvaluations.length;
-        }
-      });
-      
-      summary.overallAverage = totalCount > 0 ? totalScoreSum / totalCount : 0;
-      
+      // 평가 일시 정렬 없이 그 사람의 평가 전부 (MCP 서버 재계산과 같은 범위)
+      const snapshot = await getDocs(query(collection(db, this.collection), where('refUserId', '==', userId)));
+      const evaluations = snapshot.docs.map(d => ({ id: d.id, ...d.data() }) as Evaluation);
+      const summary = computeEvaluationSummary(evaluations, Timestamp.now());
+
       await updateDoc(doc(db, 'users', userId), {
-        evaluationSummary: summary,
+        evaluationSummary: summary ?? deleteField(),
         updatedAt: Timestamp.now()
       });
-      
-      const summaryDocRef = doc(db, this.summaryCollection, userId);
-      await setDoc(summaryDocRef, {
-        userId,
-        ...summary
-      }, { merge: true });
-      
     } catch (error) {
       console.error('사용자 평가 요약 업데이트 오류:', error);
       throw error;

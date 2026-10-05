@@ -11,7 +11,7 @@ import type { CollectionReference, DocumentData, Firestore, Query } from 'fireba
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import { ACCESS_LABEL, canAccess, type Viewer } from '@/lib/ai-content/site';
 import { clearAiContentCache, getCamps } from '@/lib/ai-content/data';
-import { guideKeyOf } from '@smis-mentor/shared';
+import { computeEvaluationSummary, guideKeyOf, type EvaluationSummarySource } from '@smis-mentor/shared';
 import { COLLECTIONS, DATA_TOOL_LIMITS, EXCLUDED_COLLECTIONS, RECIPES, type CollectionSpec, type FieldSpec, type WriteOp } from './datamodel';
 import { cleanSettingsFields, patchSummary, type CleanedFields } from './camp-settings';
 
@@ -1092,7 +1092,7 @@ export async function writeDocuments(input: WriteInput, viewer: Viewer) {
   await batch.commit();
   clearAiContentCache();
 
-  // 평가를 바꿨으면 앱(EvaluationService.updateUserEvaluationSummary)과 같은 방식으로 지원자 평가 요약 재계산
+  // 평가를 바꿨으면 앱(EvaluationService.updateUserEvaluationSummary)과 같은 계산(computeEvaluationSummary)으로 users.evaluationSummary 재계산
   const evalUsers = new Set<string>();
   for (const p of prepared) {
     if (p.spec?.name !== 'evaluations') continue;
@@ -1119,54 +1119,16 @@ export async function writeDocuments(input: WriteInput, viewer: Viewer) {
   };
 }
 
-const SUMMARY_STAGES = [
-  ['documentReview', '서류 전형'],
-  ['interview', '면접 전형'],
-  ['faceToFaceEducation', '대면 교육'],
-  ['campLife', '캠프 생활'],
-] as const;
-
-/** shared EvaluationService.updateUserEvaluationSummary 의 Admin SDK 판 — 계산 방식을 그대로 맞춘다 */
+/**
+ * shared EvaluationService.updateUserEvaluationSummary 의 Admin SDK 판 — 계산은 같은 computeEvaluationSummary 를 쓴다.
+ * 그 사람의 평가 전부로 다시 계산해 users/{uid}.evaluationSummary 를 통째로 바꾼다 (update 는 필드 값을 덮어씀 → 지운 단계가 남지 않음).
+ * 예전 userEvaluationSummaries 컬렉션은 더 이상 쓰지 않는다.
+ */
 async function recomputeEvaluationSummary(db: Firestore, userId: string) {
-  const snap = await db.collection('evaluations').where('refUserId', '==', userId).get();
-  const evaluations = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) })) as Array<{
-    id: string;
-    evaluationStage?: string;
-    totalScore?: number;
-    evaluationDate?: Timestamp;
-  }>;
   const userRef = db.collection('users').doc(userId);
-  const summaryRef = db.collection('userEvaluationSummaries').doc(userId);
-  const userExists = (await userRef.get()).exists;
-
-  if (evaluations.length === 0) {
-    if (userExists) await userRef.update({ evaluationSummary: FieldValue.delete(), updatedAt: Timestamp.now() });
-    await summaryRef.delete().catch(() => undefined);
-    return;
-  }
-
-  const summary: Record<string, unknown> = { overallAverage: 0, totalEvaluations: evaluations.length, lastUpdatedAt: Timestamp.now() };
-  let totalScoreSum = 0;
-  let totalCount = 0;
-  for (const [key, stage] of SUMMARY_STAGES) {
-    const list = evaluations.filter((e) => e.evaluationStage === stage);
-    if (!list.length) continue;
-    const scores = list.map((e) => Number(e.totalScore ?? 0));
-    const average = scores.reduce((a, b) => a + b, 0) / scores.length;
-    const sorted = [...list].sort((a, b) => (b.evaluationDate?.seconds ?? 0) - (a.evaluationDate?.seconds ?? 0));
-    summary[key] = {
-      averageScore: average,
-      totalEvaluations: list.length,
-      highestScore: Math.max(...scores),
-      lowestScore: Math.min(...scores),
-      lastEvaluatedAt: sorted[0].evaluationDate ?? Timestamp.now(),
-      evaluations: sorted.map((e) => e.id),
-    };
-    totalScoreSum += average * list.length;
-    totalCount += list.length;
-  }
-  summary.overallAverage = totalCount ? totalScoreSum / totalCount : 0;
-
-  if (userExists) await userRef.update({ evaluationSummary: summary, updatedAt: Timestamp.now() });
-  await summaryRef.set({ userId, ...summary }, { merge: true });
+  if (!(await userRef.get()).exists) return;
+  const snap = await db.collection('evaluations').where('refUserId', '==', userId).get();
+  const evaluations = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) })) as EvaluationSummarySource<Timestamp>[];
+  const summary = computeEvaluationSummary(evaluations, Timestamp.now());
+  await userRef.update({ evaluationSummary: summary ?? FieldValue.delete(), updatedAt: Timestamp.now() });
 }

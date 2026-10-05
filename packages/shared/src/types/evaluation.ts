@@ -74,44 +74,27 @@ export interface Evaluation {
   isVisible: boolean;          // 평가 대상자에게 공개 여부
 }
 
-// 사용자별 평가 요약
-export interface UserEvaluationSummary {
-  userId: string;
-  documentReview?: {
-    averageScore: number;
-    totalEvaluations: number;
-    highestScore: number;
-    lowestScore: number;
-    lastEvaluatedAt: Timestamp;
-    evaluations: string[];     // 평가 ID 목록
-  };
-  interview?: {
-    averageScore: number;
-    totalEvaluations: number;
-    highestScore: number;
-    lowestScore: number;
-    lastEvaluatedAt: Timestamp;
-    evaluations: string[];
-  };
-  faceToFaceEducation?: {
-    averageScore: number;
-    totalEvaluations: number;
-    highestScore: number;
-    lowestScore: number;
-    lastEvaluatedAt: Timestamp;
-    evaluations: string[];
-  };
-  campLife?: {
-    averageScore: number;
-    totalEvaluations: number;
-    highestScore: number;
-    lowestScore: number;
-    lastEvaluatedAt: Timestamp;
-    evaluations: string[];
-  };
+// 단계별 평가 요약 (users.evaluationSummary 의 각 단계)
+// T = 시각 타입 — 웹·모바일은 firebase Timestamp, MCP 서버는 firebase-admin Timestamp
+export interface EvaluationStageSummary<T = Timestamp> {
+  averageScore: number;
+  totalEvaluations: number;
+  highestScore: number;
+  lowestScore: number;
+  lastEvaluatedAt: T;
+  evaluations: string[];     // 평가 ID 목록 (최근 평가 순)
+}
+
+// 사용자별 평가 요약 — users/{uid}.evaluationSummary 에만 저장한다 (예전 userEvaluationSummaries 컬렉션은 더 이상 쓰지 않음)
+// 평가를 만들고·고치고·지울 때마다 computeEvaluationSummary 로 전체 평가에서 다시 계산해 통째로 바꾼다
+export interface UserEvaluationSummary<T = Timestamp> {
+  documentReview?: EvaluationStageSummary<T>;
+  interview?: EvaluationStageSummary<T>;
+  faceToFaceEducation?: EvaluationStageSummary<T>;
+  campLife?: EvaluationStageSummary<T>;
   overallAverage: number;      // 전체 평균 점수
   totalEvaluations: number;    // 총 평가 횟수
-  lastUpdatedAt: Timestamp;
+  lastUpdatedAt: T;
 }
 
 // 평가 통계 (관리자용)

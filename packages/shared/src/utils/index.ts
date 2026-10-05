@@ -31,3 +31,4 @@ export * from './lastLogin';
 export * from './chat';
 export * from './chatCall';
 export * from './chatCallController';
+export * from './evaluationSummary';
