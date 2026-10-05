@@ -1,5 +1,5 @@
 'use client';
-import { logger } from '@smis-mentor/shared';
+import { logger, getJobBoardInterview, saveJobBoardInterview } from '@smis-mentor/shared';
 
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 const RichTextEditor = lazy(() => import('@/components/common/RichTextEditor'));
 import toast from 'react-hot-toast';
 import { Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { 
@@ -153,8 +154,16 @@ export default function JobBoardManage() {
   };
   
   // 공고 수정 핸들러
-  const handleEditJobBoard = (jobBoard: JobBoardWithApplications) => {
-    logger.info('Editing job board:', jobBoard);
+  const handleEditJobBoard = async (jobBoard: JobBoardWithApplications) => {
+    logger.info('Editing job board:', jobBoard.id);
+    // 면접 정보는 관리자 전용 하위 문서(private/interview)에서 — 공개 공고 문서에 두지 않는다
+    let interview: Awaited<ReturnType<typeof getJobBoardInterview>> = {};
+    try {
+      interview = await getJobBoardInterview(db, jobBoard.id);
+    } catch (error) {
+      logger.error('면접 정보 로드 오류:', error);
+      toast.error('면접 정보를 불러오지 못했습니다.');
+    }
     setSelectedJobBoard(jobBoard);
     setIsCreating(false);
     
@@ -166,9 +175,9 @@ export default function JobBoardManage() {
       jobCode: jobBoard.jobCode,
       korea: jobBoard.korea,
       interviewDates: jobBoard.interviewDates.map(date => formatDate(date.start)),
-      interviewBaseLink: jobBoard.interviewBaseLink || '',
-      interviewBaseDuration: jobBoard.interviewBaseDuration ? String(jobBoard.interviewBaseDuration) : '',
-      interviewBaseNotes: jobBoard.interviewBaseNotes || '',
+      interviewBaseLink: interview.interviewBaseLink || '',
+      interviewBaseDuration: interview.interviewBaseDuration ? String(interview.interviewBaseDuration) : '',
+      interviewBaseNotes: interview.interviewBaseNotes || '',
       status: jobBoard.status
     });
   };
@@ -280,6 +289,13 @@ export default function JobBoardManage() {
     try {
       setIsSubmitting(true);
 
+      // 면접 정보는 공고 문서가 아니라 관리자 전용 하위 문서(private/interview)에 저장
+      const interviewData = {
+        interviewBaseLink: formData.interviewBaseLink || '',
+        interviewBaseDuration: formData.interviewBaseDuration ? parseInt(formData.interviewBaseDuration) : 0,
+        interviewBaseNotes: formData.interviewBaseNotes || '',
+      };
+
       if (isCreating) {
         // 새 공고 생성
         const newJobBoardData = {
@@ -299,16 +315,13 @@ export default function JobBoardManage() {
               end: Timestamp.fromDate(localDate)
             };
           }),
-          interviewBaseLink: formData.interviewBaseLink || '',
-          interviewBaseDuration: formData.interviewBaseDuration ? parseInt(formData.interviewBaseDuration) : 0,
-          interviewBaseNotes: formData.interviewBaseNotes || '',
-          interviewPassword: '',
           educationStartDate: Timestamp.now(),
           educationEndDate: Timestamp.now(),
           updatedAt: Timestamp.now()
         };
 
-        await createJobBoard(newJobBoardData);
+        const newJobBoardId = await createJobBoard(newJobBoardData);
+        await saveJobBoardInterview(db, newJobBoardId, interviewData);
         
         toast.success('공고가 성공적으로 생성되었습니다.');
       } else if (selectedJobBoard) {
@@ -329,11 +342,9 @@ export default function JobBoardManage() {
               end: Timestamp.fromDate(localDate)
             };
           }),
-          interviewBaseLink: formData.interviewBaseLink || '',
-          interviewBaseDuration: formData.interviewBaseDuration ? parseInt(formData.interviewBaseDuration) : 0,
-          interviewBaseNotes: formData.interviewBaseNotes || '',
           updatedAt: Timestamp.now()
         });
+        await saveJobBoardInterview(db, selectedJobBoard.id, interviewData);
         
         toast.success('공고가 성공적으로 수정되었습니다.');
       }

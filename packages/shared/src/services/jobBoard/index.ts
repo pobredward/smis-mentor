@@ -12,17 +12,17 @@ import {
   Timestamp,
   Firestore,
 } from 'firebase/firestore';
+import { deleteJobBoardInterview, omitLegacyInterviewFields } from './interview';
+
+export * from './interview';
 
 // ==================== JobBoard 관련 서비스 ====================
 
 export const createJobBoard = async (db: Firestore, jobBoardData: Record<string, any>) => {
   const now = Timestamp.now();
   const docRef = await addDoc(collection(db, 'jobBoards'), {
-    ...jobBoardData,
-    interviewPassword: jobBoardData.interviewPassword || '',
-    interviewBaseDuration: jobBoardData.interviewBaseDuration || 30,
-    interviewBaseLink: jobBoardData.interviewBaseLink || '',
-    interviewBaseNotes: jobBoardData.interviewBaseNotes || '',
+    // 면접 정보(링크·안내문·시간)는 공개 문서에 쓰지 않는다 — saveJobBoardInterview 로 private/interview 에
+    ...omitLegacyInterviewFields(jobBoardData),
     createdAt: now,
     updatedAt: now,
   });
@@ -113,11 +113,13 @@ export const updateJobBoard = async (
   jobBoardId: string,
   jobBoardData: Record<string, any>
 ) => {
-  await updateDoc(doc(db, 'jobBoards', jobBoardId), jobBoardData);
+  // 면접 정보는 공개 문서에 쓰지 않는다 — saveJobBoardInterview 사용
+  await updateDoc(doc(db, 'jobBoards', jobBoardId), omitLegacyInterviewFields(jobBoardData));
   return jobBoardId;
 };
 
 export const deleteJobBoard = async (db: Firestore, jobBoardId: string) => {
+  await deleteJobBoardInterview(db, jobBoardId);
   return await deleteDoc(doc(db, 'jobBoards', jobBoardId));
 };
 

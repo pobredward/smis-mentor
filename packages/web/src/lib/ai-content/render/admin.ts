@@ -13,6 +13,7 @@ import {
   getApplicationsByUser,
   getCamps,
   getEvaluationSummary,
+  getJobBoardInterviewInfo,
   getJobBoards,
   getUserNameMap,
   getUsers,
@@ -235,7 +236,7 @@ export async function renderAdminApplications(jobBoardId?: string): Promise<Rend
   if (jobBoardId) {
     const board = boards.find((b) => b.id === jobBoardId);
     if (!board) return { error: `공고를 찾을 수 없습니다: ${jobBoardId}` };
-    const apps = await getApplicationsByJobBoard(board.id);
+    const [apps, interview] = await Promise.all([getApplicationsByJobBoard(board.id), getJobBoardInterviewInfo(board.id)]);
     const users = await getUserNameMap(apps.map((a) => a.refUserId));
     const counts = {
       total: apps.length,
@@ -248,7 +249,7 @@ export async function renderAdminApplications(jobBoardId?: string): Promise<Rend
       `- 공고: **${board.title}** (${board.generation} ${board.jobCode}, ${board.status === 'active' ? '모집중' : '마감'})`,
       `- 지원 ${counts.total}건 · 서류 대기 ${counts.pending} · 서류 합격 ${counts.accepted} · 면접 합격 ${counts.passed} · 최종 합격 ${counts.final}`,
       board.interviewDates.length ? `- 면접 일정: ${board.interviewDates.map((d) => `${fmtDateTime(d.start)}~${fmtDateTime(d.end)}`).join(', ')}` : null,
-      board.interviewBaseNotes ? `- 면접 안내: ${board.interviewBaseNotes.replace(/\r?\n/g, ' / ')}` : null,
+      interview.notes ? `- 면접 안내: ${interview.notes.replace(/\r?\n/g, ' / ')}` : null,
       '',
       table(APPLICATION_HEADERS, applicationRows(apps, users)),
     ]

@@ -1,6 +1,6 @@
 'use client';
 import { compareCampCodes } from '@smis-mentor/shared';
-import { logger, fillRecruitmentTemplate } from '@smis-mentor/shared';
+import { logger, fillRecruitmentTemplate, getJobBoardInterview, type JobBoardInterview } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
@@ -61,6 +61,8 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const [applications, setApplications] = useState<ApplicationWithUser[]>([]);
   const [selectedApplication, setSelectedApplication] = useState<ApplicationWithUser | null>(null);
   const [jobBoard, setJobBoard] = useState<JobBoardWithId | null>(null);
+  // 공고 면접 정보 (관리자 전용 하위 문서 private/interview — 공개 공고 문서에는 두지 않음)
+  const [boardInterview, setBoardInterview] = useState<JobBoardInterview>({});
   const [isLoading, setIsLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [interviewBaseLink, setInterviewBaseLink] = useState('');
@@ -204,6 +206,12 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         id: jobBoardDoc.id
       } as JobBoardWithId;
       setJobBoard(jobBoardData);
+      try {
+        setBoardInterview(await getJobBoardInterview(db, jobBoardId));
+      } catch (error) {
+        logger.error('공고 면접 정보 로드 오류:', error);
+        setBoardInterview({});
+      }
       
       // 지원자 목록 로드
       const applicationsRef = collection(db, 'applicationHistories');
@@ -449,10 +457,10 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
     }
 
     // 면접 기본값: 지원서 → 채용 공고 → 면접 설정(interviewSettings/links) 순. 코드에 링크·비밀번호를 두지 않는다.
-    setInterviewBaseLink(app.interviewBaseLink || jobBoard?.interviewBaseLink || '');
-    setInterviewBaseDuration(String(app.interviewBaseDuration || jobBoard?.interviewBaseDuration || 60));
-    setInterviewBaseNotes(app.interviewBaseNotes || jobBoard?.interviewBaseNotes || '');
-    if (!app.interviewBaseLink && !jobBoard?.interviewBaseLink) {
+    setInterviewBaseLink(app.interviewBaseLink || boardInterview.interviewBaseLink || '');
+    setInterviewBaseDuration(String(app.interviewBaseDuration || boardInterview.interviewBaseDuration || 60));
+    setInterviewBaseNotes(app.interviewBaseNotes || boardInterview.interviewBaseNotes || '');
+    if (!app.interviewBaseLink && !boardInterview.interviewBaseLink) {
       import('@/lib/interviewLinksService')
         .then(({ getInterviewLinks }) => getInterviewLinks())
         .then((links) => { if (links.zoomUrl) setInterviewBaseLink((cur) => cur || links.zoomUrl); })

@@ -2,7 +2,7 @@
  * 공개 페이지 렌더러 — 홈, 채용 공고, 지원 안내, 후기
  */
 import { COMPANY_INFO, EVALUATION_STAGES, PageLink, RenderedPage, SITE_DESCRIPTION, SITE_NAME, SITE_URL, toMarkdownUrl } from '../site';
-import { CampInfo, getCamps, getJobBoard, getJobBoards, getReviews, JobBoardInfo, ReviewInfo } from '../data';
+import { CampInfo, getCamps, getJobBoard, getJobBoardInterviewInfo, getJobBoards, getReviews, JobBoardInfo, ReviewInfo } from '../data';
 import { excerpt, fmtDate, fmtDateTime, fmtRange, htmlToMarkdown, htmlToText, table } from '../markdown';
 import { getStaticPageMeta } from '../registry';
 
@@ -162,12 +162,13 @@ export async function renderJobBoardList(): Promise<RenderedPage> {
 export async function renderJobBoard(id: string, options: { admin?: boolean } = {}): Promise<RenderedPage | null> {
   const board = await getJobBoard(id);
   if (!board) return null;
-  const camps = await getCamps();
+  const [camps, interview] = await Promise.all([getCamps(), getJobBoardInterviewInfo(board.id)]);
   const camp = campFor(board, camps);
 
+  // 공개 렌더에는 면접 시간만 — 링크·안내문은 절대 내보내지 않는다 (안내문은 관리자 렌더에서만)
   const interviewLines = board.interviewDates.length
     ? board.interviewDates
-        .map((d) => `- ${fmtDateTime(d.start)} ~ ${fmtDateTime(d.end)}${board.interviewBaseDuration ? ` (1인당 ${board.interviewBaseDuration}분)` : ''}`)
+        .map((d) => `- ${fmtDateTime(d.start)} ~ ${fmtDateTime(d.end)}${interview.duration ? ` (1인당 ${interview.duration}분)` : ''}`)
         .join('\n')
     : '_면접 일정 미정_';
 
@@ -185,7 +186,7 @@ export async function renderJobBoard(id: string, options: { admin?: boolean } = 
     '## 면접 일정',
     '',
     interviewLines,
-    ...(options.admin && board.interviewBaseNotes ? ['', '## 면접 안내 (관리자)', '', board.interviewBaseNotes] : []),
+    ...(options.admin && interview.notes ? ['', '## 면접 안내 (관리자)', '', interview.notes] : []),
     '',
     '## 지원 방법',
     '',

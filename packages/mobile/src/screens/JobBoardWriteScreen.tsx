@@ -24,6 +24,9 @@ import {
   updateJobBoard,
   deleteJobBoard,
   adminGetAllJobCodes,
+  getJobBoardInterview,
+  saveJobBoardInterview,
+  type JobBoardInterview,
 } from '@smis-mentor/shared';
 import { AdminStackScreenProps } from '../navigation/types';
 
@@ -53,8 +56,6 @@ interface JobBoardWithId {
   generation?: string;
   code?: string;
   interviewDates?: any[];
-  interviewBaseLink?: string;
-  interviewBaseDuration?: number;
   createdAt?: any;
 }
 
@@ -176,7 +177,15 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
   };
 
   // 공고 수정
-  const handleEditJobBoard = (jobBoard: JobBoardWithId) => {
+  const handleEditJobBoard = async (jobBoard: JobBoardWithId) => {
+    // 면접 정보는 관리자 전용 하위 문서(private/interview)에서 — 공개 공고 문서에 두지 않는다
+    let interview: JobBoardInterview = {};
+    try {
+      interview = await getJobBoardInterview(db, jobBoard.id);
+    } catch (error) {
+      logger.error('면접 정보 로드 오류:', error);
+    }
+
     setSelectedJobBoard(jobBoard);
     setIsCreating(false);
     setShowForm(true);
@@ -185,8 +194,8 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
       refJobCodeId: jobBoard.refJobCodeId,
       title: jobBoard.title,
       description: jobBoard.description,
-      interviewBaseLink: jobBoard.interviewBaseLink || '',
-      interviewBaseDuration: jobBoard.interviewBaseDuration?.toString() || '30',
+      interviewBaseLink: interview.interviewBaseLink || '',
+      interviewBaseDuration: interview.interviewBaseDuration?.toString() || '30',
     });
 
     // 업무 코드 선택
@@ -248,17 +257,22 @@ export function JobBoardWriteScreen({ navigation }: AdminStackScreenProps<'JobBo
         generation: selectedCode.generation,
         code: selectedCode.code,
         interviewDates: interviewDates.length > 0 ? interviewDates : [],
-        interviewBaseLink: data.interviewBaseLink || '',
-        interviewBaseDuration: parseInt(data.interviewBaseDuration || '30'),
-        interviewBaseNotes: '',
         status: 'active',
       };
 
+      // 면접 정보는 공고 문서가 아니라 관리자 전용 하위 문서(private/interview)에 저장 (안내문은 이 화면에서 바꾸지 않음)
+      const interviewData: JobBoardInterview = {
+        interviewBaseLink: data.interviewBaseLink || '',
+        interviewBaseDuration: parseInt(data.interviewBaseDuration || '30'),
+      };
+
       if (isCreating) {
-        await createJobBoard(db, jobBoardData);
+        const newJobBoardId = await createJobBoard(db, jobBoardData);
+        await saveJobBoardInterview(db, newJobBoardId, interviewData);
         Alert.alert('성공', '공고가 생성되었습니다.');
       } else if (selectedJobBoard) {
         await updateJobBoard(db, selectedJobBoard.id, jobBoardData);
+        await saveJobBoardInterview(db, selectedJobBoard.id, interviewData);
         Alert.alert('성공', '공고가 수정되었습니다.');
       }
 

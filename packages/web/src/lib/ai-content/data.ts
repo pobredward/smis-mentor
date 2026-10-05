@@ -7,6 +7,7 @@
  */
 import type { DocumentData, Query } from 'firebase-admin/firestore';
 import { getAdminFirestore } from '@/lib/firebase-admin';
+import { JOB_BOARD_INTERVIEW_DOC_ID, pickJobBoardInterview } from '@smis-mentor/shared';
 import type { Role } from './site';
 import { toDate } from './markdown';
 
@@ -90,9 +91,6 @@ export interface JobBoardInfo {
   refJobCodeId: string;
   korea: boolean;
   interviewDates: { start: Date | null; end: Date | null }[];
-  interviewBaseDuration: number;
-  /** 관리자 전용 — 공개 렌더에서는 사용하지 않는다 */
-  interviewBaseNotes: string;
   educationStartDate: Date | null;
   educationEndDate: Date | null;
   createdAt: Date | null;
@@ -112,8 +110,7 @@ function toJobBoard(id: string, d: Doc): JobBoardInfo {
     interviewDates: Array.isArray(d.interviewDates)
       ? d.interviewDates.map((x: Doc) => ({ start: toDate(x?.start), end: toDate(x?.end) }))
       : [],
-    interviewBaseDuration: Number(d.interviewBaseDuration ?? 0),
-    interviewBaseNotes: d.interviewBaseNotes ?? '',
+    // 면접 링크·안내문·시간은 공개 문서에서 읽지 않는다 — getJobBoardInterviewInfo (private/interview)
     educationStartDate: toDate(d.educationStartDate),
     educationEndDate: toDate(d.educationEndDate),
     createdAt: toDate(d.createdAt),
@@ -136,6 +133,27 @@ export async function getJobBoard(id: string): Promise<JobBoardInfo | null> {
   if (hit) return hit;
   const snap = await getAdminFirestore().collection('jobBoards').doc(id).get();
   return snap.exists ? toJobBoard(snap.id, snap.data() as Doc) : null;
+}
+
+/**
+ * 공고 면접 정보 — 관리자 전용 하위 문서 jobBoards/{id}/private/interview (없으면 예전 공고 문서 필드).
+ * 링크는 아예 돌려주지 않는다. 안내문(notes)은 Zoom 암호가 들어 있을 수 있어 관리자 렌더에서만 쓴다.
+ */
+export interface JobBoardInterviewInfo {
+  /** 1인당 면접 시간(분), 없으면 0 */
+  duration: number;
+  /** 관리자 전용 — 공개 렌더에서는 사용하지 않는다 */
+  notes: string;
+}
+
+export async function getJobBoardInterviewInfo(id: string): Promise<JobBoardInterviewInfo> {
+  return cached(`jobBoardInterview:${id}`, 60_000, async () => {
+    const boardRef = getAdminFirestore().collection('jobBoards').doc(id);
+    const priv = await boardRef.collection('private').doc(JOB_BOARD_INTERVIEW_DOC_ID).get();
+    const source = priv.exists ? priv.data() : (await boardRef.get()).data();
+    const iv = pickJobBoardInterview(source ?? null);
+    return { duration: iv.interviewBaseDuration ?? 0, notes: iv.interviewBaseNotes ?? '' };
+  });
 }
 
 // ─── 후기(reviews) ────────────────────────────────────────────────────────
@@ -522,7 +540,8 @@ export async function getApplicationCounts(): Promise<Map<string, { total: numbe
   });
 }
 
-// ─── 평가 요약(userEvaluationSummaries) — 관리자용 ────────────────────────
+// ─── 평가 요약(users.evaluationSummary) — 관리자용 ────────────────────────
+// (예전 userEvaluationSummaries 컬렉션은 같은 내용을 따로 적어 어긋나 있었다 — 이제 users 문서의 요약 하나만 쓴다)
 
 export interface EvaluationSummaryInfo {
   overallAverage?: number;
@@ -531,9 +550,9 @@ export interface EvaluationSummaryInfo {
 }
 
 export async function getEvaluationSummary(uid: string): Promise<EvaluationSummaryInfo | null> {
-  const snap = await getAdminFirestore().collection('userEvaluationSummaries').doc(uid).get();
-  if (!snap.exists) return null;
-  const d = snap.data() as Doc;
+  const snap = await getAdminFirestore().collection('users').doc(uid).get();
+  const d = snap.data()?.evaluationSummary as Doc | undefined;
+  if (!d) return null;
   const stageKeys: [string, string][] = [
     ['documentReview', '서류 전형'],
     ['interview', '면접 전형'],

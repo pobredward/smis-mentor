@@ -1,5 +1,5 @@
 'use client';
-import { logger } from '@smis-mentor/shared';
+import { logger, getJobBoardInterview, saveJobBoardInterview, type JobBoardInterview } from '@smis-mentor/shared';
 
 import { useState, useEffect, use, useCallback, lazy, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -45,6 +45,8 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
   const [editedInterviewBaseDuration, setEditedInterviewBaseDuration] = useState(60);
   const [editedInterviewBaseLink, setEditedInterviewBaseLink] = useState('');
   const [editedInterviewBaseNotes, setEditedInterviewBaseNotes] = useState('');
+  // 면접 정보 원본 (관리자 전용 하위 문서 private/interview — 수정 취소 시 되돌리기용)
+  const [boardInterview, setBoardInterview] = useState<JobBoardInterview>({});
   const [selectedInterviewDate, setSelectedInterviewDate] = useState<string | null>(null);
   const [jobCodes, setJobCodes] = useState<JobCodeWithId[]>([]);
   const [selectedGeneration, setSelectedGeneration] = useState<string>('');
@@ -85,10 +87,19 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
         setEditedDescription(board.description);
         setEditedJobCodeId(board.refJobCodeId);
         
-        // 면접 기본정보 초기화
-        setEditedInterviewBaseLink(board.interviewBaseLink || '');
-        setEditedInterviewBaseDuration(board.interviewBaseDuration || 60);
-        setEditedInterviewBaseNotes(board.interviewBaseNotes || '');
+        // 면접 기본정보 초기화 — 관리자 전용 하위 문서(private/interview)라 관리자만 읽는다
+        let interview: JobBoardInterview = {};
+        if (userData?.role === 'admin') {
+          try {
+            interview = await getJobBoardInterview(db, board.id);
+          } catch (error) {
+            logger.error('면접 정보 로드 오류:', error);
+          }
+        }
+        setBoardInterview(interview);
+        setEditedInterviewBaseLink(interview.interviewBaseLink || '');
+        setEditedInterviewBaseDuration(interview.interviewBaseDuration || 60);
+        setEditedInterviewBaseNotes(interview.interviewBaseNotes || '');
 
         // jobCode 정보 로드
         if (board.refJobCodeId) {
@@ -274,14 +285,19 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
         generation: jobCode.generation,
         jobCode: jobCode.code,
         interviewDates: parsedInterviewDates,
-        interviewBaseDuration: Number(editedInterviewBaseDuration) || 60,
-        interviewBaseLink: editedInterviewBaseLink || '',
-        interviewBaseNotes: editedInterviewBaseNotes || '',
-        interviewPassword: jobBoard.interviewPassword || '',
         educationStartDate: jobCode.startDate,
         educationEndDate: jobCode.endDate,
         updatedAt: Timestamp.now()
       });
+
+      // 면접 정보는 공개 공고 문서가 아니라 관리자 전용 하위 문서(private/interview)에 저장
+      const nextInterview: JobBoardInterview = {
+        interviewBaseDuration: Number(editedInterviewBaseDuration) || 60,
+        interviewBaseLink: editedInterviewBaseLink || '',
+        interviewBaseNotes: editedInterviewBaseNotes || '',
+      };
+      await saveJobBoardInterview(db, id, nextInterview);
+      setBoardInterview(nextInterview);
 
       const updatedDocSnap = await getDoc(docRef);
       if (updatedDocSnap.exists()) {
@@ -372,9 +388,9 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
       setEditedJobCodeId(jobBoard.refJobCodeId);
       
       // 면접 기본정보 초기화
-      setEditedInterviewBaseLink(jobBoard.interviewBaseLink || '');
-      setEditedInterviewBaseDuration(jobBoard.interviewBaseDuration || 60);
-      setEditedInterviewBaseNotes(jobBoard.interviewBaseNotes || '');
+      setEditedInterviewBaseLink(boardInterview.interviewBaseLink || '');
+      setEditedInterviewBaseDuration(boardInterview.interviewBaseDuration || 60);
+      setEditedInterviewBaseNotes(boardInterview.interviewBaseNotes || '');
       
       // interviewDates를 텍스트로 변환
       if (jobBoard.interviewDates && Array.isArray(jobBoard.interviewDates)) {

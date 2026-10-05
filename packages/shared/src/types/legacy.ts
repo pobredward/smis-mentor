@@ -3,6 +3,7 @@ import type { JobExperienceGroupRole } from './camp';
 import type { AuthProvider } from './auth';
 import type { UserRole } from './permission';
 import type { NotificationSettings } from './notification';
+import type { UserEvaluationSummary } from './evaluation';
 
 export interface PartTimeJob {
   period: string;
@@ -88,40 +89,8 @@ export interface User {
   authProviders?: AuthProvider[];
   primaryAuthMethod?: 'email' | 'social';
   
-  // 평가 요약 정보 추가
-  evaluationSummary?: {
-    documentReview?: {
-      averageScore: number;
-      totalEvaluations: number;
-      highestScore: number;
-      lowestScore: number;
-      lastEvaluatedAt: Timestamp;
-    };
-    interview?: {
-      averageScore: number;
-      totalEvaluations: number;
-      highestScore: number;
-      lowestScore: number;
-      lastEvaluatedAt: Timestamp;
-    };
-    faceToFaceEducation?: {
-      averageScore: number;
-      totalEvaluations: number;
-      highestScore: number;
-      lowestScore: number;
-      lastEvaluatedAt: Timestamp;
-    };
-    campLife?: {
-      averageScore: number;
-      totalEvaluations: number;
-      highestScore: number;
-      lowestScore: number;
-      lastEvaluatedAt: Timestamp;
-    };
-    overallAverage: number;      // 전체 평균 점수
-    totalEvaluations: number;    // 총 평가 횟수
-    lastUpdatedAt: Timestamp;
-  };
+  // 평가 요약 — 평가를 만들고·고치고·지울 때 computeEvaluationSummary 로 다시 계산해 통째로 저장 (types/evaluation)
+  evaluationSummary?: UserEvaluationSummary;
 
   // 원어민 교사 전용 정보
   foreignTeacher?: {
@@ -209,10 +178,12 @@ export interface JobBoard {
   refJobCodeId: string;
   korea: boolean;
   interviewDates: { start: Timestamp; end: Timestamp }[];
-  interviewBaseDuration: number;
-  interviewBaseLink: string;
-  interviewPassword: string;
-  interviewBaseNotes: string;
+  /** @deprecated 공개 문서라 private/interview 로 옮김 */
+  interviewBaseDuration?: number;
+  /** @deprecated 공개 문서라 private/interview 로 옮김 */
+  interviewBaseLink?: string;
+  /** @deprecated 공개 문서라 private/interview 로 옮김 */
+  interviewBaseNotes?: string;
   educationStartDate: Timestamp;
   educationEndDate: Timestamp;
   createdAt: Timestamp;

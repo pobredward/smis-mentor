@@ -46,6 +46,12 @@ import {
   createUserLookup,
   type SocialProof,
   type SocialUserData,
+  omitLegacyInterviewFields,
+  getJobBoardInterview,
+  saveJobBoardInterview,
+  deleteJobBoardInterview,
+  type ApplicantInterviewInfo,
+  type ApplicantInterviewInfoResponse,
 } from '@smis-mentor/shared';
 import { authenticatedGet, authenticatedPost } from './apiClient';
 
@@ -496,12 +502,9 @@ export const getUserJobCodesInfo = async (jobExperiences: Array<{id: string, gro
 // JobBoard 관련 함수
 export const createJobBoard = async (jobBoardData: Omit<JobBoard, 'id' | 'createdAt'>) => {
   const now = Timestamp.now();
+  // 면접 정보(링크·안내문·시간)는 공개 문서에 쓰지 않는다 — saveJobBoardInterview 로 private/interview 에
   const docRef = await addDoc(collection(db, 'jobBoards'), {
-    ...jobBoardData,
-    interviewPassword: jobBoardData.interviewPassword || '',
-    interviewBaseDuration: jobBoardData.interviewBaseDuration || 30,
-    interviewBaseLink: jobBoardData.interviewBaseLink || '',
-    interviewBaseNotes: jobBoardData.interviewBaseNotes || '',
+    ...omitLegacyInterviewFields(jobBoardData),
     createdAt: now,
     updatedAt: now
   });
@@ -623,7 +626,8 @@ export const getActiveJobBoards = async () => {
 };
 
 export const updateJobBoard = async (jobBoardId: string, jobBoardData: Partial<JobBoard>) => {
-  await updateDoc(doc(db, 'jobBoards', jobBoardId), jobBoardData);
+  // 면접 정보는 공개 문서에 쓰지 않는다 — saveJobBoardInterview 사용
+  await updateDoc(doc(db, 'jobBoards', jobBoardId), omitLegacyInterviewFields(jobBoardData));
   
   // 해당 공고 캐시 삭제 및 관련 캐시 초기화
   await clearJobBoardCache(jobBoardId);
@@ -632,6 +636,8 @@ export const updateJobBoard = async (jobBoardId: string, jobBoardData: Partial<J
 };
 
 export const deleteJobBoard = async (jobBoardId: string) => {
+  // 면접 정보 하위 문서(private/interview)는 공고와 함께 지워지지 않으므로 먼저 지운다
+  await deleteJobBoardInterview(db, jobBoardId);
   return await deleteDoc(doc(db, 'jobBoards', jobBoardId));
 };
 
@@ -649,7 +655,7 @@ export const duplicateJobBoard = async (jobBoardId: string): Promise<string> => 
   const { id: _id, createdAt: _createdAt, ...rest } = original;
 
   const newDocRef = await addDoc(collection(db, 'jobBoards'), {
-    ...rest,
+    ...omitLegacyInterviewFields(rest),
     title: `[복사] ${original.title}`,
     status: 'active',
     interviewDates: [],
@@ -657,8 +663,29 @@ export const duplicateJobBoard = async (jobBoardId: string): Promise<string> => 
     updatedAt: now,
   });
 
+  // 면접 정보(private/interview)도 새 공고로 복사
+  const interview = await getJobBoardInterview(db, jobBoardId);
+  if (Object.keys(interview).length > 0) {
+    await saveJobBoardInterview(db, newDocRef.id, interview);
+  }
+
   await clearJobBoardsCache();
   return newDocRef.id;
+};
+
+/**
+ * 내 지원서(서류 합격 · 면접 예정)의 면접 안내 — { [지원서 ID]: { link, notes, duration } }
+ * 공고 문서는 누구나 읽으므로 면접 링크·안내문을 두지 않는다 → 서버 API 가 본인 것만 골라 준다.
+ * 실패하면 빈 객체 (면접 안내만 안 보이고 나머지 화면은 그대로).
+ */
+export const getMyInterviewInfo = async (): Promise<Record<string, ApplicantInterviewInfo>> => {
+  try {
+    const res = await authenticatedGet<ApplicantInterviewInfoResponse>('/api/recruitment/interview-info');
+    return res?.interviews ?? {};
+  } catch (error) {
+    logger.error('면접 안내 조회 오류:', error);
+    return {};
+  }
 };
 
 // ApplicationHistory 관련 함수

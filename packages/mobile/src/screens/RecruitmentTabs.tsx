@@ -33,7 +33,8 @@ import {
   ApplicationWithJobDetails,
   ReviewWithId,
 } from '../services/recruitmentService';
-import { recruitStatusBadge } from '@smis-mentor/shared';
+import { recruitStatusBadge, type ApplicantInterviewInfoResponse } from '@smis-mentor/shared';
+import { mobileAuthenticatedGet } from '../services/apiClient';
 import { htmlToPlainText } from '@smis-mentor/shared';
 
 export function ApplicationStatusScreen() {
@@ -74,8 +75,24 @@ export function ApplicationStatusScreen() {
     staleTime: 2 * 60 * 1000, // 2분
   });
 
+  // 면접 안내(링크·안내문·시간)는 서버 API 에서 — 공개 공고 문서에는 두지 않는다.
+  // 본인 지원서(서류 합격 · 면접 예정) 것만 { [지원서 ID]: { link, notes, duration } } 로 온다
+  const hasPendingInterview = applications.some(
+    (a) => a.applicationStatus === 'accepted' && a.interviewStatus === 'pending'
+  );
+  const { data: interviews = {}, refetch: refetchInterviews } = useQuery({
+    queryKey: ['applicationInterviewInfo', userData?.userId || ''],
+    queryFn: async () => {
+      const res = await mobileAuthenticatedGet<ApplicantInterviewInfoResponse>('/api/recruitment/interview-info');
+      return res.interviews ?? {};
+    },
+    enabled: !!userData?.userId && !authLoading && hasPendingInterview,
+    staleTime: 2 * 60 * 1000, // 2분
+  });
+
   const handleRefresh = () => {
     refetch();
+    if (hasPendingInterview) refetchInterviews();
   };
 
   const formatDate = (timestamp: Timestamp | undefined) => {
@@ -166,28 +183,28 @@ export function ApplicationStatusScreen() {
               </View>
             )}
 
-            {item.jobBoard.interviewBaseDuration && (
+            {!!interviews[item.applicationHistoryId]?.duration && (
               <View style={styles.interviewRow}>
                 <Text style={styles.interviewLabel}>예상 소요 시간:</Text>
                 <Text style={styles.interviewValue}>
-                  {item.jobBoard.interviewBaseDuration}분
+                  {interviews[item.applicationHistoryId]?.duration}분
                 </Text>
               </View>
             )}
 
-            {item.jobBoard.interviewBaseLink && (
+            {!!interviews[item.applicationHistoryId]?.link && (
               <TouchableOpacity
                 style={styles.interviewButton}
-                onPress={() => openInterviewLink(item.jobBoard!.interviewBaseLink)}
+                onPress={() => openInterviewLink(interviews[item.applicationHistoryId]!.link)}
               >
                 <Text style={styles.interviewButtonText}>면접 참여하기</Text>
               </TouchableOpacity>
             )}
 
-            {item.jobBoard.interviewBaseNotes && (
+            {!!interviews[item.applicationHistoryId]?.notes && (
               <View style={styles.interviewNotes}>
                 <Text style={styles.interviewNotesText}>
-                  {item.jobBoard.interviewBaseNotes}
+                  {interviews[item.applicationHistoryId]?.notes}
                 </Text>
               </View>
             )}
@@ -249,6 +266,7 @@ export function ApplicationStatusScreen() {
       <FlatList
         data={applications}
         renderItem={renderApplication}
+        extraData={interviews}
         keyExtractor={(item) => item.applicationHistoryId}
         contentContainerStyle={styles.listContent}
         refreshControl={

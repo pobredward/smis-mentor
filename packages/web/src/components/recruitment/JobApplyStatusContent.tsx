@@ -9,9 +9,9 @@ import { ko } from 'date-fns/locale';
 import toast from 'react-hot-toast';
 import { Timestamp } from 'firebase/firestore';
 import Button from '@/components/common/Button';
-import { getApplicationsByUserId, getJobBoardById, cancelApplication } from '@/lib/firebaseService';
+import { getApplicationsByUserId, getJobBoardById, cancelApplication, getMyInterviewInfo } from '@/lib/firebaseService';
 import { ApplicationHistory, JobBoard } from '@/types';
-import { recruitStatusBadge, type StatusTone } from '@smis-mentor/shared';
+import { recruitStatusBadge, type StatusTone, type ApplicantInterviewInfo } from '@smis-mentor/shared';
 
 const TONE_CLASS: Record<StatusTone, string> = {
   wait: 'bg-yellow-100 text-yellow-800', info: 'bg-purple-100 text-purple-800', ok: 'bg-green-100 text-green-800',
@@ -20,6 +20,8 @@ const TONE_CLASS: Record<StatusTone, string> = {
 
 type ApplicationWithJobDetails = ApplicationHistory & {
   jobBoard?: (JobBoard & { id: string }) | undefined;
+  /** 면접 안내 (서버 API — 공개 공고 문서에는 링크·안내문을 두지 않음) */
+  interview?: ApplicantInterviewInfo;
 };
 
 export default function JobApplyStatusContent() {
@@ -58,7 +60,15 @@ export default function JobApplyStatusContent() {
           })
         );
         
-        setApplications(applicationsWithJobDetails);
+        // 면접 안내(링크·안내문·시간)는 서버 API 에서 — 본인 지원서(서류 합격 · 면접 예정) 것만 온다
+        const interviews = applicationsWithJobDetails.some(
+          (a) => a.applicationStatus === 'accepted' && a.interviewStatus === 'pending'
+        )
+          ? await getMyInterviewInfo()
+          : {};
+        setApplications(
+          applicationsWithJobDetails.map((a) => ({ ...a, interview: interviews[a.applicationHistoryId] }))
+        );
       } catch (error) {
         logger.error('지원 내역 로드 오류:', error);
         toast.error('지원 내역을 불러오는 중 오류가 발생했습니다.');
@@ -164,14 +174,14 @@ export default function JobApplyStatusContent() {
                     <span className="font-medium">면접 일시:</span> {formatDate(app.interviewDate)}
                   </p>
                 )}
-                {app.jobBoard.interviewBaseDuration && (
+                {app.interview?.duration && (
                   <p className="text-sm text-blue-800 mb-1">
-                    <span className="font-medium">예상 소요 시간:</span> {app.jobBoard.interviewBaseDuration}분
+                    <span className="font-medium">예상 소요 시간:</span> {app.interview?.duration}분
                   </p>
                 )}
-                {app.jobBoard.interviewBaseLink && (
+                {app.interview?.link && (
                   <a
-                    href={app.jobBoard.interviewBaseLink}
+                    href={app.interview?.link}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-block mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -179,8 +189,8 @@ export default function JobApplyStatusContent() {
                     면접 참여하기
                   </a>
                 )}
-                {app.jobBoard.interviewBaseNotes && (
-                  <p className="text-sm text-blue-800 mt-2">{app.jobBoard.interviewBaseNotes}</p>
+                {app.interview?.notes && (
+                  <p className="text-sm text-blue-800 mt-2">{app.interview?.notes}</p>
                 )}
               </div>
             )}

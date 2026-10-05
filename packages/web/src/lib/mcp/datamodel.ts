@@ -325,13 +325,12 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
       educationStartDate: ts('교육/활동 시작일', { writable: true }),
       educationEndDate: ts('교육/활동 종료일', { writable: true }),
       interviewDates: { type: 'object[]', description: '면접 일정 [{start: timestamp, end: timestamp}]', writable: true },
-      interviewBaseDuration: num('1인당 면접 시간(분)', { writable: true }),
-      interviewBaseNotes: str('면접 안내 문구 (지원자에게 표시)', { writable: true, adminOnly: true }),
       code: str('레거시 코드 필드', { writable: true }),
     },
-    hidden: ['interviewPassword', 'interviewBaseLink'],
+    // 면접 링크·안내문·시간은 관리자 전용 하위 문서 jobBoards/{id}/private/interview 로 옮김 — 예전 문서에 남은 필드도 숨긴다
+    hidden: ['interviewPassword', 'interviewBaseLink', 'interviewBaseNotes', 'interviewBaseDuration'],
     serverManaged: AUDIT_FIELDS,
-    notes: ['면접 링크·비밀번호는 AI 에 노출·수정 불가. 새 공고는 기존 공고를 get_document 로 읽어 본문을 바탕으로 만드는 것이 안전하다.'],
+    notes: ['면접 링크·안내문·시간은 공개 공고 문서가 아니라 관리자 전용 하위 문서(private/interview)에 있어 AI 에 노출·수정 불가. 새 공고는 기존 공고를 get_document 로 읽어 본문을 바탕으로 만드는 것이 안전하다.'],
   },
 
   applicationHistories: {
@@ -350,7 +349,8 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
       interviewFeedback: str('면접 메모'),
       applicationPath: str('지원 경로'),
     },
-    hidden: ['interviewBaseLink'],
+    // 지원자별 면접 링크·안내문(Zoom 암호가 들어가는 경우가 있음)은 AI 에 노출하지 않는다
+    hidden: ['interviewBaseLink', 'interviewBaseNotes'],
     serverManaged: AUDIT_FIELDS,
   },
 
@@ -453,7 +453,7 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
     notes: [
       '서류 전형 점수 입력: evaluationCriteria 에서 stage="서류 전형", isActive=true 템플릿을 읽고 → 지원자 users 문서(selfIntroduction, jobMotivation, 학력, 경력) → criteria 별 score 와 근거(criteriaFeedback) 작성 → create. 점수 합계·백분율은 서버가 계산한다. 같은 지원자·공고·단계에 내가 쓴 평가가 이미 있으면 거부(그 평가를 update), 다른 평가자의 평가가 있으면 경고만 표시된다.',
       'update/delete 는 내가(실행한 관리자) 쓴 평가만 가능. update 에서 scores 를 바꾸면 합계·백분율을 서버가 다시 계산한다.',
-      '평가를 만들거나 고치거나 지우면 앱과 같은 방식으로 users.evaluationSummary 와 userEvaluationSummaries 를 서버가 다시 계산한다 → 지원자 목록 카드의 단계별 평균에 바로 반영.',
+      '평가를 만들거나 고치거나 지우면 앱과 같은 계산으로 users.evaluationSummary 를 서버가 그 사람의 평가 전부에서 다시 만든다 → 지원자 목록 카드의 단계별 평균에 바로 반영 (평가를 다 지운 단계는 사라짐).',
     ],
   },
 
@@ -471,19 +471,6 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
       isDefault: bool('기본 템플릿'),
     },
     serverManaged: AUDIT_FIELDS,
-  },
-
-  userEvaluationSummaries: {
-    name: 'userEvaluationSummaries',
-    description: '사용자별 확정 평가 집계(단계별 평균·횟수). 문서 ID = uid.',
-    read: 'admin',
-    scope: { kind: 'none' },
-    openRead: true,
-    fields: {
-      userId: str('uid'),
-      overallAverage: num('전체 평균'),
-      totalEvaluations: num('총 평가 수'),
-    },
   },
 
   interviewDates: {
@@ -621,6 +608,7 @@ export const EXCLUDED_COLLECTIONS: Record<string, string> = {
   mcpOAuthCodes: 'OAuth 내부 데이터',
   mcpOAuthRefreshTokens: 'OAuth 내부 데이터',
   mcpPendingWrites: 'MCP 내부 데이터 (dry-run 후 실행 대기 중인 쓰기)',
+  userEvaluationSummaries: '폐지된 평가 요약 사본 — 더 이상 갱신되지 않음. users 문서의 evaluationSummary(단계별 평균·횟수)를 읽으세요',
 };
 
 export const DATA_TOOL_LIMITS = {

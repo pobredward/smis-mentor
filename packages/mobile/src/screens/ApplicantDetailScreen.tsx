@@ -32,6 +32,8 @@ import {
   TemplateType,
   saveSMSTemplate,
   updateSMSTemplate,
+  getJobBoardInterview,
+  type JobBoardInterview,
 } from '@smis-mentor/shared';
 import { AdminStackScreenProps } from '../navigation/types';
 import { EvaluationStageCards, EvaluationForm, SMSMessageBox } from '../components';
@@ -164,6 +166,8 @@ export function ApplicantDetailScreen({
   const [interviewLink, setInterviewLink] = useState('');
   const [interviewDuration, setInterviewDuration] = useState('');
   const [interviewNotes, setInterviewNotes] = useState('');
+  // 공고 면접 정보 (관리자 전용 하위 문서 private/interview — 공개 공고 문서에는 두지 않음)
+  const [boardInterview, setBoardInterview] = useState<JobBoardInterview>({});
 
   const loadData = useCallback(async () => {
     try {
@@ -204,22 +208,29 @@ export function ApplicantDetailScreen({
       }
       
       // 면접 base 정보 설정
-      // 지원서에 저장된 값만 사용 (코드에 링크·비밀번호를 두지 않음 — 비어 있으면 면접 링크 관리 값 사용)
-      setInterviewLink(app.interviewBaseLink || '');
-      if (!app.interviewBaseLink) {
+      // 지원서 → 채용 공고(private/interview) → 면접 링크 관리 순 (코드에 링크·비밀번호를 두지 않음)
+      let board: JobBoardInterview = {};
+      try {
+        board = await getJobBoardInterview(db, jobBoardId);
+      } catch (error) {
+        logger.error('공고 면접 정보 로드 오류:', error);
+      }
+      setBoardInterview(board);
+      setInterviewLink(app.interviewBaseLink || board.interviewBaseLink || '');
+      if (!app.interviewBaseLink && !board.interviewBaseLink) {
         import('../services/interviewLinksService')
           .then(({ getInterviewLinks }) => getInterviewLinks())
           .then((links) => { if (links.zoomUrl) setInterviewLink((cur) => cur || links.zoomUrl); })
           .catch(() => undefined);
       }
       
-      if (app.interviewBaseDuration) {
-        setInterviewDuration(String(app.interviewBaseDuration));
+      if (app.interviewBaseDuration || board.interviewBaseDuration) {
+        setInterviewDuration(String(app.interviewBaseDuration || board.interviewBaseDuration));
       } else {
         setInterviewDuration('60');
       }
       
-      setInterviewNotes(app.interviewBaseNotes || '');
+      setInterviewNotes(app.interviewBaseNotes || board.interviewBaseNotes || '');
 
       // 지원 장소 로드
       await loadUserAppliedCamps(app.refUserId);
@@ -415,14 +426,15 @@ export function ApplicantDetailScreen({
       
       // 면접 정보 기본값 설정 (자동으로 박스를 열지는 않음)
       if (!interviewLink) {
-        // 지원서 → 채용 공고 순 (코드에 링크·비밀번호를 두지 않음)
-        setInterviewLink(application?.interviewBaseLink || '');
+        // 지원서 → 채용 공고(private/interview) 순 (코드에 링크·비밀번호를 두지 않음)
+        setInterviewLink(application?.interviewBaseLink || boardInterview.interviewBaseLink || '');
       }
       if (!interviewDuration) {
-        setInterviewDuration(application?.interviewBaseDuration ? String(application.interviewBaseDuration) : '60');
+        const duration = application?.interviewBaseDuration || boardInterview.interviewBaseDuration;
+        setInterviewDuration(duration ? String(duration) : '60');
       }
       if (!interviewNotes) {
-        setInterviewNotes(application?.interviewBaseNotes || '');
+        setInterviewNotes(application?.interviewBaseNotes || boardInterview.interviewBaseNotes || '');
       }
       
       // DB 업데이트는 백그라운드로

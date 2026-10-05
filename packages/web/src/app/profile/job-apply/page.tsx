@@ -10,9 +10,9 @@ import toast from 'react-hot-toast';
 import { Timestamp } from 'firebase/firestore';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
-import { getApplicationsByUserId, getJobBoardById, cancelApplication } from '@/lib/firebaseService';
+import { getApplicationsByUserId, getJobBoardById, cancelApplication, getMyInterviewInfo } from '@/lib/firebaseService';
 import { ApplicationHistory, JobBoard } from '@/types';
-import { recruitStatusBadge, type StatusTone } from '@smis-mentor/shared';
+import { recruitStatusBadge, type StatusTone, type ApplicantInterviewInfo } from '@smis-mentor/shared';
 
 const TONE_CLASS: Record<StatusTone, string> = {
   wait: 'bg-yellow-100 text-yellow-800', info: 'bg-purple-100 text-purple-800', ok: 'bg-green-100 text-green-800',
@@ -21,6 +21,8 @@ const TONE_CLASS: Record<StatusTone, string> = {
 
 type ApplicationWithJobDetails = ApplicationHistory & {
   jobBoard?: (JobBoard & { id: string }) | undefined;
+  /** 면접 안내 (서버 API — 공개 공고 문서에는 링크·안내문을 두지 않음) */
+  interview?: ApplicantInterviewInfo;
 };
 
 export default function JobApplyStatus() {
@@ -74,7 +76,15 @@ export default function JobApplyStatus() {
           }
         });
         
-        setApplications(applicationsWithJobDetails);
+        // 면접 안내(링크·안내문·시간)는 서버 API 에서 — 본인 지원서(서류 합격 · 면접 예정) 것만 온다
+        const interviews = applicationsWithJobDetails.some(
+          (a) => a.applicationStatus === 'accepted' && a.interviewStatus === 'pending'
+        )
+          ? await getMyInterviewInfo()
+          : {};
+        setApplications(
+          applicationsWithJobDetails.map((a) => ({ ...a, interview: interviews[a.applicationHistoryId] }))
+        );
       } catch (error) {
         logger.error('지원 내역 로드 오류:', error);
         toast.error('지원 내역을 불러오는 중 오류가 발생했습니다.');
@@ -202,23 +212,23 @@ export default function JobApplyStatus() {
                       )}
 
                       {/* 면접 시간 */}
-                      {app.jobBoard.interviewBaseDuration && (
+                      {app.interview?.duration && (
                         <div className="mb-2">
                           <p className="text-sm text-blue-800">
                             <span className="font-medium">예상 소요 시간:</span>{' '}
-                            {app.jobBoard.interviewBaseDuration}분
+                            {app.interview?.duration}분
                           </p>
                         </div>
                       )}
                       
                       {/* 면접 링크 */}
-                      {app.jobBoard.interviewBaseLink && (
+                      {app.interview?.link && (
                         <div className="mb-2">
                           {/* <p className="text-sm text-blue-800 mb-1">
                             <span className="font-medium">면접 링크:</span>
                           </p> */}
                           <a
-                            href={app.jobBoard.interviewBaseLink}
+                            href={app.interview?.link}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -234,11 +244,11 @@ export default function JobApplyStatus() {
 
                       
                       {/* 면접 참고사항 */}
-                      {app.jobBoard.interviewBaseNotes && (
+                      {app.interview?.notes && (
                         <div className="mt-3">
                           {/* <p className="text-sm font-medium text-blue-800 mb-1">참고사항:</p> */}
                           <div className="text-sm text-blue-700 bg-blue-100 p-3 rounded-md whitespace-pre-line">
-                            {app.jobBoard.interviewBaseNotes}
+                            {app.interview?.notes}
                           </div>
                         </div>
                       )}

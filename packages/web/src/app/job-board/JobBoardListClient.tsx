@@ -139,10 +139,7 @@ export default function JobBoardListClient() {
         educationStartDate: selectedJobCode.startDate,
         educationEndDate: selectedJobCode.endDate,
         interviewDates: [],
-        interviewBaseLink: '',
-        interviewBaseDuration: 30,
-        interviewBaseNotes: '',
-        interviewPassword: '',
+        // 면접 정보(링크·안내문·시간)는 공개 문서에 두지 않는다 — 공고 수정 화면에서 private/interview 로 저장
         status: 'active',
       };
 

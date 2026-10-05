@@ -1,5 +1,5 @@
 'use client';
-import { logger, fillRecruitmentTemplate } from '@smis-mentor/shared';
+import { logger, fillRecruitmentTemplate, getJobBoardInterview } from '@smis-mentor/shared';
 
 import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, getDocs, doc, getDoc, updateDoc, Timestamp, setDoc, DocumentData } from 'firebase/firestore';
@@ -384,27 +384,22 @@ export function InterviewManageClient() {
       setNewSelectedDate('');
     }
 
-    // 채용 공고의 base 정보 가져오기
+    // 채용 공고의 base 정보 가져오기 — 관리자 전용 하위 문서(private/interview), 없으면 예전 공고 필드
     try {
-      const jobBoardRef = doc(db, 'jobBoards', app.refJobBoardId);
-      const jobBoardDoc = await getDoc(jobBoardRef);
+      const boardInterview = await getJobBoardInterview(db, app.refJobBoardId);
       
-      if (jobBoardDoc.exists()) {
-        const jobBoardData = jobBoardDoc.data() as JobBoard;
+      // 선택된 지원자 정보 업데이트
+      setSelectedApplication(prev => {
+        if (!prev) return prev;
         
-        // 선택된 지원자 정보 업데이트
-        setSelectedApplication(prev => {
-          if (!prev) return prev;
-          
-          // 지원자별로 저장된 면접 정보가 있으면 우선 (공고 기본값으로 덮어쓰지 않음)
-          return {
-            ...prev,
-            interviewBaseLink: prev.interviewBaseLink || jobBoardData.interviewBaseLink || '',
-            interviewBaseDuration: prev.interviewBaseDuration || jobBoardData.interviewBaseDuration || 30,
-            interviewBaseNotes: prev.interviewBaseNotes || jobBoardData.interviewBaseNotes || ''
-          };
-        });
-      }
+        // 지원자별로 저장된 면접 정보가 있으면 우선 (공고 기본값으로 덮어쓰지 않음)
+        return {
+          ...prev,
+          interviewBaseLink: prev.interviewBaseLink || boardInterview.interviewBaseLink || '',
+          interviewBaseDuration: prev.interviewBaseDuration || boardInterview.interviewBaseDuration || 30,
+          interviewBaseNotes: prev.interviewBaseNotes || boardInterview.interviewBaseNotes || ''
+        };
+      });
     } catch (error) {
       logger.error('채용 공고 정보 로드 오류:', error);
       toast.error('채용 공고 정보를 불러오는 중 오류가 발생했습니다.');

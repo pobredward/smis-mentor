@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { logger, fillRecruitmentTemplate } from '@smis-mentor/shared';
+import { logger, fillRecruitmentTemplate, getJobBoardInterview } from '@smis-mentor/shared';
 import {
   View,
   Text,
@@ -443,23 +443,19 @@ export function InterviewManageScreen({
     }
 
     try {
-      const jobBoardRef = doc(db, 'jobBoards', app.refJobBoardId);
-      const jobBoardDoc = await getDoc(jobBoardRef);
+      // 공고 면접 정보 — 관리자 전용 하위 문서(private/interview), 없으면 예전 공고 필드
+      const boardInterview = await getJobBoardInterview(db, app.refJobBoardId);
 
-      if (jobBoardDoc.exists()) {
-        const jobBoardData = jobBoardDoc.data() as JobBoard;
+      setSelectedApplication((prev) => {
+        if (!prev) return prev;
 
-        setSelectedApplication((prev) => {
-          if (!prev) return prev;
-
-          return {
-            ...prev,
-            interviewBaseLink: jobBoardData.interviewBaseLink || '',
-            interviewBaseDuration: jobBoardData.interviewBaseDuration || 30,
-            interviewBaseNotes: jobBoardData.interviewBaseNotes || '',
-          };
-        });
-      }
+        return {
+          ...prev,
+          interviewBaseLink: boardInterview.interviewBaseLink || '',
+          interviewBaseDuration: boardInterview.interviewBaseDuration || 30,
+          interviewBaseNotes: boardInterview.interviewBaseNotes || '',
+        };
+      });
     } catch (error) {
       logger.error('채용 공고 정보 로드 오류:', error);
       Alert.alert('오류', '채용 공고 정보를 불러오는 중 오류가 발생했습니다.');
