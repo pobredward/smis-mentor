@@ -14,6 +14,7 @@
  */
 import * as admin from 'firebase-admin';
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
+import { REGION, RUNTIME_SA } from './runtime';
 import {
   CAMP_ROOM_TYPES,
   campRoomId,
@@ -35,7 +36,6 @@ import {
   wantsRoom,
 } from './chatMembership';
 
-const REGION = 'asia-northeast3';
 const fdb = () => admin.firestore();
 const FV = () => admin.firestore.FieldValue;
 
@@ -195,7 +195,7 @@ function chatKey(u: UserLike | undefined): string {
 }
 
 export const chatOnUserWritten = onDocumentWritten(
-  { document: 'users/{userId}', region: REGION, serviceAccount: 'smis-mentor@appspot.gserviceaccount.com', memory: '256MiB', timeoutSeconds: 120 },
+  { document: 'users/{userId}', region: REGION, serviceAccount: RUNTIME_SA, memory: '256MiB', timeoutSeconds: 120 },
   async (event) => {
     const before = event.data?.before?.data() as UserLike | undefined;
     const after = event.data?.after?.data() as UserLike | undefined;
@@ -230,7 +230,7 @@ export const chatOnUserWritten = onDocumentWritten(
 );
 
 export const chatOnJobCodeWritten = onDocumentWritten(
-  { document: 'jobCodes/{jobCodeId}', region: REGION, serviceAccount: 'smis-mentor@appspot.gserviceaccount.com', memory: '256MiB', timeoutSeconds: 120 },
+  { document: 'jobCodes/{jobCodeId}', region: REGION, serviceAccount: RUNTIME_SA, memory: '256MiB', timeoutSeconds: 120 },
   async (event) => {
     const before = event.data?.before?.data();
     const after = event.data?.after?.data();

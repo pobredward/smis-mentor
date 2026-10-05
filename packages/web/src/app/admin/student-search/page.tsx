@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { StudentSearchClient } from './StudentSearchClient';
 
 export const metadata: Metadata = {
-  title: '학생 조회 - SMIS Mentor',
+  title: '학생 조회 - SMIS CAMP',
 };
 
 export default function StudentSearchPage() {

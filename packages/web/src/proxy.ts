@@ -2,7 +2,7 @@
  * Next.js 16 proxy (구 middleware) — AI 에이전트용 콘텐츠 협상
  *
  * AI 에이전트(Claude, ChatGPT, Perplexity 등)의 fetch 도구나 `Accept: text/markdown` 요청이
- * 일반 페이지 URL(예: https://smis-mentor.com/)을 열면, 브라우저용 HTML(대부분 클라이언트 렌더링이라
+ * 일반 페이지 URL(예: https://smiscamp.com/)을 열면, 브라우저용 HTML(대부분 클라이언트 렌더링이라
  * 본문이 비어 있음) 대신 같은 페이지의 마크다운(/api/md/...)을 돌려준다.
  * → "링크만 줘도" 루트에서 llms.txt 안내와 하위 페이지 링크까지 바로 읽힌다.
  *

@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import LessonPlanPage from './LessonPlanPage';
 
 export const metadata: Metadata = {
-  title: 'Lesson Plan | SMIS Mentor',
+  title: 'Lesson Plan | SMIS CAMP',
   description: '원어민 레슨플랜 작성',
 };
 

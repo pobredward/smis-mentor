@@ -69,7 +69,7 @@ export async function GET(
               color: '#94a3b8',
             }}
           >
-            smis-mentor.com
+            smiscamp.com
           </div>
         </div>
       ),
@@ -96,7 +96,7 @@ export async function GET(
           }}
         >
           <div style={{ fontSize: 80, fontWeight: 'bold', color: '#3b82f6' }}>
-            SMIS 멘토
+            SMIS CAMP
           </div>
         </div>
       ),

@@ -13,11 +13,10 @@
 import * as admin from 'firebase-admin';
 import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
 import { Expo, ExpoPushMessage } from 'expo-server-sdk';
+import { REGION, RUNTIME_SA, SITE_URL } from './runtime';
 
-const REGION = 'asia-northeast3';
-// 함수 실행 계정 — 이 프로젝트에는 기본 Compute 계정(…-compute@developer)이 없어 v2 함수는 appspot 계정을 꼭 적는다 (index.ts 와 같음)
-const BUCKET = 'smis-mentor.firebasestorage.app';
-const SITE = 'https://smis-mentor.com';
+// 함수 실행 계정 · 사이트 주소는 runtime.ts (프로젝트별 .env)
+const site = () => SITE_URL.value();
 const STAFF = ['admin', 'mentor', 'foreign'];
 
 type Lang = 'ko' | 'en';
@@ -294,8 +293,8 @@ export async function sendPollReminder(roomId: string, messageId: string): Promi
           notification: { title: g.title, body: g.body },
           data: { type: 'chat', roomId, messageId },
           webpush: {
-            notification: { icon: `${SITE}/android-icon-192x192.png`, tag: `poll-${messageId}` },
-            fcmOptions: { link: `${SITE}/chat?room=${encodeURIComponent(roomId)}` },
+            notification: { icon: `${site()}/android-icon-192x192.png`, tag: `poll-${messageId}` },
+            fcmOptions: { link: `${site()}/chat?room=${encodeURIComponent(roomId)}` },
           },
         });
         await Promise.all(res.responses.map(async (r, k) => {
@@ -311,7 +310,7 @@ export async function sendPollReminder(roomId: string, messageId: string): Promi
 }
 
 export const chatOnMessageCreated = onDocumentCreated(
-  { document: 'chatRooms/{roomId}/messages/{messageId}', region: REGION, serviceAccount: 'smis-mentor@appspot.gserviceaccount.com', memory: '256MiB', timeoutSeconds: 60 },
+  { document: 'chatRooms/{roomId}/messages/{messageId}', region: REGION, serviceAccount: RUNTIME_SA, memory: '256MiB', timeoutSeconds: 60 },
   async (event) => {
     const m = event.data?.data() as MessageDoc | undefined;
     if (!m) return;
@@ -477,8 +476,8 @@ export const chatOnMessageCreated = onDocumentCreated(
           notification: { title: g.title, body: g.body },
           data: { type: 'chat', roomId, messageId },
           webpush: {
-            notification: { icon: g.photo || `${SITE}/android-icon-192x192.png`, tag: `chat-${roomId}`, renotify: !g.silent, silent: g.silent },
-            fcmOptions: { link: `${SITE}/chat?room=${encodeURIComponent(roomId)}` },
+            notification: { icon: g.photo || `${site()}/android-icon-192x192.png`, tag: `chat-${roomId}`, renotify: !g.silent, silent: g.silent },
+            fcmOptions: { link: `${site()}/chat?room=${encodeURIComponent(roomId)}` },
           },
         }).then(async (res) => {
           await Promise.all(res.responses.map(async (r, k) => {
@@ -495,7 +494,7 @@ export const chatOnMessageCreated = onDocumentCreated(
 );
 
 export const chatOnMessageUpdated = onDocumentUpdated(
-  { document: 'chatRooms/{roomId}/messages/{messageId}', region: REGION, serviceAccount: 'smis-mentor@appspot.gserviceaccount.com', memory: '256MiB' },
+  { document: 'chatRooms/{roomId}/messages/{messageId}', region: REGION, serviceAccount: RUNTIME_SA, memory: '256MiB' },
   async (event) => {
     const before = event.data?.before.data() as MessageDoc | undefined;
     const after = event.data?.after.data() as MessageDoc | undefined;
@@ -514,7 +513,7 @@ export const chatOnMessageUpdated = onDocumentUpdated(
       return;
     }
     if (before.deleted || !after.deleted) return;
-    const bucket = admin.storage().bucket(BUCKET);
+    const bucket = admin.storage().bucket();
     // 보낸 사람 폴더(chat/{roomId}/{senderId}/…)의 파일만 — media.path 는 클라이언트가 쓴 값이라,
     // 같은 방 다른 사람 파일 경로를 넣고 지우면 Storage 규칙(올린 본인만 삭제)을 넘어 남의 사진이 지워졌다.
     const senderId = String(before.senderId ?? '');

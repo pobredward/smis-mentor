@@ -33,6 +33,8 @@ firebase-debug.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# 함수 프로젝트별 설정 (비밀 값 없음)
+!functions/.env.smiscamp
 env
 env.*
 

@@ -7,6 +7,9 @@ import { db } from '../config/firebase';
 import { logger, type NotificationSettings as SharedNotificationSettings } from '@smis-mentor/shared';
 import { getOpenChatRoom } from './chatPresence';
 
+// Expo 푸시 토큰은 EAS 프로젝트 단위 — app.config 의 extra.eas.projectId
+const EAS_PROJECT_ID: string | undefined = Constants.expoConfig?.extra?.eas?.projectId;
+
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     // 지금 열어 보고 있는 채팅방의 새 메시지 — 화면에 바로 보이므로 배너·소리 없이
@@ -84,7 +87,7 @@ export async function registerPushTokenIfPermitted(): Promise<string | undefined
 
   try {
     const token = (await Notifications.getExpoPushTokenAsync({
-      projectId: '684d0445-c299-4e77-a362-42efa9c671ac',
+      projectId: EAS_PROJECT_ID,
     })).data;
     logger.info('Expo Push Token:', token);
     return token;
@@ -127,7 +130,7 @@ export async function registerForPushNotificationsAsync(): Promise<string | unde
     
     try {
       token = (await Notifications.getExpoPushTokenAsync({
-        projectId: '684d0445-c299-4e77-a362-42efa9c671ac',
+        projectId: EAS_PROJECT_ID,
       })).data;
       
       logger.info('Expo Push Token:', token);

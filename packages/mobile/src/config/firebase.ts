@@ -14,14 +14,19 @@ import {
 const { getReactNativePersistence } = require('firebase/auth') as { getReactNativePersistence: (storage: unknown) => Persistence };
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// Firebase 웹 앱 설정 — EAS 환경 변수 (웹의 NEXT_PUBLIC_FIREBASE_* 와 같은 값). 공개 값이지만 프로젝트마다 다르므로 코드에 두지 않는다
 const firebaseConfig = {
-  apiKey: 'AIzaSyA-WkaKCq_XWSuNyzoZkx__9S02WS4RIWQ',
-  authDomain: 'smis-mentor.firebaseapp.com',
-  projectId: 'smis-mentor',
-  storageBucket: 'smis-mentor.firebasestorage.app',
-  messagingSenderId: '382190683951',
-  appId: '1:382190683951:ios:ab4038222658ff9064c3da',
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
+if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  // 빌드 환경 변수가 빠졌을 때 엉뚱한 프로젝트에 붙지 않도록 바로 알린다
+  console.error('[firebase] EXPO_PUBLIC_FIREBASE_* 환경 변수가 없습니다 (EAS 환경 변수 확인)');
+}
 
 // Firebase 앱 초기화 (중복 초기화 방지)
 const app: FirebaseApp = getApps().length === 0 

@@ -9,18 +9,18 @@ import AnalyticsProvider from "@/components/analytics/AnalyticsProvider";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "SMIS 멘토 플랫폼",
-  description: "SMIS 멘토 플랫폼입니다",
+  title: "SMIS CAMP",
+  description: "SMIS CAMP — 영어캠프 멘토 · 원어민 선생님 채용과 캠프 운영",
   keywords: "SMIS, 멘토, 대학생, 영어캠프, 해외캠프, 국내캠프, 방학, 여름방학, 겨울방학, 아르바이트, 채용, 교육",
   authors: [{ name: '에스엠아이에스' }],
   publisher: '에스엠아이에스',
   creator: '에스엠아이에스',
-  metadataBase: new URL('https://www.smis-mentor.com'),
+  metadataBase: new URL('https://smiscamp.com'),
   // AI 에이전트용 마크다운 전문 (llms-full.txt) — <link rel="alternate" type="text/markdown">
   alternates: {
     types: {
       'text/markdown': [
-        { url: 'https://smis-mentor.com/llms-full.txt', title: 'SMIS 멘토 플랫폼 — AI/LLM용 전체 콘텐츠 (Markdown)' },
+        { url: 'https://smiscamp.com/llms-full.txt', title: 'SMIS CAMP — AI/LLM용 전체 콘텐츠 (Markdown)' },
       ],
     },
   },
@@ -33,16 +33,16 @@ export const metadata: Metadata = {
     },
   },
   openGraph: {
-    title: "SMIS 멘토 플랫폼",
-    description: "SMIS 멘토 플랫폼입니다.",
-    url: 'https://www.smis-mentor.com',
-    siteName: 'SMIS 멘토 플랫폼',
+    title: "SMIS CAMP",
+    description: "SMIS CAMP — 영어캠프 멘토 · 원어민 선생님 채용과 캠프 운영.",
+    url: 'https://smiscamp.com',
+    siteName: 'SMIS CAMP',
     images: [
       {
         url: '/logo-wide-metadata.png',
         width: 1200,
         height: 630,
-        alt: 'SMIS 멘토 플랫폼',
+        alt: 'SMIS CAMP',
       }
     ],
     locale: 'ko_KR',
@@ -71,7 +71,7 @@ export const metadata: Metadata = {
     ]
   },
   appleWebApp: {
-    title: 'SMIS 멘토 플랫폼',
+    title: 'SMIS CAMP',
     statusBarStyle: 'default',
   },
 };
@@ -104,12 +104,12 @@ export default function RootLayout({
             "@graph": [
               {
                 "@type": "Organization",
-                "@id": "https://www.smis-mentor.com/#organization",
-                "name": "SMIS 멘토 플랫폼",
-                "url": "https://www.smis-mentor.com",
+                "@id": "https://smiscamp.com/#organization",
+                "name": "SMIS CAMP",
+                "url": "https://smiscamp.com",
                 "logo": {
                   "@type": "ImageObject",
-                  "url": "https://www.smis-mentor.com/logo-wide.png"
+                  "url": "https://smiscamp.com/logo-wide.png"
                 },
                 "contactPoint": {
                   "@type": "ContactPoint",
@@ -134,17 +134,17 @@ export default function RootLayout({
               },
               {
                 "@type": "WebSite",
-                "@id": "https://www.smis-mentor.com/#website",
-                "url": "https://www.smis-mentor.com",
-                "name": "SMIS 멘토 플랫폼",
+                "@id": "https://smiscamp.com/#website",
+                "url": "https://smiscamp.com",
+                "name": "SMIS CAMP",
                 "publisher": {
-                  "@id": "https://www.smis-mentor.com/#organization"
+                  "@id": "https://smiscamp.com/#organization"
                 },
                 "potentialAction": {
                   "@type": "SearchAction",
                   "target": {
                     "@type": "EntryPoint",
-                    "urlTemplate": "https://www.smis-mentor.com/search?q={search_term_string}"
+                    "urlTemplate": "https://smiscamp.com/search?q={search_term_string}"
                   },
                   "query-input": "required name=search_term_string"
                 }

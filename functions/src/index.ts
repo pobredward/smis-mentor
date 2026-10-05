@@ -3,6 +3,7 @@ import * as firestoreV2 from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
 import { Expo, ExpoPushMessage, ExpoPushTicket } from 'expo-server-sdk';
 import { OAuth2Client } from 'google-auth-library';
+import { RUNTIME_SA } from './runtime';
 
 admin.initializeApp();
 
@@ -85,8 +86,8 @@ interface TaskWithNotification extends Task {
 //  (이전에는 'Bearer ' 접두사만 확인해 누구나 호출 가능했음)
 // ──────────────────────────────────────────────────────────────
 const oidcClient = new OAuth2Client();
-const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || 'smis-mentor';
-const SCHEDULER_INVOKER_EMAILS = (process.env.SCHEDULER_INVOKER_EMAILS || `${PROJECT_ID}@appspot.gserviceaccount.com`)
+const PROJECT_ID = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || '';
+const SCHEDULER_INVOKER_EMAILS = (process.env.SCHEDULER_INVOKER_EMAILS || '')
   .split(',').map((e) => e.trim()).filter(Boolean);
 
 function isAllowedInvokerEmail(email: string | undefined): boolean {
@@ -211,7 +212,7 @@ async function cleanupStaleLocations(): Promise<void> {
 export const checkOverdueTasks = functionsV2.https.onRequest(
   {
     region: 'asia-northeast3',
-    serviceAccount: 'smis-mentor@appspot.gserviceaccount.com',
+    serviceAccount: RUNTIME_SA,
   },
   async (req, res) => {
     // Cloud Scheduler OIDC 토큰(서명 검증 + SA 허용 목록) 또는 관리자 Firebase ID 토큰만 허용
@@ -460,7 +461,7 @@ async function sendTaskReminderNotifications(task: Task, users: Array<{ userId: 
 export const cleanupOrphanedSocialAccounts = functionsV2.https.onRequest(
   {
     region: 'asia-northeast3',
-    serviceAccount: 'smis-mentor@appspot.gserviceaccount.com',
+    serviceAccount: RUNTIME_SA,
   },
   async (req, res) => {
     const invoker = await verifyInvoker(req as any);
@@ -564,7 +565,7 @@ export const cleanupOrphanedSocialAccounts = functionsV2.https.onRequest(
 // ──────────────────────────────────────────────────────────────
 export const auditUserChanges = firestoreV2.onDocumentUpdatedWithAuthContext(
   // 이 프로젝트에는 기본 Compute 서비스 계정이 없어 다른 함수처럼 App Engine 계정으로 돌린다
-  { document: 'users/{userId}', region: 'asia-northeast3', serviceAccount: 'smis-mentor@appspot.gserviceaccount.com', memory: '256MiB' },
+  { document: 'users/{userId}', region: 'asia-northeast3', serviceAccount: RUNTIME_SA, memory: '256MiB' },
   async (event) => {
     const before = event.data?.before.data();
     const after = event.data?.after.data();

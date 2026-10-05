@@ -86,7 +86,7 @@ export const LodgingViewer = forwardRef<LodgingViewerHandle, Props>(function Lod
     <View style={styles.wrap}>
       <WebView
         ref={web}
-        source={{ html, baseUrl: 'https://smis-mentor.com/' }}
+        source={{ html, baseUrl: 'https://smiscamp.com/' }}
         originWhitelist={['*']}
         javaScriptEnabled
         domStorageEnabled={false}

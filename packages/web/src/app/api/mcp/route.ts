@@ -1,11 +1,11 @@
 /**
- * SMIS Mentor MCP 서버 — 로그인(OAuth) 엔드포인트
+ * SMIS CAMP MCP 서버 — 로그인(OAuth) 엔드포인트
  *
- * Claude.ai / ChatGPT 커넥터에 https://smis-mentor.com/api/mcp 를 추가하면
+ * Claude.ai / ChatGPT 커넥터에 https://smiscamp.com/api/mcp 를 추가하면
  * 401 + WWW-Authenticate → OAuth 메타데이터 탐색 → 동적 클라이언트 등록 → 로그인/동의 →
  * 액세스 토큰 발급 순으로 연결된다. 도구 구현은 src/lib/mcp/server.ts 참고.
  *
- * ⚠️ 반드시 apex 도메인(smis-mentor.com)을 사용할 것 — www 는 308 리다이렉트되어 POST 가 깨진다.
+ * ⚠️ 반드시 apex 도메인(smiscamp.com)을 사용할 것 — www 는 308 리다이렉트되어 POST 가 깨진다.
  */
 import { NextResponse } from 'next/server';
 import { createSmisMcpHandler, mcpInfo } from '@/lib/mcp/server';

@@ -340,7 +340,7 @@ export default function AppConfigPage() {
                 <li>• 변경사항은 즉시 반영되며, 다음 앱 실행부터 적용됩니다.</li>
                 <li>• 최소 1개 이상의 문구가 필요합니다.</li>
                 <li>• 강제 업데이트는 최소 버전을 설정해야 활성화되며, 스토어 배포 후 적용하세요.</li>
-                <li>• 스토어 URL을 비워두면 기본 스토어 URL(com.smis.smismentor)이 사용됩니다.</li>
+                <li>• 스토어 URL을 비워두면 기본 스토어 URL(com.smis.smiscamp)이 사용됩니다.</li>
               </ul>
             </div>
           </div>

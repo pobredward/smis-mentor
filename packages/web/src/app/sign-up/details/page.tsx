@@ -673,7 +673,7 @@ export default function SignUpDetails() {
                   <FaCheckCircle className="w-6 h-6 text-blue-600 mr-3 flex-shrink-0" />
                   <div className="text-sm text-blue-900">
                     <p className="font-semibold mb-1">거의 다 끝났습니다!</p>
-                    <p className="text-blue-700">가입 완료 버튼을 누르면 SMIS 멘토로 지원하실 수 있습니다.</p>
+                    <p className="text-blue-700">가입 완료 버튼을 누르면 SMIS CAMP 멘토로 지원하실 수 있습니다.</p>
                   </div>
                 </div>
               </div> */}

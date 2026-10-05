@@ -26,7 +26,7 @@ export const PAGE_REGISTRY: PageMeta[] = [
   {
     path: '/',
     title: '홈',
-    description: 'SMIS 멘토 플랫폼 메인 페이지. 진행 중인 채용 공고, 멘토링 참여 후기, 지원 절차 안내.',
+    description: 'SMIS CAMP 메인 페이지. 진행 중인 채용 공고, 멘토링 참여 후기, 지원 절차 안내.',
     access: 'public',
     tags: ['홈', '채용', '후기', '지원'],
   },
@@ -62,14 +62,14 @@ export const PAGE_REGISTRY: PageMeta[] = [
   {
     path: '/privacy-policy',
     title: '개인정보처리방침',
-    description: 'SMIS 멘토 플랫폼의 개인정보 수집·이용·보관·파기 방침.',
+    description: 'SMIS CAMP의 개인정보 수집·이용·보관·파기 방침.',
     access: 'public',
     tags: ['개인정보', '법적'],
   },
   {
     path: '/terms-of-service',
     title: '서비스 이용약관',
-    description: 'SMIS 멘토 플랫폼 서비스 이용약관.',
+    description: 'SMIS CAMP 서비스 이용약관.',
     access: 'public',
     tags: ['약관', '법적'],
   },

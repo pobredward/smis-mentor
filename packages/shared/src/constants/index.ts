@@ -10,5 +10,17 @@ export const CACHE_TTL = 5 * 60 * 1000; // 5분
  * (이전에는 agreedTerms: true 만 저장해 언제·어떤 내용에 동의했는지 알 수 없었음)
  */
 export const CONSENT_VERSION = '2026-09-26';
-export const TERMS_URL = 'https://smis-mentor.com/terms-of-service';
-export const PRIVACY_POLICY_URL = 'https://smis-mentor.com/privacy-policy';
+/** 서비스 이름 · 주소 · 앱 식별자 — 한곳에서만 정한다 */
+export const APP_NAME = 'SMIS CAMP';
+export const SITE_URL = 'https://smiscamp.com';
+export const APP_SCHEME = 'smiscamp';
+export const APP_BUNDLE_ID = 'com.smis.smiscamp';
+/** App Store 앱 번호 — App Store Connect 에 새 앱을 만들면 채운다 (비어 있으면 검색 화면으로) */
+export const IOS_APP_STORE_ID = '';
+export const IOS_STORE_URL = IOS_APP_STORE_ID
+  ? `https://apps.apple.com/kr/app/id${IOS_APP_STORE_ID}`
+  : 'https://apps.apple.com/kr/search?term=SMIS%20CAMP';
+export const ANDROID_STORE_URL = `https://play.google.com/store/apps/details?id=${APP_BUNDLE_ID}`;
+
+export const TERMS_URL = `${SITE_URL}/terms-of-service`;
+export const PRIVACY_POLICY_URL = `${SITE_URL}/privacy-policy`;

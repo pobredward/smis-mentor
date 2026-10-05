@@ -199,7 +199,7 @@ export default function TaskDetailScreen() {
   const handleShare = async () => {
     if (!task) return;
     
-    const url = `https://smis-mentor.com/camp/tasks/${task.id}`;
+    const url = `https://smiscamp.com/camp/tasks/${task.id}`;
     
     try {
       await Share.share(

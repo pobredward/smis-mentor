@@ -49,10 +49,10 @@ async function signInWithNativeSDK(NaverLogin: any): Promise<SocialUserData> {
   if (NAVER_CLIENT_ID && NAVER_CLIENT_SECRET) {
     try {
       NaverLogin.initialize({
-        appName: 'SMIS Mentor',
+        appName: 'SMIS CAMP',
         consumerKey: NAVER_CLIENT_ID,
         consumerSecret: NAVER_CLIENT_SECRET,
-        serviceUrlSchemeIOS: 'smismentor',
+        serviceUrlSchemeIOS: 'smiscamp',
         disableNaverAppAuthIOS: true,
       });
     } catch {
@@ -98,8 +98,8 @@ async function signInWithOAuth(): Promise<SocialUserData> {
   // Redirect URI (Expo Auth Proxy 사용)
   const redirectUri = makeRedirectUri({
     // (useProxy 는 expo-auth-session 최신판에서 없어져 무시되던 옵션이라 뺐다)
-    // 개발: https://auth.expo.io/@pobredward02/smis-mentor
-    // 프로덕션: smismentor://redirect
+    // 개발: https://auth.expo.io/@pobredward02/smiscamp
+    // 프로덕션: smiscamp://redirect
   });
 
   logger.info('📍 Redirect URI:', redirectUri);

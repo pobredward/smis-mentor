@@ -28,7 +28,7 @@ export async function generateMetadata({
     
     const timeStr = task.time ? ` ${task.time}` : '';
     const description = `${dateStr}${timeStr}`;
-    const url = `https://www.smis-mentor.com/camp/tasks/${taskId}`;
+    const url = `https://smiscamp.com/camp/tasks/${taskId}`;
 
     return {
       title: L('misc.smisMentorTask', { v0: task.title }),
@@ -37,14 +37,14 @@ export async function generateMetadata({
         title: task.title,
         description: description,
         url: url,
-        siteName: 'SMIS 멘토',
+        siteName: 'SMIS CAMP',
         type: 'article',
         images: [
           {
             url: '/logo-wide-metadata.png',
             width: 1200,
             height: 630,
-            alt: 'SMIS 멘토 플랫폼',
+            alt: 'SMIS CAMP',
           }
         ],
       },

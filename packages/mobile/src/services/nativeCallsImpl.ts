@@ -395,7 +395,7 @@ function replay(events: RawEvent[] | null | undefined) {
 // ── Android — 통화 계정 · 백그라운드 데이터 푸시 ─────────────────────────
 
 const androidOptions = () => ({
-  ios: { appName: 'SMIS Mentor' },
+  ios: { appName: 'SMIS CAMP' },
   android: {
     alertTitle: L('chat.callPhoneAccountTitle'),
     alertDescription: L('chat.callPhoneAccountDesc'),
@@ -466,7 +466,7 @@ export function callPushFrom(raw: unknown, depth = 0): CallPush | null {
       callId: o.callId,
       uuid: o.uuid,
       roomId: typeof o.roomId === 'string' ? o.roomId : '',
-      callerName: typeof o.callerName === 'string' && o.callerName ? o.callerName : 'SMIS Mentor',
+      callerName: typeof o.callerName === 'string' && o.callerName ? o.callerName : 'SMIS CAMP',
       media: o.media === 'video' ? 'video' : 'voice',
       createdAt: Number.isFinite(createdAt) && createdAt > 0 ? createdAt : Date.now(),
     };
@@ -581,7 +581,7 @@ const impl: NativeCalls = {
       return;
     }
     if (e.ended) return;
-    const name = callerName || 'SMIS Mentor';
+    const name = callerName || 'SMIS CAMP';
     if (Platform.OS === 'ios') ck.displayIncomingCall(uuid, name, name, 'generic', call.media === 'video', IOS_INCOMING);
     else ck.displayIncomingCall(uuid, name, name, 'generic', call.media === 'video');
     watchEntry(e);
@@ -593,7 +593,7 @@ const impl: NativeCalls = {
     const uuid = norm(call.uuid);
     if (!ck || !uuid || entries.has(uuid)) return;
     track(uuid, { callId: call.id, roomId: call.roomId, media: call.media, createdAt: call.createdAt, incoming: false, answered: true });
-    const name = peerName || 'SMIS Mentor';
+    const name = peerName || 'SMIS CAMP';
     ck.startCall(uuid, name, name, 'generic', call.media === 'video');
   },
   reportConnected(callId) {

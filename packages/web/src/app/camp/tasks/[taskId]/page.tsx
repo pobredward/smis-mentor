@@ -155,7 +155,7 @@ export default function TaskDetailPage() {
   };
 
   const handleOpenInApp = () => {
-    const appUrl = `smismentor://camp/tasks/${taskId}`;
+    const appUrl = `smiscamp://camp/tasks/${taskId}`;
     const fallbackUrl = window.location.href;
     
     // 앱 열기 시도

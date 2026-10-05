@@ -6,7 +6,7 @@
  *   APNS_KEY_ID   Apple Developer → Keys 의 Key ID (APNs 사용 체크된 키)
  *   APNS_TEAM_ID  Team ID
  *   APNS_KEY_P8   .p8 파일 내용 (줄바꿈은 \n 으로 넣어도 된다)
- *   APNS_BUNDLE_ID 앱 번들 ID (기본 com.smis.smismentor) — VoIP 토픽은 `${번들}.voip`
+ *   APNS_BUNDLE_ID 앱 번들 ID (기본 com.smis.smiscamp) — VoIP 토픽은 `${번들}.voip`
  * 토큰이 개발(디버그·개발 빌드)용인지 배포(TestFlight·App Store)용인지 몰라서 운영 서버에 먼저 보내고,
  * BadDeviceToken 이면 개발 서버로 한 번 더 보낸다.
  */
@@ -39,7 +39,7 @@ function providerToken(): string {
 }
 
 function request(session: ClientHttp2Session, deviceToken: string, payload: string, expiresAtSec: number): Promise<{ status: number; reason?: string }> {
-  const topic = `${process.env.APNS_BUNDLE_ID || 'com.smis.smismentor'}.voip`;
+  const topic = `${process.env.APNS_BUNDLE_ID || 'com.smis.smiscamp'}.voip`;
   return new Promise((resolve) => {
     const req = session.request({
       [constants.HTTP2_HEADER_METHOD]: 'POST',

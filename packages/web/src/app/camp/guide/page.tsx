@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import CampClient from '../CampClient';
 
 export const metadata: Metadata = {
-  title: '숙소 | SMIS Mentor',
+  title: '숙소 | SMIS CAMP',
   description: '캠프 숙소 배치도 — 방 명단·용도·선생님 위치',
 };
 

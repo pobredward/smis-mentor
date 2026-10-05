@@ -210,7 +210,7 @@ export default function JobBoardDetail({ params }: { params: Promise<{ id: strin
   // 동적 메타데이터 설정 - 제목만 변경
   useEffect(() => {
     if (jobBoard && typeof document !== 'undefined') {
-      document.title = `${jobBoard.title} | SMIS 멘토 플랫폼`;
+      document.title = `${jobBoard.title} | SMIS CAMP`;
     }
   }, [jobBoard]);
 

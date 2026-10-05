@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 
 export const metadata: Metadata = {
-  title: '캠프 | SMIS Mentor',
+  title: '캠프 | SMIS CAMP',
   description: '캠프 관리 페이지',
 };
 

@@ -37,7 +37,7 @@ const CustomLightTheme = {
 
 // 딥링킹 설정
 const linking = {
-  prefixes: ['smismentor://', 'https://smis-mentor.com'],
+  prefixes: ['smiscamp://', 'https://smiscamp.com'],
   config: {
     screens: {
       MainTabs: 'tabs',

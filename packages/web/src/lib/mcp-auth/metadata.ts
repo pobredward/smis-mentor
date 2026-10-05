@@ -40,7 +40,7 @@ export function protectedResourceMetadata() {
     authorization_servers: [OAUTH_ENDPOINTS.issuer],
     scopes_supported: [...OAUTH_SCOPES],
     bearer_methods_supported: ['header'],
-    resource_name: 'SMIS Mentor MCP',
+    resource_name: 'SMIS CAMP MCP',
     resource_documentation: `${SITE_URL}/llms.txt`,
   };
 }

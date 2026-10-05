@@ -6,14 +6,14 @@ export const metadata = {
   openGraph: {
     title: 'SMIS 대학생 멘토 채용 공고',
     description: '현재 모집 중인 영어캠프 대학생 멘토 지원하러 가기',
-    url: 'https://www.smis-mentor.com/job-board',
-    siteName: 'SMIS 멘토 채용 플랫폼',
+    url: 'https://smiscamp.com/job-board',
+    siteName: 'SMIS CAMP',
     images: [
       {
         url: '/logo-wide.png',
         width: 1200,
         height: 630,
-        alt: 'SMIS 멘토 채용 플랫폼',
+        alt: 'SMIS CAMP',
       },
     ],
     locale: 'ko_KR',

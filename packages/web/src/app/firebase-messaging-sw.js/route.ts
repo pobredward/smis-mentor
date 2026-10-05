@@ -23,7 +23,7 @@ export function GET() {
   const ready = !!(config.apiKey && config.projectId && config.messagingSenderId && config.appId);
   const base = `https://www.gstatic.com/firebasejs/${version}`;
 
-  const script = `/* SMIS Mentor — 웹 푸시 서비스 워커 (Firebase Cloud Messaging ${version}) */
+  const script = `/* SMIS CAMP — 웹 푸시 서비스 워커 (Firebase Cloud Messaging ${version}) */
 self.addEventListener('install', function () { self.skipWaiting(); });
 self.addEventListener('activate', function (event) { event.waitUntil(self.clients.claim()); });
 ${ready ? `importScripts('${base}/firebase-app-compat.js');

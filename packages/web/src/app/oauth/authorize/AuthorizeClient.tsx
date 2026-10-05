@@ -109,7 +109,7 @@ export default function AuthorizeClient() {
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-6 text-white">
-          <p className="text-sm text-blue-100">SMIS Mentor</p>
+          <p className="text-sm text-blue-100">SMIS CAMP</p>
           <h1 className="text-xl font-bold mt-1">AI 연결 허용</h1>
         </div>
 
@@ -138,7 +138,7 @@ export default function AuthorizeClient() {
 
               <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 text-sm text-gray-700 space-y-2">
                 <p>
-                  <span className="font-semibold">{client.name}</span> 이(가) 회원님의 계정으로 SMIS Mentor 페이지를 <span className="font-semibold">읽기 전용</span>으로 접근하려 합니다.
+                  <span className="font-semibold">{client.name}</span> 이(가) 회원님의 계정으로 SMIS CAMP 페이지를 <span className="font-semibold">읽기 전용</span>으로 접근하려 합니다.
                 </p>
                 <ul className="list-disc pl-5 space-y-1 text-gray-600">
                   <li>공개 페이지(채용 공고, 후기, 약관)</li>
@@ -153,7 +153,7 @@ export default function AuthorizeClient() {
                 <p className="text-sm text-gray-500">로그인 상태 확인 중…</p>
               ) : !currentUser ? (
                 <div className="space-y-3">
-                  <p className="text-sm text-gray-700">계속하려면 SMIS Mentor 계정으로 로그인하세요.</p>
+                  <p className="text-sm text-gray-700">계속하려면 SMIS CAMP 계정으로 로그인하세요.</p>
                   <Link href={signInHref} className="block w-full text-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-700">
                     로그인하고 계속
                   </Link>

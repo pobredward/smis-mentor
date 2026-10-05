@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * 사이트맵 — 공개 페이지 + 채용 공고 상세(동적)
- * apex 도메인(smis-mentor.com)을 사용한다. www 는 308 리다이렉트.
+ * apex 도메인(smiscamp.com)을 사용한다. www 는 308 리다이렉트.
  */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();

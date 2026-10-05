@@ -1,7 +1,7 @@
 import { InterviewManageClient } from './InterviewManageClient';
 
 export const metadata = {
-  title: '면접 관리 - SMIS Mentor',
+  title: '면접 관리 - SMIS CAMP',
   description: '면접일 및 면접 대상 유저들을 관리합니다.',
 };
 

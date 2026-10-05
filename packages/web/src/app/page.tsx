@@ -72,7 +72,7 @@ export default function Home() {
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             "itemListElement": [
-              { "@type": "ListItem", "position": 1, "name": "홈", "item": "https://www.smis-mentor.com" }
+              { "@type": "ListItem", "position": 1, "name": "홈", "item": "https://smiscamp.com" }
             ]
           },
           {
@@ -81,11 +81,11 @@ export default function Home() {
             "title": "E.G.G 영어캠프",
             "description": "E.G.G 영어캠프 대학생 멘토 채용 공고",
             "datePosted": "2025-03-27",
-            "url": "https://www.smis-mentor.com/job-board/6XxTH28Nu6qi0hPoNaNV",
+            "url": "https://smiscamp.com/job-board/6XxTH28Nu6qi0hPoNaNV",
             "hiringOrganization": {
               "@type": "Organization",
-              "name": "SMIS 멘토 플랫폼",
-              "sameAs": "https://www.smis-mentor.com"
+              "name": "SMIS CAMP",
+              "sameAs": "https://smiscamp.com"
             },
             "jobLocation": {
               "@type": "Place",
@@ -103,11 +103,11 @@ export default function Home() {
             "title": "발상 영어캠프",
             "description": "발상 영어캠프 대학생 멘토 채용 공고",
             "datePosted": "2025-03-27",
-            "url": "https://www.smis-mentor.com/job-board/NcwLxGHoLRX34uScQ9er",
+            "url": "https://smiscamp.com/job-board/NcwLxGHoLRX34uScQ9er",
             "hiringOrganization": {
               "@type": "Organization",
-              "name": "SMIS 멘토 플랫폼",
-              "sameAs": "https://www.smis-mentor.com"
+              "name": "SMIS CAMP",
+              "sameAs": "https://smiscamp.com"
             },
             "jobLocation": {
               "@type": "Place",
@@ -125,11 +125,11 @@ export default function Home() {
             "title": "싱가포르&말레이시아 영어캠프",
             "description": "싱&말 영어캠프 대학생 멘토 채용 공고",
             "datePosted": "2025-03-27",
-            "url": "https://www.smis-mentor.com/job-board/7MQ6awgoebb5KQ4IpCgk",
+            "url": "https://smiscamp.com/job-board/7MQ6awgoebb5KQ4IpCgk",
             "hiringOrganization": {
               "@type": "Organization",
-              "name": "SMIS 멘토 플랫폼",
-              "sameAs": "https://www.smis-mentor.com"
+              "name": "SMIS CAMP",
+              "sameAs": "https://smiscamp.com"
             },
             "jobLocation": {
               "@type": "Place",
@@ -155,19 +155,19 @@ export default function Home() {
 }
 
 export const metadata = {
-  title: 'SMIS 멘토 플랫폼',
+  title: 'SMIS CAMP',
   description: '대학생 멘토와 함께하는 영어캠프, 국내외 캠프, 교육 아르바이트 채용 정보를 제공합니다. 실제 멘토 후기와 다양한 채용공고를 확인하세요.',
   openGraph: {
-    title: 'SMIS 멘토 플랫폼',
+    title: 'SMIS CAMP',
     description: '대학생 멘토와 함께하는 영어캠프, 국내외 캠프, 교육 아르바이트 채용 정보를 제공합니다.',
-    url: 'https://www.smis-mentor.com',
-    siteName: 'SMIS 멘토 플랫폼',
+    url: 'https://smiscamp.com',
+    siteName: 'SMIS CAMP',
     images: [
       {
         url: '/logo-wide-metadata.png',
         width: 1200,
         height: 630,
-        alt: 'SMIS 멘토 플랫폼',
+        alt: 'SMIS CAMP',
       },
     ],
     locale: 'ko_KR',
@@ -175,7 +175,7 @@ export const metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'SMIS 멘토 플랫폼',
+    title: 'SMIS CAMP',
     description: '대학생 멘토와 함께하는 영어캠프, 국내외 캠프, 교육 아르바이트 채용 정보를 제공합니다.',
     images: ['/logo-wide-metadata.png'],
   },

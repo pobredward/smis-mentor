@@ -3,8 +3,8 @@ import type { Metadata } from 'next';
 import AuthorizeClient from './AuthorizeClient';
 
 export const metadata: Metadata = {
-  title: 'AI 연결 허용 | SMIS Mentor',
-  description: 'AI 에이전트(Claude, ChatGPT 등)가 SMIS Mentor 데이터를 읽도록 허용합니다.',
+  title: 'AI 연결 허용 | SMIS CAMP',
+  description: 'AI 에이전트(Claude, ChatGPT 등)가 SMIS CAMP 데이터를 읽도록 허용합니다.',
   robots: { index: false, follow: false },
 };
 

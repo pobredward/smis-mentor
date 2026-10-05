@@ -39,7 +39,7 @@ import {
 
 /** 웹 API 베이스 URL (www 리디렉션 시 POST 손실 방지) */
 export const getApiBaseUrl = () =>
-  (process.env.EXPO_PUBLIC_WEB_API_URL || 'https://smis-mentor.com').replace('https://www.', 'https://');
+  (process.env.EXPO_PUBLIC_WEB_API_URL || 'https://smiscamp.com').replace('https://www.', 'https://');
 
 /**
  * 비로그인(또는 규칙에 막힌) 상태의 users 조회는 서버 API(/api/auth/lookup)로 폴백한다.

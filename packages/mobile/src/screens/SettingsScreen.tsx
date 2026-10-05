@@ -451,7 +451,7 @@ export function SettingsScreen() {
       </View>
 
       <View style={styles.appInfo}>
-        <Text style={styles.appVersion}>SMIS Mentor v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
+        <Text style={styles.appVersion}>SMIS CAMP v{Constants.expoConfig?.version ?? '1.0.0'}</Text>
         <Text style={styles.copyright}>{L('settings.n2026SmisCoLtdAll')}</Text>
       </View>
     </ScrollView>

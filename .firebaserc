@@ -1,7 +1,8 @@
 {
   "projects": {
-    "staging": "smis-mentor",
-    "default": "smis-mentor"
+    "default": "smiscamp",
+    "smiscamp": "smiscamp",
+    "old": "smis-mentor"
   },
   "targets": {},
   "etags": {}

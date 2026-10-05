@@ -5,7 +5,7 @@ import { logger } from '@smis-mentor/shared';
 const isBrowser = () => typeof window !== 'undefined';
 
 // IndexedDB 데이터베이스 이름과 버전
-const DB_NAME = 'smis-mentor-cache';
+const DB_NAME = 'smiscamp-cache';
 const DB_VERSION = 1;
 
 // 캐시 저장소 이름

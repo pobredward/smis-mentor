@@ -178,7 +178,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
 
     try {
       // 공개 공유 링크 생성 (환경 변수 사용)
-      const websiteUrl = process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smis-mentor.com';
+      const websiteUrl = process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smiscamp.com';
       const shareUrl = `${websiteUrl}/share/${category}/${itemId}`;
       
       if (Platform.OS === 'ios' || Platform.OS === 'android') {
@@ -198,7 +198,7 @@ export function CampDetailScreen({ route, navigation }: Props) {
       
       // 공유 실패 시 클립보드 복사로 폴백
       try {
-        const websiteUrl = process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smis-mentor.com';
+        const websiteUrl = process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smiscamp.com';
         const shareUrl = `${websiteUrl}/share/${category}/${itemId}`;
         await Clipboard.setStringAsync(shareUrl);
         Alert.alert(L('common.success'), L('content.shareLinkCopiedToClipboard'));

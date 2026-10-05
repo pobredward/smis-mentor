@@ -1,8 +1,8 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: '개인정보처리방침 | SMIS Mentor',
-  description: 'SMIS Mentor 개인정보처리방침',
+  title: '개인정보처리방침 | SMIS CAMP',
+  description: 'SMIS CAMP 개인정보처리방침',
 };
 
 /** 개정 시 두 값만 바꾼다. 시행일은 공지일로부터 7일 이후 (제12조) */

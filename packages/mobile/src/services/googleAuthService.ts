@@ -11,15 +11,12 @@ import { logger } from '@smis-mentor/shared';
 // WebBrowser 설정 (로그인 완료 후 브라우저 자동 닫기)
 WebBrowser.maybeCompleteAuthSession();
 
-// .env에서 Client ID 가져오기
-const GOOGLE_WEB_CLIENT_ID = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 
-  '382190683951-d213f6sqm30lokbddeth6g2gucava2en.apps.googleusercontent.com';
+// 구글 OAuth 클라이언트 ID — EAS 환경 변수 (Firebase 프로젝트마다 다름, 코드에 기본값을 두지 않는다)
+const GOOGLE_WEB_CLIENT_ID = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID as string | undefined;
 
-const GOOGLE_IOS_CLIENT_ID = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID || 
-  '382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me.apps.googleusercontent.com';
+const GOOGLE_IOS_CLIENT_ID = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID as string | undefined;
 
-const GOOGLE_ANDROID_CLIENT_ID = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || 
-  '382190683951-cs53mija3pru3p0na3t8tqmqgqej8okn.apps.googleusercontent.com';
+const GOOGLE_ANDROID_CLIENT_ID = Constants.expoConfig?.extra?.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID as string | undefined;
 
 
 /**
@@ -133,7 +130,7 @@ async function signInWithGoogleOAuth(): Promise<{
   const redirectUri = makeRedirectUri();
   
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${new URLSearchParams({
-    client_id: GOOGLE_WEB_CLIENT_ID,
+    client_id: GOOGLE_WEB_CLIENT_ID ?? '',
     redirect_uri: redirectUri,
     response_type: 'id_token token',
     scope: 'openid profile email',

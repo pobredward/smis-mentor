@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import ChatPage from '@/components/chat/ChatPage';
 
 export const metadata: Metadata = {
-  title: '채팅 | SMIS Mentor',
+  title: '채팅 | SMIS CAMP',
   description: '캠프 선생님 채팅',
   // 로그인한 캠프 선생님만 쓰는 화면 — 검색엔진에 올리지 않는다
   robots: { index: false, follow: false },

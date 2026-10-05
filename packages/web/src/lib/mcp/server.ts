@@ -1,5 +1,5 @@
 /**
- * SMIS Mentor MCP 서버 (mcp-handler + MCP SDK v2, Streamable HTTP, stateless)
+ * SMIS CAMP MCP 서버 (mcp-handler + MCP SDK v2, Streamable HTTP, stateless)
  *
  * - /api/mcp        : OAuth 로그인 필수. 역할(멘토/원어민/관리자)에 맞는 페이지까지 읽기 전용 제공
  * - /api/mcp/public : 인증 없음. 공개 페이지만
@@ -101,7 +101,7 @@ function registerTools(server: McpServer, mode: McpMode) {
     'get_site_overview',
     {
       title: '사이트 개요',
-      description: 'SMIS 멘토 플랫폼의 개요 — 서비스 목적, 회사 정보, 평가 단계, AI 접근 방법(llms.txt, .md, MCP 엔드포인트)을 반환합니다.',
+      description: 'SMIS CAMP의 개요 — 서비스 목적, 회사 정보, 평가 단계, AI 접근 방법(llms.txt, .md, MCP 엔드포인트)을 반환합니다.',
       inputSchema: z.object({}),
     },
     async (_args, ctx) => {
@@ -181,7 +181,7 @@ function registerTools(server: McpServer, mode: McpMode) {
       title: '페이지 가져오기 (ChatGPT 호환)',
       description: 'id(경로 또는 URL)로 페이지 전체 텍스트를 가져옵니다. 응답은 {id, title, text, url, metadata} JSON 입니다. 하위 페이지 목록은 metadata.children 에 있습니다.',
       inputSchema: z.object({
-        id: z.string().min(1).describe('페이지 경로 또는 URL. 예: "/job-board", "https://smis-mentor.com/camp/tasks/S29"'),
+        id: z.string().min(1).describe('페이지 경로 또는 URL. 예: "/job-board", "https://smiscamp.com/camp/tasks/S29"'),
       }),
     },
     async ({ id }, ctx) => {
@@ -215,7 +215,7 @@ function registerTools(server: McpServer, mode: McpMode) {
       description:
         '페이지 하나를 마크다운으로 읽습니다. 문서 끝의 "하위 · 관련 페이지" 목록으로 다음 페이지를 탐색할 수 있습니다. 캠프 페이지는 경로에 캠프 코드를 포함하거나 camp 파라미터를 주세요.',
       inputSchema: z.object({
-        url: z.string().min(1).describe('페이지 URL 또는 경로. 예: "https://smis-mentor.com/", "/job-board", "/camp/education/S29"'),
+        url: z.string().min(1).describe('페이지 URL 또는 경로. 예: "https://smiscamp.com/", "/job-board", "/camp/education/S29"'),
         camp: z.string().optional().describe('캠프 코드(예: S29) 또는 jobCodes ID — 캠프 경로에 코드가 없을 때 사용'),
       }),
     },
@@ -235,7 +235,7 @@ function registerTools(server: McpServer, mode: McpMode) {
       description:
         '지정한 페이지와 그 하위·관련 페이지를 BFS 로 따라가며 마크다운으로 한 번에 수집합니다. 루트 URL 만 주면 사이트 전체(권한 범위 내)를 읽을 수 있습니다. 분량 한도에 걸리면 truncated 로 표시되며, 생략된 경로는 read_page 로 개별 조회하세요.',
       inputSchema: z.object({
-        url: z.string().min(1).describe('시작 페이지 URL 또는 경로. 예: "https://smis-mentor.com/"'),
+        url: z.string().min(1).describe('시작 페이지 URL 또는 경로. 예: "https://smiscamp.com/"'),
         max_depth: z.number().int().min(0).max(4).default(2).describe('따라갈 링크 깊이 (기본 2)'),
         max_pages: z.number().int().min(1).max(100).default(30).describe('최대 페이지 수 (기본 30)'),
         max_chars: z.number().int().min(5000).max(140000).default(120000).describe('최대 글자 수 (기본 120,000)'),
@@ -592,7 +592,7 @@ function registerTools(server: McpServer, mode: McpMode) {
 /** 모드별 MCP 라우트 핸들러 생성 */
 export function createSmisMcpHandler(mode: McpMode): (req: Request) => Promise<Response> {
   const handler = createMcpHandler((server) => registerTools(server, mode), {
-    serverInfo: { name: mode === 'auth' ? 'smis-mentor' : 'smis-mentor-public', version: SERVER_VERSION },
+    serverInfo: { name: mode === 'auth' ? 'smiscamp' : 'smiscamp-public', version: SERVER_VERSION },
     instructions: instructions(mode),
   });
 
@@ -624,20 +624,20 @@ export function createSmisMcpHandler(mode: McpMode): (req: Request) => Promise<R
 export function mcpInfo(mode: McpMode) {
   const endpoint = mode === 'auth' ? MCP_ENDPOINT : MCP_PUBLIC_ENDPOINT;
   return {
-    name: mode === 'auth' ? 'SMIS Mentor MCP Server' : 'SMIS Mentor MCP Server (public)',
+    name: mode === 'auth' ? 'SMIS CAMP MCP Server' : 'SMIS CAMP MCP Server (public)',
     version: SERVER_VERSION,
     transport: 'Streamable HTTP (MCP)',
     endpoint,
     auth: mode === 'auth' ? 'OAuth 2.1 (authorization code + PKCE, dynamic client registration 지원)' : 'none',
     description:
       mode === 'auth'
-        ? 'Claude.ai 커넥터 / ChatGPT 커넥터에 이 URL 을 추가하면 SMIS Mentor 로그인 창이 열립니다. 로그인 후 역할에 맞는 페이지를 읽을 수 있고, 관리자는 데이터 도구로 캠프 자료·업무·평가·시간표 칸 설명·일정표를 조회·수정(dry-run → confirm)하고, 사진·동영상을 올릴 수 있습니다(upload_media).'
+        ? 'Claude.ai 커넥터 / ChatGPT 커넥터에 이 URL 을 추가하면 SMIS CAMP 로그인 창이 열립니다. 로그인 후 역할에 맞는 페이지를 읽을 수 있고, 관리자는 데이터 도구로 캠프 자료·업무·평가·시간표 칸 설명·일정표를 조회·수정(dry-run → confirm)하고, 사진·동영상을 올릴 수 있습니다(upload_media).'
         : '인증 없이 공개 페이지(채용 공고, 지원 안내, 후기, 약관)를 읽을 수 있는 엔드포인트입니다.',
     setup: {
       claudeAi: 'Settings → Connectors → Add custom connector → URL 에 endpoint 입력',
       chatgpt: 'Settings → Apps & Connectors → Developer mode 활성화 → Create → URL 에 endpoint 입력 (Auth: OAuth 또는 None)',
-      claudeCode: `claude mcp add --transport http smis-mentor ${endpoint}`,
-      cursor: { mcpServers: { 'smis-mentor': { url: endpoint } } },
+      claudeCode: `claude mcp add --transport http smiscamp ${endpoint}`,
+      cursor: { mcpServers: { 'smiscamp': { url: endpoint } } },
     },
     tools: mode === 'auth'
       ? [

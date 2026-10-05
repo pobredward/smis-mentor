@@ -29,7 +29,8 @@ pod 'RecaptchaInterop', :modular_headers => true
 `;
 
       // Podfile의 target 블록 앞에 삽입
-      const targetMatch = contents.match(/^target ['"]SMISMentor['"]/m);
+      const projectName = c.modRequest.projectName ?? 'SMISCAMP';
+      const targetMatch = contents.match(new RegExp(`^target ['"]${projectName}['"]`, 'm'));
       if (targetMatch && targetMatch.index !== undefined) {
         const insertAt = targetMatch.index;
         contents = contents.slice(0, insertAt) + snippet + '\n' + contents.slice(insertAt);
@@ -95,7 +96,7 @@ enum SmisCallBridge {
   static func start(_ delegate: PKPushRegistryDelegate) {
     if let t = classMethod("RNCallKeep", "setup:") {
       let options: NSDictionary = [
-        "appName": "SMIS Mentor",
+        "appName": "SMIS CAMP",
         "handleType": "generic",
         "supportsVideo": true,
         "maximumCallGroups": "1",
@@ -125,7 +126,7 @@ enum SmisCallBridge {
     }
     var uuid = (info["uuid"] as? String) ?? ""
     if UUID(uuidString: uuid) == nil { uuid = UUID().uuidString.lowercased() }
-    let callerName = (info["callerName"] as? String) ?? "SMIS Mentor"
+    let callerName = (info["callerName"] as? String) ?? "SMIS CAMP"
     let handle = (info["handle"] as? String) ?? callerName
     let hasVideo = (info["hasVideo"] as? Bool) ?? ((info["media"] as? String) == "video")
     let sel = "reportNewIncomingCall:handle:handleType:hasVideo:localizedCallerName:supportsHolding:supportsDTMF:supportsGrouping:supportsUngrouping:fromPushKit:payload:withCompletionHandler:"
@@ -191,7 +192,7 @@ const withSmisCallKit: ConfigPlugin = (cfg) => {
     app.service = (app.service ?? []).filter((svc) => svc.$['android:name'] !== 'io.wazo.callkeep.RNCallKeepBackgroundMessagingService');
     for (const svc of app.service) {
       if (svc.$['android:name'] === 'io.wazo.callkeep.VoiceConnectionService') {
-        (svc.$ as Record<string, string>)['android:label'] = 'SMIS Mentor';
+        (svc.$ as Record<string, string>)['android:label'] = 'SMIS CAMP';
       }
     }
     return c;
@@ -269,7 +270,7 @@ const withSmisNotificationService: ConfigPlugin = (cfg) => {
     // 이미 있으면 그대로 (ios/ 를 지우지 않고 prebuild 를 다시 돌린 경우 — 파일의 이름은 따옴표째 읽힌다)
     const targets = proj.pbxNativeTargetSection() as Record<string, { name?: string } | string>;
     if (Object.values(targets).some((t) => typeof t === 'object' && String(t.name ?? '').replace(/"/g, '') === NSE_TARGET)) return c;
-    const appName = c.modRequest.projectName ?? 'SMISMentor';
+    const appName = c.modRequest.projectName ?? 'SMISCAMP';
     type BuildConfig = { buildSettings?: Record<string, string> };
     const configs = (): Record<string, BuildConfig> => proj.pbxXCBuildConfigurationSection();
 
@@ -331,7 +332,7 @@ const withSmisNotificationService: ConfigPlugin = (cfg) => {
     proj.addTargetAttribute('DevelopmentTeam', APPLE_TEAM_ID, target);
 
     // 확장 넣기(Copy Files) 단계를 앱의 Resources 바로 뒤로 — 스크립트 단계 뒤에 있으면
-    // Xcode 15+ 에서 'Cycle inside SMISMentor; building could produce unreliable results' 로 빌드가 멈춘다
+    // Xcode 15+ 에서 'Cycle inside <앱>; building could produce unreliable results' 로 빌드가 멈춘다
     const main = proj.getFirstTarget()?.firstTarget as { buildPhases?: Array<{ value: string; comment: string }> } | undefined;
     const phases = main?.buildPhases;
     if (phases) {
@@ -409,35 +410,54 @@ if (smisReactNativePackageDir != null) {
     return c;
   });
 
+// 새 앱(SMIS CAMP) — 옛 앱(SMIS Mentor, com.smis.smismentor)은 main 브랜치에서 빌드한다
+// EAS 프로젝트: expo.dev 에 smiscamp 프로젝트를 만든 뒤 id 를 채운다 (비어 있으면 코드푸시 주소 · EAS 연결을 넣지 않는다)
+const EAS_PROJECT_ID = '';
+const EAS_OWNER = 'pobredward02';
+
+// 구글 로그인 iOS URL scheme — iOS 클라이언트 ID 를 뒤집은 값 (GoogleService-Info.plist 의 REVERSED_CLIENT_ID)
+const GOOGLE_IOS_URL_SCHEME = (() => {
+  const id = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+  if (!id) {
+    console.warn('[app.config] EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID 가 없어 iOS 구글 로그인 URL scheme 을 넣지 않습니다');
+    return undefined;
+  }
+  return `com.googleusercontent.apps.${id.replace(/\.apps\.googleusercontent\.com$/, '')}`;
+})();
+
 export default ({ config }: ConfigContext): ExpoConfig => {
   const baseConfig: ExpoConfig = {
     ...config,
-    name: 'SMIS Mentor',
-    slug: 'smis-mentor',
-    version: '1.9.0',
+    name: 'SMIS CAMP',
+    slug: 'smiscamp',
+    version: '1.0.0',
     // 코드푸시(EAS Update) — 같은 앱 버전의 스토어 빌드에만 JS 업데이트를 보낸다.
     // 네이티브 변경(라이브러리·권한·app.config 네이티브 설정)이 있으면 버전을 올려 새로 빌드할 것.
     runtimeVersion: { policy: 'appVersion' },
-    updates: {
-      url: 'https://u.expo.dev/684d0445-c299-4e77-a362-42efa9c671ac',
-      checkAutomatically: 'ON_LOAD',
-      fallbackToCacheTimeout: 0,
-    },
+    ...(EAS_PROJECT_ID
+      ? {
+          updates: {
+            url: `https://u.expo.dev/${EAS_PROJECT_ID}`,
+            checkAutomatically: 'ON_LOAD' as const,
+            fallbackToCacheTimeout: 0,
+          },
+        }
+      : {}),
     orientation: 'portrait',
     icon: './assets/icon.png',
     userInterfaceStyle: 'light',
     // newArchEnabled: SDK 55부터 New Architecture가 기본값이므로 제거
-    scheme: 'smismentor',
+    scheme: 'smiscamp',
     // splash는 expo-splash-screen 플러그인에서 관리 (SDK 55+)
     // 하위 호환을 위해 유지하되 타입 캐스팅 사용
     ios: {
       supportsTablet: true,
-      bundleIdentifier: 'com.smis.smismentor',
+      bundleIdentifier: 'com.smis.smiscamp',
       googleServicesFile: './GoogleService-Info.plist',
       buildNumber: '1',
       associatedDomains: [
-        'applinks:smis-mentor.com',
-        'applinks:www.smis-mentor.com',
+        'applinks:smiscamp.com',
+        'applinks:www.smiscamp.com',
       ],
       // 통신 알림(Communication Notifications) — 채팅 알림에 앱 아이콘 대신 보낸 사람 사진. EAS 가 App ID 기능을 맞춘다
       entitlements: {
@@ -458,11 +478,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         // 채팅 통화 — 화면이 꺼지거나 다른 앱으로 가도 통화가 이어지게(audio), 잠금화면 수신(voip — PushKit · CallKit)
         UIBackgroundModes: ['audio', 'voip', 'remote-notification'],
         CFBundleURLTypes: [
+          ...(GOOGLE_IOS_URL_SCHEME ? [{ CFBundleURLSchemes: [GOOGLE_IOS_URL_SCHEME] }] : []),
           {
-            CFBundleURLSchemes: ['com.googleusercontent.apps.382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me'],
-          },
-          {
-            CFBundleURLSchemes: ['smismentor'],
+            CFBundleURLSchemes: ['smiscamp'],
           },
         ],
       },
@@ -472,7 +490,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         foregroundImage: './assets/adaptive-icon.png',
         backgroundColor: '#ffffff',
       },
-      package: 'com.smis.smismentor',
+      package: 'com.smis.smiscamp',
       versionCode: 1,
       // edgeToEdgeEnabled: SDK 55부터 Android 16+ 타겟 시 필수 적용되므로 config에서 제거
       predictiveBackGestureEnabled: false,
@@ -489,12 +507,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           data: [
             {
               scheme: 'https',
-              host: 'smis-mentor.com',
+              host: 'smiscamp.com',
               pathPrefix: '/camp/tasks',
             },
             {
               scheme: 'https',
-              host: 'www.smis-mentor.com',
+              host: 'www.smiscamp.com',
               pathPrefix: '/camp/tasks',
             },
           ],
@@ -556,7 +574,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           sounds: [],
           mode: 'production',
           androidMode: 'default',
-          androidCollapsedTitle: 'SMIS Mentor',
+          androidCollapsedTitle: 'SMIS CAMP',
         },
       ],
       [
@@ -619,15 +637,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       [
         '@react-native-seoul/naver-login',
         {
-          urlScheme: 'smismentor',
+          urlScheme: 'smiscamp',
         },
       ],
-      [
-        '@react-native-google-signin/google-signin',
-        {
-          iosUrlScheme: 'com.googleusercontent.apps.382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me',
-        },
-      ],
+      ...(GOOGLE_IOS_URL_SCHEME
+        ? [['@react-native-google-signin/google-signin', { iosUrlScheme: GOOGLE_IOS_URL_SCHEME }] as [string, Record<string, string>]]
+        : []),
       // 전화번호 로그인(문자 인증) — React Native Firebase 네이티브 인증. 문자 인증에만 쓰고 로그인 세션은 Firebase JS SDK 그대로
       // (네이티브로 받은 ID 토큰을 서버 /api/auth/phone 에 보내면 서버가 우리 계정의 로그인 토큰을 준다)
       // iOS 는 CocoaPods + 정적 프레임워크 — RNFB 기본(SPM)은 동적 프레임워크가 필요해 다른 네이티브 모듈과 부딪히기 쉽다
@@ -654,22 +669,22 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ],
     extra: {
       eas: {
-        projectId: '684d0445-c299-4e77-a362-42efa9c671ac',
+        ...(EAS_PROJECT_ID ? { projectId: EAS_PROJECT_ID } : {}),
         // 앱 확장 — EAS 가 이 대상의 App ID · 프로비저닝 프로필을 만든다 (withSmisNotificationService 와 같은 이름 · 번들 ID)
         build: {
           experimental: {
             ios: {
               appExtensions: [
-                { targetName: NSE_TARGET, bundleIdentifier: nseBundleId('com.smis.smismentor'), entitlements: {} },
+                { targetName: NSE_TARGET, bundleIdentifier: nseBundleId('com.smis.smiscamp'), entitlements: {} },
               ],
             },
           },
         },
       },
-      EXPO_PUBLIC_WEBSITE_URL: process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smis-mentor.com',
-      // www 없는 도메인 사용 필수: www.smis-mentor.com → smis-mentor.com 리다이렉트 시
+      EXPO_PUBLIC_WEBSITE_URL: process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smiscamp.com',
+      // www 없는 도메인 사용 필수: www.smiscamp.com → smiscamp.com 리다이렉트 시
       // Authorization 헤더가 제거되어 인증 실패하므로 반드시 canonical 도메인(www 없음)을 사용해야 함
-      EXPO_PUBLIC_WEB_API_URL: process.env.EXPO_PUBLIC_WEB_API_URL || 'https://smis-mentor.com',
+      EXPO_PUBLIC_WEB_API_URL: process.env.EXPO_PUBLIC_WEB_API_URL || 'https://smiscamp.com',
       EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
       EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
       EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
@@ -679,7 +694,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       NAVER_CLIENT_SECRET: process.env.NAVER_CLIENT_SECRET,
       kakaoRestApiKey: process.env.EXPO_PUBLIC_KAKAO_REST_API_KEY,
     },
-    owner: 'pobredward02',
+    owner: EAS_OWNER,
   };
 
   // ConfigPlugin을 직접 적용하여 타입 오류 해결

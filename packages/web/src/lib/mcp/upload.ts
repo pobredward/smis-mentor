@@ -158,7 +158,7 @@ async function fetchSource(raw: string): Promise<{ bytes: Buffer; finalUrl: URL;
       const res = await fetch(url, {
         redirect: 'manual',
         signal: controller.signal,
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SMIS-Mentor-MCP/1.0)', Accept: 'image/*,video/*;q=0.9,*/*;q=0.5' },
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SMIS-CAMP-MCP/1.0)', Accept: 'image/*,video/*;q=0.9,*/*;q=0.5' },
       });
       const location = res.headers.get('location');
       if (res.status >= 300 && res.status < 400 && location) {

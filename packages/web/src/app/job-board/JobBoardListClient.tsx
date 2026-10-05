@@ -189,8 +189,8 @@ export default function JobBoardListClient() {
           "@context": "https://schema.org",
           "@type": "BreadcrumbList",
           "itemListElement": [
-            { "@type": "ListItem", "position": 1, "name": "홈", "item": "https://www.smis-mentor.com" },
-            { "@type": "ListItem", "position": 2, "name": "채용공고", "item": "https://www.smis-mentor.com/job-board" }
+            { "@type": "ListItem", "position": 1, "name": "홈", "item": "https://smiscamp.com" },
+            { "@type": "ListItem", "position": 2, "name": "채용공고", "item": "https://smiscamp.com/job-board" }
           ]
         })
       }} />

@@ -7,8 +7,8 @@ import { getAuthenticatedUser } from '@/lib/authMiddleware';
 
 // CORS 허용 출처 (서비스 도메인만 허용)
 const ALLOWED_ORIGINS = [
-  process.env.NEXT_PUBLIC_BASE_URL || 'https://www.smis-mentor.com',
-  'https://smis-mentor.com',
+  process.env.NEXT_PUBLIC_BASE_URL || 'https://smiscamp.com',
+  'https://smiscamp.com',
   'http://localhost:3000',
 ].filter(Boolean);
 

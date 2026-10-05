@@ -8,7 +8,7 @@ import { getAdminAuth, getAdminFirestore, adminFieldValue } from '@/lib/firebase
 import { logger } from '@smis-mentor/shared';
 
 /** 인증 완료 후 돌아올 주소 (Authentication › 설정 › 승인된 도메인에 있어야 한다) */
-export const VERIFY_CONTINUE_URL = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://smis-mentor.com'}/profile?verified=1`;
+export const VERIFY_CONTINUE_URL = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://smiscamp.com'}/profile?verified=1`;
 
 export async function sendVerificationEmail(idToken: string, locale: 'ko' | 'en' = 'ko'): Promise<boolean> {
   const key = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;

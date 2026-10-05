@@ -505,7 +505,7 @@ export function SharedApplicantsClient({ token }: Props) {
 
         {/* 푸터 안내 */}
         <div className="mt-4 text-center text-xs text-gray-500">
-          <p>이 페이지는 SMIS Mentor 시스템을 통해 공유되었습니다.</p>
+          <p>이 페이지는 SMIS CAMP 시스템을 통해 공유되었습니다.</p>
           <p className="mt-1">개인정보 보호를 위해 링크를 타인과 공유하지 마세요.</p>
         </div>
       </div>

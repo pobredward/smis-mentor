@@ -33,7 +33,7 @@ export class ChatCallError extends Error {
 }
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
-const SITE = (process.env.NEXT_PUBLIC_BASE_URL || 'https://smis-mentor.com').replace(/\/$/, '');
+const SITE = (process.env.NEXT_PUBLIC_BASE_URL || 'https://smiscamp.com').replace(/\/$/, '');
 const db = () => getAdminFirestore();
 const callsCol = () => db().collection('chatCalls');
 const roomsCol = () => db().collection('chatRooms');

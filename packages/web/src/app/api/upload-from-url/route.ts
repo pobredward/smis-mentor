@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
       const timeoutId = setTimeout(() => controller.abort(), 10_000);
       imageResponse = await fetch(url, {
         signal: controller.signal,
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SMIS-Mentor-Bot/1.0)' },
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SMIS-CAMP-Bot/1.0)' },
       });
       clearTimeout(timeoutId);
     } catch (fetchError) {

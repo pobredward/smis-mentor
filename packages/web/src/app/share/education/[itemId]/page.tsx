@@ -31,29 +31,29 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 
     if (!page) {
       return {
-        title: 'SMIS 멘토 플랫폼 - 교육 자료',
+        title: 'SMIS CAMP - 교육 자료',
         description: '페이지를 찾을 수 없습니다.',
       };
     }
 
     return {
-      title: `SMIS 멘토 플랫폼 - 교육 자료`,
+      title: `SMIS CAMP - 교육 자료`,
       description: page.title,
       openGraph: {
-        title: 'SMIS 멘토 플랫폼 - 교육 자료',
+        title: 'SMIS CAMP - 교육 자료',
         description: page.title,
         images: [
           {
             url: '/logo-wide-metadata.png',
             width: 1200,
             height: 630,
-            alt: 'SMIS 멘토 플랫폼',
+            alt: 'SMIS CAMP',
           },
         ],
       },
       twitter: {
         card: 'summary_large_image',
-        title: 'SMIS 멘토 플랫폼 - 교육 자료',
+        title: 'SMIS CAMP - 교육 자료',
         description: page.title,
         images: ['/logo-wide-metadata.png'],
       },
@@ -61,7 +61,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   } catch (error) {
     console.error('메타데이터 생성 실패:', error);
     return {
-      title: 'SMIS 멘토 플랫폼 - 교육 자료',
+      title: 'SMIS CAMP - 교육 자료',
       description: '교육 자료를 확인하세요',
     };
   }
@@ -94,7 +94,7 @@ export default async function ShareEducationPage({ params }: PageProps) {
             </span>
             <div>
               <h1 className="text-xl font-bold text-gray-900">{page.title}</h1>
-              <p className="text-sm text-gray-500 mt-1">SMIS Mentor 교육 자료</p>
+              <p className="text-sm text-gray-500 mt-1">SMIS CAMP 교육 자료</p>
             </div>
           </div>
         </div>
@@ -109,7 +109,7 @@ export default async function ShareEducationPage({ params }: PageProps) {
 
       {/* 푸터 */}
       <div className="max-w-5xl mx-auto px-4 py-8 text-center text-sm text-gray-500">
-        <p>이 자료는 SMIS Mentor에서 제공됩니다.</p>
+        <p>이 자료는 SMIS CAMP에서 제공됩니다.</p>
       </div>
     </div>
   );

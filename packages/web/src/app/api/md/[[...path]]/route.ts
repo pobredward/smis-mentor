@@ -30,7 +30,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
   if (authHeader && !verified) {
     return new Response('# 401 Unauthorized\n\n액세스 토큰이 유효하지 않거나 만료되었습니다.\n', {
       status: 401,
-      headers: { ...TEXT_HEADERS, 'WWW-Authenticate': `Bearer resource_metadata="https://smis-mentor.com/.well-known/oauth-protected-resource/api/mcp", error="invalid_token"` },
+      headers: { ...TEXT_HEADERS, 'WWW-Authenticate': `Bearer resource_metadata="https://smiscamp.com/.well-known/oauth-protected-resource/api/mcp", error="invalid_token"` },
     });
   }
   const viewer = verified?.viewer ?? null;
@@ -39,9 +39,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ path
   if (!result.ok) {
     const { error } = result;
     const status = error.error === 'not_found' ? 404 : error.error === 'auth_required' ? 401 : 403;
-    const body = [`# ${status} ${error.error}`, '', error.message, '', `- 전체 목차: https://smis-mentor.com/llms.txt`, `- 로그인 접근(MCP): ${MCP_ENDPOINT}`, ''].join('\n');
+    const body = [`# ${status} ${error.error}`, '', error.message, '', `- 전체 목차: https://smiscamp.com/llms.txt`, `- 로그인 접근(MCP): ${MCP_ENDPOINT}`, ''].join('\n');
     const headers: Record<string, string> = { ...TEXT_HEADERS };
-    if (status === 401) headers['WWW-Authenticate'] = `Bearer resource_metadata="https://smis-mentor.com/.well-known/oauth-protected-resource/api/mcp"`;
+    if (status === 401) headers['WWW-Authenticate'] = `Bearer resource_metadata="https://smiscamp.com/.well-known/oauth-protected-resource/api/mcp"`;
     return new Response(body, { status, headers });
   }
 

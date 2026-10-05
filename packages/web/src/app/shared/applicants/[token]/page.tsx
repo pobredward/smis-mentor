@@ -55,8 +55,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
           // 지원 경로 (applicationPath)
           const applicationPath = appData?.applicationPath || '';
           
-          // 제목: SMIS 멘토 프로필 - 이름(24세)
-          const title = `SMIS 멘토 프로필 - ${name}(${age}세)`;
+          // 제목: SMIS CAMP 멘토 프로필 - 이름(24세)
+          const title = `SMIS CAMP 멘토 프로필 - ${name}(${age}세)`;
           
           // 설명 구성
           const descriptionParts = [];

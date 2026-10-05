@@ -1299,7 +1299,7 @@ export function CampPageWebEditor({
   `;
 
   // 웹 서버 API URL (노션 이미지 업로드용)
-  const WEB_API_BASE = (process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smis-mentor.com').replace(/\/$/, '');
+  const WEB_API_BASE = (process.env.EXPO_PUBLIC_WEBSITE_URL || 'https://smiscamp.com').replace(/\/$/, '');
 
   // 노션 이미지 업로드: notion-image API 호출
   const uploadViaNotionApi = async (block: {

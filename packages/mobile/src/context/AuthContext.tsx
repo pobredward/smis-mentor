@@ -169,9 +169,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
         const consumerKey = Constants.expoConfig?.extra?.EXPO_PUBLIC_NAVER_CLIENT_ID || '';
         const consumerSecret = Constants.expoConfig?.extra?.NAVER_CLIENT_SECRET || '';
-        const appName = 'SMIS Mentor';
+        const appName = 'SMIS CAMP';
         // app.config.ts scheme 및 CFBundleURLSchemes와 반드시 일치해야 iOS 로그인 후 앱 복귀 가능
-        const serviceUrlSchemeIOS = 'smismentor';
+        const serviceUrlSchemeIOS = 'smiscamp';
 
         if (!consumerKey || !consumerSecret) {
           logger.error(

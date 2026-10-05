@@ -1,8 +1,8 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: '서비스 이용약관 | SMIS Mentor',
-  description: 'SMIS Mentor 서비스 이용약관',
+  title: '서비스 이용약관 | SMIS CAMP',
+  description: 'SMIS CAMP 서비스 이용약관',
 };
 
 export default function TermsOfServicePage() {

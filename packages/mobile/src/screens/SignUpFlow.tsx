@@ -98,7 +98,7 @@ export function SignUpFlow({
         // 네이버: 서버 검증 Custom Token 으로 Firebase 세션이 이미 생성되어 자동 로그인됨
         Alert.alert(
           '회원가입 완료',
-          '환영합니다! SMIS Mentor에 오신 걸 환영합니다.',
+          '환영합니다! SMIS CAMP에 오신 걸 환영합니다.',
           [{ text: '확인', onPress: onComplete }]
         );
       } else {
@@ -186,7 +186,7 @@ export function SignUpFlow({
           logger.info('✅ 소셜 회원가입 완료 - Firebase Auth 로그인 확인됨');
           Alert.alert(
             '회원가입 완료',
-            '환영합니다! SMIS Mentor에 오신 걸 환영합니다.',
+            '환영합니다! SMIS CAMP에 오신 걸 환영합니다.',
             [{ text: '확인', onPress: onComplete }]
           );
         } else {
@@ -311,7 +311,7 @@ export function SignUpFlow({
     // (temp 계정 이관은 서버가 temp 이메일로 대체)
     if (!tempUserId && /^apple_[^@]+@privaterelay\.appleid\.com$/i.test(socialData.email)) {
       throw new Error(
-        'Apple 재로그인 감지: Apple 설정에서 SMIS Mentor 앱 연동을 삭제한 후 다시 시도하세요.\n' +
+        'Apple 재로그인 감지: Apple 설정에서 SMIS CAMP 앱 연동을 삭제한 후 다시 시도하세요.\n' +
         '설정 > Apple ID > 암호 및 보안 > Apple로 로그인을 사용하는 앱'
       );
     }

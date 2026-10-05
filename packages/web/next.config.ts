@@ -10,17 +10,15 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
 
-  // www.smis-mentor.com → smis-mentor.com 영구 리디렉션
-  // postMessage origin 불일치 및 Firebase CORS 문제 방지
+  // www.smiscamp.com → smiscamp.com 영구 리디렉션 (postMessage origin 불일치 · Firebase CORS 문제 방지)
+  // 옛 주소 smis-mentor.com · www 도 전환 뒤 이 프로젝트에 붙이면 같은 경로의 smiscamp.com 으로 보낸다
   async redirects() {
-    return [
-      {
-        source: '/:path*',
-        has: [{ type: 'host', value: 'www.smis-mentor.com' }],
-        destination: 'https://smis-mentor.com/:path*',
-        permanent: true,
-      },
-    ];
+    return ['www.smiscamp.com', 'smis-mentor.com', 'www.smis-mentor.com'].map((host) => ({
+      source: '/:path*',
+      has: [{ type: 'host' as const, value: host }],
+      destination: 'https://smiscamp.com/:path*',
+      permanent: true,
+    }));
   },
 
   // AI 에이전트용 마크다운 미러: 어떤 페이지든 URL 뒤에 .md 를 붙이면 마크다운으로 제공
@@ -52,7 +50,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: 'Content-Security-Policy',
-            // Firebase Google OAuth 팝업: accounts.google.com, smis-mentor.firebaseapp.com 필수
+            // Firebase Google OAuth 팝업: accounts.google.com, <프로젝트>.firebaseapp.com 필수
             value: "frame-src 'self' https://accounts.google.com https://*.firebaseapp.com https://*.notion.site https://*.notion.so https://docs.google.com https://www.google.com https://postcode.map.kakao.com http://postcode.map.kakao.com https://*.daumcdn.net http://*.daumcdn.net;",
           },
           {
@@ -70,7 +68,7 @@ const nextConfig: NextConfig = {
 export default withSentryConfig(nextConfig, {
   // Sentry 설정 - 환경변수 또는 기본값 사용
   org: process.env.SENTRY_ORG || "pobredward",
-  project: process.env.SENTRY_PROJECT || "smis-mentor-web",
+  project: process.env.SENTRY_PROJECT || "smiscamp-web",
 
   // CI에서만 로그 출력
   silent: !process.env.CI,

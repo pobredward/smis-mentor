@@ -1,5 +1,6 @@
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { AppConfig, AppConfigUpdateInput, CampHomeMessage, CampHomeMessageUpdateInput, VersionCheckResult } from '../types/appConfig';
+import { IOS_STORE_URL, ANDROID_STORE_URL } from '../constants';
 
 /**
  * 앱 설정 서비스
@@ -167,10 +168,8 @@ function compareVersions(a: string, b: string): number {
   return aPatch - bPatch;
 }
 
-const DEFAULT_IOS_STORE_URL =
-  'https://apps.apple.com/kr/app/smis-mentor/id6748606030';
-const DEFAULT_ANDROID_STORE_URL =
-  'https://play.google.com/store/apps/details?id=com.smis.smismentor';
+const DEFAULT_IOS_STORE_URL = IOS_STORE_URL;
+const DEFAULT_ANDROID_STORE_URL = ANDROID_STORE_URL;
 
 /**
  * 현재 앱 버전과 Firestore 최소 버전을 비교하여 강제 업데이트 여부를 반환.

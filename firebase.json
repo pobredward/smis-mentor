@@ -8,16 +8,12 @@
       "source": "functions",
       "codebase": "default",
       "runtime": "nodejs22",
-      "serviceAccount": "smis-mentor@appspot.gserviceaccount.com",
       "predeploy": [
         "npm run build --workspace=functions"
       ]
     }
   ],
-  "storage": [
-    {
-      "bucket": "smis-mentor.firebasestorage.app",
-      "rules": "storage.rules"
-    }
-  ]
+  "storage": {
+    "rules": "storage.rules"
+  }
 }

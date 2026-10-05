@@ -29,7 +29,7 @@ if (typeof window !== 'undefined') {
 
 // ignoreUndefinedProperties: undefined 값이 포함된 객체 저장 시 오류 방지
 const db = initializeFirestore(app, { ignoreUndefinedProperties: true });
-const storage = getStorage(app, 'gs://smis-mentor.firebasestorage.app');
+const storage = getStorage(app); // 버킷은 firebaseConfig.storageBucket (NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET)
 const functions = getFunctions(app, 'asia-northeast3');
 
 // 로컬 개발 환경에서 Functions Emulator 사용

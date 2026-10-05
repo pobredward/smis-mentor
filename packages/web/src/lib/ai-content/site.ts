@@ -8,8 +8,8 @@
  */
 
 /** 정식(apex) 도메인. www 는 308 리다이렉트되므로 AI 용 URL은 항상 apex 를 쓴다. */
-export const SITE_URL = 'https://smis-mentor.com';
-export const SITE_NAME = 'SMIS 멘토 플랫폼';
+export const SITE_URL = 'https://smiscamp.com';
+export const SITE_NAME = 'SMIS CAMP';
 export const MCP_ENDPOINT = `${SITE_URL}/api/mcp`;
 export const MCP_PUBLIC_ENDPOINT = `${SITE_URL}/api/mcp/public`;
 export const LLMS_TXT_URL = `${SITE_URL}/llms.txt`;

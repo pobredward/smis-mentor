@@ -6,7 +6,7 @@ function getWebApiBaseUrl(): string {
   const url =
     Constants.expoConfig?.extra?.EXPO_PUBLIC_WEBSITE_URL ||
     process.env.EXPO_PUBLIC_WEBSITE_URL ||
-    'https://smis-mentor.com';
+    'https://smiscamp.com';
   return url.replace(/\/$/, '');
 }
 

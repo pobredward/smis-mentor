@@ -189,7 +189,7 @@ const startBackgroundLocationUpdates = async (
       showsBackgroundLocationIndicator: true,
       // Android: foreground service 알림 (백그라운드 위치 권한 필요)
       foregroundService: {
-        notificationTitle: 'SMIS Mentor',
+        notificationTitle: 'SMIS CAMP',
         notificationBody: '위치 공유 중',
         notificationColor: '#3b82f6',
       },

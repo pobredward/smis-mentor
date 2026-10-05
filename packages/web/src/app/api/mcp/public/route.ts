@@ -1,6 +1,6 @@
 /**
- * SMIS Mentor MCP 서버 — 공개(인증 없음) 엔드포인트
- * https://smis-mentor.com/api/mcp/public
+ * SMIS CAMP MCP 서버 — 공개(인증 없음) 엔드포인트
+ * https://smiscamp.com/api/mcp/public
  */
 import { NextResponse } from 'next/server';
 import { createSmisMcpHandler, mcpInfo } from '@/lib/mcp/server';

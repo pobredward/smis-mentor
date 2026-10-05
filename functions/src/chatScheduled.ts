@@ -14,6 +14,7 @@
 import * as admin from 'firebase-admin';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { POLL_REMINDERS, sendPollReminder } from './chat';
+import { RUNTIME_SA } from './runtime';
 
 interface ScheduledDoc {
   roomId?: string;
@@ -26,7 +27,7 @@ interface ScheduledDoc {
 }
 
 export const chatSendScheduled = onSchedule(
-  { schedule: 'every 1 minutes', region: 'asia-northeast3', serviceAccount: 'smis-mentor@appspot.gserviceaccount.com', timeZone: 'Asia/Seoul', memory: '256MiB', timeoutSeconds: 60, retryCount: 0 },
+  { schedule: 'every 1 minutes', region: 'asia-northeast3', serviceAccount: RUNTIME_SA, timeZone: 'Asia/Seoul', memory: '256MiB', timeoutSeconds: 60, retryCount: 0 },
   async () => {
     const db = admin.firestore();
     const due = await db.collection('chatScheduled')

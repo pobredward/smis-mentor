@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 공유 URL 생성
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://www.smis-mentor.com';
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://smiscamp.com';
     const shareUrl = `${baseUrl}/shared/applicants/${token}`;
 
     logger.info('✅ 공유 링크 생성 성공:', shareUrl);
