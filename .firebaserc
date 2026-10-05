@@ -1,7 +1,7 @@
 {
   "projects": {
-    "default": "smiscamp",
-    "smiscamp": "smiscamp",
+    "default": "smiscamp-bacba",
+    "smiscamp": "smiscamp-bacba",
     "old": "smis-mentor"
   },
   "targets": {},

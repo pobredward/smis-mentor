@@ -14,19 +14,15 @@ import {
 const { getReactNativePersistence } = require('firebase/auth') as { getReactNativePersistence: (storage: unknown) => Persistence };
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Firebase 웹 앱 설정 — EAS 환경 변수 (웹의 NEXT_PUBLIC_FIREBASE_* 와 같은 값). 공개 값이지만 프로젝트마다 다르므로 코드에 두지 않는다
+// Firebase 웹 앱 설정 (smiscamp 프로젝트 — 공개 값). EXPO_PUBLIC_FIREBASE_* 환경 변수가 있으면 그 값 (에뮬레이터 · 다른 프로젝트 시험용)
 const firebaseConfig = {
-  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || 'AIzaSyBRYCardl7mH2ft866rhTst7EZ5GceQv8o',
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || 'smiscamp-bacba.firebaseapp.com',
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || 'smiscamp-bacba',
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || 'smiscamp-bacba.firebasestorage.app',
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || '628518329710',
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || '1:628518329710:web:0cf51dcf656ec3e7e2b57f',
 };
-if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
-  // 빌드 환경 변수가 빠졌을 때 엉뚱한 프로젝트에 붙지 않도록 바로 알린다
-  console.error('[firebase] EXPO_PUBLIC_FIREBASE_* 환경 변수가 없습니다 (EAS 환경 변수 확인)');
-}
 
 // Firebase 앱 초기화 (중복 초기화 방지)
 const app: FirebaseApp = getApps().length === 0 

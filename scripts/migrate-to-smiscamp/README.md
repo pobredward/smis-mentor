@@ -1,5 +1,7 @@
 # smis-mentor → smiscamp 이관
 
+새 프로젝트: 이름 smiscamp · id **smiscamp-bacba** · 번호 628518329710 · 버킷 smiscamp-bacba.firebasestorage.app
+
 결정 (2026-10-05): 커뮤니티 제거 · 지난 캠프 데이터 모두 옮김 · Storage 파일 복사(주소 바꿈) · 캠프 열쇠 campCode.
 검토 문서: 프로젝트 문서 `claude/smiscamp-firestore-review.md`.
 
@@ -10,18 +12,18 @@
 3. **Auth** — 원본 콘솔 › Authentication › 사용자 › ⋮ › 비밀번호 해시 매개변수를 적어 둔 뒤:
    ```
    firebase auth:export users.json --format=json --project smis-mentor
-   firebase auth:import users.json --project smiscamp --hash-algo=SCRYPT \
+   firebase auth:import users.json --project smiscamp-bacba --hash-algo=SCRYPT \
      --hash-key=<base64_signer_key> --salt-separator=<base64_salt_separator> --rounds=8 --mem-cost=14
    ```
    uid 가 그대로여야 한다 (users 문서 id = Auth uid). users.json 은 개인정보 — 끝나면 지운다.
 4. **Storage 파일** — 메타데이터(다운로드 토큰)까지 같이 복사해야 바뀐 주소가 열린다:
    ```
-   gcloud storage cp -r "gs://smis-mentor.firebasestorage.app/*" gs://smiscamp.firebasestorage.app/
+   gcloud storage cp -r "gs://smis-mentor.firebasestorage.app/*" gs://smiscamp-bacba.firebasestorage.app/
    ```
    복사 뒤 바뀐 주소 하나를 브라우저로 열어 확인.
 5. **Firestore 미리보기** → **복사** → **확인**
    ```
-   NODE_PATH=node_modules node scripts/migrate-to-smiscamp/run.cjs --source <smis-mentor 키> --new-bucket smiscamp.firebasestorage.app
+   NODE_PATH=node_modules node scripts/migrate-to-smiscamp/run.cjs --source <smis-mentor 키> --new-bucket smiscamp-bacba.firebasestorage.app
    NODE_PATH=node_modules node scripts/migrate-to-smiscamp/run.cjs --source <smis-mentor 키> --target <smiscamp 키> --write
    NODE_PATH=node_modules node scripts/migrate-to-smiscamp/run.cjs --source <smis-mentor 키> --target <smiscamp 키> --verify
    ```
