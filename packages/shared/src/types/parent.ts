@@ -120,3 +120,13 @@ export const applicationQuestionsFor = (campType: CampType): ApplicationQuestion
 export const PARENT_EDITABLE_AFTER_CONFIRM = new Set<string>(['shirtSize', ...APPLICATION_QUESTIONS.filter((q) => q.section === 'survey').map((q) => q.key)]);
 
 export const ENROLLMENT_STATUS_LABEL: Record<string, string> = { applied: '신청 · 확인 중', confirmed: '참가 확정', cancelled: '취소' };
+
+/**
+ * 아이 등록 때 학부모(법정대리인) 동의 — 만 14세 미만 아이의 개인정보는 법정대리인 동의가 필요하다 (개인정보 보호법 제22조의2).
+ * 문구를 바꾸면 버전을 올린다 (아이 문서 guardianConsent.version 에 남는다).
+ */
+export const GUARDIAN_CONSENT_VERSION = '2026-10-05';
+export const GUARDIAN_CONSENT_TEXT =
+  '보호자(법정대리인)로서 아이의 개인정보(이름 · 생년월일 · 연락처 · 주소 · 건강 정보 · 여권 정보 · 주민등록번호)를 ' +
+  'SMIS CAMP 캠프 신청 · 운영(반 배정, 안전 관리, 병원 진료 접수 · 보험 처리)을 위해 수집 · 이용하는 데 동의합니다. ' +
+  '자세한 내용은 개인정보처리방침에 있습니다.';

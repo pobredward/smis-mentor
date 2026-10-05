@@ -7,7 +7,7 @@
 import { getAdminFirestore } from '@/lib/firebase-admin';
 import {
   CHILDREN_COLLECTION, ENROLLMENTS_SUBCOLLECTION, PARENT_EDITABLE_CHILD_FIELDS, PARENT_EDITABLE_ENROLLMENT_FIELDS,
-  PARENT_EDITABLE_AFTER_CONFIRM, campTypeOfCode, applicationQuestionsFor, normalizePhoneForMatch, childMatchKey,
+  PARENT_EDITABLE_AFTER_CONFIRM, campTypeOfCode, applicationQuestionsFor, normalizePhoneForMatch, childMatchKey, GUARDIAN_CONSENT_VERSION,
   type ChildProfile, type CampEnrollment, type OpenCamp,
 } from '@smis-mentor/shared';
 import {
@@ -130,7 +130,9 @@ async function ownChild(uid: string, childId: string): Promise<ChildProfile> {
  * 아이 등록 — 학부모의 인증된 번호와 이름이 같은 아이가 이미 있으면(예전 캠프 명단에서 옮긴 아이) 새로 만들지 않고 연결한다.
  * @returns childId, 이미 있던 아이와 이어졌는지
  */
-export async function parentCreateChild(uid: string, raw: unknown, ssn?: string): Promise<{ childId: string; linkedExisting: boolean }> {
+export async function parentCreateChild(uid: string, raw: unknown, ssn?: string, consent?: boolean): Promise<{ childId: string; linkedExisting: boolean }> {
+  if (consent !== true) throw new CampStudentError(400, '보호자(법정대리인) 동의가 필요합니다.');
+  const guardianConsent = { at: new Date().toISOString(), by: uid, version: GUARDIAN_CONSENT_VERSION };
   const me = (await db().collection('users').doc(uid).get()).data() ?? {};
   const fields = pick(raw, CHILD_KEYS);
   if (!fields.name) throw new CampStudentError(400, '아이 이름을 넣어주세요.');
@@ -147,12 +149,12 @@ export async function parentCreateChild(uid: string, raw: unknown, ssn?: string)
       const childId = hit.docs[0].id;
       await setChildParent(childId, uid, true);
       const { name: _n, ...rest } = fields;
-      if (Object.keys(rest).length) await updateChild(childId, rest, uid);
+      await updateChild(childId, { ...rest, guardianConsent } as Partial<ChildProfile>, uid);
       if (ssn) await setChildSsn(childId, ssn);
       return { childId, linkedExisting: true };
     }
   }
-  const childId = await createChild({ ...fields, parentIds: [uid] }, uid, ssn || undefined);
+  const childId = await createChild({ ...fields, parentIds: [uid], guardianConsent } as Partial<ChildProfile>, uid, ssn || undefined);
   return { childId, linkedExisting: false };
 }
 

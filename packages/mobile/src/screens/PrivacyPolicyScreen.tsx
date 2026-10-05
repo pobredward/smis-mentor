@@ -30,6 +30,7 @@ export function PrivacyPolicyScreen() {
             <Text style={styles.bulletItem}>• 회원 가입 및 관리: 회원 자격 유지·관리, 본인확인, 불만처리 등 민원처리</Text>
             <Text style={styles.bulletItem}>• 서비스 제공: 멘토링 서비스 제공, 업무 관리, 알림 서비스 제공</Text>
             <Text style={styles.bulletItem}>• 캠프 운영: 급여 지급 및 원천징수 신고, 해외 송금, 항공권 발권·여행자보험 가입, 명찰·단체복 제작, 로밍 준비</Text>
+            <Text style={styles.bulletItem}>• 캠프 신청: 학부모 회원의 아이 등록, 캠프 참가 신청 · 신청서(사전 설문 포함) 접수, 참가 확정 · 반 배정 안내</Text>
             <Text style={styles.bulletItem}>• 안전 관리: 캠프 참가 학생의 병원 내원 등 응급 상황 대응, 스태프 위치 공유</Text>
             <Text style={styles.bulletItem}>• 커뮤니티 운영: 게시판 운영, 신고 처리 및 이용 제한</Text>
             <Text style={styles.bulletItem}>• 마케팅 및 광고: 신규 서비스 개발, 맞춤 서비스 제공, 이벤트 정보 제공</Text>
@@ -75,7 +76,11 @@ export function PrivacyPolicyScreen() {
           <View style={[styles.infoBox, { borderLeftColor: '#f59e0b' }]}>
             <Text style={styles.infoBoxTitle}>캠프 참가 학생 정보</Text>
             <Text style={styles.infoBoxContent}>
-              회사는 캠프 운영을 위해 참가 학생의 명단(이름, 연락처, 주민등록번호 등)을 처리합니다.
+              회사는 캠프 운영을 위해 참가 학생의 명단(이름, 연락처, 주민등록번호 등)을 처리합니다. 학생 정보는 학부모 회원이 앱에서 직접 입력하거나, 캠프 신청 시 받은 정보를 운영진이 입력합니다.
+              {'\n'}• 학부모 회원: 이름, 전화번호(문자 인증), 이메일 또는 소셜 계정 정보
+              {'\n'}• 아이 정보(학부모가 법정대리인으로서 동의 후 입력): 이름, 영어 이름, 성별, 생년월일, 보호자 · 기타 연락처, 지역 · 주소, 이메일, 복용약 · 알레르기 · 건강 특이사항, 여권 정보(해외 캠프), 주민등록번호(병원 진료 접수 · 보험 처리용, 암호화 저장)
+              {'\n'}• 캠프 신청서: 학년, 입소 · 퇴소 여정, 단체티 사이즈, 사전 설문(학습 · 생활 습관 등 — 반 배정과 상담에 사용)
+              {'\n'}• 만 14세 미만 아이의 정보는 법정대리인인 학부모의 동의를 받아 처리하며, 동의 일시를 기록합니다.
               {'\n'}• 스태프 화면에는 주민등록번호 뒷자리를 가려서 표시합니다.
               {'\n'}• 원문은 관리자, 그리고 병원 내원 인솔자로 지정된 스태프에게만 해당 내원 기간 동안 표시되며, 조회할 때마다 기록이 남습니다.
               {'\n'}• 수집 목적: 병원 진료 접수, 보험 처리 등 학생 안전 관리
@@ -253,7 +258,7 @@ export function PrivacyPolicyScreen() {
           </Text>
           <View style={styles.bulletList}>
             <Text style={styles.bulletItem}>• 시행일: {EFFECTIVE_DATE}</Text>
-            <Text style={styles.bulletItem}>• {EFFECTIVE_DATE} 개정: 캠프 배정 시 수집 항목(계좌·여권 등), 원어민 해외 송금 정보, 캠프 참가 학생 정보 처리, 제3자 제공, 위치 기록 자동 삭제, 커뮤니티 신고·익명글 처리, 감사 로그 보관 내용 추가</Text>
+            <Text style={styles.bulletItem}>• {EFFECTIVE_DATE} 개정: 캠프 배정 시 수집 항목(계좌·여권 등), 원어민 해외 송금 정보, 캠프 참가 학생 정보 처리, 제3자 제공, 위치 기록 자동 삭제, 커뮤니티 신고·익명글 처리, 감사 로그 보관, 학부모 회원 · 아이 정보(법정대리인 동의) · 캠프 신청서 내용 추가</Text>
             <Text style={styles.bulletItem}>• 2026년 6월 14일: 이전 방침</Text>
           </View>
         </View>

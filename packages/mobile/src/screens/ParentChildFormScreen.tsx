@@ -6,21 +6,23 @@ import {
   View, Text, TextInput, ScrollView, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { doc, getDoc } from 'firebase/firestore';
-import { PARENT_CHILD_FORM_FIELDS, CHILDREN_COLLECTION, logger, type ChildProfile } from '@smis-mentor/shared';
+import { PARENT_CHILD_FORM_FIELDS, CHILDREN_COLLECTION, GUARDIAN_CONSENT_TEXT, logger, type ChildProfile } from '@smis-mentor/shared';
 import { db } from '../config/firebase';
 import { useAuth } from '../context/AuthContext';
 import { parentCall } from '../services/parentApi';
 import type { RootStackParamList } from '../navigation/types';
 
 export function ParentChildFormScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'ParentChildForm'>>();
   const childId = route.params?.childId;
   const { userData } = useAuth();
   const [child, setChild] = useState<ChildProfile | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [ssn, setSsn] = useState('');
+  const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(!!childId);
   const [saving, setSaving] = useState(false);
 
@@ -43,6 +45,7 @@ export function ParentChildFormScreen() {
   }, [childId, navigation, userData]);
 
   const save = async () => {
+    if (!child && !consent) { Alert.alert('보호자 동의', '보호자(법정대리인) 동의에 체크해주세요.'); return; }
     const missing = PARENT_CHILD_FORM_FIELDS.filter((f) => f.required && !form[f.key]?.trim());
     if (missing.length) { Alert.alert('빠진 칸이 있어요', missing.map((f) => f.label).join(', ')); return; }
     if (form.birthDate && !/^\d{4}-\d{2}-\d{2}$/.test(form.birthDate.trim())) { Alert.alert('생년월일', '2015-03-01 처럼 넣어주세요.'); return; }
@@ -55,7 +58,7 @@ export function ParentChildFormScreen() {
           .map((f) => [f.key, form[f.key] ?? '']));
         await parentCall('PUT', '/api/parent/children', { childId: child.childId, child: changed, ssn: ssn || undefined });
       } else {
-        const res = await parentCall<{ linkedExisting: boolean }>('POST', '/api/parent/children', { child: form, ssn: ssn || undefined });
+        const res = await parentCall<{ linkedExisting: boolean }>('POST', '/api/parent/children', { child: form, ssn: ssn || undefined, consent: true });
         if (res.linkedExisting) Alert.alert('등록했습니다', '예전 캠프 기록과 이어서 등록했습니다.');
       }
       navigation.goBack();
@@ -108,6 +111,15 @@ export function ParentChildFormScreen() {
             style={styles.input}
           />
         </View>
+        {!child && (
+          <TouchableOpacity style={styles.consent} onPress={() => setConsent((v) => !v)} activeOpacity={0.7}>
+            <View style={[styles.checkbox, consent && styles.checkboxOn]}>{consent ? <Text style={styles.check}>✓</Text> : null}</View>
+            <Text style={styles.consentText}>
+              (필수) {GUARDIAN_CONSENT_TEXT}{' '}
+              <Text style={styles.consentLink} onPress={() => navigation.navigate('PrivacyPolicy')}>개인정보처리방침 보기</Text>
+            </Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={[styles.save, saving && { opacity: 0.6 }]} onPress={save} disabled={saving}>
           <Text style={styles.saveText}>{saving ? '저장 중…' : '저장'}</Text>
         </TouchableOpacity>
@@ -130,6 +142,12 @@ const styles = StyleSheet.create({
   choiceOn: { borderColor: '#3b82f6', backgroundColor: '#eff6ff' },
   choiceText: { fontSize: 15, color: '#374151' },
   choiceTextOn: { color: '#1d4ed8', fontWeight: '600' },
+  consent: { flexDirection: 'row', gap: 10, backgroundColor: '#f9fafb', borderRadius: 8, padding: 12, marginTop: 4 },
+  checkbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 1.5, borderColor: '#9ca3af', alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  checkboxOn: { backgroundColor: '#3b82f6', borderColor: '#3b82f6' },
+  check: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  consentText: { flex: 1, fontSize: 12, lineHeight: 18, color: '#374151' },
+  consentLink: { color: '#2563eb', textDecorationLine: 'underline' },
   save: { marginTop: 8, backgroundColor: '#3b82f6', borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
   saveText: { color: '#fff', fontSize: 16, fontWeight: '700' },
 });

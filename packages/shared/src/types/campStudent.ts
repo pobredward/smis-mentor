@@ -42,6 +42,8 @@ export interface ChildProfile {
   ssnMasked?: string;
   /** 연결된 학부모 계정 */
   parentIds: string[];
+  /** 학부모(법정대리인)가 앱에서 등록할 때 받은 동의 */
+  guardianConsent?: { at: string; by: string; version: string };
   createdAt?: unknown;
   updatedAt?: unknown;
   createdBy?: string;

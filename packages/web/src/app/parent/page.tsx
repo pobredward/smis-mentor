@@ -12,7 +12,7 @@ import { db } from '@/lib/firebase';
 import { authenticatedFetch, authenticatedGet } from '@/lib/apiClient';
 import {
   getMyChildren, getMyEnrollments, logger, PARENT_CHILD_FORM_FIELDS, applicationQuestionsFor, campTypeOfCode,
-  SCALE_CHOICES, ENROLLMENT_STATUS_LABEL, PARENT_EDITABLE_AFTER_CONFIRM,
+  SCALE_CHOICES, ENROLLMENT_STATUS_LABEL, PARENT_EDITABLE_AFTER_CONFIRM, GUARDIAN_CONSENT_TEXT,
   type ChildProfile, type CampEnrollment, type OpenCamp, type ApplicationQuestion,
 } from '@smis-mentor/shared';
 
@@ -178,9 +178,11 @@ function ChildFormModal({ child, defaults, onClose, onSaved }: {
     return init;
   });
   const [ssn, setSsn] = useState('');
+  const [consent, setConsent] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const save = async () => {
+    if (!child && !consent) { toast.error('보호자 동의에 체크해주세요.'); return; }
     const missing = PARENT_CHILD_FORM_FIELDS.filter((f) => f.required && !form[f.key]?.trim());
     if (missing.length) { toast.error(`${missing.map((f) => f.label).join(', ')}을(를) 넣어주세요.`); return; }
     if (ssn && ssn.replace(/\D/g, '').length !== 13) { toast.error('주민등록번호 13자리를 확인해주세요.'); return; }
@@ -193,7 +195,7 @@ function ChildFormModal({ child, defaults, onClose, onSaved }: {
         await call('PUT', '/api/parent/children', { childId: child.childId, child: changed, ssn: ssn || undefined });
         toast.success('저장했습니다.');
       } else {
-        const res = await call('POST', '/api/parent/children', { child: form, ssn: ssn || undefined });
+        const res = await call('POST', '/api/parent/children', { child: form, ssn: ssn || undefined, consent: true });
         toast.success(res.linkedExisting ? '예전 캠프 기록과 이어서 등록했습니다.' : '등록했습니다.');
       }
       onSaved();
@@ -232,6 +234,12 @@ function ChildFormModal({ child, defaults, onClose, onSaved }: {
           <input value={ssn} onChange={(e) => setSsn(e.target.value)} autoComplete="off" inputMode="numeric"
             placeholder={child?.ssnMasked ? `등록됨 (${child.ssnMasked}) — 바꿀 때만 넣기` : '13자리'} className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" />
         </label>
+        {!child && (
+          <label className="flex items-start gap-2 rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-700 sm:col-span-2">
+            <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5" />
+            <span>(필수) {GUARDIAN_CONSENT_TEXT} <a href="/privacy-policy" target="_blank" className="text-blue-600 underline">개인정보처리방침</a></span>
+          </label>
+        )}
       </div>
     </Modal>
   );
