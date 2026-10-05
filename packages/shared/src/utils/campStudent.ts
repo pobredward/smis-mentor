@@ -1,8 +1,9 @@
 /**
  * 아이 + 캠프 참가 → 학생 화면이 쓰는 한 명 (STSheetStudent 모양 — 캠프 탭 · 학생 카드가 그대로 쓴다)
  */
-import type { STSheetStudent } from '../types/student';
-import { CHILD_STUDENT_FIELDS, type ChildProfile, type CampEnrollment } from '../types/campStudent';
+import type { STSheetStudent, FamilyStudent, FamilyUnit, CampType } from '../types/student';
+import { CAMP_SHEET_CONFIG } from '../types/student';
+import { CHILD_STUDENT_FIELDS, type ChildProfile, type CampEnrollment, type CampFamily } from '../types/campStudent';
 import { ST_DETAIL_FIELDS } from './studentRecordSplit';
 
 const DETAIL = new Set<string>(ST_DETAIL_FIELDS);
@@ -46,3 +47,54 @@ export function toRosterStudent(child: Partial<ChildProfile> | null | undefined,
 /** 명단 순서 — 참가 순서(order) → 이름 */
 export const compareEnrollments = (a: Partial<CampEnrollment>, b: Partial<CampEnrollment>) =>
   (Number(a.order ?? 1e9) - Number(b.order ?? 1e9)) || String(a.studentId ?? '').localeCompare(String(b.studentId ?? ''));
+
+/** 가족 캠프 명단 — 가족 문서 + 확정된 학생(familyId, 상세 칸 포함 toCampStudent) → 예전 familySTSheetCache.families 모양 */
+export function buildFamilyUnits(families: CampFamily[], students: STSheetStudent[], campCode: string, updatedAt: string): FamilyUnit[] {
+  const byFamily = new Map<string, STSheetStudent[]>();
+  for (const s of students) {
+    const fid = String((s as { familyId?: string }).familyId ?? '');
+    if (!fid) continue;
+    if (!byFamily.has(fid)) byFamily.set(fid, []);
+    byFamily.get(fid)!.push(s);
+  }
+  return [...families]
+    .sort((a, b) => (Number(a.order ?? 1e9) - Number(b.order ?? 1e9)) || a.familyId.localeCompare(b.familyId))
+    .map((f) => ({
+      familyId: f.familyId,
+      familyType: f.familyType ?? '',
+      parents: f.parents ?? [],
+      roomNumber: f.roomNumber ?? '',
+      rowNumber: Number(f.order ?? 0),
+      campCode,
+      lastSyncedAt: updatedAt as unknown as Date,
+      students: (byFamily.get(f.familyId) ?? []).map((s): FamilyStudent => ({
+        id: s.studentId,
+        name: s.name,
+        englishName: s.englishName || undefined,
+        grade: s.grade ?? '',
+        gender: s.gender as 'M' | 'F',
+        ssn: s.ssn || undefined,
+        passportName: s.passportName || undefined,
+        passportNumber: s.passportNumber || undefined,
+        passportExpiry: s.passportExpiry || undefined,
+        medication: s.medication || undefined,
+        parentPhone: s.parentPhone || undefined,
+        registrationSource: s.registrationSource || undefined,
+        classNumber: s.classNumber || undefined,
+        className: s.className || undefined,
+        classMentor: s.classMentor || undefined,
+      })),
+    }));
+}
+
+/** 캠프 코드 → 캠프 종류 (등록된 캠프는 CAMP_SHEET_CONFIG, 새 캠프는 코드 앞 글자로: J·E → EJ, S, D·G → DG, F, W) */
+export function campTypeOfCode(campCode: string): CampType {
+  const known = (CAMP_SHEET_CONFIG as Record<string, { type?: CampType }>)[campCode]?.type;
+  if (known) return known;
+  const c = campCode.trim().charAt(0).toUpperCase();
+  if (c === 'S') return 'S';
+  if (c === 'F') return 'F';
+  if (c === 'W') return 'W';
+  if (c === 'D' || c === 'G') return 'DG';
+  return 'EJ';
+}

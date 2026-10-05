@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import SsnReveal from '@/components/common/SsnReveal';
 import { useState, useEffect, useCallback } from 'react';
@@ -201,7 +202,6 @@ export default function FamilyContent() {
   const { userData } = useAuth();
   const [families, setFamilies] = useState<FamilyUnit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
   const [campCode, setCampCode] = useState<CampCode | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
@@ -237,24 +237,6 @@ export default function FamilyContent() {
   }, [campCode]);
 
   useEffect(() => { if (campCode) loadFamilies(); }, [campCode, loadFamilies]);
-
-  // 동기화
-  const handleSync = async () => {
-    if (!isAdmin) { alert(L('common.onlyAdministratorsCanSync')); return; }
-    if (!campCode) { alert(L('common.loadingCampCode')); return; }
-    try {
-      setSyncing(true);
-      await stSheetService.syncSTSheet(campCode);
-      await loadFamilies();
-      alert(L('students.familyDataSyncComplete'));
-    } catch (err) {
-      logger.error('동기화 실패:', err);
-      const msg = err instanceof Error ? err.message : L('common.syncFailed');
-      alert(L('students.syncFailed2', { v0: msg }));
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   // 검색 필터 (이름 + 휴대폰번호)
   const filtered = searchQuery.trim()
@@ -324,15 +306,14 @@ export default function FamilyContent() {
             </button>
           )}
 
-          {/* 동기화 (관리자) */}
-          {isAdmin && (
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+          {/* 명단 관리 (관리자) */}
+          {isAdmin && campCode && (
+            <Link
+              href={`/admin/camp-students?camp=${campCode}`}
+              className="px-3 py-1.5 text-xs font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
             >
-              {syncing ? L('students.syncing') : L('students.sync')}
-            </button>
+              {L('students.manageRoster')}
+            </Link>
           )}
         </div>
       </div>
@@ -353,13 +334,8 @@ export default function FamilyContent() {
             <span className="text-sm">
               {searchQuery.trim() ? L('students.noResults') : L('students.noFamilyData')}
             </span>
-            {!searchQuery.trim() && isAdmin && (
-              <button
-                onClick={handleSync}
-                className="mt-2 px-4 py-2 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-              >
-                {L('students.sync2')}
-              </button>
+            {!searchQuery.trim() && (
+              <span className="text-xs text-gray-400">{L('students.rosterEmptyHint')}</span>
             )}
           </div>
         ) : (

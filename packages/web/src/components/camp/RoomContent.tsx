@@ -3,6 +3,7 @@ import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import { logger, toDriveImageUrl, type STSheetFieldConfig } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import StudentDetailModal from './StudentDetailModal';
 import { stSheetService, jobCodesService, STSheetStudent, CampCode, CampType } from '@/lib/stSheetService';
@@ -18,7 +19,6 @@ export default function RoomContent() {
   const [selectedStudent, setSelectedStudent] = useState<STSheetStudent | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [campCode, setCampCode] = useState<CampCode | null>(null);
   const [campType, setCampType] = useState<CampType>('EJ');
   const [fieldConfig, setFieldConfig] = useState<STSheetFieldConfig | null>(null);
@@ -98,30 +98,6 @@ export default function RoomContent() {
       loadAllStudents();
     }
   }, [campCode, loadAllStudents]);
-
-  const handleSync = async () => {
-    if (!isAdmin) {
-      alert(L('common.onlyAdministratorsCanSync'));
-      return;
-    }
-
-    if (!campCode) {
-      alert(L('common.loadingCampCode'));
-      return;
-    }
-
-    try {
-      setSyncing(true);
-      await stSheetService.syncSTSheet(campCode);
-      await loadAllStudents();
-      alert(L('common.dataSyncComplete'));
-    } catch (error) {
-      logger.error('동기화 실패:', error);
-      alert(L('common.syncFailed'));
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   // 유닛멘토별로 그룹화 (unitMentor 없으면 '미분류')
   const groupedByMentor = useMemo(() => {
@@ -279,16 +255,13 @@ export default function RoomContent() {
               🔍
             </button>
           )}
-          {isAdmin && (
-            <>
-              <button
-                onClick={handleSync}
-                disabled={syncing}
-                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {syncing ? L('students.syncing') : L('students.sync')}
-              </button>
-            </>
+          {isAdmin && campCode && (
+            <Link
+              href={`/admin/camp-students?camp=${campCode}`}
+              className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              {L('students.manageRoster')}
+            </Link>
           )}
         </div>
       </div>

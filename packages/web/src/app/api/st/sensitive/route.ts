@@ -1,6 +1,5 @@
-import { openSensitive, type SensitiveEntry } from '@/lib/stSensitive';
+import { readSsnByKey } from '@/lib/campStudentsServer';
 import { NextRequest, NextResponse } from 'next/server';
-import { getAdminFirestore } from '@/lib/firebase-admin';
 import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 import { writeAuditLog } from '@/lib/auditLog';
 import { logger } from '@smis-mentor/shared';
@@ -9,7 +8,7 @@ import { logger } from '@smis-mentor/shared';
  * 학생·가족 주민번호 원본 조회 (관리자 전용, 건별)
  * GET /api/st/sensitive?campCode=J28&key=<studentId | familyId__personId>&label=<표시 이름>
  *
- * - 원본은 stSheetSensitive/{campCode} (규칙상 클라이언트 읽기 불가) 에만 있다.
+ * - 원본은 암호화해서 아이 children/{id}/private/identity · 가족 보호자 camps/{캠프}/families/{가족}/private/identity 에만 있다 (규칙상 클라이언트 읽기 불가).
  * - 조회할 때마다 감사 로그(STUDENT_SENSITIVE_VIEW)를 남긴다.
  */
 export async function GET(request: NextRequest) {
@@ -26,10 +25,9 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const snap = await getAdminFirestore().collection('stSheetSensitive').doc(campCode).get();
-    const ssn = openSensitive(snap.exists ? (snap.data()?.entries?.[key] as SensitiveEntry | undefined) : undefined);
+    const ssn = await readSsnByKey(campCode, key);
     if (!ssn) {
-      return NextResponse.json({ error: '원본 정보가 없습니다. 시트를 다시 동기화해주세요.' }, { status: 404 });
+      return NextResponse.json({ error: '주민등록번호가 등록되지 않았습니다.' }, { status: 404 });
     }
     await writeAuditLog({
       action: 'STUDENT_SENSITIVE_VIEW',

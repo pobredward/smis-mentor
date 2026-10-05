@@ -3,6 +3,7 @@ import { resolveActiveJobCodeId } from '@smis-mentor/shared';
 import { logger, toDriveImageUrl, type STSheetFieldConfig } from '@smis-mentor/shared';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import StudentDetailModal from './StudentDetailModal';
 import { stSheetService, jobCodesService, STSheetStudent, CampCode, CampType } from '@/lib/stSheetService';
@@ -17,7 +18,6 @@ export default function ClassContent() {
   const [selectedStudent, setSelectedStudent] = useState<STSheetStudent | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [campCode, setCampCode] = useState<CampCode | null>(null);
   const [campType, setCampType] = useState<CampType>('EJ');
   // 동적 필드 설정
@@ -97,30 +97,6 @@ export default function ClassContent() {
       loadAllStudents();
     }
   }, [campCode, loadAllStudents]);
-
-  const handleSync = async () => {
-    if (!isAdmin) {
-      alert(L('common.onlyAdministratorsCanSync'));
-      return;
-    }
-
-    if (!campCode) {
-      alert(L('common.loadingCampCode'));
-      return;
-    }
-
-    try {
-      setSyncing(true);
-      await stSheetService.syncSTSheet(campCode);
-      await loadAllStudents();
-      alert(L('common.dataSyncComplete'));
-    } catch (error) {
-      logger.error('동기화 실패:', error);
-      alert(L('common.syncFailed'));
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   // 반별로 그룹화 + 담당 멘토 추출
   const groupedByClass = useMemo(() => {
@@ -258,16 +234,13 @@ export default function ClassContent() {
               🔍
             </button>
           )}
-          {isAdmin && (
-            <>
-              <button
-                onClick={handleSync}
-                disabled={syncing}
-                className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {syncing ? L('students.syncing') : L('students.sync')}
-              </button>
-            </>
+          {isAdmin && campCode && (
+            <Link
+              href={`/admin/camp-students?camp=${campCode}`}
+              className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              {L('students.manageRoster')}
+            </Link>
           )}
         </div>
       </div>
@@ -326,7 +299,7 @@ export default function ClassContent() {
               {L('students.noRealDataAvailable')}
             </p>
             <p className="text-xs text-gray-400">
-              {L('students.syncTheStSheetOr')}
+              {L('students.rosterEmptyHint')}
             </p>
           </div>
         ) : displayStudents.length === 0 ? (

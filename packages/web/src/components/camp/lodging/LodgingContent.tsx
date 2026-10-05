@@ -69,7 +69,7 @@ export default function LodgingContent() {
   const building = useMemo(() => lodgingBuildingFor(campType), [campType]);
 
   const { data: students = [], isLoading: loadingStudents } = useQuery({
-    queryKey: ['stSheetCache', campCode],
+    queryKey: ['studentRoster', campCode],
     queryFn: () => stSheetService.getCachedData(campCode as CampCode),
     enabled: !!campCode && !!building,
   });

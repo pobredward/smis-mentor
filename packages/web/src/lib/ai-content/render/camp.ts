@@ -313,10 +313,7 @@ export async function renderCampRoster(viewer: Viewer, view: RosterView, campPar
   };
 
   if (!roster) {
-    return { ...base, body: `${campHeader(camp)}\n\n_이 캠프의 학생 명단이 아직 동기화되지 않았습니다._` };
-  }
-  if (roster.temporaryDataMode) {
-    return { ...base, body: `${campHeader(camp)}\n\n_현재 임시 데이터 표시 모드가 켜져 있어 실제 명단을 제공하지 않습니다._` };
+    return { ...base, body: `${campHeader(camp)}\n\n_이 캠프에 아직 확정된 학생이 없습니다._` };
   }
 
   const students = roster.students;
@@ -346,7 +343,7 @@ export async function renderCampRoster(viewer: Viewer, view: RosterView, campPar
   const body = [
     campHeader(camp),
     `- 학생 수: ${students.length}명${roster.isFamilyCamp ? ' (가족 캠프)' : ''}`,
-    `- 명단 동기화: ${fmtDateTime(roster.lastSyncedAt)}`,
+    `- 명단 갱신: ${fmtDateTime(roster.lastSyncedAt)}`,
     '',
     content,
   ].join('\n');

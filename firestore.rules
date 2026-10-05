@@ -62,8 +62,9 @@ service cloud.firestore {
         allow read, write: if false;
       }
     }
-    // 캠프 참가 · 목록용 명단
+    // 캠프 참가 · 목록용 명단 · 가족 (캠프 문서 자체는 서버 전용 — 명단 버전 rosterRev)
     match /camps/{campCode} {
+      allow read, write: if false;
       match /enrollments/{studentId} {
         allow read: if isCampStaff() || (isAuthenticated() && request.auth.uid in resource.data.parentIds);
         allow write: if false;
@@ -71,6 +72,14 @@ service cloud.firestore {
       match /roster/{docId} {
         allow read: if isCampStaff();
         allow write: if false;
+      }
+      // 가족 캠프의 가족 (함께 오는 보호자) — 운영진 읽기, 보호자 주민번호 원본(private)은 서버만
+      match /families/{familyId} {
+        allow read: if isCampStaff();
+        allow write: if false;
+        match /private/{docId} {
+          allow read, write: if false;
+        }
       }
     }
     // 여러 캠프를 한 번에 — 학부모의 내 아이 참가 찾기 · 운영진 학생 이력 조회
@@ -347,45 +356,19 @@ service cloud.firestore {
     }
 
     // ──────────────────────────────────────────────────────────────
-    // stSheetCache 컬렉션 (ST시트 캐시 - 학생 데이터)
-    // 역할: admin(전체), 캠프 스태프(읽기)
-    // 주의: 민감한 학생 개인정보 포함 (주민번호 등)
+    // 예전 시트 연동 사본 (stSheetCache · familySTSheetCache · stSheetOverrides · stSheetSensitive)
+    // SMIS CAMP 는 children · camps/{캠프}/enrollments 가 원본 — 앱은 더 읽지 않는다. 이관 스크립트(Admin SDK)만.
     // ──────────────────────────────────────────────────────────────
-    match /stSheetCache/{campCode} {
-      allow read: if isCampStaff();
-      // 쓰기는 서버(Cloud Functions/Admin SDK)를 통해서만 가능
-      allow write: if false;
-
-      // 학생별 상세 (설문 · 상담 · 주소 · 여권 · 특이사항) — 명단과 같은 사람이 읽고, 쓰기는 동기화 서버만
-      match /details/{studentKey} {
-        allow read: if isCampStaff();
-        allow write: if false;
-      }
+    match /stSheetCache/{document=**} {
+      allow read, write: if false;
     }
-
-    // ──────────────────────────────────────────────────────────────
-    // stSheetOverrides 컬렉션 (입소 레벨 테스트 등 admin 수동 수정값)
-    // 재동기화(syncSTSheet)와 독립적으로 보존됨
-    // ──────────────────────────────────────────────────────────────
-    match /stSheetOverrides/{campCode}/students/{studentId} {
-      allow read: if isCampStaff();
-      allow write: if isAdmin();
+    match /familySTSheetCache/{document=**} {
+      allow read, write: if false;
     }
-
-    // ──────────────────────────────────────────────────────────────
-    // familySTSheetCache 컬렉션 (가족 ST시트 캐시)
-    // 역할: admin(전체), 캠프 스태프(읽기)
-    // ──────────────────────────────────────────────────────────────
-    match /familySTSheetCache/{campCode} {
-      allow read: if isCampStaff();
-      allow write: if false;
+    match /stSheetOverrides/{document=**} {
+      allow read, write: if false;
     }
-
-    // ──────────────────────────────────────────────────────────────
-    // stSheetSensitive 컬렉션 (학생·가족 주민번호 원본)
-    // 클라이언트 접근 전면 차단 — 관리자도 /api/st/sensitive(감사 로그 기록)로만 조회
-    // ──────────────────────────────────────────────────────────────
-    match /stSheetSensitive/{campCode} {
+    match /stSheetSensitive/{document=**} {
       allow read, write: if false;
     }
 

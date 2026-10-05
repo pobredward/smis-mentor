@@ -5,12 +5,14 @@
  *   children/{childId}/private/identity      주민번호 원본(암호화) — 서버만
  *   camps/{campCode}/enrollments/{studentId} 캠프 참가 (반 · 방 · 입퇴소 · 설문 · 테스트 · 상담 …) — 문서 id 는 캠프 안 학생 번호
  *                                            (이관한 학생은 시트 고유번호를 그대로 — 보건 · 용돈 · 기기 기록이 이 번호를 가리킨다)
- *   camps/{campCode}/roster/current          목록용 명단 — 서버가 참가 · 아이 문서가 바뀔 때마다 다시 만든다 (확정만)
+ *   camps/{campCode}/families/{familyId}     가족 캠프의 한 가족 (함께 오는 보호자 · 가족 유형 · 방) — 운영진 읽기
+ *   camps/{campCode}/families/{familyId}/private/identity  보호자 주민번호 원본(암호화) — 서버만
+ *   camps/{campCode}/roster/current          목록용 명단 — 서버가 참가 · 아이 · 가족 문서가 바뀔 때마다 다시 만든다 (확정만)
  *
  * 모든 쓰기는 서버 API 로 (규칙은 클라이언트 쓰기를 막는다).
  */
 
-import type { STSheetStudent } from './student';
+import type { STSheetStudent, FamilyParent, FamilyUnit } from './student';
 
 export type EnrollmentStatus = 'applied' | 'confirmed' | 'cancelled';
 
@@ -93,10 +95,35 @@ export interface CampEnrollment extends EnrollmentRecordFields {
   updatedBy?: string;
 }
 
+/** 가족 캠프의 한 가족 — 아이들은 참가 문서(familyId)로 묶는다 */
+export interface CampFamily {
+  familyId: string;
+  /** "2인 가족" 등 */
+  familyType: string;
+  /** 함께 오는 보호자 (주민번호는 가린 값 — 원본은 private/identity) */
+  parents: FamilyParent[];
+  roomNumber?: string;
+  order?: number;
+  updatedAt?: unknown;
+  updatedBy?: string;
+}
+
+/** camps/{campCode}/roster/current */
+export interface StudentRosterDoc {
+  campCode: string;
+  /** 확정된 학생 (STSheetStudent 모양 · 상세 칸 제외) */
+  students: STSheetStudent[];
+  /** 가족 캠프만 — 예전 familySTSheetCache.families 와 같은 모양 */
+  families?: FamilyUnit[];
+  total: number;
+  updatedAt: string;
+}
+
 export const CHILDREN_COLLECTION = 'children';
 export const CAMPS_COLLECTION = 'camps';
 export const ENROLLMENTS_SUBCOLLECTION = 'enrollments';
 export const ROSTER_SUBCOLLECTION = 'roster';
+export const FAMILIES_SUBCOLLECTION = 'families';
 export const ROSTER_DOC_ID = 'current';
 
 /** 아이 문서에 두는 학생 칸 (STSheetStudent 이름 그대로 — ssn 은 ssnMasked) */

@@ -13,7 +13,7 @@ import {
   type STSheetFieldConfig, type FieldSectionConfig, type PatientRecord, type StudentTabId, type MessageKey,
 } from '@smis-mentor/shared';
 import { useAuth } from '@/contexts/AuthContext';
-import { placementOverrideService, stSheetService, type STSheetStudent, type CampCode, type CampType } from '@/lib/stSheetService';
+import { stSheetService, type STSheetStudent, type CampCode, type CampType } from '@/lib/stSheetService';
 import { authenticatedPost } from '@/lib/apiClient';
 import { db } from '@/lib/firebase';
 import StudentAllowanceTab, { useStudentAllowance } from './StudentAllowanceTab';
@@ -64,7 +64,7 @@ export default function StudentDetailModal({
   const config = fieldConfig ?? getDefaultFieldConfig(campType ?? 'EJ');
 
   const [index, setIndex] = useState(() => Math.max(0, students.findIndex(s => s.studentId === initialStudentId)));
-  // 학생별 override + 이 모달에서 저장한 값
+  // 학생별 상세(참가 + 아이 문서) + 이 모달에서 저장한 값
   const [patches, setPatches] = useState<Record<string, Partial<STSheetStudent>>>({});
   const [tab, setTab] = useState<StudentTabId>(() => tabMemory.current);
   useEffect(() => { tabMemory.current = tab; }, [tab]);
@@ -84,19 +84,7 @@ export default function StudentDetailModal({
     return { ...base, ...p, displayFields: { ...(base.displayFields ?? {}), ...(p.displayFields ?? {}) } };
   }, [base, patches]);
 
-  // placement override 병합 (학생이 바뀔 때마다)
-  useEffect(() => {
-    if (!campCode || !base) return;
-    let alive = true;
-    placementOverrideService.getOverride(campCode, base.studentId).then(ov => {
-      if (!alive || !ov) return;
-      const merged = placementOverrideService.mergeOverride(base, ov);
-      setPatches(prev => ({ ...prev, [base.studentId]: { ...merged, ...(prev[base.studentId] ?? {}) } }));
-    }).catch(() => {});
-    return () => { alive = false; };
-  }, [campCode, base]);
-
-  // 상세 칸 (설문 · 레벨 테스트 · 상담 · 주소 · 여권 · 특이사항) — 목록에는 없어서 학생이 바뀔 때 한 번 읽어 합친다
+  // 상세 칸 (설문 · 레벨 테스트 · 상담 · 주소 · 여권 · 특이사항) — 목록에는 없어서 학생이 바뀔 때 참가 + 아이 문서를 한 번 읽어 합친다
   useEffect(() => {
     if (!campCode || !base) return;
     let alive = true;

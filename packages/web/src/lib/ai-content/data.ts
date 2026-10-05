@@ -326,7 +326,7 @@ export async function getTaskCategories(campCode: string): Promise<Map<string, s
   });
 }
 
-// ─── 학생 명단(stSheetCache / familySTSheetCache) — 최소 필드만 ─────────────
+// ─── 학생 명단(camps/{캠프}/roster/current) — 최소 필드만 ─────────────
 
 /** 개인정보를 제외한 학생 명단 항목 */
 export interface RosterStudent {
@@ -349,7 +349,6 @@ export interface RosterInfo {
   campCode: string;
   students: RosterStudent[];
   lastSyncedAt: Date | null;
-  temporaryDataMode: boolean;
   isFamilyCamp: boolean;
 }
 
@@ -374,35 +373,16 @@ function pickStudent(s: Doc): RosterStudent {
 export async function getCampRoster(campCode: string): Promise<RosterInfo | null> {
   return cached(`roster:${campCode}`, 60_000, async () => {
     const db = getAdminFirestore();
-    const [settings, cacheSnap, familySnap] = await Promise.all([
-      db.collection('campSettings').doc(campCode).get(),
-      db.collection('stSheetCache').doc(campCode).get(),
-      db.collection('familySTSheetCache').doc(campCode).get(),
-    ]);
-    const temporaryDataMode = !!settings.data()?.useTemporaryData;
-
-    if (cacheSnap.exists) {
-      const d = cacheSnap.data() as Doc;
-      const data: Doc[] = Array.isArray(d.data) ? d.data : [];
-      return {
-        campCode,
-        students: data.map(pickStudent),
-        lastSyncedAt: toDate(d.lastSyncedAt),
-        temporaryDataMode,
-        isFamilyCamp: false,
-      };
-    }
-    if (familySnap.exists) {
-      const d = familySnap.data() as Doc;
-      const families: Doc[] = Array.isArray(d.families) ? d.families : [];
-      const students = families.flatMap((f) =>
-        (Array.isArray(f.students) ? f.students : []).map((s: Doc) =>
-          pickStudent({ ...s, roomNumber: s.roomNumber ?? f.roomNumber, familyId: f.familyId })
-        )
-      );
-      return { campCode, students, lastSyncedAt: toDate(d.lastSyncedAt), temporaryDataMode, isFamilyCamp: true };
-    }
-    return null;
+    const snap = await db.collection('camps').doc(campCode).collection('roster').doc('current').get();
+    if (!snap.exists) return null;
+    const d = snap.data() as Doc;
+    const data: Doc[] = Array.isArray(d.students) ? d.students : [];
+    return {
+      campCode,
+      students: data.map(pickStudent),
+      lastSyncedAt: toDate(d.updatedAt),
+      isFamilyCamp: Array.isArray(d.families) && d.families.length > 0,
+    };
   });
 }
 

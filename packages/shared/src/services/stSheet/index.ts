@@ -1,69 +1,36 @@
 /**
- * ST 시트(학생 명단) 캐시 읽기 — web·mobile 공용
- * 예전에는 모바일 사본이 가족(F) 캠프를 모르고(stSheetCache 만 봄), 데이터가 없으면 가짜 학생으로 채웠다.
- * 이제 웹과 같이: F 캠프는 familySTSheetCache, 실제 데이터 없으면 빈 목록.
- * 임시(샘플) 학생 기능(campSettings.useTemporaryData)은 없앴다 — 명단을 열 때 campSettings 를 읽지 않는다.
+ * 학생 명단 읽기 — web·mobile 공용
+ * SMIS CAMP 1.0 부터 구글 시트 연동이 없다. 원본은 아이(children) · 캠프 참가(camps/{캠프}/enrollments) 이고,
+ * 화면은 서버가 만들어 두는 목록용 명단(camps/{캠프}/roster/current) 하나만 읽는다 (가족 캠프도 같은 문서의 families).
+ * 한 학생의 상세(설문 · 레벨 테스트 · 상담 · 주소 · 여권 · 특이사항)는 참가 + 아이 문서를 합쳐 읽는다.
+ * 쓰기는 모두 서버 API (/api/st/update-placement, /api/admin/camp-students …).
  */
-import { type Firestore, collection, doc, getDoc, getDocs } from 'firebase/firestore';
+import { type Firestore, collectionGroup, doc, getDoc, getDocs } from 'firebase/firestore';
 import type { STSheetStudent, CampCode, CampType, FamilyUnit } from '../../types/student';
-import { CAMP_SHEET_CONFIG } from '../../types/student';
+import {
+  CAMPS_COLLECTION, CHILDREN_COLLECTION, ENROLLMENTS_SUBCOLLECTION, ROSTER_SUBCOLLECTION, ROSTER_DOC_ID,
+  type CampEnrollment, type StudentRosterDoc, type ChildProfile,
+} from '../../types/campStudent';
+import { toCampStudent, campTypeOfCode } from '../../utils/campStudent';
 import { logger } from '../../utils/logger';
-import { ST_DETAIL_SUBCOLLECTION, studentKeyOf, mergeStudentDetail, type StudentDetailDoc } from '../../utils/studentRecordSplit';
+import type { StudentDetailDoc } from '../../utils/studentRecordSplit';
 
-export interface SyncSTSheetResponse {
-  success: boolean;
-  count: number;
-  familyCount?: number;
-  lastSync: string;
+const rosterDocRef = (db: Firestore, campCode: string) => doc(db, CAMPS_COLLECTION, campCode, ROSTER_SUBCOLLECTION, ROSTER_DOC_ID);
+
+async function readRoster(db: Firestore, campCode: string): Promise<StudentRosterDoc | null> {
+  const snap = await getDoc(rosterDocRef(db, campCode));
+  return snap.exists() ? (snap.data() as StudentRosterDoc) : null;
 }
 
-export function createStSheetService(db: Firestore, opts: { sync: (campCode: CampCode) => Promise<SyncSTSheetResponse> }) {
+export function createStSheetService(db: Firestore) {
   const service = {
     /**
-     * 학생 명단 — 캐시 문서 하나만 읽는다 (F 캠프는 familySTSheetCache, 그 외 stSheetCache).
-     * 캐시가 없으면 빈 목록. 읽기 실패는 그대로 던진다 → 화면이 오류/빈 상태를 보여 준다.
+     * 학생 명단 — camps/{캠프}/roster/current 한 문서 (확정된 학생, 참가 순서).
+     * 명단이 아직 없으면 빈 목록. 읽기 실패는 그대로 던진다 → 화면이 오류/빈 상태를 보여 준다.
      */
     getCachedData: async (campCode: CampCode = 'E27'): Promise<STSheetStudent[]> => {
-      const config = CAMP_SHEET_CONFIG[campCode];
-      const isFamily = config?.type === 'F';
-
-      // F캠프: familySTSheetCache에서 읽어 STSheetStudent[] 형태로 변환
-      if (isFamily) {
-        const familyCacheSnap = await getDoc(doc(db, 'familySTSheetCache', campCode));
-        if (!familyCacheSnap.exists()) return [];
-        const families: FamilyUnit[] = familyCacheSnap.data()?.families ?? [];
-        // FamilyUnit의 학생들을 STSheetStudent 형태로 평탄화
-        const students: STSheetStudent[] = families.flatMap((family) =>
-          family.students.map((fs) => ({
-            studentId: fs.id,
-            name: fs.name,
-            englishName: fs.englishName ?? '',
-            grade: fs.grade,
-            gender: fs.gender,
-            ssn: fs.ssn ?? '',
-            passportName: fs.passportName ?? '',
-            passportNumber: fs.passportNumber ?? '',
-            passportExpiry: fs.passportExpiry ?? '',
-            medication: fs.medication ?? '',
-            parentPhone: fs.parentPhone ?? (family.parents[0]?.phone ?? ''),
-            registrationSource: fs.registrationSource ?? '',
-            classMentor: fs.classMentor ?? '',
-            classNumber: fs.classNumber ?? '',
-            className: fs.className ?? '',
-            roomNumber: family.roomNumber ?? '',
-            familyId: family.familyId,
-            familyType: family.familyType,
-          } as STSheetStudent & { familyId: string; familyType: string; classNumber: string; className: string })
-        ));
-        logger.info(`📦 [F캠프] familySTSheetCache → ${students.length}명 변환 완료`);
-        return students;
-      }
-
-      // 일반 캠프: stSheetCache 의 가벼운 명단만 읽는다 (설문 · 상담 · 주소 등 상세는 getStudentDetail).
-      // 실제 캐시가 없으면 빈 배열 (빈 화면 표시)
-      const cacheSnap = await getDoc(doc(db, 'stSheetCache', campCode));
-      const data = cacheSnap.exists() ? cacheSnap.data()?.data : undefined;
-      return Array.isArray(data) ? (data as STSheetStudent[]) : [];
+      const roster = await readRoster(db, campCode);
+      return Array.isArray(roster?.students) ? roster!.students : [];
     },
 
     getStudentsByMentor: async (
@@ -73,28 +40,13 @@ export function createStSheetService(db: Firestore, opts: { sync: (campCode: Cam
     ): Promise<STSheetStudent[]> => {
       try {
         const students = await service.getCachedData(campCode);
-      
-        const filtered = students.filter(student => {
-          if (filterType === 'class') {
-            return student.classMentor === mentorName;
-          } else {
-            return student.unitMentor === mentorName;
-          }
-        });
-
-        return filtered;
+        return students.filter(student =>
+          filterType === 'class' ? student.classMentor === mentorName : student.unitMentor === mentorName,
+        );
       } catch (error) {
         logger.error('학생 목록 조회 실패:', error);
         throw error;
       }
-    },
-
-    /** 시트 동기화는 서버(/api/st/sync-sheet)가 한다 — 호출 방식이 앱마다 달라 주입받는다 */
-    syncSTSheet: async (campCode: CampCode = 'E27'): Promise<SyncSTSheetResponse> => {
-      logger.info(`🔄 ST 시트 동기화 요청 (캠프: ${campCode})`);
-      const result = await opts.sync(campCode);
-      logger.info(`✅ 동기화 완료: ${result.count}명`);
-      return result;
     },
 
     getStudentDetail: async (studentId: string, campCode: CampCode = 'E27'): Promise<STSheetStudent | null> => {
@@ -102,7 +54,8 @@ export function createStSheetService(db: Firestore, opts: { sync: (campCode: Cam
         const students = await service.getCachedData(campCode);
         const student = students.find(s => s.studentId === studentId);
         if (!student) return null;
-        return mergeStudentDetail(student, await service.getStudentDetailFields(campCode, student));
+        const detail = await service.getStudentDetailFields(campCode, student);
+        return detail ? ({ ...student, ...detail } as STSheetStudent) : student;
       } catch (error) {
         logger.error('학생 상세 정보 조회 실패:', error);
         throw error;
@@ -110,32 +63,33 @@ export function createStSheetService(db: Firestore, opts: { sync: (campCode: Cam
     },
 
     /**
-     * 한 학생의 상세 칸 (설문 · 레벨 테스트 · 상담 · 주소 · 여권 · 특이사항) — stSheetCache/{캠프}/details/{학생 키}.
-     * 가족 캠프나 상세 문서가 없으면 null (예전 형식 명단은 목록에 다 들어 있다).
+     * 한 학생 전체 (상세 칸 포함) — 캠프 참가 + 아이 문서를 합친다. 참가 문서가 없으면 null.
+     * 목록 항목에 childId 가 있으면 두 문서를 함께 읽는다.
      */
     getStudentDetailFields: async (
       campCode: string,
-      student: Pick<STSheetStudent, 'studentId'> & { rowNumber?: number },
+      student: Pick<STSheetStudent, 'studentId'> & { childId?: string },
     ): Promise<StudentDetailDoc | null> => {
-      if (CAMP_SHEET_CONFIG[campCode as CampCode]?.type === 'F') return null;
-      const snap = await getDoc(doc(db, 'stSheetCache', campCode, ST_DETAIL_SUBCOLLECTION, studentKeyOf(student)));
-      return snap.exists() ? (snap.data() as StudentDetailDoc) : null;
+      if (!student.studentId) return null;
+      const enrRef = doc(db, CAMPS_COLLECTION, campCode, ENROLLMENTS_SUBCOLLECTION, student.studentId);
+      const [enrSnap, childSnap0] = await Promise.all([
+        getDoc(enrRef),
+        student.childId ? getDoc(doc(db, CHILDREN_COLLECTION, student.childId)) : Promise.resolve(null),
+      ]);
+      if (!enrSnap.exists()) return null;
+      const enr = { ...(enrSnap.data() as CampEnrollment), studentId: enrSnap.id };
+      const childSnap = childSnap0 ?? (enr.childId ? await getDoc(doc(db, CHILDREN_COLLECTION, enr.childId)) : null);
+      const child = childSnap?.exists() ? ({ ...(childSnap.data() as ChildProfile), childId: childSnap.id }) : null;
+      return toCampStudent(child, enr) as unknown as StudentDetailDoc;
     },
 
-    getCampType: (campCode: CampCode): CampType => {
-      const config = CAMP_SHEET_CONFIG[campCode as keyof typeof CAMP_SHEET_CONFIG];
-      return (config?.type as CampType) || 'EJ';
-    },
+    getCampType: (campCode: CampCode): CampType => campTypeOfCode(campCode),
 
-    // F 캠프 가족 데이터 조회
+    /** 가족 캠프 — 목록용 명단의 families (예전 familySTSheetCache 와 같은 모양) */
     getCachedFamilies: async (campCode: CampCode): Promise<FamilyUnit[]> => {
       try {
-        const docRef = doc(db, 'familySTSheetCache', campCode);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          return (docSnap.data()?.families ?? []) as FamilyUnit[];
-        }
-        return [];
+        const roster = await readRoster(db, campCode);
+        return Array.isArray(roster?.families) ? roster!.families : [];
       } catch (error) {
         logger.error('❌ 가족 데이터 로드 실패:', error);
         return [];
@@ -249,8 +203,10 @@ export function groupStudentResults(results: StudentHistoryResult[]): StudentGro
   results.forEach(({ student, campCode, isFamily, familyUnit }) => {
     // ssn은 하이픈 제거 후 정규화 (980619-1234567 == 9806191234567)
     const normalizedSsn = student.ssn ? student.ssn.replace(/-/g, '') : null;
-    // 캐시의 주민번호는 뒷자리가 가려져 있으므로("YYMMDD-G******") 생년월일·성별이 같은 다른 학생과 섞이지 않게 이름을 함께 쓴다
-    const key = normalizedSsn
+    // 같은 아이는 childId 하나로 묶는다 (이관 때 이름 + 보호자 번호로 묶어 둠).
+    // 없으면 예전처럼: 가린 주민번호("YYMMDD-G******")는 생년월일·성별이 같은 다른 학생과 섞이지 않게 이름을 함께 쓴다
+    const childId = (student as { childId?: string }).childId;
+    const key = childId ? `child:${childId}` : normalizedSsn
       ? (normalizedSsn.includes('*') ? `ssn:${normalizedSsn}:name:${student.name}` : `ssn:${normalizedSsn}`)
       : `name:${student.name}:phone:${(student.parentPhone || '').replace(/-/g, '')}`;
 
@@ -301,49 +257,24 @@ export function groupStudentResults(results: StudentHistoryResult[]): StudentGro
 /** 전체 캠프 학생 기록 (학생 검색용) — 페이지 진입 시 1회 */
 export function createStudentHistoryLoader(db: Firestore) {
   /**
-   * 페이지 진입 시 1회 호출: 전체 stSheetCache + familySTSheetCache를 메모리에 로드.
+   * 페이지 진입 시 1회 호출: 모든 캠프의 목록용 명단(camps/{캠프}/roster/current)을 메모리에 로드.
    * 이후 검색은 filterStudents()로 클라이언트 사이드에서 처리한다.
    */
   async function loadAllStudentRecords(): Promise<StudentHistoryResult[]> {
-    const [regularSnap, familySnap] = await Promise.all([
-      getDocs(collection(db, 'stSheetCache')),
-      getDocs(collection(db, 'familySTSheetCache')),
-    ]);
-
+    const snap = await getDocs(collectionGroup(db, ROSTER_SUBCOLLECTION));
     const records: StudentHistoryResult[] = [];
-
-    regularSnap.forEach((docSnap) => {
-      const campCode = docSnap.id;
-      const students: STSheetStudent[] = docSnap.data().data || [];
-      students.forEach((student) => records.push({ student, campCode }));
+    snap.forEach((docSnap) => {
+      if (docSnap.id !== ROSTER_DOC_ID) return;
+      const roster = docSnap.data() as StudentRosterDoc;
+      const campCode = roster.campCode || docSnap.ref.parent.parent?.id || '';
+      if (!campCode) return;
+      const families = new Map((roster.families ?? []).map((f) => [f.familyId, f] as const));
+      for (const student of roster.students ?? []) {
+        const familyId = (student as { familyId?: string }).familyId;
+        const familyUnit = familyId ? families.get(familyId) : undefined;
+        records.push(familyUnit ? { student, campCode, isFamily: true, familyUnit } : { student, campCode });
+      }
     });
-
-    familySnap.forEach((docSnap) => {
-      const campCode = docSnap.id;
-      const families: FamilyUnit[] = docSnap.data().families || [];
-      families.forEach((family) => {
-        family.students.forEach((fs) => {
-          const student: STSheetStudent = {
-            name: fs.name,
-            englishName: fs.englishName,
-            grade: fs.grade,
-            gender: fs.gender,
-            ssn: fs.ssn,
-            passportName: fs.passportName,
-            passportNumber: fs.passportNumber,
-            passportExpiry: fs.passportExpiry,
-            medication: fs.medication,
-            parentPhone: fs.parentPhone || family.parents[0]?.phone,
-            registrationSource: fs.registrationSource,
-            roomNumber: family.roomNumber,
-            studentId: fs.id,
-            lastSyncedAt: family.lastSyncedAt,
-          } as STSheetStudent;
-          records.push({ student, campCode, isFamily: true, familyUnit: family });
-        });
-      });
-    });
-
     return records;
   }
   return loadAllStudentRecords;

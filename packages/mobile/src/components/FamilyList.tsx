@@ -40,21 +40,14 @@ export const FamilyList: React.FC<FamilyListProps> = ({ campCode, isForeign }) =
     staleTime: 5 * 60 * 1000,
   });
 
+  // 명단은 서버가 만든다 — 여기서는 다시 읽기만
   const handleSync = async () => {
-    if (!isAdmin) {
-      Alert.alert(L('students.noPermission'), L('common.onlyAdministratorsCanSync'));
-      return;
-    }
     try {
       setSyncing(true);
-      await stSheetService.syncSTSheet(campCode);
       await queryClient.invalidateQueries({ queryKey: ['families', campCode] });
       await refetch();
-      Alert.alert(L('common.success'), L('students.familyDataSyncComplete'));
     } catch (error) {
-      logger.error('동기화 실패:', error);
-      const message = error instanceof Error ? error.message : L('common.syncFailed');
-      Alert.alert(L('students.syncFailed'), message);
+      logger.error('가족 명단 새로고침 실패:', error);
     } finally {
       setSyncing(false);
     }
@@ -154,7 +147,7 @@ export const FamilyList: React.FC<FamilyListProps> = ({ campCode, isForeign }) =
               disabled={syncing}
             >
               <Text style={styles.syncButtonText}>
-                {syncing ? L('students.syncing') : L('students.sync')}
+                {L('students.refreshRoster')}
               </Text>
             </TouchableOpacity>
           )}

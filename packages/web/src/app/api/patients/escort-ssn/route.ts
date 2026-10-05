@@ -1,4 +1,4 @@
-import { openSensitive, type SensitiveEntry } from '@/lib/stSensitive';
+import { readSsnByKey } from '@/lib/campStudentsServer';
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedUser } from '@/lib/authMiddleware';
 import { getAdminFirestore } from '@/lib/firebase-admin';
@@ -44,11 +44,9 @@ export async function GET(request: NextRequest) {
       viaVisitId = visit.visitId ?? null;
     }
 
-    const sens = await db.collection('stSheetSensitive').doc(rec.campCode).get();
-    const entries = (sens.data()?.entries ?? {}) as Record<string, SensitiveEntry>;
-    const ssn = openSensitive(entries[rec.studentId] ?? Object.entries(entries).find(([k]) => k.endsWith(`__${rec.studentId}`))?.[1]);
+    const ssn = await readSsnByKey(String(rec.campCode ?? ''), String(rec.studentId ?? ''));
     if (!ssn) {
-      return NextResponse.json({ error: '주민번호 원본이 없습니다. 관리자에게 시트 동기화를 요청해주세요.' }, { status: 404 });
+      return NextResponse.json({ error: '주민등록번호가 등록되지 않았습니다. 관리자에게 문의해주세요.' }, { status: 404 });
     }
 
     await writeAuditLog({

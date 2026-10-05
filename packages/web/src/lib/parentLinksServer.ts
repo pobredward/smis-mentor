@@ -22,22 +22,11 @@ export interface LinkCandidate {
   phoneMatch: boolean;
 }
 
-/** 캠프 학생 명단 (일반 캠프 stSheetCache.data · 가족 캠프 familySTSheetCache.families[].students) */
+/** 캠프 학생 명단 (camps/{캠프}/roster/current — 가족 캠프 학생도 같은 목록) */
 async function readCampStudents(campCode: string): Promise<Doc[]> {
-  const db = getAdminFirestore();
-  const [cache, family] = await Promise.all([
-    db.collection('stSheetCache').doc(campCode).get(),
-    db.collection('familySTSheetCache').doc(campCode).get(),
-  ]);
-  if (cache.exists) {
-    const data = cache.data()?.data;
-    return Array.isArray(data) ? data : [];
-  }
-  if (family.exists) {
-    const families = family.data()?.families;
-    return Array.isArray(families) ? families.flatMap((f: Doc) => (Array.isArray(f.students) ? f.students : [])) : [];
-  }
-  return [];
+  const snap = await getAdminFirestore().collection('camps').doc(campCode).collection('roster').doc('current').get();
+  const students = snap.data()?.students;
+  return Array.isArray(students) ? students : [];
 }
 
 async function loadParent(parentUid: string): Promise<Doc> {

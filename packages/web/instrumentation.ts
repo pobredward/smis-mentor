@@ -7,7 +7,7 @@ export async function register() {
     if (process.env.NODE_ENV === 'development') {
       setTimeout(() => {
         const base = `http://localhost:${process.env.PORT ?? 3000}`;
-        for (const path of ['/api/st/sync-sheet', '/api/st/update-placement']) {
+        for (const path of ['/api/st/update-placement']) {
           fetch(`${base}${path}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

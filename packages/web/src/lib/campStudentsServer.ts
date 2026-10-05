@@ -7,9 +7,9 @@ import { getAdminFirestore } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
 import { encryptRRN, decryptRRN } from '@/lib/encryption';
 import {
-  CHILDREN_COLLECTION, CAMPS_COLLECTION, ENROLLMENTS_SUBCOLLECTION, ROSTER_SUBCOLLECTION, ROSTER_DOC_ID,
-  toRosterStudent, compareEnrollments, maskSsnForStaff,
-  type ChildProfile, type CampEnrollment, type EnrollmentStatus,
+  CHILDREN_COLLECTION, CAMPS_COLLECTION, ENROLLMENTS_SUBCOLLECTION, ROSTER_SUBCOLLECTION, ROSTER_DOC_ID, FAMILIES_SUBCOLLECTION,
+  ST_DETAIL_FIELDS, toRosterStudent, toCampStudent, buildFamilyUnits, compareEnrollments, maskSsnForStaff,
+  type ChildProfile, type CampEnrollment, type CampFamily, type EnrollmentStatus, type FamilyParent, type StudentRosterDoc,
 } from '@smis-mentor/shared';
 
 export class CampStudentError extends Error {
@@ -20,7 +20,10 @@ const db = () => getAdminFirestore();
 export const childRef = (childId: string) => db().collection(CHILDREN_COLLECTION).doc(childId);
 export const identityRef = (childId: string) => childRef(childId).collection('private').doc('identity');
 export const enrollmentsCol = (campCode: string) => db().collection(CAMPS_COLLECTION).doc(campCode).collection(ENROLLMENTS_SUBCOLLECTION);
-export const rosterRef = (campCode: string) => db().collection(CAMPS_COLLECTION).doc(campCode).collection(ROSTER_SUBCOLLECTION).doc(ROSTER_DOC_ID);
+export const campRef = (campCode: string) => db().collection(CAMPS_COLLECTION).doc(campCode);
+export const rosterRef = (campCode: string) => campRef(campCode).collection(ROSTER_SUBCOLLECTION).doc(ROSTER_DOC_ID);
+export const familiesCol = (campCode: string) => campRef(campCode).collection(FAMILIES_SUBCOLLECTION);
+export const familyIdentityRef = (campCode: string, familyId: string) => familiesCol(campCode).doc(familyId).collection('private').doc('identity');
 
 /** Firestore 에 넣을 수 있게 — undefined 빼기 */
 const clean = <T extends Record<string, unknown>>(o: T): T =>
@@ -29,10 +32,21 @@ const clean = <T extends Record<string, unknown>>(o: T): T =>
 export const newChildId = () => randomUUID().replace(/-/g, '').slice(0, 20);
 
 // ─── 명단 ───────────────────────────────────────────────
+// 명단에 보이는 값이 바뀌는 쓰기는 camps/{캠프}.rosterRev 를 올린다. 명단을 다 만든 뒤 그 사이 rosterRev 가 바뀌었으면
+// (다른 쓰기가 끼어들었으면) 다시 만든다 → 동시에 고쳐도 마지막 명단이 옛 값으로 덮이지 않는다.
 
-/** 캠프 목록용 명단 다시 만들기 — 확정된 참가만, 참가 순서대로 */
-export async function rebuildCampRoster(campCode: string): Promise<number> {
-  const snap = await enrollmentsCol(campCode).where('status', '==', 'confirmed').get();
+const DETAIL_SET = new Set<string>(ST_DETAIL_FIELDS);
+/** 명단에 안 보이는 칸(설문 · 테스트 · 상담 · 주소 …)만 바꿨으면 명단을 다시 만들 필요가 없다 */
+export const touchesRoster = (keys: string[]) => keys.some((k) => !DETAIL_SET.has(k));
+
+export const bumpRosterRev = (campCode: string) =>
+  campRef(campCode).set({ campCode, rosterRev: FieldValue.increment(1) }, { merge: true });
+
+async function buildRoster(campCode: string): Promise<StudentRosterDoc> {
+  const [snap, famSnap] = await Promise.all([
+    enrollmentsCol(campCode).where('status', '==', 'confirmed').get(),
+    familiesCol(campCode).get(),
+  ]);
   const enrollments = snap.docs.map((d) => ({ ...(d.data() as CampEnrollment), studentId: d.id })).sort(compareEnrollments);
   const childIds = [...new Set(enrollments.map((e) => e.childId).filter(Boolean))];
   const children = new Map<string, ChildProfile>();
@@ -41,9 +55,38 @@ export async function rebuildCampRoster(campCode: string): Promise<number> {
     if (!refs.length) continue;
     for (const c of await db().getAll(...refs)) if (c.exists) children.set(c.id, { ...(c.data() as ChildProfile), childId: c.id });
   }
-  const students = enrollments.map((e) => clean(toRosterStudent(children.get(e.childId), e) as unknown as Record<string, unknown>));
-  await rosterRef(campCode).set({ campCode, students, total: students.length, updatedAt: new Date().toISOString() });
-  return students.length;
+  const families = famSnap.docs.map((d) => ({ ...(d.data() as CampFamily), familyId: d.id }));
+  const familyById = new Map(families.map((f) => [f.familyId, f] as const));
+  const withFamily = (row: Record<string, unknown>, e: CampEnrollment) => {
+    const f = e.familyId ? familyById.get(e.familyId) : undefined;
+    if (!f) return row;
+    return { ...row, familyId: f.familyId, familyType: f.familyType ?? '', roomNumber: (row.roomNumber as string) || f.roomNumber || '' };
+  };
+  const students = enrollments.map((e) => clean(withFamily(toRosterStudent(children.get(e.childId), e) as unknown as Record<string, unknown>, e)));
+  const updatedAt = new Date().toISOString();
+  const out: StudentRosterDoc = { campCode, students: students as unknown as StudentRosterDoc['students'], total: students.length, updatedAt };
+  if (families.length) {
+    const full = enrollments.map((e) => withFamily(toCampStudent(children.get(e.childId), e) as unknown as Record<string, unknown>, e));
+    out.families = buildFamilyUnits(families, full as unknown as StudentRosterDoc['students'], campCode, updatedAt);
+  }
+  // 배열 안의 undefined 까지 빼기 (Firestore 는 undefined 를 못 넣는다)
+  return JSON.parse(JSON.stringify(out)) as StudentRosterDoc;
+}
+
+/** 캠프 목록용 명단 다시 만들기 — 확정된 참가만, 참가 순서대로 (가족 캠프는 families 도) */
+export async function rebuildCampRoster(campCode: string): Promise<number> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const rev = (await campRef(campCode).get()).get('rosterRev') ?? 0;
+    const roster = await buildRoster(campCode);
+    const ok = await db().runTransaction(async (tx) => {
+      const cur = (await tx.get(campRef(campCode))).get('rosterRev') ?? 0;
+      if (cur !== rev) return false;
+      tx.set(rosterRef(campCode), { ...roster, rosterRev: rev });
+      return true;
+    });
+    if (ok) return roster.total;
+  }
+  throw new CampStudentError(409, '명단을 만드는 동안 계속 바뀌었습니다. 잠시 뒤 다시 시도해주세요.');
 }
 
 /** 아이가 참가한 캠프들 (명단을 다시 만들 곳) */
@@ -75,7 +118,10 @@ export async function updateChild(childId: string, patch: Partial<ChildProfile>,
   if (!(await ref.get()).exists) throw new CampStudentError(404, '아이 정보를 찾을 수 없습니다.');
   const { childId: _c, parentIds: _p, ssnMasked: _s, ...rest } = patch;
   await ref.set(clean({ ...rest, updatedAt: FieldValue.serverTimestamp(), updatedBy: by }), { merge: true });
-  await Promise.all((await campsOfChild(childId)).map(rebuildCampRoster));
+  if (!touchesRoster(Object.keys(rest))) return;
+  const camps = await campsOfChild(childId);
+  await Promise.all(camps.map(bumpRosterRev));
+  await Promise.all(camps.map(rebuildCampRoster));
 }
 
 /** 주민번호 — 원본은 암호화해서 private, 아이 문서에는 가린 값 */
@@ -133,7 +179,10 @@ export async function createEnrollment(campCode: string, childId: string, data: 
     createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), createdBy: by,
   } as Record<string, unknown>) as unknown as CampEnrollment;
   await enrollmentsCol(campCode).doc(studentId).set(doc);
-  if (doc.status === 'confirmed') await rebuildCampRoster(campCode);
+  if (doc.status === 'confirmed') {
+    await bumpRosterRev(campCode);
+    await rebuildCampRoster(campCode);
+  }
   return doc;
 }
 
@@ -142,9 +191,55 @@ export async function updateEnrollment(campCode: string, studentId: string, patc
   if (!(await ref.get()).exists) throw new CampStudentError(404, '캠프 참가 정보를 찾을 수 없습니다.');
   const { studentId: _s, childId: _c, campCode: _cc, parentIds: _p, order: _o, ...rest } = patch;
   await ref.set(clean({ ...rest, updatedAt: FieldValue.serverTimestamp(), updatedBy: by }), { merge: true });
+  if (!touchesRoster(Object.keys(rest))) return;
+  await bumpRosterRev(campCode);
   await rebuildCampRoster(campCode);
 }
 
 export async function setEnrollmentStatus(campCode: string, studentId: string, status: EnrollmentStatus, by: string): Promise<void> {
   await updateEnrollment(campCode, studentId, { status }, by);
+}
+
+// ─── 가족 캠프 ───────────────────────────────────────────
+
+/** 가족 만들기 · 고치기 (보호자 주민번호는 가린 값만 — 원본은 setFamilyMemberSsn) */
+export async function upsertFamily(campCode: string, familyId: string, data: Partial<CampFamily>, by: string): Promise<void> {
+  const id = familyId.trim();
+  if (!id) throw new CampStudentError(400, '가족 번호가 필요합니다.');
+  const parents = (data.parents ?? undefined)?.map((p: FamilyParent) => ({ ...p, ssn: p.ssn ? maskSsnForStaff(p.ssn) : undefined }));
+  await familiesCol(campCode).doc(id).set(
+    JSON.parse(JSON.stringify({ ...data, parents, familyId: id, updatedAt: new Date().toISOString(), updatedBy: by })),
+    { merge: true },
+  );
+  await bumpRosterRev(campCode);
+  await rebuildCampRoster(campCode);
+}
+
+export async function setFamilyMemberSsn(campCode: string, familyId: string, personId: string, ssn: string): Promise<void> {
+  const digits = ssn.replace(/\D/g, '');
+  if (digits.length !== 13) throw new CampStudentError(400, '주민등록번호 13자리를 확인해주세요.');
+  const formatted = `${digits.slice(0, 6)}-${digits.slice(6)}`;
+  await familyIdentityRef(campCode, familyId).set({ entries: { [personId]: { ssnEnc: encryptRRN(formatted) } } }, { merge: true });
+}
+
+// ─── 주민번호 원본 (관리자 · 내원 인솔자) ─────────────────────
+
+/**
+ * 원본 주민번호 — key 는 학생 번호(캠프 참가 id) 또는 가족 보호자 "가족번호__보호자번호".
+ * 학생은 참가 → 아이 → private/identity, 보호자는 가족 private/identity.
+ */
+export async function readSsnByKey(campCode: string, key: string): Promise<string | null> {
+  const sep = key.indexOf('__');
+  if (sep > 0) {
+    const familyId = key.slice(0, sep);
+    const personId = key.slice(sep + 2);
+    const enr = await getEnrollment(campCode, personId);
+    if (enr?.childId) return readChildSsn(enr.childId);
+    const fam = await familyIdentityRef(campCode, familyId).get();
+    // 보호자 번호에 점이 있어(P01.1) 필드 경로로 읽지 않고 맵에서 꺼낸다
+    const enc = (fam.get('entries') as Record<string, { ssnEnc?: string }> | undefined)?.[personId]?.ssnEnc;
+    return typeof enc === 'string' && enc ? decryptRRN(enc) : null;
+  }
+  const enr = await getEnrollment(campCode, key);
+  return enr?.childId ? readChildSsn(enr.childId) : null;
 }

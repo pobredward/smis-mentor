@@ -159,30 +159,15 @@ export const StudentList: React.FC<StudentListProps> = ({
     await refetch();
   };
 
+  // 명단은 서버가 참가 · 아이 정보가 바뀔 때마다 다시 만든다 — 여기서는 다시 읽기만
   const handleSync = async () => {
-    if (!isAdmin) {
-      Alert.alert(L('students.noPermission'), L('common.onlyAdministratorsCanSync'));
-      return;
-    }
-
-    if (!campCode) {
-      Alert.alert(L('task.notice'), L('common.loadingCampCode'));
-      return;
-    }
-
+    if (!campCode) return;
     try {
       setSyncing(true);
-      await stSheetService.syncSTSheet(campCode);
-      
-      // React Query 캐시 무효화 후 리페칭
       await queryClient.invalidateQueries({ queryKey: ['students', campCode] });
       await refetch();
-      
-      Alert.alert(L('common.success'), L('common.dataSyncComplete'));
     } catch (error) {
-      logger.error('동기화 실패:', error);
-      const message = error instanceof Error ? error.message : L('common.syncFailed');
-      Alert.alert(L('students.syncFailed'), message);
+      logger.error('명단 새로고침 실패:', error);
     } finally {
       setSyncing(false);
     }
@@ -552,7 +537,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                 disabled={syncing}
               >
                 <Text style={styles.syncButtonText}>
-                  {syncing ? (L('students.syncing')) : (L('students.sync'))}
+                  {L('students.refreshRoster')}
                 </Text>
               </TouchableOpacity>
             </>

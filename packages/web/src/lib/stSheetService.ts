@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, setDoc, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import {
   logger,
   STSheetStudent,
@@ -11,7 +11,6 @@ import {
   createStSheetService,
   createStudentHistoryLoader,
   campCodeOf,
-  type SyncSTSheetResponse,
 } from '@smis-mentor/shared';
 import { db } from './firebase';
 
@@ -26,18 +25,12 @@ export interface JobCode {
   korea?: boolean;
 }
 
-// ST 시트 캐시 읽기·학생 검색 — 구현은 shared (mobile 과 같은 코드)
-export const stSheetService = createStSheetService(db, {
-  // 동기화는 Next.js API (Cloud Function Cold Start 없이 빠름)
-  sync: async (campCode) => {
-    const { authenticatedPost } = await import('./apiClient');
-    return authenticatedPost<SyncSTSheetResponse>('/api/st/sync-sheet', { campCode });
-  },
-});
+// 학생 명단 읽기·학생 검색 — 구현은 shared (mobile 과 같은 코드). 원본은 앱(children · camps/{캠프}/enrollments), 시트 연동 없음
+export const stSheetService = createStSheetService(db);
 
 export const loadAllStudentRecords = createStudentHistoryLoader(db);
 export { campSortKey, filterStudents, groupStudentResults } from '@smis-mentor/shared';
-export type { StudentHistoryResult, StudentGroup, SyncSTSheetResponse } from '@smis-mentor/shared';
+export type { StudentHistoryResult, StudentGroup } from '@smis-mentor/shared';
 
 export const jobCodesService = {
   /** jobCodes 문서 id → 캠프 코드 (shared campKey 변환표 — 없으면 null). 코드만 필요하면 이것을 쓴다 */
@@ -86,88 +79,5 @@ export const jobCodesService = {
       logger.error('JobCodes 조회 실패:', error);
       throw error;
     }
-  },
-};
-
-// ─── 입소 레벨 테스트 override 서비스 ───────────────────────────────────────
-
-export interface PlacementOverride {
-  // 상세 정보
-  medication?: string;
-  notes?: string;
-  etc?: string;
-  // 입소 레벨 테스트
-  placementSpeaking?: string;
-  placementReading?: string;
-  placementWriting?: string;
-  // 파이널 레벨 테스트
-  finalSpeaking?: string;
-  finalReading?: string;
-  finalWriting?: string;
-  // 반 상담
-  classCounsel1?: string;
-  classCounsel2?: string;
-  classCounsel3?: string;
-  // 방 상담
-  unitCounsel1?: string;
-  unitCounsel2?: string;
-  unitCounsel3?: string;
-  updatedAt?: unknown;
-  updatedBy?: string;
-}
-
-export const placementOverrideService = {
-  /**
-   * 특정 학생의 override 값을 조회한다.
-   * stSheetOverrides/{campCode}/students/{studentId}
-   */
-  getOverride: async (campCode: CampCode, studentId: string): Promise<PlacementOverride | null> => {
-    try {
-      const ref = doc(db, 'stSheetOverrides', campCode, 'students', studentId);
-      const snap = await getDoc(ref);
-      return snap.exists() ? (snap.data() as PlacementOverride) : null;
-    } catch (error) {
-      logger.error('override 조회 실패:', error);
-      return null;
-    }
-  },
-
-  /**
-   * 입소 레벨 테스트 값을 저장한다. (admin 전용)
-   * 기존 값에 merge 방식으로 저장하므로 필드 단위 업데이트 가능.
-   */
-  saveOverride: async (
-    campCode: CampCode,
-    studentId: string,
-    fields: Omit<PlacementOverride, 'updatedAt' | 'updatedBy'>,
-    updatedBy: string,
-  ): Promise<void> => {
-    const ref = doc(db, 'stSheetOverrides', campCode, 'students', studentId);
-    await setDoc(ref, {
-      ...fields,
-      updatedAt: serverTimestamp(),
-      updatedBy,
-    }, { merge: true });
-  },
-
-  /**
-   * STSheetStudent 원본 위에 override 값을 병합하여 반환한다.
-   */
-  mergeOverride: (student: STSheetStudent, override: PlacementOverride | null): STSheetStudent => {
-    if (!override) return student;
-    const overridableKeys: (keyof PlacementOverride)[] = [
-      'medication', 'notes', 'etc',
-      'placementSpeaking', 'placementReading', 'placementWriting',
-      'finalSpeaking', 'finalReading', 'finalWriting',
-      'classCounsel1', 'classCounsel2', 'classCounsel3',
-      'unitCounsel1', 'unitCounsel2', 'unitCounsel3',
-    ];
-    const merged = { ...student };
-    for (const key of overridableKeys) {
-      if (override[key] !== undefined) {
-        (merged as unknown as Record<string, unknown>)[key] = override[key];
-      }
-    }
-    return merged;
   },
 };
