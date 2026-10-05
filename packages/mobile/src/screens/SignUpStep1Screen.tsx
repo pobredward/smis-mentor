@@ -17,7 +17,7 @@ import { usePhoneAuth } from '../components/auth/PhoneAuthModal';
 import { isPhoneAuthAvailable } from '../services/phoneAuthNative';
 
 /** 새 로그인 흐름(문자 인증) — 로그인 화면과 같은 설정 */
-const AUTH_V2 = process.env.EXPO_PUBLIC_AUTH_V2 === '1';
+const AUTH_V2 = true; // SMIS CAMP 는 새 로그인 흐름(서버 판정 · 연결표)만 쓴다 — 옛 흐름 코드는 1.0 뒤 정리
 
 interface SignUpStep1ScreenProps {
   onNext: (data: { name: string; phone: string }) => void;

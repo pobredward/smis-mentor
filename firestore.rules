@@ -113,6 +113,10 @@ service cloud.firestore {
           fieldUnchanged('jobCodeIds') &&
           fieldUnchanged('evaluationSummary') &&
           fieldUnchanged('adminTempActiveCamp') &&
+          // 로그인 연결 목록 · 전화 확인 표시는 서버(연결표 · 문자 인증)만 쓴다
+          fieldUnchanged('authProviders') &&
+          fieldUnchanged('isPhoneVerified') &&
+          fieldUnchanged('phoneVerifiedAt') &&
           // 이메일은 Auth 와 동기화가 필요하므로 /api/user/change-email 로만 변경
           fieldUnchanged('email') &&
           // 평문 임시 비밀번호 저장 금지 (폐기됨)

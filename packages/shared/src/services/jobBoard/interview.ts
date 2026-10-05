@@ -2,11 +2,10 @@
  * 공고 면접 안내 (Zoom 링크 · 안내문 · 소요 시간) — web·mobile 공용.
  *
  * jobBoards 문서는 누구나 읽을 수 있어서(공개 공고) 면접 정보는 관리자 전용 하위 문서
- * jobBoards/{id}/private/interview 에 둔다. 예전 공고 문서에 남아 있는 interviewBase* 필드는
- * 읽을 때만 대신 쓰고(전환기), 저장할 때 지운다. interviewPassword 는 항상 비어 있던 필드라 같이 지운다.
+ * jobBoards/{id}/private/interview 에 둔다 (예전 공고 문서의 interviewBase* 필드는 이관 때 옮기고 버렸다).
  * 지원자는 /api/recruitment/interview-info 로 자기 지원서 것만 받는다.
  */
-import { type Firestore, deleteDoc, deleteField, doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { type Firestore, deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 
 export type JobBoardInterview = {
   interviewBaseLink?: string;
@@ -79,42 +78,20 @@ const interviewDocRef = (db: Firestore, jobBoardId: string) =>
 
 /**
  * 공고 면접 정보 읽기 (관리자 전용 — 규칙상 다른 사람은 거부된다).
- * private/interview 가 없으면 공고 문서의 예전 필드를 쓴다 (옮기기 전 데이터).
+ * (공고 문서의 예전 필드는 이관 때 이 문서로 옮겼다)
  */
 export async function getJobBoardInterview(db: Firestore, jobBoardId: string): Promise<JobBoardInterview> {
   const snap = await getDoc(interviewDocRef(db, jobBoardId));
-  if (snap.exists()) return pickJobBoardInterview(snap.data());
-  const boardSnap = await getDoc(doc(db, 'jobBoards', jobBoardId));
-  return pickJobBoardInterview(boardSnap.exists() ? boardSnap.data() : null);
+  return pickJobBoardInterview(snap.exists() ? snap.data() : null);
 }
 
-/**
- * 공고 면접 정보 저장 (관리자 전용).
- * private/interview 에 합쳐 쓰고(merge), 공고 문서에 남은 예전 필드는 지운다 — 한 번에(batch).
- * 처음 옮길 때는 이번에 바꾸지 않은 예전 값(예: 안내문)도 같이 옮겨서 잃지 않게 한다.
- */
+/** 공고 면접 정보 저장 (관리자 전용) — private/interview 에 합쳐 쓴다(merge) */
 export async function saveJobBoardInterview(
   db: Firestore,
   jobBoardId: string,
   data: JobBoardInterview,
 ): Promise<void> {
-  const ref = interviewDocRef(db, jobBoardId);
-  const boardRef = doc(db, 'jobBoards', jobBoardId);
-  const [snap, boardSnap] = await Promise.all([getDoc(ref), getDoc(boardRef)]);
-  const boardData = boardSnap.exists() ? boardSnap.data() : null;
-  const carried = snap.exists() ? {} : pickJobBoardInterview(boardData);
-
-  const batch = writeBatch(db);
-  batch.set(ref, { ...carried, ...pickJobBoardInterview(data), updatedAt: serverTimestamp() }, { merge: true });
-  if (boardData && LEGACY_JOB_BOARD_INTERVIEW_FIELDS.some((k) => k in boardData)) {
-    batch.update(boardRef, {
-      interviewBaseLink: deleteField(),
-      interviewBaseNotes: deleteField(),
-      interviewBaseDuration: deleteField(),
-      interviewPassword: deleteField(),
-    });
-  }
-  await batch.commit();
+  await setDoc(interviewDocRef(db, jobBoardId), { ...pickJobBoardInterview(data), updatedAt: serverTimestamp() }, { merge: true });
 }
 
 /** 공고를 지울 때 면접 정보 하위 문서도 지운다 (하위 문서는 공고와 함께 지워지지 않음) */

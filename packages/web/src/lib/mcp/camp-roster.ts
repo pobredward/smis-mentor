@@ -255,7 +255,7 @@ export async function writeCampRosterForMcp(input: WriteRosterInput, viewer: Vie
     }
     await db.collection('mcpAuditLogs').add({
       uid: viewer.uid, name: viewer.name, role: viewer.role, note: String(d.note ?? ''), previewHash: input.previewHash, kind: 'camp-roster',
-      operations: [{ op: 'update', collection: 'campRosters', id: plan.jobCodeId, summary: `${plan.camp} 선생님 표 저장 — 배정 ${res.assigned}명, 해제 ${res.removed.length}명` }],
+      operations: [{ op: 'update', collection: 'campRosters', id: plan.camp || plan.jobCodeId, summary: `${plan.camp} 선생님 표 저장 — 배정 ${res.assigned}명, 해제 ${res.removed.length}명` }],
       at: Timestamp.now(),
     });
     await writeAuditLog({

@@ -43,7 +43,7 @@ export class CampPageService {
       ? Math.max(...existingPages.map(p => p.order))
       : -1;
 
-    // 캠프 열쇠는 campCode (jobCodeId 는 옛 앱이 찾으므로 같이 적는다)
+    // 캠프 열쇠는 campCode (jobCodeId 는 화면이 쓰므로 같이 적는다)
     const campCode = (await campCodeOf(this.db, data.jobCodeId)) ?? undefined;
 
     const newPage: CampPage = {
@@ -128,22 +128,14 @@ export class CampPageService {
   }
 
   // 카테고리별 페이지 목록 조회 (클라이언트 정렬)
-  // 캠프 열쇠는 campCode. campCode 가 아직 없는 예전 문서는 jobCodeId 로 한 번 더 찾는다 (이관 뒤에는 오지 않음)
+  // 캠프 열쇠는 campCode (이관 때 모든 문서에 채웠다)
   async getPagesByCategory(
     jobCodeId: string,
     category: CampPageCategory
   ): Promise<CampPage[]> {
     const campCode = await campCodeOf(this.db, jobCodeId);
-    let querySnapshot = campCode
-      ? await getDocs(query(collection(this.db, 'campPages'), where('campCode', '==', campCode), where('category', '==', category)))
-      : null;
-    if (!querySnapshot || querySnapshot.empty) {
-      querySnapshot = await getDocs(query(
-        collection(this.db, 'campPages'),
-        where('jobCodeId', '==', jobCodeId),
-        where('category', '==', category)
-      ));
-    }
+    if (!campCode) return [];
+    const querySnapshot = await getDocs(query(collection(this.db, 'campPages'), where('campCode', '==', campCode), where('category', '==', category)));
     const pages: CampPage[] = [];
 
     querySnapshot.forEach((doc) => {

@@ -1225,60 +1225,18 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               const { removeCache, CACHE_STORE } = await import('../services/cacheUtils');
               await removeCache(CACHE_STORE.USERS, userData.userId);
 
-              // 새 흐름(EXPO_PUBLIC_AUTH_V2=1): 서버가 연결표 · authProviders 를 지운다 (마지막 로그인 방법은 서버가 막음)
-              if (process.env.EXPO_PUBLIC_AUTH_V2 === '1') {
-                const { unlinkSocialAccount } = await import('@smis-mentor/shared');
-                const { getApiBaseUrl } = await import('../services/authService');
-                const me = auth.currentUser;
-                if (!me) throw new Error(L('profile.userDocumentNotFound'));
-                await unlinkSocialAccount(getApiBaseUrl(), await me.getIdToken(), providerId);
-                if (providerId === 'google.com' || providerId === 'apple.com') {
-                  const { unlink } = await import('firebase/auth');
-                  await unlink(me, providerId).catch(() => undefined);
-                }
-                Alert.alert(L('common.success'), L('profile.v0AccountHasBeenUnlinked', { v0: providerName }));
-                await refreshUserData();
-                return;
+              // 서버가 연결표 · authProviders 를 지운다 (마지막 로그인 방법은 서버가 막음)
+              const { unlinkSocialAccount } = await import('@smis-mentor/shared');
+              const { getApiBaseUrl } = await import('../services/authService');
+              const me = auth.currentUser;
+              if (!me) throw new Error(L('profile.userDocumentNotFound'));
+              await unlinkSocialAccount(getApiBaseUrl(), await me.getIdToken(), providerId);
+              if (providerId === 'google.com' || providerId === 'apple.com') {
+                const { unlink } = await import('firebase/auth');
+                await unlink(me, providerId).catch(() => undefined);
               }
-
-              const { unlinkSocialProvider } = await import('@smis-mentor/shared');
-              const { getUserById, updateUser, getUserByEmail } = await import('../services/authService');
-              const { runTransaction, doc } = await import('firebase/firestore');
-              const { db } = await import('../config/firebase');
-
-              const runTransactionWrapper = async (updateFn: (user: any) => any) => {
-                await runTransaction(db, async (transaction) => {
-                  const userRef = doc(db, 'users', userData.userId);
-                  const userDoc = await transaction.get(userRef);
-                  
-                  if (!userDoc.exists()) {
-                    throw new Error(L('profile.userDocumentNotFound'));
-                  }
-                  
-                  const latestUserData = userDoc.data();
-                  const updates = await updateFn(latestUserData);
-                  
-                  transaction.update(userRef, updates);
-                });
-              };
-
-              await unlinkSocialProvider(
-                auth,
-                providerId as any,
-                userData.userId,
-                getUserById as any,
-                updateUser as any,
-                runTransactionWrapper
-              );
-
-              Alert.alert(
-                L('common.success'),
-                L('profile.v0AccountHasBeenUnlinked', { v0: providerName })
-              );
-
-              console.log('🔄 사용자 데이터 새로고침 시작');
+              Alert.alert(L('common.success'), L('profile.v0AccountHasBeenUnlinked', { v0: providerName }));
               await refreshUserData();
-              console.log('✅ 사용자 데이터 새로고침 완료');
             } catch (error: any) {
               console.error('연동 해제 오류:', error);
               Alert.alert(

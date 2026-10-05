@@ -159,7 +159,7 @@ export async function renderCampCategory(viewer: Viewer, category: CampPageCateg
   const resolved = await resolveCampForViewer(viewer, campParam);
   if (!resolved.ok) return { error: resolved.message };
   const { camp } = resolved.ctx;
-  const [pages, resources] = await Promise.all([getCampPages(camp.id, category), getGenerationResources(camp.id)]);
+  const [pages, resources] = await Promise.all([getCampPages(camp.id, category), getGenerationResources(camp.code || camp.id)]);
   const visible = pages.filter((p) => visibleToViewer(p, viewer));
   const links = category === 'education' ? resources.educationLinks : category === 'schedule' ? resources.scheduleLinks : resources.guideLinks;
   const label = CAMP_CATEGORY_LABEL[category];

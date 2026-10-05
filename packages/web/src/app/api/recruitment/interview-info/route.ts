@@ -41,15 +41,13 @@ export async function GET(request: NextRequest) {
     const interviews: Record<string, ApplicantInterviewInfo> = {};
     if (targets.length === 0) return respond(interviews);
 
-    // 공고별 면접 정보 (private/interview, 없으면 공고 문서의 예전 필드)
+    // 공고별 면접 정보 (private/interview)
     const boardIds = [...new Set(targets.map((d) => String(d.data().refJobBoardId ?? '')).filter((id) => id && !id.includes('/')))];
     const boardInterviews = new Map<string, JobBoardInterview>();
     await Promise.all(
       boardIds.map(async (id) => {
-        const boardRef = db.collection('jobBoards').doc(id);
-        const priv = await boardRef.collection('private').doc(JOB_BOARD_INTERVIEW_DOC_ID).get();
-        const source = priv.exists ? priv.data() : (await boardRef.get()).data();
-        boardInterviews.set(id, pickJobBoardInterview(source ?? null));
+        const priv = await db.collection('jobBoards').doc(id).collection('private').doc(JOB_BOARD_INTERVIEW_DOC_ID).get();
+        boardInterviews.set(id, pickJobBoardInterview(priv.exists ? priv.data() : null));
       }),
     );
 

@@ -13,8 +13,8 @@ import { SocialProvider } from '@smis-mentor/shared';
 import { unlinkSocialProvider, getSocialProviderName, linkSocialAccount, unlinkSocialAccount, AuthApiError } from '@smis-mentor/shared';
 import { signInWithCustomToken, unlink as unlinkAuthProvider } from 'firebase/auth';
 
-/** 새 소셜 로그인 흐름(서버 연결표) — NEXT_PUBLIC_AUTH_V2=1 이면 연결 · 해제도 서버 API 로 */
-const AUTH_V2 = process.env.NEXT_PUBLIC_AUTH_V2 === '1';
+/** 새 소셜 로그인 흐름(서버 연결표) — 연결 · 해제도 서버 API 로 */
+const AUTH_V2 = true; // SMIS CAMP 는 새 로그인 흐름(서버 판정 · 연결표)만 쓴다 — 옛 흐름 코드는 1.0 뒤 정리
 import toast from 'react-hot-toast';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';

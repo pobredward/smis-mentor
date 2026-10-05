@@ -43,9 +43,9 @@ import { isPhoneAuthAvailable } from '../services/phoneAuthNative';
 
 /**
  * 새 소셜 로그인 흐름 — 서버(/api/auth/social)가 사용자를 찾고 판정한다 (공개 조회 API 를 쓰지 않음).
- * EAS 환경 변수 EXPO_PUBLIC_AUTH_V2=1 이면 켜진다 (빌드 · 코드푸시에 들어감). 꺼져 있으면 예전 흐름 그대로.
+ * SMIS CAMP 에서는 항상 켜져 있다.
  */
-const AUTH_V2 = process.env.EXPO_PUBLIC_AUTH_V2 === '1';
+const AUTH_V2 = true; // SMIS CAMP 는 새 로그인 흐름(서버 판정 · 연결표)만 쓴다 — 옛 흐름 코드는 1.0 뒤 정리
 import type { SocialUserData, LastLoginInfo, LastLoginMethod } from '@smis-mentor/shared';
 import type { User as LegacyUser } from '@smis-mentor/shared';
 

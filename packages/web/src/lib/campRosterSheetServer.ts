@@ -52,28 +52,16 @@ export async function getJobCode(jobCodeId: string) {
   return { id: snap.id, code, name: String(d.name ?? ''), generation: String(d.generation ?? ''), tier: rosterTierOf(code) as CampRosterTier };
 }
 
-/**
- * campRosters 문서 — 캠프 열쇠(campCode)가 문서 id. 예전 문서(jobCodeId)는 옛 앱이 읽으므로 이관 전까지 같이 쓴다.
- * 읽을 때는 campCode 문서 → 없으면 예전 문서.
- */
-const rosterRefs = (jc: { id: string; code: string }) => {
-  const col = getAdminFirestore().collection('campRosters');
-  return { main: col.doc(jc.code || jc.id), legacy: col.doc(jc.id) };
-};
+/** campRosters 문서 — 캠프 열쇠(campCode)가 문서 id */
+const rosterRef = (jc: { id: string; code: string }) => getAdminFirestore().collection('campRosters').doc(jc.code || jc.id);
 
 export async function readRosterDoc(jc: { id: string; code: string }): Promise<CampRosterDoc | null> {
-  const { main, legacy } = rosterRefs(jc);
-  const snap = await main.get();
-  if (snap.exists) return snap.data() as CampRosterDoc;
-  if (legacy.id === main.id) return null;
-  const old = await legacy.get();
-  return old.exists ? (old.data() as CampRosterDoc) : null;
+  const snap = await rosterRef(jc).get();
+  return snap.exists ? (snap.data() as CampRosterDoc) : null;
 }
 
 async function writeRosterDoc(jc: { id: string; code: string }, data: CampRosterDoc): Promise<void> {
-  const { main, legacy } = rosterRefs(jc);
-  await main.set(data);
-  if (legacy.id !== main.id) await legacy.set(data); // 옛 앱용 — 이관 후 지운다
+  await rosterRef(jc).set(data);
 }
 
 export async function loadUsers(jobCodeId: string): Promise<UserLite[]> {

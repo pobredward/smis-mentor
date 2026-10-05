@@ -12,23 +12,12 @@ export type LinkType = 'educationLinks' | 'scheduleLinks' | 'guideLinks';
 /** 링크 id — uuid 패키지 없이 (React Native 호환) */
 const newLinkId = (): string => newId();
 
-/**
- * 기수별 자료 링크 문서 — 캠프 열쇠(campCode)가 문서 id. 아직 옮기지 않은 예전 문서(jobCodeId)도 찾는다.
- * 새로 만들 때는 campCode 로 만든다.
- */
+/** 기수별 자료 링크 문서 — 캠프 열쇠(campCode)가 문서 id */
 async function resourcesDocOf(db: Firestore, jobCodeId: string) {
-  const code = await campCodeOf(db, jobCodeId);
-  const legacy = doc(db, 'generationResources', jobCodeId);
-  if (code && code !== jobCodeId) {
-    const ref = doc(db, 'generationResources', code);
-    const [snap, old] = await Promise.all([getDoc(ref), getDoc(legacy)]);
-    // 예전 문서가 남아 있으면 이관 전까지 같이 고친다 (옛 앱 · MCP 가 읽는다)
-    if (snap.exists()) return { ref, snap, code, mirror: old.exists() ? legacy : null };
-    if (old.exists()) return { ref: legacy, snap: old, code, mirror: null };
-    return { ref, snap: null, code, mirror: null };
-  }
-  const old = await getDoc(legacy);
-  return { ref: legacy, snap: old.exists() ? old : null, code, mirror: null };
+  const code = (await campCodeOf(db, jobCodeId)) || jobCodeId;
+  const ref = doc(db, 'generationResources', code);
+  const snap = await getDoc(ref);
+  return { ref, snap: snap.exists() ? snap : null, code };
 }
 
 export function createGenerationResourcesService(db: Firestore) {
@@ -52,7 +41,7 @@ export function createGenerationResourcesService(db: Firestore) {
       targetRole: ResourceLinkRole = 'common',
     ): Promise<void> => {
       try {
-        const { ref: docRef, snap, code, mirror } = await resourcesDocOf(db, jobCodeId);
+        const { ref: docRef, snap, code } = await resourcesDocOf(db, jobCodeId);
         const newLink: ResourceLink = { id: newLinkId(), title, url, targetRole, createdAt: Timestamp.now(), createdBy: userId };
 
         if (!snap) {
@@ -75,7 +64,6 @@ export function createGenerationResourcesService(db: Firestore) {
         } else {
           const change = { [linkType]: arrayUnion(newLink), updatedAt: Timestamp.now() };
           await updateDoc(docRef, change);
-          if (mirror) await updateDoc(mirror, change).catch((e) => logger.warn('예전 자료 링크 문서 갱신 실패(무시):', e));
         }
       } catch (error) {
         logger.error('링크 추가 실패:', error);
@@ -85,11 +73,10 @@ export function createGenerationResourcesService(db: Firestore) {
 
     reorderLinks: async (jobCodeId: string, linkType: LinkType, newOrderedLinks: ResourceLink[]): Promise<void> => {
       try {
-        const { ref, snap, mirror } = await resourcesDocOf(db, jobCodeId);
+        const { ref, snap } = await resourcesDocOf(db, jobCodeId);
         if (!snap) throw new Error('문서를 찾을 수 없습니다.');
         const change = { [linkType]: newOrderedLinks, updatedAt: Timestamp.now() };
         await updateDoc(ref, change);
-        if (mirror) await updateDoc(mirror, change).catch((e) => logger.warn('예전 자료 링크 문서 갱신 실패(무시):', e));
       } catch (error) {
         logger.error('링크 순서 변경 실패:', error);
         throw error;
@@ -98,12 +85,11 @@ export function createGenerationResourcesService(db: Firestore) {
 
     deleteLink: async (jobCodeId: string, linkType: LinkType, linkId: string): Promise<void> => {
       try {
-        const { ref: docRef, snap, mirror } = await resourcesDocOf(db, jobCodeId);
+        const { ref: docRef, snap } = await resourcesDocOf(db, jobCodeId);
         if (!snap) throw new Error('문서를 찾을 수 없습니다.');
         const links = (snap.data() as GenerationResources)[linkType] || [];
         const change = { [linkType]: links.filter((l) => l.id !== linkId), updatedAt: Timestamp.now() };
         await updateDoc(docRef, change);
-        if (mirror) await updateDoc(mirror, change).catch((e) => logger.warn('예전 자료 링크 문서 갱신 실패(무시):', e));
       } catch (error) {
         logger.error('링크 삭제 실패:', error);
         throw error;

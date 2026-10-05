@@ -16,7 +16,7 @@ import ProgressSteps from '@/components/common/ProgressSteps';
 import { usePhoneAuth } from '@/components/auth/PhoneAuthDialog';
 
 /** 새 로그인 흐름(문자 인증) — 로그인 화면과 같은 설정 */
-const AUTH_V2 = process.env.NEXT_PUBLIC_AUTH_V2 === '1';
+const AUTH_V2 = true; // SMIS CAMP 는 새 로그인 흐름(서버 판정 · 연결표)만 쓴다 — 옛 흐름 코드는 1.0 뒤 정리
 
 const step1Schema = z.object({
   name: z.string().min(2, '이름은 최소 2자 이상이어야 합니다.'),

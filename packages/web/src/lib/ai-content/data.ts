@@ -148,10 +148,8 @@ export interface JobBoardInterviewInfo {
 
 export async function getJobBoardInterviewInfo(id: string): Promise<JobBoardInterviewInfo> {
   return cached(`jobBoardInterview:${id}`, 60_000, async () => {
-    const boardRef = getAdminFirestore().collection('jobBoards').doc(id);
-    const priv = await boardRef.collection('private').doc(JOB_BOARD_INTERVIEW_DOC_ID).get();
-    const source = priv.exists ? priv.data() : (await boardRef.get()).data();
-    const iv = pickJobBoardInterview(source ?? null);
+    const priv = await getAdminFirestore().collection('jobBoards').doc(id).collection('private').doc(JOB_BOARD_INTERVIEW_DOC_ID).get();
+    const iv = pickJobBoardInterview(priv.exists ? priv.data() : null);
     return { duration: iv.interviewBaseDuration ?? 0, notes: iv.interviewBaseNotes ?? '' };
   });
 }
@@ -248,9 +246,10 @@ export interface GenerationResources {
   guideLinks: ResourceLink[];
 }
 
-export async function getGenerationResources(jobCodeId: string): Promise<GenerationResources> {
-  return cached(`genRes:${jobCodeId}`, 60_000, async () => {
-    const snap = await getAdminFirestore().collection('generationResources').doc(jobCodeId).get();
+/** 기수별 자료 링크 — 문서 id 는 캠프 열쇠(campCode) */
+export async function getGenerationResources(campCode: string): Promise<GenerationResources> {
+  return cached(`genRes:${campCode}`, 60_000, async () => {
+    const snap = await getAdminFirestore().collection('generationResources').doc(campCode).get();
     const d = (snap.exists ? snap.data() : {}) as Doc;
     const conv = (arr: unknown): ResourceLink[] =>
       Array.isArray(arr)
