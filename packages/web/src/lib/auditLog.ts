@@ -21,7 +21,8 @@ export type AuditAction =
   | 'CAMP_PROFILE_REVEAL'
   | 'ESCORT_SSN_VIEW'
   | 'SIGNUP_TEMP_CLAIM'
-  | 'ADMIN_EMAIL_CHANGE';
+  | 'ADMIN_EMAIL_CHANGE'
+  | 'PARENT_CHILD_LINK';
 
 export async function writeAuditLog(params: {
   action: AuditAction;

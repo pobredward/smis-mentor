@@ -1,4 +1,5 @@
 export * from './HomeScreen';
+export * from './ParentHomeScreen';
 export * from './CampScreen';
 export * from './EducationScreen';
 export * from './CampDetailScreen';

@@ -13,6 +13,7 @@ import PhoneInput from '@/components/common/PhoneInput';
 import { formatPhoneNumber, formatPhoneNumberForMentor } from '@smis-mentor/shared';
 import { getAllUsers, updateUser, deleteUser, getAllJobCodes, getUserJobCodesInfo, addUserJobCode, reactivateUser, checkUserData } from '@/lib/firebaseService';
 import { JobCodeWithId, JobCodeWithGroup, JobGroup, User, PartTimeJob } from '@/types';
+import ParentLinksPanel from '@/components/admin/ParentLinksPanel';
 import { EvaluationSummaryCompact } from '@/components/evaluation/EvaluationSummary';
 import EvaluationStageCards from '@/components/evaluation/EvaluationStageCards';
 import { Timestamp, doc, getDoc } from 'firebase/firestore';
@@ -152,6 +153,7 @@ export default function UserManage() {
     { value: 'admin', label: '관리자' },
     { value: 'mentor_temp', label: '멘토(임시)' },
     { value: 'foreign_temp', label: '원어민(임시)' },
+    { value: 'parent', label: '학부모' },
     { value: 'deleted', label: '탈퇴' },
   ];
 
@@ -753,6 +755,10 @@ export default function UserManage() {
 
   // 직무 경험 섹션 UI
   const renderJobExperiencesSection = () => {
+    // 학부모는 직무 경험 대신 아이 연결
+    if (selectedUser?.role === 'parent') {
+      return <ParentLinksPanel parentUid={selectedUser.userId} jobCodes={allJobCodes} />;
+    }
     return (
       <div className="mt-4 border-t pt-4">
         <div className="flex justify-between items-center mb-2">
@@ -1260,6 +1266,7 @@ export default function UserManage() {
                             <option value="admin">관리자</option>
                             <option value="mentor_temp">멘토(임시)</option>
                             <option value="foreign_temp">원어민(임시)</option>
+                            <option value="parent">학부모</option>
                           </select>
                         </div>
 

@@ -217,6 +217,11 @@ const Header = () => {
     },
   ];
 
+  // 학부모: 학부모 홈 · 마이페이지만 (캠프 · 채용 · 채팅 없음)
+  if (userData?.role === 'parent') {
+    navItems.splice(0, navItems.length, { ...navItems[0], path: '/parent' }, ...navItems.filter((i) => i.path === '/profile'));
+  }
+
   if (isAdmin) {
     navItems.push({ 
       name: '관리자', 

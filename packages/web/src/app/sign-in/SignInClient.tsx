@@ -536,9 +536,32 @@ export function SignInClient() {
   };
   
   // 역할 선택 핸들러
-  const handleRoleSelection = (role: 'mentor' | 'foreign') => {
-    setSelectedRole(role);
+  const handleRoleSelection = (role: 'mentor' | 'foreign' | 'parent') => {
     setShowRoleSelectionModal(false);
+    if (role === 'parent') {
+      // 학부모: 이름 · 번호(문자 인증)만 받는 가입 화면으로 — 소셜 정보는 signupStorage 로 넘긴다
+      if (!socialData) return;
+      const provider = socialData.providerId.replace('.com', '');
+      void import('@/utils/signupStorage').then(({ signupStorage }) => {
+        signupStorage.clear();
+        signupStorage.save({
+          name: socialData.name || '',
+          phoneNumber: '',
+          email: socialData.email,
+          socialSignUp: true,
+          socialProvider: provider,
+          socialEmail: socialData.email,
+          firebaseAuthUid: socialData.firebaseAuthUid,
+          socialProviderUid: socialData.providerUid,
+          socialDisplayName: socialData.name,
+          socialPhotoURL: socialData.photoURL,
+          socialAccessToken: socialData.accessToken,
+        });
+        router.push('/sign-up/parent');
+      });
+      return;
+    }
+    setSelectedRole(role);
     
     if (role === 'foreign') {
       setShowForeignPhoneModal(true);

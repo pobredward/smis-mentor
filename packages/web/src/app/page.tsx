@@ -4,6 +4,7 @@ import Layout from '@/components/common/Layout';
 import JobBoardSection from '@/components/home/JobBoardSection';
 import ApplicationSection from '@/components/home/ApplicationSection';
 import AdminDashboardButton from '@/components/home/AdminDashboardButton';
+import ParentRedirect from '@/components/home/ParentRedirect';
 import { getBestReviews } from '@/lib/firebaseService';
 import { Review } from '@/types';
 
@@ -145,6 +146,7 @@ export default function Home() {
       }} />
       
       <Layout>
+        <ParentRedirect />
         <AdminDashboardButton />
         <JobBoardSection />
         <ApplicationSection />

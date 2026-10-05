@@ -68,7 +68,7 @@ const signIn = _signIn;
 interface SignInScreenProps {
   onSignUpPress: () => void;
   onSignInSuccess: () => void;
-  onSocialSignUp?: (socialData: SocialUserData, tempUserId?: string, credential?: any, role?: 'mentor' | 'foreign') => void;
+  onSocialSignUp?: (socialData: SocialUserData, tempUserId?: string, credential?: any, role?: 'mentor' | 'foreign' | 'parent') => void;
   onBack?: () => void;
 }
 
@@ -713,9 +713,14 @@ export function SignInScreen({
    * mentor: PhoneInputModal(이름+전화번호)
    * foreign: ForeignPhoneInputModal(성명+전화번호+국가코드)
    */
-  const handleSocialRoleSelect = (role: 'mentor' | 'foreign') => {
-    setSelectedSocialRole(role);
+  const handleSocialRoleSelect = (role: 'mentor' | 'foreign' | 'parent') => {
     setShowRoleSelectionModal(false);
+    if (role === 'parent') {
+      // 학부모: 이름 · 번호(문자 인증)만 받는 가입 화면으로
+      if (socialData) onSocialSignUp?.(socialData, undefined, googleCredential || appleCredential, 'parent');
+      return;
+    }
+    setSelectedSocialRole(role);
     if (role === 'mentor') {
       setShowPhoneModal(true);
     } else {
@@ -1735,7 +1740,7 @@ const styles = StyleSheet.create({
 
 interface SocialRoleSelectionModalProps {
   visible: boolean;
-  onRoleSelect: (role: 'mentor' | 'foreign') => void;
+  onRoleSelect: (role: 'mentor' | 'foreign' | 'parent') => void;
   onCancel: () => void;
 }
 
@@ -1789,6 +1794,21 @@ function SocialRoleSelectionModal({ visible, onRoleSelect, onCancel }: SocialRol
             <View style={roleModalStyles.roleTextBox}>
               <Text style={roleModalStyles.roleName}>Foreign Teacher</Text>
               <Text style={roleModalStyles.roleDesc}>Sign up as a foreign language teacher</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={roleModalStyles.roleCard}
+            onPress={() => onRoleSelect('parent')}
+            activeOpacity={0.75}
+          >
+            <View style={[roleModalStyles.iconBox, { backgroundColor: '#fff7ed' }]}>
+              <Ionicons name="people" size={32} color="#f97316" />
+            </View>
+            <View style={roleModalStyles.roleTextBox}>
+              <Text style={roleModalStyles.roleName}>학부모</Text>
+              <Text style={roleModalStyles.roleDesc}>캠프에 참가하는 학생의 보호자</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#94a3b8" />
           </TouchableOpacity>

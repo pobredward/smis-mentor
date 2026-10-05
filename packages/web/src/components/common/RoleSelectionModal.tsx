@@ -1,12 +1,12 @@
 'use client';
 
 import Modal from './Modal';
-import { FaGraduationCap, FaGlobe } from 'react-icons/fa';
+import { FaGraduationCap, FaGlobe, FaUserFriends } from 'react-icons/fa';
 
 interface RoleSelectionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectRole: (role: 'mentor' | 'foreign') => void;
+  onSelectRole: (role: 'mentor' | 'foreign' | 'parent') => void;
   provider?: 'google' | 'kakao' | 'naver';
 }
 
@@ -58,6 +58,20 @@ export default function RoleSelectionModal({
             <div className="text-left flex-1">
               <h3 className="text-lg font-bold text-gray-800">Foreign Teacher</h3>
               <p className="text-sm text-gray-600">Native English Speaker</p>
+            </div>
+          </button>
+
+          {/* 학부모 버튼 */}
+          <button
+            onClick={() => onSelectRole('parent')}
+            className="flex items-center bg-white border-2 border-gray-200 hover:border-orange-400 hover:bg-orange-50 rounded-xl p-4 transition-all group"
+          >
+            <div className="w-12 h-12 bg-orange-50 rounded-full flex items-center justify-center mr-4 group-hover:bg-orange-100">
+              <FaUserFriends className="w-6 h-6 text-orange-500" />
+            </div>
+            <div className="text-left flex-1">
+              <h3 className="text-lg font-bold text-gray-800">학부모</h3>
+              <p className="text-sm text-gray-600">Parent</p>
             </div>
           </button>
         </div>

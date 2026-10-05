@@ -53,6 +53,12 @@ service cloud.firestore {
     // - collection list 쿼리는 미인증 사용자도 허용한다.
     //   (클라이언트 SDK에서 where 조건 없는 전체 조회는 Rules 상 거부됨)
     // ──────────────────────────────────────────────────────────────
+    // 학부모 ↔ 아이 연결 — 학부모 본인 · 관리자 읽기, 쓰기는 서버(/api/admin/parent-links)만
+    match /parentLinks/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+    }
+
     match /users/{userId} {
       // 캠프 참가 정보(여권·계좌 가림본 등) — 본인·관리자 읽기, 쓰기는 서버(/api/user/camp-profile)만
       match /private/{docId} {

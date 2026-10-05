@@ -5,6 +5,7 @@ export * from './fieldConfig';
 export * from './camp';
 export * from './campPageService';
 export * from './campKey';
+export * from './parent';
 export * from './campTimetableService';
 export * from './timetableWorkspaceService';
 export * from './user';

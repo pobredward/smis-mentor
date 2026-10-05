@@ -36,7 +36,7 @@ export const EVALUATION_STAGES = ['서류 전형', '면접 전형', '대면 교�
 /** 페이지 접근 등급 */
 export type Access = 'public' | 'auth' | 'mentor' | 'admin';
 
-export type Role = 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp' | 'admin';
+export type Role = 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp' | 'admin' | 'parent';
 
 /** 인증된 요청자 (OAuth 액세스 토큰 → Firestore users 문서) */
 export interface Viewer {

@@ -17,7 +17,7 @@ import { getAuthenticatedUser } from '@/lib/authMiddleware';
  */
 
 type EditPermission = 'readonly' | 'admin' | 'all' | 'mentor';
-type UserRole = 'admin' | 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp';
+type UserRole = 'admin' | 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp' | 'parent';
 
 interface FieldConfig {
   sheetHeader: string;   // Google Sheets 실제 헤더명

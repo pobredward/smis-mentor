@@ -33,6 +33,7 @@ export type RootStackParamList = {
 // Bottom Tabs (메인 하단 탭)
 export type MainTabsParamList = {
   Home: undefined;
+  ParentHome: undefined;
   Recruitment: undefined;
   Camp: undefined;
   /** 채팅 (카톡방 대체) */

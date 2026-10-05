@@ -6,7 +6,7 @@
  * role·status·jobExperiences·jobCodeIds 같은 권한 필드는 서버가 정하며, 클라이언트가 보내도 무시한다.
  */
 
-export type SignupKind = 'mentor' | 'foreign';
+export type SignupKind = 'mentor' | 'foreign' | 'parent';
 export type SignupProviderId = 'password' | 'google.com' | 'apple.com' | 'naver' | 'kakao';
 
 export interface CompleteSignupProfile {

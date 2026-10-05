@@ -27,6 +27,7 @@ import { SignUpStep2Screen } from './SignUpStep2Screen';
 import { SignUpStep3Screen } from './SignUpStep3Screen';
 import { SignUpStep4Screen } from './SignUpStep4Screen';
 import { SignUpFlow } from './SignUpFlow';
+import { ParentSignUpScreen } from './ParentSignUpScreen';
 import { ForeignSignUpStep1Screen } from './ForeignSignUpStep1Screen';
 import { ForeignSignUpStep2Screen } from './ForeignSignUpStep2Screen';
 import { signUp } from '../services/authService';
@@ -57,7 +58,8 @@ type Screen =
   | 'mentor-signup-step4'
   | 'foreign-signup-step1'
   | 'foreign-signup-step2'
-  | 'social-signup';
+  | 'social-signup'
+  | 'parent-signup';
 
 export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const { isAuthenticated, userData, loading, updateActiveJobCode, refreshUserData, isSharingLocation } = useAuth();
@@ -111,6 +113,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
   const [deletingDoc, setDeletingDoc] = useState<'cv' | 'passport' | 'idCard' | 'bankBook' | 'eslCert' | null>(null);
 
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+  // 학부모: 캠프 · 멘토 프로필 섹션 없이 기본 정보 · 로그인 연결 · 알림만
+  const isParent = userData?.role === 'parent';
 
   useEffect(() => {
     if (userData) {
@@ -429,7 +433,11 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
     });
   };
 
-  const handleRoleSelect = (role: 'mentor' | 'foreign') => {
+  const handleRoleSelect = (role: 'mentor' | 'foreign' | 'parent') => {
+    if (role === 'parent') {
+      setCurrentScreen('parent-signup');
+      return;
+    }
     setSelectedRole(role);
     if (signUpData.socialData) {
       // 소셜 회원가입 컨텍스트이면 역할 선택 후 바로 소셜 가입 플로우로 이동
@@ -562,7 +570,7 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
    * - role이 전달되면(SignInScreen에서 역할 선택 완료): 바로 소셜 가입 플로우로 이동
    * - role이 없으면: 역할 선택 화면으로 이동 (이전 방식 fallback)
    */
-  const handleSocialSignUp = (socialData: any, tempUserId?: string, credential?: any, role?: 'mentor' | 'foreign') => {
+  const handleSocialSignUp = (socialData: any, tempUserId?: string, credential?: any, role?: 'mentor' | 'foreign' | 'parent') => {
     setSignUpData({
       ...signUpData,
       socialData: { ...socialData, _credential: credential },
@@ -574,7 +582,9 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
       ...(socialData.foreignTeacher && { foreignTeacher: socialData.foreignTeacher }),
     });
 
-    if (role) {
+    if (role === 'parent') {
+      setCurrentScreen('parent-signup');
+    } else if (role) {
       // SignInScreen에서 역할 선택이 완료된 경우 → 바로 소셜 가입 플로우
       setSelectedRole(role);
       setCurrentScreen('social-signup');
@@ -1587,7 +1597,8 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             }
           />
 
-          {/* SMIS 캠프 참여 이력 - 기수 선택 */}
+          {/* SMIS 캠프 참여 이력 - 기수 선택 (학부모 제외) */}
+          {!isParent && (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>
@@ -1777,12 +1788,13 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
               </View>
             )}
           </View>
+          )}
 
           {/* 캠프 참가 정보 (캠프 코드가 있는 멘토·원어민) */}
-          <CampProfileSection />
+          {!isParent && <CampProfileSection />}
 
           {/* 멘토 — 섹션별 제자리 수정 */}
-          {!isForeign && (
+          {!isForeign && !isParent && (
             <>
               <RrnSection />
               <AddressSection />
@@ -2131,6 +2143,22 @@ export function ProfileScreen({ navigation }: MainTabScreenProps<'Profile'>) {
             setCurrentScreen('profile');
           }}
           onCancel={() => setCurrentScreen('signin')}
+        />
+      );
+    case 'parent-signup':
+      return (
+        <ParentSignUpScreen
+          socialData={signUpData.socialData ?? null}
+          onComplete={async () => {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await refreshUserData();
+            setSignUpData({});
+            setCurrentScreen('profile');
+          }}
+          onBack={() => {
+            setSignUpData({});
+            setCurrentScreen(signUpData.socialData ? 'signin' : 'role-selection');
+          }}
         />
       );
     case 'signin':

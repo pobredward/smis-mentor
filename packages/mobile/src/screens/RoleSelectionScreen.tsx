@@ -11,7 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 
 interface RoleSelectionScreenProps {
-  onRoleSelect: (role: 'mentor' | 'foreign') => void;
+  onRoleSelect: (role: 'mentor' | 'foreign' | 'parent') => void;
   onBack: () => void;
 }
 
@@ -59,6 +59,20 @@ export function RoleSelectionScreen({
               <Text style={styles.roleTitle}>Foreign Teacher</Text>
               <Text style={styles.roleDescription}>
                 Sign up as a foreign language teacher
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.roleCard}
+              onPress={() => onRoleSelect('parent')}
+              activeOpacity={0.7}
+            >
+              <View style={styles.iconContainer}>
+                <Ionicons name="people" size={48} color="#f97316" />
+              </View>
+              <Text style={styles.roleTitle}>학부모</Text>
+              <Text style={styles.roleDescription}>
+                캠프에 참가하는 학생의 보호자로 가입합니다
               </Text>
             </TouchableOpacity>
           </View>

@@ -1,7 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 import type { AuthProvider, AuthMethod } from '@smis-mentor/shared';
 
-export type UserRole = 'admin' | 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp';
+export type UserRole = 'admin' | 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp' | 'parent';
 export type UserStatus = 'active' | 'deactivated' | 'temp';
 
 export interface JobExperience {

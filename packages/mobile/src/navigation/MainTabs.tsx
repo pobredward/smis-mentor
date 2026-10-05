@@ -7,6 +7,7 @@ import { RecruitmentNavigator } from './RecruitmentNavigator';
 import { AdminNavigator } from './AdminNavigator';
 import {
   HomeScreen,
+  ParentHomeScreen,
   CampScreen,
   ProfileScreen,
   ChatListScreen,
@@ -22,6 +23,8 @@ export function MainTabs() {
   const { userData } = useAuth();
   const isAdmin = userData?.role === 'admin';
   const isForeign = userData?.role === 'foreign' || userData?.role === 'foreign_temp';
+  // 학부모: 학부모 홈 · 마이페이지만 (채용 · 캠프 · 채팅 없음)
+  const isParent = userData?.role === 'parent';
   const hasAnyJobCode = (userData?.jobExperiences?.length ?? 0) > 0;
   // 채팅 — 관리자·멘토·원어민(활성) 계정. 탭은 캠프가 하나라도 있거나 관리자일 때
   const chatStaff = isChatStaff(userData);
@@ -45,8 +48,20 @@ export function MainTabs() {
         },
       }}
     >
+        {isParent && (
+          <Tab.Screen
+            name="ParentHome"
+            component={ParentHomeScreen}
+            options={{
+              title: '홈',
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="home" size={size} color={color} />
+              ),
+            }}
+          />
+        )}
         {/* 원어민이 아닌 경우에만 '홈' 탭 표시 */}
-        {!isForeign && (
+        {!isForeign && !isParent && (
           <Tab.Screen
             name="Home"
             component={HomeScreen}
@@ -59,7 +74,7 @@ export function MainTabs() {
           />
         )}
         {/* 원어민이 아닌 경우에만 '채용' 탭 표시 */}
-        {!isForeign && (
+        {!isForeign && !isParent && (
           <Tab.Screen
             name="Recruitment"
             component={RecruitmentNavigator}
@@ -72,16 +87,18 @@ export function MainTabs() {
             }}
           />
         )}
-        <Tab.Screen
-          name="Camp"
-          component={CampScreen}
-          options={{
-            title: L('nav.camp'),
-            tabBarIcon: ({ color, size }) => (
-              <Ionicons name="school" size={size} color={color} />
-            ),
-          }}
-        />
+        {!isParent && (
+          <Tab.Screen
+            name="Camp"
+            component={CampScreen}
+            options={{
+              title: L('nav.camp'),
+              tabBarIcon: ({ color, size }) => (
+                <Ionicons name="school" size={size} color={color} />
+              ),
+            }}
+          />
+        )}
         {/* 채팅 (카톡방 대체) — 게시판 탭 자리. 게시판 화면·코드는 남겨 두었다 */}
         {showChatTab && (
           <Tab.Screen

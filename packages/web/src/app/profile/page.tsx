@@ -875,6 +875,8 @@ export default function ProfilePage() {
   }
 
   const isForeign = userData.role === 'foreign' || userData.role === 'foreign_temp';
+  // 학부모: 캠프 · 멘토 프로필 섹션 없이 기본 정보 · 로그인 연결 · 알림만
+  const isParent = userData.role === 'parent';
 
   return (
     <>
@@ -1188,10 +1190,10 @@ export default function ProfilePage() {
         </div>
 
         {/* 이번 캠프 배정 — 관리자 '캠프 선생님 표' (반·강의실·방·항공) */}
-        <MyCampRosterCard />
+        {!isParent && <MyCampRosterCard />}
 
         {/* 캠프 참가 정보 (캠프 코드가 있는 멘토·원어민) */}
-        <CampProfileSection />
+        {!isParent && <CampProfileSection />}
 
         {/* 원어민 주소 */}
         {isForeign && <AddressSection />}
@@ -1279,7 +1281,7 @@ export default function ProfilePage() {
         )}
 
         {/* 멘토 — 섹션별 제자리 수정 */}
-        {!isForeign && (
+        {!isForeign && !isParent && (
           <>
             <RrnSection />
             <AddressSection />

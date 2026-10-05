@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import Layout from '@/components/common/Layout';
-import { FaGraduationCap, FaGlobe } from 'react-icons/fa';
+import { FaGraduationCap, FaGlobe, FaUserFriends } from 'react-icons/fa';
 
 export default function SignUpRoleSelection() {
   const router = useRouter();
@@ -42,6 +42,17 @@ export default function SignUpRoleSelection() {
             </div>
           </button>
         </div>
+
+        {/* 학부모 — 캠프 참가 학생의 보호자 */}
+        <button
+          onClick={() => router.push('/sign-up/parent')}
+          className="mt-4 w-full bg-white shadow-lg rounded-xl p-5 hover:shadow-xl transition-all duration-300 border-2 border-transparent hover:border-orange-400 group flex items-center justify-center gap-4"
+        >
+          <div className="w-12 h-12 bg-orange-50 rounded-full flex items-center justify-center group-hover:bg-orange-100 transition-colors">
+            <FaUserFriends className="w-6 h-6 text-orange-500" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-800">학부모</h2>
+        </button>
 
         <div className="text-center mt-8">
           <button

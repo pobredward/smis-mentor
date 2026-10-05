@@ -40,7 +40,8 @@ const isHttps = (v: unknown) => typeof v === 'string' && /^https:\/\/\S+$/.test(
 /** 입력 검증·정리 — 허용한 필드만 남긴다 */
 function sanitizeProfile(input: CompleteSignupInput) {
   const p = (input?.profile ?? {}) as Record<string, any>;
-  const kind: 'mentor' | 'foreign' = input?.kind === 'foreign' ? 'foreign' : 'mentor';
+  // parent: 학부모 — 이름 · 번호만 (번호는 문자 인증 필수, 아이는 관리자가 연결)
+  const kind: 'mentor' | 'foreign' | 'parent' = input?.kind === 'foreign' ? 'foreign' : input?.kind === 'parent' ? 'parent' : 'mentor';
   const name = str(p.name, 50);
   const phoneNumber = str(p.phoneNumber, 30);
   if (!name || name.length < 2) throw new SignupError(400, 'INVALID_NAME', kind === 'foreign' ? 'Please check your name.' : '이름을 확인해주세요.');
@@ -77,7 +78,7 @@ function sanitizeProfile(input: CompleteSignupInput) {
     if (typeof p.isOnLeave === 'boolean' || p.isOnLeave === null) out.isOnLeave = p.isOnLeave;
     put('major1', str(p.major1, 100));
     out.major2 = str(p.major2, 100) ?? '';
-  } else {
+  } else if (kind === 'foreign') {
     const ft = (p.foreignTeacher ?? {}) as Record<string, unknown>;
     const firstName = str(ft.firstName, 50);
     const lastName = str(ft.lastName, 50);
@@ -214,13 +215,17 @@ export async function completeSignup(uid: string, tokenEmail: string | undefined
     const verifiedPhone = ticketPhone && samePhone(profile.phoneNumber, ticketPhone) ? ticketPhone : null;
     if (input?.phoneTicket && !verifiedPhone) logger.warn('⚠️ 번호 확인 표가 만료됐거나 입력 번호와 다름 — 확인 안 된 번호로 처리');
 
-    const temp = await findTempAccount(kind, profile, email, str(input.tempUserId, 128));
+    // 학부모는 문자 인증을 마친 번호로만 가입한다 (관리자가 그 번호를 보고 아이를 연결하므로)
+    if (kind === 'parent' && !verifiedPhone) {
+      throw new SignupError(403, 'PHONE_VERIFY_REQUIRED', '학부모 가입은 전화번호 문자 인증이 필요합니다.');
+    }
+    const temp = kind === 'parent' ? null : await findTempAccount(kind, profile, email, str(input.tempUserId, 128));
     // 관리자가 미리 만든 멘토 계정을 이어받으려면 그 번호의 문자 인증이 필요하다 (이름 + 번호만으로 남의 계정을 여는 것 막기)
     // 옛 앱은 문자 인증이 없어, 새 앱이 퍼진 뒤 AUTH_TEMP_CLAIM_REQUIRES_PHONE=1 로 켠다
     if (temp && kind === 'mentor' && !verifiedPhone && process.env.AUTH_TEMP_CLAIM_REQUIRES_PHONE === '1') {
       throw new SignupError(403, 'PHONE_VERIFY_REQUIRED', '전화번호 문자 인증이 필요합니다. 앱을 최신 버전으로 업데이트한 뒤 다시 시도해주세요.');
     }
-    if (!temp && kind === 'mentor' && await phoneInUse(String(profile.phoneNumber), uid)) {
+    if (!temp && kind !== 'foreign' && await phoneInUse(String(profile.phoneNumber), uid)) {
       throw new SignupError(409, 'PHONE_IN_USE', '이 전화번호는 이미 가입되어 있습니다.');
     }
     // Apple 비공개 릴레이 이메일이면 temp 계정의 실제 이메일을 쓴다
@@ -231,7 +236,7 @@ export async function completeSignup(uid: string, tokenEmail: string | undefined
     const t = temp?.data ?? {};
     const role = temp
       ? (t.role === 'foreign_temp' ? 'foreign' : t.role === 'admin' ? 'admin' : 'mentor')
-      : (kind === 'foreign' ? 'foreign' : 'mentor'); // 가입을 마치면 바로 멘토 (mentor_temp 는 관리자가 미리 만든 가입 전 계정에만)
+      : (kind === 'foreign' ? 'foreign' : kind === 'parent' ? 'parent' : 'mentor'); // 가입을 마치면 바로 멘토 (mentor_temp 는 관리자가 미리 만든 가입 전 계정에만)
     // 서버가 확인한 소셜 신원이 있으면 그것으로 (없으면 예전처럼 클라이언트 값 — 옛 앱 호환)
     const providerId = verified
       ? (storedProviderId(verified.provider) as SignupProviderId)

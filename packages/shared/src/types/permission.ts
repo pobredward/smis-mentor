@@ -1,6 +1,7 @@
 // 권한 관리 타입
 
-export type UserRole = 'admin' | 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp';
+/** parent: 학부모 — 캠프 운영 권한 없음 (아이 연결은 관리자가) */
+export type UserRole = 'admin' | 'mentor' | 'mentor_temp' | 'foreign' | 'foreign_temp' | 'parent';
 
 export interface Permission {
   // ST시트 권한
@@ -80,6 +81,20 @@ export const RolePermissions: Record<UserRole, Permission> = {
     canEvaluate: false,
   },
   foreign_temp: {  // 원어민 (회원가입 전): 권한 없음
+    canViewAllStudents: false,
+    canViewOwnStudents: false,
+    canEditStudentData: false,
+    canSyncSTSheet: false,
+    canManageCamp: false,
+    canManageEducation: false,
+    canManageTasks: false,
+    canManageRooms: false,
+    canManagePatients: false,
+    canManageJobBoards: false,
+    canManageApplications: false,
+    canEvaluate: false,
+  },
+  parent: {  // 학부모: 캠프 운영 권한 없음 (자기 아이 정보는 parentLinks 로 따로)
     canViewAllStudents: false,
     canViewOwnStudents: false,
     canEditStudentData: false,
