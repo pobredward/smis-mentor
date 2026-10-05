@@ -37,6 +37,8 @@ const ACTION_LABELS: Record<string, string> = {
   CAMP_PROFILE_UPDATE: '캠프 참가 정보 입력',
   CAMP_PROFILE_REVEAL: '캠프 참가 정보 원본 열람',
   ESCORT_SSN_VIEW: '내원 인솔자 주민번호 열람',
+  PARENT_CHILD_LINK: '학부모 · 아이 연결',
+  CAMP_STUDENT_CHANGE: '캠프 학생 명단 변경',
 };
 
 const fmt = (v: unknown) => (Array.isArray(v) ? v.join(', ') || '(없음)' : v == null ? '(없음)' : String(v));

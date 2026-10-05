@@ -98,3 +98,69 @@ export function campTypeOfCode(campCode: string): CampType {
   if (c === 'D' || c === 'G') return 'DG';
   return 'EJ';
 }
+
+// ─── 시트 · 엑셀 한 줄 → 아이 + 캠프 참가 (관리자 붙여넣기 · 이관 공용) ─────────────
+
+const CHILD_KEYS = new Set<string>(CHILD_STUDENT_FIELDS);
+/** 참가 문서에 넣지 않는 칸 (시트 동기화 시절 값 · 아이 칸 · 주민번호) */
+const NOT_ENROLLMENT = new Set(['studentId', 'rowNumber', 'lastSyncedAt', 'campCode', 'ssn', 'childId', 'enrollmentStatus', 'familyType']);
+
+/** 같은 아이 찾기 키 — 이름(공백 제거) + 보호자 번호 숫자. 번호가 없으면 null (자동으로 묶지 않는다) */
+export function childMatchKey(name: string | undefined | null, parentPhone: string | undefined | null): string | null {
+  const n = String(name ?? '').replace(/\s+/g, '');
+  const p = String(parentPhone ?? '').replace(/\D/g, '');
+  if (!n || p.length < 9) return null;
+  return `${n}|${p}`;
+}
+
+/** 시트 모양 학생 한 명 → 아이 칸 · 참가 칸 · 주민번호 원본(13자리일 때만) */
+export function sheetStudentToRecords(s: Partial<STSheetStudent> & Record<string, unknown>): {
+  child: Partial<ChildProfile>;
+  enrollment: Partial<CampEnrollment>;
+  ssn: string | null;
+} {
+  const child: Record<string, unknown> = {};
+  const enrollment: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(s)) {
+    if (v === undefined || v === null || v === '') continue;
+    if (k === 'displayFields') {
+      if (v && typeof v === 'object' && Object.keys(v as object).length) enrollment.displayFields = v;
+      continue;
+    }
+    if (CHILD_KEYS.has(k)) child[k] = typeof v === 'string' ? v.trim() : v;
+    else if (!NOT_ENROLLMENT.has(k)) enrollment[k] = typeof v === 'string' ? v.trim() : v;
+  }
+  if (child.gender !== 'M' && child.gender !== 'F') delete child.gender;
+  const digits = String(s.ssn ?? '').replace(/\D/g, '');
+  const ssn = digits.length === 13 && !String(s.ssn).includes('*') ? `${digits.slice(0, 6)}-${digits.slice(6)}` : null;
+  return { child: child as Partial<ChildProfile>, enrollment: enrollment as Partial<CampEnrollment>, ssn };
+}
+
+/** 엑셀 · 시트에서 복사한 글(탭 구분) 또는 CSV → 2차원 배열. 따옴표로 감싼 칸(줄바꿈 · 쉼표 포함)도 처리 */
+export function parseSpreadsheetText(text: string): string[][] {
+  const t = String(text ?? '').replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+  const firstLine = t.split('\n', 1)[0] ?? '';
+  const sep = firstLine.includes('\t') ? '\t' : ',';
+  const rows: string[][] = [];
+  let row: string[] = [], cell = '', q = false;
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (q) {
+      if (ch === '"' && t[i + 1] === '"') { cell += '"'; i++; } else if (ch === '"') q = false; else cell += ch;
+    } else if (ch === '"' && cell === '') q = true;
+    else if (ch === sep) { row.push(cell); cell = ''; }
+    else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+    else cell += ch;
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  return rows.map((r) => r.map((c) => c.trim())).filter((r) => r.some(Boolean));
+}
+
+/** 표 → CSV (엑셀에서 한글이 깨지지 않게 BOM) */
+export function toCsv(rows: Array<Array<string | number | null | undefined>>): string {
+  const esc = (v: string | number | null | undefined) => {
+    const s = v == null ? '' : String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return '﻿' + rows.map((r) => r.map(esc).join(',')).join('\n');
+}

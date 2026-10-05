@@ -73,6 +73,12 @@ export default function AdminDashboard() {
           icon: <IoPeople className="w-5 h-5" />,
         },
         {
+          title: '학생 명단 관리',
+          href: '/admin/camp-students',
+          iconClass: 'text-blue-600',
+          icon: <IoPeople className="w-5 h-5" />,
+        },
+        {
           title: '수업 템플릿 관리',
           href: '/admin/lesson-templates',
           iconClass: 'text-cyan-600',
@@ -144,7 +150,7 @@ export default function AdminDashboard() {
           icon: <IoBook className="w-5 h-5" />,
         },
         {
-          title: 'ST시트 필드 설정',
+          title: '학생 카드 칸 설정',
           href: '/admin/st-field-config',
           iconClass: 'text-emerald-600',
           icon: <IoGrid className="w-5 h-5" />,
