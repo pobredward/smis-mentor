@@ -12,6 +12,7 @@ export * from './campRoster';
 export * from './teachingExperience';
 export * from './permission';
 export * from './parent';
+export * from './campStudent';
 export * from './evaluation';
 export * from './sms';
 export * from './auth';

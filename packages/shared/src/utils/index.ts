@@ -19,6 +19,7 @@ export * from './campAccess';
 export * from './campProfile';
 export * from './signup';
 export * from './studentRecordSplit';
+export * from './campStudent';
 export * from './phoneAuth';
 export * from './escort';
 export * from './patient';

@@ -313,6 +313,43 @@
       "collectionGroup": "appSettings",
       "fieldPath": "bands",
       "indexes": []
+    },
+    {
+      "collectionGroup": "enrollments",
+      "fieldPath": "childId",
+      "indexes": [
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "DESCENDING",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "order": "ASCENDING",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "enrollments",
+      "fieldPath": "parentIds",
+      "indexes": [
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION"
+        },
+        {
+          "arrayConfig": "CONTAINS",
+          "queryScope": "COLLECTION_GROUP"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "roster",
+      "fieldPath": "students",
+      "indexes": []
     }
   ]
 }

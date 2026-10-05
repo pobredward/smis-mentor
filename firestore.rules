@@ -53,6 +53,34 @@ service cloud.firestore {
     // - collection list 쿼리는 미인증 사용자도 허용한다.
     //   (클라이언트 SDK에서 where 조건 없는 전체 조회는 Rules 상 거부됨)
     // ──────────────────────────────────────────────────────────────
+    // ── 학생 정보 원본 (시트 연동 없음) — 쓰기는 모두 서버 API ─────────────
+    // 아이: 캠프 운영진 · 연결된 학부모 읽기, 주민번호 원본(private)은 서버만
+    match /children/{childId} {
+      allow read: if isCampStaff() || (isAuthenticated() && request.auth.uid in resource.data.parentIds);
+      allow write: if false;
+      match /private/{docId} {
+        allow read, write: if false;
+      }
+    }
+    // 캠프 참가 · 목록용 명단
+    match /camps/{campCode} {
+      match /enrollments/{studentId} {
+        allow read: if isCampStaff() || (isAuthenticated() && request.auth.uid in resource.data.parentIds);
+        allow write: if false;
+      }
+      match /roster/{docId} {
+        allow read: if isCampStaff();
+        allow write: if false;
+      }
+    }
+    // 여러 캠프를 한 번에 — 학부모의 내 아이 참가 찾기 · 운영진 학생 이력 조회
+    match /{path=**}/enrollments/{studentId} {
+      allow read: if isCampStaff() || (isAuthenticated() && request.auth.uid in resource.data.parentIds);
+    }
+    match /{path=**}/roster/{docId} {
+      allow read: if isCampStaff();
+    }
+
     // 학부모 ↔ 아이 연결 — 학부모 본인 · 관리자 읽기, 쓰기는 서버(/api/admin/parent-links)만
     match /parentLinks/{uid} {
       allow read: if isOwner(uid) || isAdmin();
