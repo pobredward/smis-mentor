@@ -563,7 +563,8 @@ export const cleanupOrphanedSocialAccounts = functionsV2.https.onRequest(
 // (민감값은 남기지 않음 — 변경된 필드명과 이전/이후 값만)
 // ──────────────────────────────────────────────────────────────
 export const auditUserChanges = firestoreV2.onDocumentUpdatedWithAuthContext(
-  { document: 'users/{userId}', region: 'asia-northeast3' },
+  // 이 프로젝트에는 기본 Compute 서비스 계정이 없어 다른 함수처럼 App Engine 계정으로 돌린다
+  { document: 'users/{userId}', region: 'asia-northeast3', serviceAccount: 'smis-mentor@appspot.gserviceaccount.com', memory: '256MiB' },
   async (event) => {
     const before = event.data?.before.data();
     const after = event.data?.after.data();
