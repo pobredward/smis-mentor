@@ -398,10 +398,15 @@ export const signUpWithSocialToken = async (proof: SocialProof) => {
  */
 export const completeSignupViaApi = async (input: import('@smis-mentor/shared').CompleteSignupInput) => {
   const { mobileAuthenticatedPost } = await import('./apiClient');
-  return mobileAuthenticatedPost<import('@smis-mentor/shared').CompleteSignupResult>(
+  // 이 앱에서 방금 문자 인증한 번호가 가입 번호와 같으면 그 확인 표를 함께 보낸다 (서버가 다시 확인)
+  const { phoneTicketStore } = await import('./phoneTicketStore');
+  const phoneTicket = input.phoneTicket ?? phoneTicketStore.ticketFor(input.profile?.phoneNumber);
+  const result = await mobileAuthenticatedPost<import('@smis-mentor/shared').CompleteSignupResult>(
     '/api/auth/complete-signup',
-    input as unknown as Record<string, unknown>,
+    { ...input, ...(phoneTicket && { phoneTicket }) } as unknown as Record<string, unknown>,
   );
+  phoneTicketStore.clear();
+  return result;
 };
 
 

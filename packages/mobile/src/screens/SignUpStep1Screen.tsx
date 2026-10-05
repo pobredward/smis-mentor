@@ -13,6 +13,11 @@ import {
   Platform,
 } from 'react-native';
 import { getUserByPhone, getUserByPhoneIncludeInactive, getUserJobCodesInfo } from '../services/authService';
+import { usePhoneAuth } from '../components/auth/PhoneAuthModal';
+import { isPhoneAuthAvailable } from '../services/phoneAuthNative';
+
+/** 새 로그인 흐름(문자 인증) — 로그인 화면과 같은 설정 */
+const AUTH_V2 = process.env.EXPO_PUBLIC_AUTH_V2 === '1';
 
 interface SignUpStep1ScreenProps {
   onNext: (data: { name: string; phone: string }) => void;
@@ -28,6 +33,8 @@ export function SignUpStep1Screen({
   const [name, setName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  // 새 흐름: 입력한 번호의 주인인지 문자로 확인 (관리자가 미리 만든 계정을 이어받을 때 필요)
+  const [phoneModal, startPhoneAuth] = usePhoneAuth();
 
   const handleSubmit = async () => {
     if (!name || name.length < 2) {
@@ -38,6 +45,11 @@ export function SignUpStep1Screen({
     if (!phoneNumber || phoneNumber.length < 10 || phoneNumber.length > 11) {
       Alert.alert('입력 오류', '유효한 휴대폰 번호를 입력해주세요.');
       return;
+    }
+
+    if (AUTH_V2 && isPhoneAuthAvailable()) {
+      const verified = await startPhoneAuth({ purpose: 'verify', phone: phoneNumber });
+      if (!verified) return;
     }
 
     setIsLoading(true);
@@ -240,6 +252,7 @@ export function SignUpStep1Screen({
           </View>
         </View>
       </ScrollView>
+      {phoneModal}
     </KeyboardAvoidingView>
   );
 }

@@ -414,7 +414,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name: 'SMIS Mentor',
     slug: 'smis-mentor',
-    version: '1.8.0',
+    version: '1.9.0',
     // 코드푸시(EAS Update) — 같은 앱 버전의 스토어 빌드에만 JS 업데이트를 보낸다.
     // 네이티브 변경(라이브러리·권한·app.config 네이티브 설정)이 있으면 버전을 올려 새로 빌드할 것.
     runtimeVersion: { policy: 'appVersion' },
@@ -626,6 +626,20 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         '@react-native-google-signin/google-signin',
         {
           iosUrlScheme: 'com.googleusercontent.apps.382190683951-6qjb6jfc4ssfirqt7807ttt7b77rl8me',
+        },
+      ],
+      // 전화번호 로그인(문자 인증) — React Native Firebase 네이티브 인증. 문자 인증에만 쓰고 로그인 세션은 Firebase JS SDK 그대로
+      // (네이티브로 받은 ID 토큰을 서버 /api/auth/phone 에 보내면 서버가 우리 계정의 로그인 토큰을 준다)
+      // iOS 는 CocoaPods + 정적 프레임워크 — RNFB 기본(SPM)은 동적 프레임워크가 필요해 다른 네이티브 모듈과 부딪히기 쉽다
+      ['@react-native-firebase/app', { ios: { disableSPM: true } }],
+      '@react-native-firebase/auth',
+      [
+        'expo-build-properties',
+        {
+          ios: {
+            useFrameworks: 'static',
+            forceStaticLinking: ['RNFBApp', 'RNFBAuth'],
+          },
         },
       ],
       [

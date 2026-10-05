@@ -38,6 +38,8 @@ import {
 } from '@smis-mentor/shared';
 import { getUserByForeignName, buildSocialProof as buildProofV2, getApiBaseUrl } from '../services/authService';
 import { resolveSocialLogin, linkSocialWithPassword, socialProviderLabel, AuthApiError } from '@smis-mentor/shared';
+import { usePhoneAuth } from '../components/auth/PhoneAuthModal';
+import { isPhoneAuthAvailable } from '../services/phoneAuthNative';
 
 /**
  * 새 소셜 로그인 흐름 — 서버(/api/auth/social)가 사용자를 찾고 판정한다 (공개 조회 API 를 쓰지 않음).
@@ -77,6 +79,9 @@ export function SignInScreen({
   onBack,
 }: SignInScreenProps) {
   const { refreshUserData } = useAuth(); // AuthContext에서 refreshUserData 가져오기
+  // 새 흐름: 문자 인증 창 (전화번호로 로그인 · 가입 번호 확인) — 네이티브 모듈이 있는 빌드(1.9.0~)에서만
+  const [phoneModal, startPhoneAuth] = usePhoneAuth();
+  const phoneAuthOn = AUTH_V2 && isPhoneAuthAvailable();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -234,6 +239,45 @@ export function SignInScreen({
       if (!has) await u.delete().catch(() => firebaseAuth.signOut());
     } catch (e) {
       logger.warn('가입 중단 — 임시 세션 정리 실패(무시):', e);
+    }
+  };
+
+  /**
+   * 새 흐름 — 전화번호로 로그인 (문자 인증 → 서버가 그 번호의 계정을 찾아 로그인 토큰을 준다)
+   */
+  const handlePhoneLogin = async () => {
+    const r = await startPhoneAuth({ purpose: 'login' });
+    if (!r) return;
+    if (r.action === 'LOGIN') {
+      setIsLoading(true);
+      try {
+        const { auth: firebaseAuth } = await import('../config/firebase');
+        const fbAuth = await import('firebase/auth');
+        await fbAuth.signInWithCustomToken(firebaseAuth, r.customToken);
+        const signedEmail = firebaseAuth.currentUser?.email || '';
+        if (signedEmail) await persistLoginRememberEmail(signedEmail);
+        await persistLastLoginMethod('phone', signedEmail);
+        onSignInSuccess();
+      } catch (error) {
+        logger.error('전화번호 로그인 실패:', error);
+        Alert.alert('로그인 실패', '로그인 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+    if (r.action === 'NO_ACCOUNT') {
+      // 번호 확인 표는 앱에 저장됐다 — 가입 단계에서 같은 번호를 쓰면 다시 묻지 않는다
+      Alert.alert(
+        r.hasTemp ? '미리 등록된 계정이 있어요' : '가입된 계정이 없어요',
+        r.hasTemp
+          ? '회원가입을 마치면 관리자가 미리 등록한 계정으로 이어집니다.'
+          : '이 번호로 가입된 계정이 없어요. 회원가입을 진행해주세요.',
+        [
+          { text: '취소', style: 'cancel' },
+          { text: '회원가입', onPress: onSignUpPress },
+        ],
+      );
     }
   };
 
@@ -812,6 +856,18 @@ export function SignInScreen({
    */
   const handlePhoneSubmit = async (data: { name: string; phone: string }) => {
     if (!socialData) return;
+
+    // 새 흐름: 그 번호의 주인인지 문자로 확인 (관리자가 미리 만든 계정을 이름 + 번호만으로 가져가지 못하게)
+    // iOS 는 창 두 개를 겹쳐 띄우지 못해 이름·번호 창을 잠깐 닫는다 (취소하면 다시 연다)
+    if (phoneAuthOn) {
+      setShowPhoneModal(false);
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const verified = await startPhoneAuth({ purpose: 'verify', phone: data.phone });
+      if (!verified) {
+        setShowPhoneModal(true);
+        return;
+      }
+    }
     
     // 현재 소셜 제공자의 credential (Google, Apple 등)
     const currentCredential = googleCredential || appleCredential;
@@ -1360,6 +1416,23 @@ export function SignInScreen({
               disabled={isLoading}
               lastUsed={lastUsedFor('apple')}
             />
+
+            {/* 전화번호 로그인 (새 흐름 · 1.9.0 이상 빌드) */}
+            {phoneAuthOn && (
+              <LastLoginMark active={!!lastUsedFor('phone')}>
+                <TouchableOpacity
+                  style={[styles.phoneLoginButton, isLoading && styles.phoneLoginButtonDisabled]}
+                  onPress={() => void handlePhoneLogin()}
+                  disabled={isLoading}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                  accessibilityHint={lastLoginA11yHint(!!lastUsedFor('phone'))}
+                >
+                  <Ionicons name="phone-portrait-outline" size={20} color="#334155" />
+                  <Text style={styles.phoneLoginText}>전화번호로 로그인</Text>
+                </TouchableOpacity>
+              </LastLoginMark>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -1407,6 +1480,9 @@ export function SignInScreen({
         onForgotPassword={handleForgotPasswordFromModal}
       />
 
+      {/* 문자 인증 (새 흐름) */}
+      {phoneModal}
+
       {/* 로딩 오버레이 */}
       {isLoading && (
         <View style={styles.loadingOverlay}>
@@ -1421,6 +1497,27 @@ export function SignInScreen({
 }
 
 const styles = StyleSheet.create({
+  phoneLoginButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginVertical: 8,
+  },
+  phoneLoginButtonDisabled: {
+    opacity: 0.6,
+  },
+  phoneLoginText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#334155',
+  },
   container: {
     flex: 1,
     backgroundColor: '#f3f4f6',
