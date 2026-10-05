@@ -160,6 +160,12 @@ service cloud.firestore {
       allow read: if true;
       allow create, update: if isAdmin();
       allow delete: if isAdmin();
+
+      // 면접 안내 (Zoom 링크 · 안내문 · 소요 시간) — 공고는 누구나 읽으므로 여기로 뺀다. 관리자만.
+      // 지원자는 /api/recruitment/interview-info 로 자기 지원서 것만 받는다.
+      match /private/{docId} {
+        allow read, write: if isAdmin();
+      }
     }
 
     // ──────────────────────────────────────────────────────────────
@@ -647,8 +653,16 @@ service cloud.firestore {
     match /userLocations/{locationId} {
       // 캠프 운영진(admin/mentor/foreign)만 읽기 — 지원자·임시 계정은 위치 열람 불가
       allow read: if isCampStaff();
-      // 본인 문서만 생성/수정 가능
-      allow create, update: if isAuthenticated()
+      // 본인 문서만 생성/수정 가능 — 문서 id 는 {campCode}_{uid}, 고칠 때는 원래 주인도 나여야 한다
+      // (예전에는 새 데이터의 userId 만 봐서 남의 문서를 내 userId 로 덮어쓸 수 있었다)
+      allow create: if isAuthenticated()
+        && locationId.matches('^.+_' + request.auth.uid + '$')
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.isSharing is bool
+        && request.resource.data.lat is number
+        && request.resource.data.lng is number;
+      allow update: if isAuthenticated()
+        && resource.data.userId == request.auth.uid
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.isSharing is bool
         && request.resource.data.lat is number
