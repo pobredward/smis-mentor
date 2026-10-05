@@ -1,4 +1,3 @@
-import * as functions from 'firebase-functions/v1';
 import * as functionsV2 from 'firebase-functions/v2';
 import * as firestoreV2 from 'firebase-functions/v2/firestore';
 import * as admin from 'firebase-admin';
@@ -33,6 +32,9 @@ interface UserData {
   name: string;
   email: string;
   role?: string;
+  status?: string;
+  /** 캠프 배정 (jobExperiences 의 id 들) */
+  jobCodeIds?: string[];
   /** 화면·알림 언어 (설정에서 고름) */
   locale?: 'ko' | 'en';
   pushTokens?: {
@@ -53,7 +55,6 @@ interface UserData {
     groupRole?: string;
     group?: string;
   }>;
-  activeJobExperienceId?: string;
 }
 
 // shared의 LEGACY_GROUP_MAP과 동일한 매핑 (영문 그룹명 → 한글)
@@ -205,7 +206,7 @@ async function cleanupStaleLocations(): Promise<void> {
   console.log(`📍 오래된 위치 기록 ${snap.size}건 삭제 (${LOCATION_RETENTION_DAYS}일 경과)`);
 }
 
-// Cloud Scheduler에서 HTTP POST로 30분마다 호출
+// Cloud Scheduler 가 HTTP POST 로 매분 호출 (업무 시각이 지난 뒤 30분 안의 첫 실행에서 한 번 보낸다 — notificationSentDates 로 중복 방지)
 // gcloud functions deploy --build-service-account 옵션으로 배포 (Compute Engine SA 없이 Cloud Build SA 활용)
 export const checkOverdueTasks = functionsV2.https.onRequest(
   {
@@ -258,7 +259,17 @@ export const checkOverdueTasks = functionsV2.https.onRequest(
         return;
       }
 
-      const tasksToNotify: Array<{ task: TaskWithNotification; users: string[] }> = [];
+      const tasksToNotify: Array<{ task: TaskWithNotification; users: Array<{ userId: string; data: UserData }> }> = [];
+      // 이번 실행 안에서만 쓰는 캐시 (캠프 코드 → id, 캠프 → 배정된 사람)
+      const jobCodeIds = new Map<string, string | null>();
+      const jobCodeIdOf = async (campCode: string): Promise<string | null> => {
+        if (!jobCodeIds.has(campCode)) {
+          const snap = await db.collection('jobCodes').where('code', '==', campCode).limit(1).get();
+          jobCodeIds.set(campCode, snap.empty ? null : snap.docs[0].id);
+        }
+        return jobCodeIds.get(campCode) ?? null;
+      };
+      const campUsers = new Map<string, admin.firestore.QuerySnapshot>();
 
       for (const taskDoc of tasksSnapshot.docs) {
         const task = { id: taskDoc.id, ...taskDoc.data() } as TaskWithNotification;
@@ -278,22 +289,19 @@ export const checkOverdueTasks = functionsV2.https.onRequest(
           continue;
         }
 
-        // campCode로 jobCodeId 조회
-        const jobCodesSnapshot = await db
-          .collection('jobCodes')
-          .where('code', '==', task.campCode)
-          .get();
+        // campCode → jobCodeId (jobCodes.code 는 유일 — 같은 실행에서는 한 번만 읽는다)
+        const jobCodeId = await jobCodeIdOf(task.campCode);
+        if (!jobCodeId) continue;
 
-        if (jobCodesSnapshot.empty) continue;
-        const jobCodeId = jobCodesSnapshot.docs[0].id;
+        // 캠프 배정(jobCodeIds) 기준 — 채팅 · 재고 · 수동 독촉과 같은 기준
+        // (예전에는 화면에서 고른 캠프 activeJobExperienceId 로 찾아, 캠프를 고르지 않은 사람은 알림을 못 받았다)
+        let usersSnapshot = campUsers.get(jobCodeId);
+        if (!usersSnapshot) {
+          usersSnapshot = await db.collection('users').where('jobCodeIds', 'array-contains', jobCodeId).get();
+          campUsers.set(jobCodeId, usersSnapshot);
+        }
 
-        // activeJobExperienceId 기준으로 해당 캠프 소속 유저만 조회
-        const usersSnapshot = await db
-          .collection('users')
-          .where('activeJobExperienceId', '==', jobCodeId)
-          .get();
-
-        const incompleteUsers: string[] = [];
+        const incompleteUsers: Array<{ userId: string; data: UserData }> = [];
 
         for (const userDoc of usersSnapshot.docs) {
           const userData = userDoc.data() as UserData;
@@ -310,7 +318,8 @@ export const checkOverdueTasks = functionsV2.https.onRequest(
           const userGroupKorean = LEGACY_GROUP_MAP[campExperience.group ?? ''] || campExperience.group;
           if (!task.targetGroups.includes('공통') && !task.targetGroups.includes(userGroupKorean ?? '')) continue;
 
-          const isCompleted = task.completions?.some(c => c.userId === userData.userId);
+          if (userData.status && userData.status !== 'active') continue;
+          const isCompleted = task.completions?.some(c => c.userId === userDoc.id);
           if (isCompleted) continue;
 
           // 알림 설정 — 전체를 껐거나 업무 알림을 껐으면 제외
@@ -318,7 +327,7 @@ export const checkOverdueTasks = functionsV2.https.onRequest(
           if (settings?.generalNotifications === false) continue;
           if (settings?.taskReminders === false) continue;
 
-          incompleteUsers.push(userData.userId);
+          incompleteUsers.push({ userId: userDoc.id, data: userData });
         }
 
         if (incompleteUsers.length > 0) {
@@ -353,17 +362,15 @@ export const checkOverdueTasks = functionsV2.https.onRequest(
   }
 );
 
-async function sendTaskReminderNotifications(task: Task, userIds: string[]): Promise<void> {
+async function sendTaskReminderNotifications(task: Task, users: Array<{ userId: string; data: UserData }>): Promise<void> {
   try {
     const messages: ExpoPushMessage[] = [];
     // 만료 토큰 삭제를 위한 매핑: token → userId
     const tokenUserMap = new Map<string, string>();
 
-    for (const userId of userIds) {
-      const userDoc = await db.collection('users').doc(userId).get();
-      const userData = userDoc.data() as UserData;
-
-      if (!userData.pushTokens) continue;
+    // 대상 조회 때 읽은 문서를 그대로 쓴다 (사람마다 다시 읽지 않음)
+    for (const { userId, data: userData } of users) {
+      if (!userData?.pushTokens) continue;
 
       const tokens = Object.keys(userData.pushTokens).filter(token =>
         Expo.isExpoPushToken(token)
@@ -443,319 +450,6 @@ async function sendTaskReminderNotifications(task: Task, userIds: string[]): Pro
     throw error;
   }
 }
-
-export const sendTestNotification = functions
-  .region('asia-northeast3')
-  .https.onCall(async (data: { userId: string; message: string }, context) => {
-    if (!context.auth) {
-      throw new functions.https.HttpsError('unauthenticated', '인증이 필요합니다.');
-    }
-    // 본인에게만 테스트 발송 가능 (관리자는 임의 대상 허용)
-    if (data.userId !== context.auth.uid) {
-      const callerDoc = await db.collection('users').doc(context.auth.uid).get();
-      if (callerDoc.data()?.role !== 'admin') {
-        throw new functions.https.HttpsError('permission-denied', '본인에게만 테스트 알림을 보낼 수 있습니다.');
-      }
-    }
-
-    try {
-      const userDoc = await db.collection('users').doc(data.userId).get();
-      const userData = userDoc.data() as UserData;
-
-      if (!userData?.pushTokens) {
-        throw new functions.https.HttpsError('not-found', '푸시 토큰이 없습니다.');
-      }
-
-      const tokens = Object.keys(userData.pushTokens).filter(token =>
-        Expo.isExpoPushToken(token)
-      );
-
-      if (tokens.length === 0) {
-        throw new functions.https.HttpsError('not-found', '유효한 푸시 토큰이 없습니다.');
-      }
-
-      const messages: ExpoPushMessage[] = tokens.map(token => ({
-        to: token,
-        sound: 'default',
-        title: '테스트 알림',
-        body: data.message || '테스트 메시지입니다.',
-        data: { type: 'test' },
-      }));
-
-      const chunks = expo.chunkPushNotifications(messages);
-      const tickets: ExpoPushTicket[] = [];
-
-      for (const chunk of chunks) {
-        const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-        tickets.push(...ticketChunk);
-      }
-
-      return { success: true, ticketsCount: tickets.length };
-    } catch (error) {
-      console.error('테스트 알림 전송 실패:', error);
-      throw new functions.https.HttpsError('internal', '알림 전송에 실패했습니다.');
-    }
-  });
-
-// 관리자가 특정 업무의 미완료자에게 푸시 알림 보내기
-export const sendTaskReminderToUsers = functionsV2.https.onCall(
-  { region: 'asia-northeast3', serviceAccount: 'smis-mentor@appspot.gserviceaccount.com', cors: true, minInstances: 1 },
-  async (request: functionsV2.https.CallableRequest<{ taskId: string }>) => {
-    if (!request.auth) {
-      throw new functionsV2.https.HttpsError('unauthenticated', '인증이 필요합니다.');
-    }
-
-    const data = request.data;
-
-    try {
-      // 관리자 권한 확인
-      const adminDoc = await db.collection('users').doc(request.auth.uid).get();
-      const adminData = adminDoc.data();
-      
-      if (!adminData || adminData.role !== 'admin') {
-        throw new functionsV2.https.HttpsError('permission-denied', '관리자 권한이 필요합니다.');
-      }
-
-      // 업무 정보 조회 (클라이언트와 동일한 campTasks 컬렉션)
-      const taskDoc = await db.collection('campTasks').doc(data.taskId).get();
-      
-      if (!taskDoc.exists) {
-        throw new functionsV2.https.HttpsError('not-found', '업무를 찾을 수 없습니다.');
-      }
-
-      const task = { id: taskDoc.id, ...taskDoc.data() } as Task;
-
-      const jobCodesSnapshot = await db
-        .collection('jobCodes')
-        .where('code', '==', task.campCode)
-        .get();
-
-      if (jobCodesSnapshot.empty) {
-        throw new functionsV2.https.HttpsError('not-found', '캠프 코드를 찾을 수 없습니다.');
-      }
-
-      const jobCodeId = jobCodesSnapshot.docs[0].id;
-
-      // activeJobExperienceId로 현재 캠프 소속 유저만 조회 (전체 스캔 방지)
-      const usersSnapshot = await db.collection('users')
-        .where('activeJobExperienceId', '==', jobCodeId)
-        .get();
-      const incompleteUsers: string[] = [];
-
-      for (const userDoc of usersSnapshot.docs) {
-        const userData = userDoc.data() as UserData;
-
-        // jobExperiences에서 해당 캠프 코드의 상세 정보 조회
-        if (!userData.jobExperiences) continue;
-
-        const campExperience = userData.jobExperiences.find(exp => exp.id === jobCodeId);
-        if (!campExperience || !campExperience.groupRole) continue;
-
-        // 대상 역할 확인 (targetRoles)
-        if (!task.targetRoles.includes(campExperience.groupRole)) continue;
-
-        // 대상 그룹 확인 (targetGroups) — shared의 getTaskTargetUsers와 동일한 로직
-        // 영문 레거시 그룹명을 한글로 변환
-        const userGroupKorean = LEGACY_GROUP_MAP[campExperience.group ?? ''] || campExperience.group;
-        // '공통'이 포함된 경우 모든 그룹 통과, 아니면 사용자 그룹이 targetGroups에 있어야 함
-        if (!task.targetGroups.includes('공통') && !task.targetGroups.includes(userGroupKorean ?? '')) continue;
-
-        // 완료 여부 확인
-        const isCompleted = task.completions?.some(c => c.userId === userData.userId);
-        if (isCompleted) continue;
-
-        // 알림 설정 확인 — 전체를 껐거나 업무 알림을 껐으면 제외
-        const settings = userData.notificationSettings;
-        if (settings?.generalNotifications === false) continue;
-        if (settings?.taskReminders === false) continue;
-
-        incompleteUsers.push(userData.userId);
-      }
-
-      if (incompleteUsers.length === 0) {
-        return { 
-          success: true, 
-          message: '알림을 보낼 미완료자가 없습니다.',
-          sentCount: 0 
-        };
-      }
-
-      // 푸시 알림 전송
-      await sendTaskReminderNotifications(task, incompleteUsers);
-
-      console.log(`✅ 업무 "${task.title}"에 대한 알림 전송 완료: ${incompleteUsers.length}명`);
-
-      return { 
-        success: true, 
-        message: `${incompleteUsers.length}명에게 알림을 전송했습니다.`,
-        sentCount: incompleteUsers.length 
-      };
-    } catch (error) {
-      console.error('업무 알림 전송 실패:', error);
-      
-      if (error instanceof functionsV2.https.HttpsError) {
-        throw error;
-      }
-      
-      throw new functionsV2.https.HttpsError('internal', '알림 전송에 실패했습니다.');
-    }
-  }
-);
-
-/**
- * 소셜 제공자 연동 해제 시 Firebase Auth에서도 계정 삭제
- * Multiple Email Policy에서 별도 계정으로 생성된 소셜 계정 정리
- */
-export const deleteOrphanedSocialAccount = functionsV2.https.onCall({
-  region: 'asia-northeast3',
-  cors: true, // ✅ CORS 허용
-}, async (request) => {
-  try {
-    // 인증 확인
-    if (!request.auth) {
-      throw new functionsV2.https.HttpsError('unauthenticated', '로그인이 필요합니다.');
-    }
-
-    const { providerId, providerEmail } = request.data;
-    const currentUserId = request.auth.uid;
-
-    console.log('🗑️ 고아 소셜 계정 삭제 요청:', {
-      currentUserId,
-      providerId,
-      providerEmail,
-    });
-
-    if (!providerId || !providerEmail) {
-      throw new functionsV2.https.HttpsError('invalid-argument', 'providerId와 providerEmail이 필요합니다.');
-    }
-
-    // 1. Firestore에서 현재 사용자 확인
-    const userDoc = await db.collection('users').doc(currentUserId).get();
-    if (!userDoc.exists) {
-      throw new functionsV2.https.HttpsError('not-found', '사용자를 찾을 수 없습니다.');
-    }
-
-    const userData = userDoc.data();
-    console.log('👤 현재 사용자:', {
-      userId: currentUserId,
-      email: userData?.email,
-    });
-
-    // 2. providerEmail로 Firebase Auth 사용자 검색
-    let targetAuthUser;
-    try {
-      targetAuthUser = await admin.auth().getUserByEmail(providerEmail);
-      console.log('🔍 Firebase Auth 사용자 발견:', {
-        uid: targetAuthUser.uid,
-        email: targetAuthUser.email,
-        providers: targetAuthUser.providerData?.map(p => p.providerId),
-      });
-    } catch (error: any) {
-      if (error.code === 'auth/user-not-found') {
-        console.log('ℹ️ Firebase Auth에 해당 이메일 없음 (이미 삭제됨)');
-        return { success: true, message: 'Firebase Auth 계정 없음 (정상)' };
-      }
-      throw error;
-    }
-
-    // 3. 안전성 검증: 현재 사용자와 다른 계정인지 확인
-    if (targetAuthUser.uid === currentUserId) {
-      throw new functionsV2.https.HttpsError(
-        'failed-precondition',
-        '본인 계정은 삭제할 수 없습니다.'
-      );
-    }
-
-    // 4. Firestore에 해당 UID가 없거나 active가 아닌지 확인
-    const targetUserDoc = await db.collection('users').doc(targetAuthUser.uid).get();
-    if (targetUserDoc.exists && targetUserDoc.data()?.status === 'active') {
-      console.warn('⚠️ Firestore에 active 상태로 존재하는 계정 - 삭제 거부');
-      throw new functionsV2.https.HttpsError(
-        'failed-precondition',
-        'Firestore에 존재하는 active 계정은 삭제할 수 없습니다.'
-      );
-    }
-
-    // 5. Firebase Auth에서 삭제
-    await admin.auth().deleteUser(targetAuthUser.uid);
-    console.log('✅ Firebase Auth 사용자 삭제 완료:', targetAuthUser.uid);
-
-    return {
-      success: true,
-      deletedUid: targetAuthUser.uid,
-      deletedEmail: targetAuthUser.email,
-      message: 'Firebase Auth 계정이 성공적으로 삭제되었습니다.',
-    };
-  } catch (error: any) {
-    console.error('❌ 고아 소셜 계정 삭제 실패:', error);
-    if (error instanceof functionsV2.https.HttpsError) {
-      throw error;
-    }
-    throw new functionsV2.https.HttpsError('internal', error.message || '계정 삭제에 실패했습니다.');
-  }
-});
-
-/**
- * Firebase Auth 계정 삭제 시 해당 유저의 Storage 파일 자동 정리
- * 본인 탈퇴 / 관리자 soft·hard 삭제 모든 경로를 커버
- *
- * 삭제 대상 경로:
- *   profileImages/{userId}/
- *   foreignTeachers/{userId}/
- */
-export const cleanupUserStorageOnDelete = functionsV2.https.onRequest(
-  {
-    region: 'asia-northeast3',
-    serviceAccount: 'smis-mentor@appspot.gserviceaccount.com',
-  },
-  async (req, res) => {
-    // 관리자 Firebase ID 토큰(또는 스케줄러 OIDC)만 허용 — 임의 사용자의 Storage 삭제 방지
-    const invoker = await verifyInvoker(req as any);
-    if (!invoker.ok) {
-      console.warn('⛔ cleanupUserStorageOnDelete 비인가 호출:', invoker.reason);
-      res.status(403).json({ error: '허가되지 않은 접근입니다.' });
-      return;
-    }
-
-    const userId = req.body?.userId as string | undefined;
-    if (!userId) {
-      res.status(400).json({ error: 'userId가 필요합니다.' });
-      return;
-    }
-
-    console.log(`🗑️ Storage 정리 시작: ${userId}`);
-
-    const storage = admin.storage();
-    const bucket = storage.bucket();
-
-    const pathsToDelete = [
-      `profileImages/${userId}`,
-      `foreignTeachers/${userId}`,
-    ];
-
-    let totalDeleted = 0;
-
-    for (const prefix of pathsToDelete) {
-      try {
-        const [files] = await bucket.getFiles({ prefix });
-
-        if (files.length === 0) {
-          console.log(`ℹ️ 삭제할 파일 없음: ${prefix}`);
-          continue;
-        }
-
-        await Promise.all(files.map(file => file.delete()));
-        totalDeleted += files.length;
-        console.log(`✅ Storage 파일 ${files.length}개 삭제 완료: ${prefix}`);
-      } catch (error) {
-        console.error(`❌ Storage 파일 삭제 실패 (${prefix}):`, error);
-      }
-    }
-
-    console.log(`✅ Storage 정리 완료: 총 ${totalDeleted}개 파일 삭제 (userId: ${userId})`);
-    res.json({ success: true, totalDeleted });
-  }
-);
 
 /**
  * 매일 자동으로 고아 소셜 계정 정리
