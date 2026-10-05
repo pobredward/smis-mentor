@@ -10,6 +10,8 @@
  * 옵션: --only users,jobBoards (일부만) · --report <파일> (보고서 JSON 저장, 기본 deploylogs 아래 아님 — 지정할 때만)
  *
  * 하는 일 (plan.cjs):
+ *  - 학생 명단(시트 사본)은 아이 · 캠프 참가 · 가족 · 목록용 명단으로 바꾼다 (students.cjs) — 주민번호 원본은 지금 · 다가오는 캠프만 암호화
+ *    → --write 에는 RRN_ENCRYPTION_KEY (웹과 같은 값) 환경 변수가 필요
  *  - 컬렉션별 복사 · 건너뛰기 · 바꾸기, 버리는 필드, 하위 컬렉션은 부모가 옮겨진 것만
  *  - Storage 주소의 버킷 이름을 새 버킷으로 (파일 자체는 gcloud storage cp 로 따로 — 메타데이터의 다운로드 토큰이 같이 가야 주소가 열린다)
  *  - 문서 id · 값의 형식(Timestamp 등)은 그대로
@@ -20,6 +22,7 @@ const fs = require('fs');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
 const { COLLECTIONS, SUBCOLLECTIONS, ST_DETAIL_FIELDS } = require('./plan.cjs');
+const { buildStudentsNative } = require('./students.cjs');
 
 /** 웹 lib/encryption.ts encryptRRN 과 같은 형식 — AES-256-GCM, base64(iv 16 + tag 16 + 암호문). 키는 RRN_ENCRYPTION_KEY (웹과 같은 값) */
 function seal(plain) {
@@ -110,6 +113,42 @@ async function currentCamps() {
 
 /** 원본 문서들 → [{ path, data }] (하위 문서 경로 포함) */
 const TRANSFORMS = {
+  /** 학생 명단 → 아이 · 캠프 참가 · 가족 · 목록용 명단 (students.cjs) */
+  async studentsNative(docs, stat) {
+    const [famSnap, sensSnap, ovSnap, detSnap, current] = await Promise.all([
+      src.collection('familySTSheetCache').get(),
+      src.collection('stSheetSensitive').get(),
+      src.collectionGroup('students').get(),
+      src.collectionGroup('details').get(),
+      currentCamps(),
+    ]);
+    const overrides = {};
+    ovSnap.forEach((d) => {
+      const camp = d.ref.parent.parent;
+      if (!camp || camp.parent.id !== 'stSheetOverrides') return;
+      (overrides[camp.id] = overrides[camp.id] || {})[d.id] = d.data();
+    });
+    const details = {};
+    detSnap.forEach((d) => {
+      const camp = d.ref.parent.parent;
+      if (!camp || camp.parent.id !== 'stSheetCache') return;
+      (details[camp.id] = details[camp.id] || {})[d.id] = d.data();
+    });
+    const sensitive = {};
+    sensSnap.forEach((d) => { sensitive[d.id] = d.get('entries') || {}; });
+    const { items, stats } = buildStudentsNative({
+      rosters: docs.map((d) => ({ campCode: d.id, students: Array.isArray(d.get('data')) ? d.get('data') : [] })),
+      familyCaches: famSnap.docs.map((d) => ({ campCode: d.id, families: d.get('families') || [] })),
+      sensitive, overrides, details, current,
+      seal: (plain) => (WRITE ? seal(plain) : '(미리보기)'),
+      now: new Date(),
+    });
+    stat.notes.push(`캠프 ${stats.camps} · 참가 ${stats.enrollments} · 아이 ${stats.children} (여러 캠프에 온 아이 ${stats.sharedChildren}) · 가족 ${stats.families}`);
+    stat.notes.push(`보호자 번호 없음 ${stats.noPhone} (그중 캠프 하나로만 ${stats.solo}) · 같은 캠프에 두 줄 ${stats.dupInCamp} · 카드 수정 덮음 ${stats.overrides}`);
+    stat.notes.push(`주민번호 원본 → 아이 ${stats.identities} · 가족 ${stats.familyIdentities} (지금 · 다가오는 캠프 ${[...current].join(', ') || '없음'}) · 지난 캠프 평문은 가린 값으로 ${stats.pastRawSsnMasked}`);
+    stat.notes.push(`가족 캐시 ${famSnap.size} (같은 캠프의 옛 명단 사본 ${stats.staleFamilyRosters}개는 버림) · 주민번호 원본 ${sensSnap.size} · 수정 내역 캠프 ${Object.keys(overrides).length}`);
+    return items;
+  },
   async sealCurrentSensitive(docs, stat) {
     const current = await currentCamps();
     const out = [];
@@ -275,7 +314,8 @@ async function runCollection(name, plan) {
   let items;
   if (plan.mode === 'transform') items = await TRANSFORMS[plan.transform](snap.docs, stat, name);
   else items = snap.docs.map((d) => ({ path: `${name}/${d.id}`, data: d.data() }));
-  items = items.map((it) => ({ ...it, data: rewrite(dropFields(it.data, plan.drop, stat), stat) }));
+  // dates: 날짜(Timestamp 로 쓸 값)는 주소 바꾸기 · JSON 정리 뒤에 붙인다
+  items = items.map((it) => ({ ...it, data: { ...rewrite(dropFields(it.data, plan.drop, stat), stat), ...(it.dates || {}) } }));
   for (const it of items) writtenParents.add(it.path);
   await writeAll(items, stat);
 }
@@ -304,6 +344,13 @@ async function verify() {
   console.log('\n== 확인: 컬렉션별 문서 수 (원본 계획 → 대상)');
   for (const [name, r] of Object.entries(report.collections)) {
     if (r.mode === 'skip') continue;
+    if (COLLECTIONS[name].verify) {
+      // 다른 컬렉션으로 옮긴 것 — 대상 컬렉션 문서 수만 보여 준다
+      for (const c of COLLECTIONS[name].verify) console.log(`${(name + ' → ' + c).padEnd(28)} ${' '.repeat(6)} → ${String((await dst.collection(c).count().get()).data().count).padStart(6)}`);
+      const groups = ['enrollments', 'roster', 'families'];
+      for (const g of groups) console.log(`${('  (camps/*/' + g + ')').padEnd(28)} ${' '.repeat(6)} → ${String((await dst.collectionGroup(g).count().get()).data().count).padStart(6)}`);
+      continue;
+    }
     const n = (await dst.collection(name).count().get()).data().count;
     console.log(`${name.padEnd(28)} ${String(r.stat.write).padStart(6)} → ${String(n).padStart(6)} ${n === r.stat.write ? 'OK' : '⚠ 다름'}`);
   }

@@ -33,7 +33,16 @@
 
 ## 계획 (plan.cjs)
 - 복사하지 않음: posts · comments(커뮤니티), userEvaluationSummaries, user_id_mappings_backup*, 만료된 shareTokens,
-  userLocations, stSheetOverrides, rateLimits · pushReceiptQueue · mcp 토큰류
+  userLocations, rateLimits · pushReceiptQueue · mcp 토큰류, parentLinks(옛 방식)
+- **학생 명단 (students.cjs)** — 시트 사본(stSheetCache · familySTSheetCache · stSheetSensitive · stSheetOverrides)을
+  SMIS CAMP 원본으로 바꾼다: `children/{아이}`(+ private/identity) · `camps/{캠프}/enrollments/{시트 고유번호}` · `families` · `roster/current`
+  - 같은 아이 = 이름 + 보호자 번호 (여러 캠프를 한 아이로), 아이 칸은 최근 캠프 값
+  - 참가 문서 id 는 시트 고유번호 그대로 → 보건 · 용돈 · 기기 · 메모 기록이 그대로 이어진다
+  - 주민번호 원본은 지금 · 다가오는 캠프만 암호화해서 (지난 캠프는 가린 값만)
+  - 가족 캠프는 가족 명단만 (같은 캠프의 옛 stSheetCache 사본은 버림)
+  - 2026-10-05 미리보기: 캠프 41 · 참가 3,879 · 아이 3,419 (여러 캠프에 온 아이 342) · 가족 390 · 주민번호 원본 92 (J29 · S29)
+    · 보호자 번호 없는 줄 122 · 같은 캠프에 같은 아이 두 줄 18 (따로 아이로 — 관리자 학생 명단에서 확인)
+  - **E29 · F29 는 아직 시트 사본이 없다** → 전환 전에 옛 앱에서 마지막 동기화를 하거나, 전환 뒤 관리자 › 학생 명단 관리 › 엑셀 붙여넣기
 - 바꾸기: jobBoards 면접 정보 → private/interview, campRosters · generationResources 문서 id → campCode,
   campPages campCode 채움, lessonMaterials 빈 껍데기 건너뜀 · 중복은 섹션을 모음, 지운 템플릿 · 안 쓰는 면접 대본 건너뜀
 - users 버리는 필드: 빈 password, rrnLast · birthDate · ssn 등 죽은 필드, 쓰기만 하던 표시, 기기 상태(새 앱이 다시 등록), phone(phoneNumber 와 같음)
@@ -46,4 +55,5 @@
   되돌리기: main 에서 `firebase deploy --only firestore:rules,storage --project smis-mentor`
 - **예약 작업 멈춤 · 만들기**: `scripts/smiscamp-scheduler.cjs` (옛 프로젝트 `--pause`, 새 프로젝트 `--create --invoker <firebase-adminsdk 주소>`)
 - **웹 점검 모드** (Vercel 환경 변수, `packages/web/src/proxy.ts`): `MAINTENANCE_MODE=all`(화면 + API) · `1`(화면만), `MAINTENANCE_BYPASS_TOKEN` 으로 시험하는 사람만 통과
-- **학생 주민번호**: `stSheetSensitive` 는 지금 · 다가오는 캠프만 옮기고 암호화한다 → `--write` 때 `RRN_ENCRYPTION_KEY`(웹과 같은 값) 환경 변수가 필요
+- **학생 주민번호**: 지금 · 다가오는 캠프만 아이 private 으로 옮기고 암호화한다 → `--write` 때 `RRN_ENCRYPTION_KEY`(웹과 같은 값) 환경 변수가 필요
+- **마지막 시트 동기화**: 옛 앱(main)의 동기화 버튼으로 29기 시트를 한 번 더 읽은 뒤 잠근다 — 그 뒤 시트는 읽기 전용 보관

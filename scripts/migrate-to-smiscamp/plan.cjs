@@ -34,7 +34,7 @@ const COLLECTIONS = {
   authIdentities: keep('소셜 · 전화 신원 연결표 (이관 후 backfill 로 다시 채움)'),
   appConfig: { mode: 'copy', reason: '앱 설정 — 안 쓰는 홈 문구 빼고', drop: ['mentorHomeMessage', 'foreignHomeMessage'] },
   appSettings: keep('교재 목록 · 단원'),
-  campSettings: { mode: 'copy', reason: '캠프 설정 — 없앤 샘플 데이터 표시 빼고', drop: ['useTemporaryData'] },
+  campSettings: { mode: 'copy', reason: '캠프 설정 — 없앤 샘플 데이터 표시 · 시트 열 위치 빼고', drop: ['useTemporaryData', 'sheetColumnMap', 'sheetName'] },
   campTimetables: keep('시간표'),
   campTasks: keep('업무'),
   taskCategories: keep('업무 분류'),
@@ -46,9 +46,12 @@ const COLLECTIONS = {
   lessonMaterialTemplates: { mode: 'transform', reason: '수업자료 템플릿 — 지운 것 빼고', transform: 'dropDeleted' },
   lessonMaterials: { mode: 'transform', reason: '수업자료 — 빈 껍데기 · 중복 정리, 섹션은 남은 문서로 모음', transform: 'lessonMaterial', drop: ['migratedAt'] },
   lessonPlans: keep('레슨플랜'),
-  stSheetCache: { mode: 'transform', reason: '학생 명단 — 목록용 명단 + 학생별 상세(details) 로 나눔', transform: 'splitRoster' },
-  familySTSheetCache: keep('가족 캠프 명단'),
-  stSheetSensitive: { mode: 'transform', reason: '학생 주민번호 — 지금 · 다가오는 캠프만, 암호화해서 (지난 캠프는 export 보관 후 삭제)', transform: 'sealCurrentSensitive' },
+  stSheetCache: {
+    mode: 'transform', transform: 'studentsNative', verify: ['children', 'camps'],
+    reason: '학생 명단(시트 사본) → 아이(children) · 캠프 참가(camps/{캠프}/enrollments) · 가족 · 목록용 명단. 가족 명단 · 주민번호 원본(지금 · 다가오는 캠프만 암호화) · 카드 수정 내역도 여기서 함께 (students.cjs)',
+  },
+  familySTSheetCache: skip('가족 캠프 명단 — stSheetCache(studentsNative)에서 함께 옮김'),
+  stSheetSensitive: skip('학생 주민번호 원본 — studentsNative 가 지금 · 다가오는 캠프만 아이 private 으로 암호화해서 옮김 (지난 캠프는 export 보관 후 삭제)'),
   stSheetFieldConfig: keep('명단 칸 설정'),
   studentMemos: keep('학생 메모'),
   studentDevices: { mode: 'transform', reason: '학생 기기 — 지난 캠프의 잠금번호는 버림', transform: 'devicesDropPastLockCodes' },
@@ -78,7 +81,8 @@ const COLLECTIONS = {
   user_id_mappings_backup_metadata: skip('지난 마이그레이션 백업'),
   shareTokens: { mode: 'transform', reason: '평가 공유 링크 — 만료 안 된 것만', transform: 'notExpired' },
   userLocations: skip('위치 기록 — 새로 쌓인다 (14일 보존)'),
-  stSheetOverrides: skip('명단 임시 수정 — 다시 동기화하면 지워지는 값'),
+  stSheetOverrides: skip('학생 카드 수정 내역 — studentsNative 가 학생에 덮어서 옮김'),
+  parentLinks: skip('학부모 연결(옛 방식) — 아이 문서 parentIds 로 바뀜'),
   rateLimits: skip('짧은 수명'),
   pushReceiptQueue: skip('짧은 수명'),
   mcpOAuthClients: skip('Claude 연결은 다시 등록'),
@@ -95,10 +99,11 @@ const SUBCOLLECTIONS = {
   reads: keep('chatRooms/{id}/reads'),
   sections: keep('lessonMaterials/{id}/sections — 정리된 부모로 모음'),
   comments: skip('커뮤니티 제거'),
-  students: skip('stSheetOverrides 아래 임시값'),
+  students: skip('stSheetOverrides 아래 수정값 — studentsNative 가 학생에 덮음'),
+  details: skip('stSheetCache 아래 학생 상세 — studentsNative 가 합침'),
 };
 
-/** 학생 상세 문서에만 두는 칸 — packages/shared/src/utils/studentRecordSplit.ts ST_DETAIL_FIELDS 와 같게 */
+/** 학생 상세 문서에만 두는 칸 — packages/shared/src/utils/studentRecordSplit.ts ST_DETAIL_FIELDS 와 같게 (예전 splitRoster 용) */
 const ST_DETAIL_FIELDS = [
   'notes', 'ssn', 'region', 'address', 'addressDetail', 'email', 'shirtSize',
   'passportName', 'passportNumber', 'passportExpiry', 'etc',
