@@ -148,8 +148,6 @@ export interface User {
   activeJobExperienceId?: string;
   /** 관리자가 캠프를 임시로 활성화했을 때의 jobCode id */
   adminTempActiveCamp?: string;
-  /** 커뮤니티에서 내가 차단한 사용자 uid 목록 (해당 사용자의 글·댓글 숨김) */
-  blockedUsers?: string[];
   /** 가입 시 동의한 약관·개인정보처리방침 버전 (CONSENT_VERSION) 과 시각 */
   consentVersion?: string;
   consentedAt?: any;

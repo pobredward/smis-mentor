@@ -677,115 +677,7 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // ──────────────────────────────────────────────────────────────
-    // posts 컬렉션 (게시판)
-    //
-    // [접근 설계]
-    // - 작성/읽기 권한: active 역할(mentor, foreign, admin)만 허용
-    //   temp 역할(mentor_temp, foreign_temp)은 업무코드 없이 게시판 불가
-    // - scope='dev': 작성자 본인 + admin만 읽기 가능
-    // - scope 나머지(all/camp/group): active 캠프 스태프 전체 읽기
-    //   (camp/group 범위 필터링은 클라이언트 쿼리에서 jobCodeId/groupId로 처리)
-    //
-    // [update 분리 설계]
-    // - 좋아요 토글(likedBy, likeCount): 본인이 아닌 active 유저도 가능
-    // - commentCount 증감: 댓글 생성/삭제 시 서비스에서 처리 → active 유저 허용
-    // - 내용 수정(content, imageUrls): 작성자 본인 + 핵심 필드 불변 보장
-    // ──────────────────────────────────────────────────────────────
-    match /posts/{postId} {
-      // dev 게시글: 본인 또는 admin만 읽기
-      // 나머지 scope: active 캠프 스태프 전체 읽기
-      allow read: if (
-        isActiveUser() && (
-          resource.data.scope != 'dev' ||
-          isAdmin() ||
-          resource.data.authorId == request.auth.uid
-        )
-      );
-
-      // 새 게시글 작성: active 캠프 스태프 + 본인 명의
-      allow create: if (
-        isActiveUser() &&
-        request.resource.data.authorId == request.auth.uid &&
-        request.resource.data.keys().hasAll([
-          'scope', 'authorId', 'authorName',
-          'content', 'imageUrls',
-          'likeCount', 'likedBy', 'commentCount',
-          'createdAt', 'updatedAt'
-        ]) &&
-        request.resource.data.scope in ['all', 'camp', 'group', 'dev'] &&
-        request.resource.data.content is string &&
-        request.resource.data.content.size() <= 5000 &&
-        request.resource.data.likeCount == 0 &&
-        request.resource.data.commentCount == 0
-      );
-
-      // 좋아요 토글 또는 commentCount 증감:
-      // active 유저라면 likedBy/likeCount/commentCount/updatedAt 만 변경 허용
-      allow update: if (
-        isActiveUser() &&
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['likedBy', 'likeCount', 'commentCount', 'updatedAt'])
-      );
-
-      // 게시글 내용 수정: 작성자 본인만, 핵심 필드 불변
-      allow update: if (
-        isActiveUser() &&
-        resource.data.authorId == request.auth.uid &&
-        fieldUnchanged('authorId') &&
-        fieldUnchanged('scope') &&
-        fieldUnchanged('jobCodeId') &&
-        fieldUnchanged('groupId') &&
-        fieldUnchanged('likedBy') &&
-        fieldUnchanged('likeCount') &&
-        fieldUnchanged('commentCount') &&
-        request.resource.data.content is string &&
-        request.resource.data.content.size() <= 5000
-      );
-
-      // 게시글 삭제: 작성자 본인 또는 admin
-      allow delete: if (
-        isAdmin() ||
-        (isActiveUser() && resource.data.authorId == request.auth.uid)
-      );
-
-      // 댓글 서브컬렉션
-      match /comments/{commentId} {
-        // dev 게시글 댓글: 본인 또는 admin만
-        // 나머지: active 캠프 스태프 전체
-        allow read: if (
-          isActiveUser() && (
-            get(/databases/$(database)/documents/posts/$(postId)).data.scope != 'dev' ||
-            isAdmin() ||
-            resource.data.authorId == request.auth.uid
-          )
-        );
-
-        allow create: if (
-          isActiveUser() &&
-          request.resource.data.authorId == request.auth.uid &&
-          request.resource.data.keys().hasAll([
-            'parentId', 'authorId', 'authorName',
-            'content', 'createdAt', 'updatedAt'
-          ]) &&
-          request.resource.data.content is string &&
-          request.resource.data.content.size() <= 1000
-        );
-
-        // 댓글 수정 / soft delete: 작성자 본인, 또는 admin(신고 처리·삭제) — 핵심 필드 불변
-        allow update: if (
-          (isAdmin() || (isActiveUser() && resource.data.authorId == request.auth.uid)) &&
-          fieldUnchanged('authorId') &&
-          fieldUnchanged('parentId')
-        );
-
-        // 댓글 삭제: 작성자 본인 또는 admin
-        allow delete: if (
-          isAdmin() ||
-          (isActiveUser() && resource.data.authorId == request.auth.uid)
-        );
-      }
-    }
+    // posts 컬렉션 (게시판) — 2026-10 에 기능을 없앴다. 규칙이 없으면 기본 거부.
 
     // ──────────────────────────────────────────────────────────────
     // 채팅 (카톡방 대체) — packages/shared/src/types/chat.ts
@@ -1015,18 +907,6 @@ service cloud.firestore {
         request.resource.data.status == 'open' &&
         isChatMember(request.resource.data.roomId) &&
         reportId == 'chatMessage_' + request.resource.data.roomId + '_' + request.resource.data.messageId + '_' + request.auth.uid
-      );
-      allow create: if (
-        isActiveUser() &&
-        request.resource.data.reporterId == request.auth.uid &&
-        request.resource.data.keys().hasAll(['targetType', 'postId', 'targetAuthorId', 'reporterId', 'reason', 'status', 'createdAt']) &&
-        request.resource.data.targetType in ['post', 'comment'] &&
-        request.resource.data.reason in ['spam', 'abuse', 'sexual', 'privacy', 'other'] &&
-        request.resource.data.status == 'open' &&
-        reportId == request.resource.data.targetType + '_' +
-          (request.resource.data.targetType == 'comment'
-            ? request.resource.data.postId + '_' + request.resource.data.commentId
-            : request.resource.data.postId) + '_' + request.auth.uid
       );
       allow update: if isAdmin();
       allow delete: if isAdmin();

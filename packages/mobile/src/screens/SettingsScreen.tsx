@@ -97,37 +97,6 @@ export function SettingsScreen() {
       setStoppingLocation(false);
     }
   };
-  // 커뮤니티 차단 목록 (이름은 조회 가능한 경우만 표시)
-  const blockedUsers = userData?.blockedUsers ?? [];
-  const [blockedNames, setBlockedNames] = useState<Record<string, string>>({});
-  const [unblocking, setUnblocking] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (blockedUsers.length === 0) { setBlockedNames({}); return; }
-      const { getUserById } = await import('../services/authService');
-      const entries = await Promise.all(blockedUsers.map(async (uid) => {
-        try { const u = await getUserById(uid); return [uid, u?.name || ''] as const; } catch { return [uid, ''] as const; }
-      }));
-      if (!cancelled) setBlockedNames(Object.fromEntries(entries));
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blockedUsers.join(',')]);
-
-  const handleUnblock = async (uid: string) => {
-    if (!userData?.userId || unblocking) return;
-    setUnblocking(uid);
-    try {
-      const { unblockUser } = await import('../services/communityService');
-      await unblockUser(userData.userId, uid);
-      await refreshUserData();
-    } catch {
-      Alert.alert(L('common.error'), L('settings.failedToUnblock'));
-    } finally {
-      setUnblocking(null);
-    }
-  };
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<NotificationSettings>({});
@@ -447,29 +416,6 @@ export function SettingsScreen() {
           </View>
           {stoppingLocation ? <ActivityIndicator size="small" color="#6b7280" /> : <Ionicons name="chevron-forward" size={20} color="#9ca3af" />}
         </TouchableOpacity>
-      </View>
-
-      <View style={styles.footerSection}>
-        <Text style={styles.footerTitle}>
-          {L('settings.blockedUsersCommunity')}
-        </Text>
-        {blockedUsers.length === 0 ? (
-          <Text style={styles.sectionDescription}>
-            {L('settings.noBlockedUsersYouCan')}
-          </Text>
-        ) : (
-          blockedUsers.map((uid) => (
-            <View key={uid} style={styles.footerLink}>
-              <View style={styles.footerLinkContent}>
-                <Ionicons name="ban-outline" size={20} color="#6b7280" />
-                <Text style={styles.footerLinkText}>{blockedNames[uid] || (L('settings.user')) + ` (${uid.slice(0, 6)}…)`}</Text>
-              </View>
-              <TouchableOpacity onPress={() => handleUnblock(uid)} disabled={unblocking === uid} accessibilityRole="button" accessibilityLabel={L('settings.unblock')}>
-                {unblocking === uid ? <ActivityIndicator size="small" color="#6b7280" /> : <Text style={{ color: '#2563eb', fontWeight: '600' }}>{L('settings.unblock2')}</Text>}
-              </TouchableOpacity>
-            </View>
-          ))
-        )}
       </View>
 
       <View style={styles.footerSection}>

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
   collection, doc, getDoc, getDocs, orderBy, query, where, limit,
-  updateDoc, deleteDoc, serverTimestamp, increment, Timestamp,
+  updateDoc, serverTimestamp, Timestamp,
 } from 'firebase/firestore';
 import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
@@ -14,16 +14,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { chatRoomLabel, isCampChatRoomType, logger } from '@smis-mentor/shared';
 
 /**
- * 커뮤니티 · 채팅 신고 처리 (관리자)
+ * 채팅 신고 처리 (관리자)
  * - reports 컬렉션(status=open)을 최신순으로 표시
- * - 조치: 게시글 삭제 / 댓글 삭제(soft) / 채팅 메시지 삭제(/api/chat/moderate) / 문제 없음(닫기)
- * 앱스토어 UGC 정책상 신고를 접수·처리하는 수단이 있어야 한다.
+ * - 조치: 채팅 메시지 삭제(/api/chat/moderate) / 문제 없음(닫기)
+ * 앱스토어 UGC 정책상 신고를 접수·처리하는 수단이 있어야 한다. (게시판은 2026-10 에 없앴다 — 옛 게시글 신고는 '닫기'만)
  */
 type Report = {
   id: string;
+  /** 'post' · 'comment' 는 없앤 게시판의 옛 신고 */
   targetType: 'post' | 'comment' | 'chatMessage';
-  postId: string;
-  commentId: string | null;
   /** 채팅 신고 — 방 · 메시지 · 글 일부 · 사진·동영상 수 */
   roomId?: string;
   messageId?: string;
@@ -98,26 +97,13 @@ export default function AdminReportsPage() {
   };
 
   const handleDeleteTarget = async (r: Report) => {
-    const question = r.targetType === 'post'
-      ? '신고된 게시글을 삭제하시겠습니까? (댓글 포함, 되돌릴 수 없음)'
-      : r.targetType === 'chatMessage'
-        ? '신고된 채팅 메시지를 모두에게서 삭제하시겠습니까? (사진·동영상 포함, 되돌릴 수 없음)'
-        : '신고된 댓글을 삭제 처리하시겠습니까?';
-    if (!confirm(question)) return;
+    if (r.targetType !== 'chatMessage') return; // 없앤 게시판의 옛 신고 — 지울 대상이 없다
+    if (!confirm('신고된 채팅 메시지를 모두에게서 삭제하시겠습니까? (사진·동영상 포함, 되돌릴 수 없음)')) return;
     setBusy(r.id);
     try {
-      if (r.targetType === 'chatMessage') {
-        if (!r.roomId || !r.messageId) throw new Error('채팅 신고에 방·메시지 정보가 없습니다.');
-        // 서버가 메시지를 지우고 같은 메시지의 신고를 모두 '처리됨'으로 바꾼다
-        await authenticatedPost('/api/chat/moderate', { roomId: r.roomId, messageId: r.messageId });
-      } else if (r.targetType === 'post') {
-        await deleteDoc(doc(db, 'posts', r.postId));
-      } else if (r.commentId) {
-        await updateDoc(doc(db, 'posts', r.postId, 'comments', r.commentId), {
-          content: '', deletedAt: serverTimestamp(), updatedAt: serverTimestamp(),
-        });
-        await updateDoc(doc(db, 'posts', r.postId), { commentCount: increment(-1) }).catch(() => undefined);
-      }
+      if (!r.roomId || !r.messageId) throw new Error('채팅 신고에 방·메시지 정보가 없습니다.');
+      // 서버가 메시지를 지우고 같은 메시지의 신고를 모두 '처리됨'으로 바꾼다
+      await authenticatedPost('/api/chat/moderate', { roomId: r.roomId, messageId: r.messageId });
       await closeReport(r, 'resolved', 'deleted');
       toast.success('삭제 처리했습니다.');
       await load();
@@ -148,7 +134,7 @@ export default function AdminReportsPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">커뮤니티 신고 처리</h1>
-            <p className="text-sm text-gray-500 mt-1">앱 게시판·채팅에서 접수된 신고입니다. 확인 후 삭제 또는 문제 없음으로 처리해주세요.</p>
+            <p className="text-sm text-gray-500 mt-1">앱 채팅에서 접수된 신고입니다. 확인 후 삭제 또는 문제 없음으로 처리해주세요.</p>
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-600">
             <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />

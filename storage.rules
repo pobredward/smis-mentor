@@ -177,21 +177,6 @@ service firebase.storage {
     }
 
     // ──────────────────────────────────────────────────────────────
-    // 커뮤니티 게시글 이미지
-    // 경로: community/posts/{postId}/...
-    // 역할: 인증 사용자(읽기), 인증 사용자(업로드/삭제)
-    // ──────────────────────────────────────────────────────────────
-    match /community/posts/{postId}/{allPaths=**} {
-      allow read: if isAuthenticated();
-      allow write: if (
-        isAuthenticated() &&
-        isImage() &&
-        isUnder10MB()
-      );
-      allow delete: if isAuthenticated();
-    }
-
-    // ──────────────────────────────────────────────────────────────
     // 환자 처방전 사진
     // 경로: patientRecords/{recordId}/prescriptions/...
     // 역할: 인증 사용자(읽기/업로드/삭제) — 캠프 운영진 전체 공유

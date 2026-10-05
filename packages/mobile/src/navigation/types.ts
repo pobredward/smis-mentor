@@ -24,26 +24,10 @@ export type RootStackParamList = {
   NotificationTest: undefined;
   PrivacyPolicy: undefined;
   TermsOfService: undefined;
-  /** 게시글 세부 화면 (댓글 포함) */
-  PostDetail: { postId: string };
   /** 채팅 대화방 */
   ChatRoom: { roomId: string };
   /** 원어민 레슨플랜 — bookKey(내 교재) · planId(문서) · sample(샘플: speaking·reading·writing) */
   LessonPlan: { bookKey?: string; planId?: string; sample?: string };
-  /** 게시글 작성/수정 화면 */
-  PostWrite: {
-    scope: 'all' | 'camp' | 'group' | 'dev';
-    jobCodeId: string | null;
-    groupId: string | null;
-    groupLabel: string | null;
-    authorId: string;
-    authorName: string;
-    authorProfileImage: string | null;
-    authorJobCodeLabel: string | null;
-    authorIsAdmin: boolean;
-    /** 수정 시 기존 게시글 ID */
-    editPostId?: string;
-  };
 };
 
 // Bottom Tabs (메인 하단 탭)
@@ -53,8 +37,6 @@ export type MainTabsParamList = {
   Camp: undefined;
   /** 채팅 (카톡방 대체) */
   Chat: undefined;
-  /** 게시판 — 탭에서는 내렸다 (화면·코드는 남겨 둠) */
-  Community: undefined;
   Profile: undefined;
   Admin: undefined;
 };
