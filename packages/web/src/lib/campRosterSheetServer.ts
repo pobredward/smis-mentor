@@ -10,11 +10,10 @@
  */
 import { getAdminFirestore, adminFieldValue } from '@/lib/firebase-admin';
 import { privateRef } from '@/lib/campProfileServer';
-import { buildRosterRow } from '@/lib/campRosterServer';
+import { decryptRRN } from '@/lib/encryption';
 import {
   ENGLISH_NICKNAME_RE,
   normalizeNameForMatch,
-  campProfileTierOf,
   cleanLodging,
   rosterColumnsOf,
   rosterTierOf,
@@ -29,6 +28,7 @@ import {
   rosterAccountKeys,
   rosterRowWithAccount,
   type CampLodging,
+  type CampProfileDoc,
   type CampRosterDoc,
   type CampRosterKind,
   type CampRosterRow,
@@ -89,28 +89,56 @@ export async function loadUsers(jobCodeId: string): Promise<UserLite[]> {
 
 /** 해외(S·F) 캠프 민감 칸 — 개인 저장소 원본 (관리자 표에서 보여 주기만) */
 export const SENSITIVE_KEYS = ['rrn', 'passportName', 'passportNumber', 'passportExpiry', 'shirtSize', 'phoneNumber', 'phoneModel'] as const;
-async function sensitiveCellsOf(uid: string, jobCodeId: string, code: string): Promise<Record<string, string>> {
-  const d = await getAdminFirestore().collection('users').doc(uid).get();
-  if (!d.exists) return {};
-  const r = await buildRosterRow(d, jobCodeId, code, campProfileTierOf([code]), true);
-  const rrn = r.rrnFront && r.rrnLast && !r.rrnLast.includes('●') ? `${r.rrnFront}-${r.rrnLast}` : r.rrnFront || '';
-  return { rrn, passportName: r.passportName, passportNumber: r.passportNumber, passportExpiry: r.passportExpiry, shirtSize: r.shirtSize, phoneNumber: r.phoneNumber, phoneModel: r.phoneModel };
+/**
+ * 여러 사람의 민감 칸을 한 번에 — users · 개인 저장소 문서를 두 번에 묶어 읽고 여기서 푼다
+ * (사람마다 따로 읽으면 왕복이 사람 수만큼 겹쳐 느리다). 주민번호 뒷자리는 복호화해 '앞-뒤'로.
+ */
+async function sensitiveCellsMany(uids: string[]): Promise<Map<string, Record<string, string>>> {
+  const out = new Map<string, Record<string, string>>();
+  const ids = [...new Set(uids)];
+  if (!ids.length) return out;
+  const db = getAdminFirestore();
+  const [us, ps] = await Promise.all([
+    db.getAll(...ids.map((id) => db.collection('users').doc(id))),
+    db.getAll(...ids.map((id) => privateRef(id))),
+  ]);
+  ids.forEach((id, i) => {
+    if (!us[i].exists) return;
+    const u = (us[i].data() ?? {}) as Record<string, any>;
+    const p = (ps[i].data() ?? {}) as CampProfileDoc;
+    let rrnLast = '';
+    if (u.rrnLastEncrypted) { try { rrnLast = decryptRRN(u.rrnLastEncrypted); } catch { rrnLast = ''; } }
+    else if (typeof u.rrnLast === 'string' && u.rrnLast.length === 7) rrnLast = u.rrnLast;
+    const front = String(u.rrnFront ?? '');
+    out.set(id, {
+      rrn: front && rrnLast ? `${front}-${rrnLast}` : front,
+      passportName: p.passportName ?? '', passportNumber: p.passportNumber ?? '', passportExpiry: p.passportExpiry ?? '',
+      shirtSize: p.shirtSize ?? '', phoneNumber: String(u.phoneNumber ?? ''), phoneModel: p.phoneModel ?? '',
+    });
+  });
+  return out;
 }
 
-/** 불러오기 — 표 문서 (해외 S·F 캠프 멘토 줄에는 민감 칸 원본을 채운다) */
-export async function loadCampRoster(jobCodeId: string) {
+/**
+ * 불러오기 — 표 문서 (해외 S·F 캠프 멘토 줄에는 민감 칸 원본을 채운다)
+ * secrets: false 면 민감 칸 없이 (다른 캠프 미리 받아 두기용 — 열람 기록도 남기지 않는다)
+ */
+export async function loadCampRoster(jobCodeId: string, opts: { secrets?: boolean } = {}) {
+  const usersP = loadUsers(jobCodeId);   // 캠프 정보와 같이 읽는다 (왕복 줄이기)
   const jc = await getJobCode(jobCodeId);
-  const [doc, users] = await Promise.all([readRosterDoc(jc), loadUsers(jobCodeId)]);
+  const [doc, users] = await Promise.all([readRosterDoc(jc), usersP]);
   const byId = new Map(users.map((u) => [u.id, u]));
   // 영어 이름 · 성별은 지금 계정 값으로 (멘토가 바꾸면 바로 보이게, 안 넣었으면 빈 칸)
   let mentors = (doc?.mentors ?? []).map((r) => rosterRowWithAccount('mentor', jc.tier, r, r.userId ? byId.get(r.userId)?.data : null));
-  const revealed = jc.tier === 'S' && mentors.some((r) => r.userId);
-  if (jc.tier === 'S') {
-    mentors = await Promise.all(mentors.map(async (r) => (r.userId ? { ...r, cells: { ...r.cells, ...(await sensitiveCellsOf(r.userId, jobCodeId, jc.code)) } } : r)));
+  const withSecrets = jc.tier === 'S' && opts.secrets !== false;
+  const revealed = withSecrets && mentors.some((r) => r.userId);
+  if (revealed) {
+    const secrets = await sensitiveCellsMany(mentors.map((r) => r.userId).filter((x): x is string => !!x));
+    mentors = mentors.map((r) => (r.userId && secrets.has(r.userId) ? { ...r, cells: { ...r.cells, ...secrets.get(r.userId) } } : r));
   }
   // 매칭 결과도 같이 — 화면이 열리자마자 연결된 계정 이름이 보이게 (따로 한 번 더 묻지 않는다)
   const matches = matchRoster(jobCodeId, { mentors: doc?.mentors ?? [], foreign: doc?.foreign ?? [] }, users, doc);
-  return { jobCode: jc, doc: doc ? { ...doc, mentors } : null, revealed, matches };
+  return { jobCode: jc, doc: doc ? { ...doc, mentors } : null, revealed, secretsPending: jc.tier === 'S' && !withSecrets, matches };
 }
 
 /** gender: 'M' | 'F' | '' — 계정 칸(성별)을 표에 바로 보여 주려고 */

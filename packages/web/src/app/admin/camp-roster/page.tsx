@@ -37,10 +37,15 @@ import {
 type Row = CampRosterRow & { pickedFor?: string; lookup?: string; loadedUserId?: string | null };
 type Cand = { userId: string; name: string; role: string; status: string; englishNickname: string; gender?: string; university: string; inCamp: boolean };
 type Match = { index: number; name: string; userId: string | null; status: 'linked' | 'auto' | 'ambiguous' | 'none'; candidates: Cand[] };
+/** GET /api/admin/camp-roster — secretsPending: 해외 캠프인데 민감 칸 없이 받은 표 (미리 받아 둔 것) */
+type LoadRes = { doc: any; revealed: boolean; secretsPending?: boolean; matches?: { mentors: Match[]; foreign: Match[]; removals: Cand[] } };
 type JobCode = { id: string; code: string; name: string; generation: string; startDate?: any };
 
 const ROLE_LABEL: Record<string, string> = { mentor: '멘토', mentor_temp: '멘토(임시)', admin: '관리자', foreign: '원어민', foreign_temp: '원어민(임시)' };
 const blankRows = (n: number): Row[] => Array.from({ length: n }, () => ({ cells: {}, userId: null }));
+/** 표 받기 — lite: 민감 칸 없이 (미리 받아 두기) */
+const fetchRoster = (id: string, lite = false) =>
+  authenticatedGet<LoadRes>(`/api/admin/camp-roster?jobCodeId=${encodeURIComponent(id)}${lite ? '&lite=1' : ''}`);
 /** 매칭에 영향을 주는 것만 (이름 · 연결 · 다른 이름으로 찾기, 줄 순서) */
 const matchKeyOf = (m: Row[], f: Row[]) =>
   `${m.map((r) => `${r.cells.name ?? ''}|${r.userId ?? ''}|${r.lookup ?? ''}`).join(',')}§${f.map((r) => `${r.cells.englishName ?? ''}|${r.userId ?? ''}|${r.lookup ?? ''}`).join(',')}`;
@@ -95,33 +100,88 @@ export default function CampRosterPage() {
 
   /** 마지막으로 매칭한 표 (이름 · 연결 · 순서) — 같으면 다시 묻지 않는다 */
   const matchedKey = useRef('');
-  const load = useCallback(async (id: string) => {
-    if (dirty && !window.confirm('저장하지 않은 내용이 있습니다. 다른 캠프를 불러올까요?')) return;
-    setJobCodeId(id); setResult(null); setMatches({ mentor: [], foreign: [], removals: [] });
-    if (!id) return;
-    setLoading(true);
-    try {
-      const res = await authenticatedGet<{ doc: any; revealed: boolean; matches?: { mentors: Match[]; foreign: Match[]; removals: Cand[] } }>(`/api/admin/camp-roster?jobCodeId=${encodeURIComponent(id)}`);
-      // loadedUserId: 민감 칸(주민번호 · 여권 …)은 불러온 그 계정일 때만 보인다
-      const pad = (rows: Row[], n: number) => [...rows.map((r) => ({ ...r, pickedFor: r.userId ? rosterMatchName('mentor', r) : undefined, loadedUserId: r.userId ?? null })), ...blankRows(Math.max(3, n - rows.length))];
-      const m: Row[] = res.doc?.mentors ?? [];
-      const f: Row[] = (res.doc?.foreign ?? []).map((r: Row) => ({ ...r, pickedFor: r.userId ? rosterMatchName('foreign', r) : undefined }));
-      const mm = pad(m, 20);
-      const ff = [...f, ...blankRows(Math.max(3, 12 - f.length))];
-      setMentors(mm);
-      setForeign(ff);
-      if (res.matches) {
-        setMatches({ mentor: res.matches.mentors, foreign: res.matches.foreign, removals: res.matches.removals });
-        matchedKey.current = matchKeyOf(mm, ff);   // 방금 받은 매칭 — 같은 표로 다시 묻지 않는다
-      }
-      setMeta({ updatedAt: res.doc?.updatedAt, updatedByName: res.doc?.updatedByName });
-      setDirty(false);
-    } catch (e) {
-      toast.error((e as Error).message || '불러오지 못했습니다.');
-    } finally {
-      setLoading(false);
+  /** 캠프별로 받아 둔 표 — 다른 캠프 버튼을 누르면 이것부터 바로 보여 주고, 뒤에서 새로 받아 바꾼다 */
+  const cache = useRef(new Map<string, LoadRes>());
+  /** 미리 받는 중인 표 — 그 사이 버튼을 누르면 이것이 먼저 오면 먼저 보여 준다 */
+  const prefetching = useRef(new Map<string, Promise<LoadRes>>());
+  /** 지금 보고 있는 캠프 (늦게 온 응답이 다른 캠프 화면을 덮지 않게) */
+  const currentId = useRef('');
+  const dirtyRef = useRef(false);
+  useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
+  /** 해외 캠프 민감 칸(주민번호 · 여권 …)을 아직 받는 중 — 미리 받아 둔 표에는 없다 */
+  const [secretsPending, setSecretsPending] = useState(false);
+
+  /** 받은 표를 화면에 */
+  const show = useCallback((res: LoadRes) => {
+    // loadedUserId: 민감 칸(주민번호 · 여권 …)은 불러온 그 계정일 때만 보인다
+    const pad = (rows: Row[], n: number) => [...rows.map((r) => ({ ...r, pickedFor: r.userId ? rosterMatchName('mentor', r) : undefined, loadedUserId: r.userId ?? null })), ...blankRows(Math.max(3, n - rows.length))];
+    const m: Row[] = res.doc?.mentors ?? [];
+    const f: Row[] = (res.doc?.foreign ?? []).map((r: Row) => ({ ...r, pickedFor: r.userId ? rosterMatchName('foreign', r) : undefined }));
+    const mm = pad(m, 20);
+    const ff = [...f, ...blankRows(Math.max(3, 12 - f.length))];
+    setMentors(mm);
+    setForeign(ff);
+    if (res.matches) {
+      setMatches({ mentor: res.matches.mentors, foreign: res.matches.foreign, removals: res.matches.removals });
+      matchedKey.current = matchKeyOf(mm, ff);   // 방금 받은 매칭 — 같은 표로 다시 묻지 않는다
+    } else {
+      setMatches({ mentor: [], foreign: [], removals: [] });
     }
-  }, [dirty]);
+    setSecretsPending(!!res.secretsPending);
+    setMeta({ updatedAt: res.doc?.updatedAt, updatedByName: res.doc?.updatedByName });
+    setDirty(false);
+  }, []);
+
+  /**
+   * 캠프 열기 — 받아 둔 표가 있으면 바로 보여 주고(기다림 없이), 뒤에서 새로 받아 바꾼다.
+   * refresh: 방금 저장한 뒤 — '저장 안 됨' 확인 없이, 지금 화면을 둔 채 새로 받는다
+   */
+  const load = useCallback(async (id: string, refresh = false) => {
+    if (!refresh && dirty && !window.confirm('저장하지 않은 내용이 있습니다. 다른 캠프를 불러올까요?')) return;
+    currentId.current = id;
+    setJobCodeId(id);
+    if (!refresh) setResult(null);
+    if (!id) return;
+    const hit = refresh ? undefined : cache.current.get(id);
+    let early = !!hit;   // 받아 둔 표를 먼저 보여 줬다
+    let done = false;
+    if (hit) { show(hit); setLoading(false); }
+    else if (!refresh) {
+      setMatches({ mentor: [], foreign: [], removals: [] }); setLoading(true);
+      // 미리 받는 중이었으면 그것이 먼저 오는 대로 보여 준다
+      prefetching.current.get(id)?.then((pre) => {
+        if (done || currentId.current !== id) return;
+        early = true; show(pre); setLoading(false);
+      }).catch(() => {});
+    }
+    try {
+      const res = await fetchRoster(id);
+      done = true;
+      cache.current.set(id, res);
+      if (currentId.current !== id) return;            // 그 사이 다른 캠프를 열었다
+      if (early && dirtyRef.current) return;            // 먼저 보여 준 표로 벌써 고치기 시작했다 — 덮지 않는다
+      show(res);
+    } catch (e) {
+      if (currentId.current === id) toast.error((e as Error).message || '불러오지 못했습니다.');
+    } finally {
+      if (currentId.current === id) setLoading(false);
+    }
+  }, [dirty, show]);
+
+  // 같은 기수의 다른 캠프는 미리 받아 둔다 (민감 칸 없이 — 열람 기록도 남지 않는다) → 버튼을 누르면 바로 보인다
+  useEffect(() => {
+    if (!gen) return;
+    const ids = codes.filter((c) => String(c.generation) === gen).map((c) => c.id).filter((id) => !cache.current.has(id));
+    let stop = false;
+    ids.forEach((id) => {
+      const pr = fetchRoster(id, true);
+      prefetching.current.set(id, pr);
+      pr.then((res) => { if (!stop && !cache.current.has(id)) cache.current.set(id, res); })   // 그 사이 다 받은 표가 있으면 그것을 둔다
+        .catch(() => { /* 미리 받기는 실패해도 괜찮다 — 누르면 다시 받는다 */ })
+        .finally(() => { if (prefetching.current.get(id) === pr) prefetching.current.delete(id); });
+    });
+    return () => { stop = true; };
+  }, [gen, codes]);   // 기수를 바꾸거나 캠프 목록이 처음 올 때만
 
   // 이름 매칭 — 입력이 멈추면 서버에 물어본다
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -200,7 +260,7 @@ export default function CampRosterPage() {
       });
       setResult(res); setConfirm(null); setDirty(false);
       toast.success(`${res.assigned}명 배정${res.removed.length ? ` · ${res.removed.length}명 해제` : ''}`);
-      await load(jobCodeId);
+      await load(jobCodeId, true);   // 저장한 뒤 — '저장 안 됨' 확인 없이 새로 받는다
     } catch (e) {
       toast.error((e as Error).message || '저장하지 못했습니다.');
     } finally {
@@ -274,7 +334,7 @@ export default function CampRosterPage() {
               <button onClick={() => void openConfirm()} disabled={saving} className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50">저장</button>
             </div>
 
-            <Grid title="멘토" kind="mentor" cols={colsM} rows={mentors} matches={matches.mentor} onEdit={edit} onPick={pick} onLookup={setLookup} onRemove={removeRow} onAdd={addRows} />
+            <Grid title="멘토" kind="mentor" cols={colsM} rows={mentors} matches={matches.mentor} secretsPending={secretsPending} onEdit={edit} onPick={pick} onLookup={setLookup} onRemove={removeRow} onAdd={addRows} />
             <div className="h-8" />
             <Grid title="원어민" kind="foreign" cols={colsF} rows={foreign} matches={matches.foreign} onEdit={edit} onPick={pick} onLookup={setLookup} onRemove={removeRow} onAdd={addRows} />
 
@@ -336,8 +396,10 @@ function Grid(props: {
   onLookup: (kind: CampRosterKind, r: number, lookup: string) => void;
   onRemove: (kind: CampRosterKind, r: number) => void;
   onAdd: (kind: CampRosterKind, n?: number) => void;
+  /** 해외 캠프 민감 칸을 아직 받는 중 (미리 받아 둔 표를 먼저 보여 줄 때) */
+  secretsPending?: boolean;
 }) {
-  const { title, kind, cols, rows, matches, onEdit, onPick, onLookup, onRemove, onAdd } = props;
+  const { title, kind, cols, rows, matches, onEdit, onPick, onLookup, onRemove, onAdd, secretsPending } = props;
   const ref = useRef<HTMLTableElement>(null);
   const filled = useMemo(() => rosterFillInherited(rows, cols), [rows, cols]);
 
@@ -416,14 +478,15 @@ function Grid(props: {
                       const acc = row.userId ? cands.find((x) => x.userId === row.userId) : undefined;
                       // 민감 칸은 불러온 계정일 때만 (새로 연결하면 저장한 뒤 보인다)
                       const pending = !!row.userId && !!c.sensitive && row.userId !== row.loadedUserId;
-                      const val = !row.userId || pending ? '' : c.sensitive || !acc ? row.cells[c.key] ?? '' : rosterAccountCells(acc)[c.key] ?? '';
+                      const fetching = !!row.userId && !!c.sensitive && !pending && !!secretsPending;   // 받는 중
+                      const val = !row.userId || pending || fetching ? '' : c.sensitive || !acc ? row.cells[c.key] ?? '' : rosterAccountCells(acc)[c.key] ?? '';
                       return (
                         <td key={c.key} className="border-r p-0 bg-gray-50">
                           <input
-                            data-r={r} data-c={ci} value={val} readOnly placeholder={pending ? '저장 후 표시' : row.userId ? '미입력' : ''}
+                            data-r={r} data-c={ci} value={val} readOnly placeholder={fetching ? '…' : pending ? '저장 후 표시' : row.userId ? '미입력' : ''}
                             title={pending ? '새로 연결한 계정 — 저장하면 멘토가 넣은 값이 보입니다' : row.userId ? (val ? '멘토가 직접 넣은 값' : '멘토가 아직 넣지 않았습니다') : '계정을 연결하면 저절로 채워집니다'}
                             onPaste={(e) => onPaste(e, r, ci)} onKeyDown={(e) => onKey(e, r, ci)}
-                            className={`w-full cursor-default px-2 py-1.5 outline-none bg-transparent text-gray-600 ${pending ? 'placeholder:text-gray-300' : 'placeholder:text-rose-300'}`}
+                            className={`w-full cursor-default px-2 py-1.5 outline-none bg-transparent text-gray-600 ${pending || fetching ? 'placeholder:text-gray-300' : 'placeholder:text-rose-300'}`}
                             style={{ minWidth: c.width }}
                           />
                         </td>
