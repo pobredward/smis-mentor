@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { getAuthenticatedUser, requireAdmin } from '@/lib/authMiddleware';
 import { writeAuditLog } from '@/lib/auditLog';
 import { loadCampRoster, previewCampRoster, saveCampRoster, CampRosterError } from '@/lib/campRosterSheetServer';
@@ -6,7 +6,8 @@ import { logger } from '@smis-mentor/shared';
 
 /**
  * 관리자: 캠프 선생님 표 (campRosters/{jobCodeId})
- * GET  ?jobCodeId=…                                   → 표 (S 캠프는 민감 칸 원본 포함 — 열람 기록)
+ * GET  ?jobCodeId=…                                   → 표 + 이름 매칭 (해외 S·F 캠프는 민감 칸 원본 포함 — 열람 기록)
+ * GET  ?jobCodeId=…&lite=1                            → 민감 칸 없이 (다른 캠프 미리 받아 두기 — 열람 기록 없음)
  * POST { jobCodeId, mentors, foreign }                → 이름 매칭 미리보기 + 표에서 빠져 배정 해제될 사람
  * PUT  { jobCodeId, mentors, foreign, removeUserIds } → 저장 (캠프 배정·영어 이름·반 정보·숙소 방·S 개인정보 반영)
  */
@@ -20,15 +21,17 @@ export async function GET(request: NextRequest) {
   const auth = await getAuthenticatedUser(request);
   const denied = requireAdmin(auth);
   if (denied) return denied;
-  const jobCodeId = new URL(request.url).searchParams.get('jobCodeId')?.trim() ?? '';
+  const sp = new URL(request.url).searchParams;
+  const jobCodeId = sp.get('jobCodeId')?.trim() ?? '';
   if (!jobCodeId) return NextResponse.json({ error: 'jobCodeId 가 필요합니다.' }, { status: 400 });
   try {
-    const res = await loadCampRoster(jobCodeId);
+    const res = await loadCampRoster(jobCodeId, { secrets: sp.get('lite') !== '1' });
     if (res.revealed) {
-      await writeAuditLog({
+      // 열람 기록은 응답을 보낸 뒤에 남긴다 (화면이 기록 쓰기를 기다리지 않게)
+      after(() => writeAuditLog({
         action: 'CAMP_PROFILE_REVEAL', category: 'PRIVACY', performedBy: auth!.firebaseUid, performedByName: (auth!.user as any)?.name,
         targetLabel: `${res.jobCode.code} 선생님 표`, metadata: { scope: 'camp-roster', campCode: res.jobCode.code }, request,
-      });
+      }));
     }
     return NextResponse.json(res);
   } catch (e) {
