@@ -503,10 +503,10 @@ function registerTools(server: McpServer, mode: McpMode) {
       {
         title: '캠프 선생님 배정 — 등록·변경·해제 (관리자, dry-run → confirm)',
         description: [
-          '관리자 전용. 캠프 선생님 표를 고치고 저장합니다 — 저장하면 관리자 화면과 똑같이 캠프 배정(그룹·역할·반번호), 영어 이름·성별, 반 정보(강의실·반이름·교재 → 시간표), 숙소 방이 앱 전체에 반영되고, 해제한 사람은 캠프 배정이 빠집니다.',
+          '관리자 전용. 캠프 선생님 표를 고치고 저장합니다 — 저장하면 관리자 화면과 똑같이 캠프 배정(그룹·역할·반번호), 반 정보(강의실·반이름·교재 → 시간표), 숙소 방이 앱 전체에 반영되고, 해제한 사람은 캠프 배정이 빠집니다. 멘토 영어 이름·성별은 넣지 않는다 — 연결된 계정(멘토가 직접 넣은 값)에서 저절로 채워지고 안 넣었으면 빈 칸.',
           '두 가지 방식 중 하나: (1) changes — 줄 단위: { action: "add", kind, cells, userId? } 등록 / { action: "update", kind, target, cells, userId? } 변경(칸 값 "" 은 비우기) / { action: "remove", kind, target } 해제(그 사람 캠프 배정도 빠짐). target 은 userId · name(멘토=반멘토, 원어민=영어 이름) · classCode · group+subject · index 로 한 줄을 가리킨다.',
           '(2) mentors·foreign — 표 전체를 보낸다(관리시트 붙여넣기와 같음). removeMissing=true 면 표에 없는 사람의 배정도 해제한다(기본 false).',
-          '칸 키: 멘토 role(담임 멘토/수업 멘토/매니저/부매니저), group(Junior·Spring·단기1·All…), classCode, name, gender, englishName, classroom, className, textbook, grade, arrAirport·arrBooking·arrSeat·depAirport·depBooking·depSeat, room / 원어민 group, subject(Speaking/Reading/Writing/Mix…), englishName, visa, ticket, arrival, room. 민감 칸은 받지 않는다.',
+          '칸 키: 멘토 role(담임 멘토/수업 멘토/매니저/부매니저), group(Junior·Spring·단기1·All…), classCode, name, classroom, className, textbook, grade, arrAirport·arrBooking·arrSeat·depAirport·depBooking·depSeat, room / 원어민 group, subject(Speaking/Reading/Writing/Mix…), englishName, visa, ticket, arrival, room. 민감 칸은 받지 않는다.',
           '이름으로 계정을 찾고, 같은 이름이 여럿이면 오류로 후보(userId)를 돌려주므로 userId 를 넣어 다시 보낸다. 사이트 계정이 없는 사람(예: "여(1차)")은 표에만 남는다. 지금 표에서 계정 연결 없이 둔 줄은 계속 연결하지 않으며, 일부러 연결하지 않을 사람(예: 대표님)은 userId: null 로 보낸다.',
           'confirm 없이 부르면 dry-run — 사람별 배정 전→후, 등록·해제, 반 정보·숙소 변화와 previewHash 를 돌려주고 아무것도 바꾸지 않는다. 반드시 사용자에게 보여 주고 승인받은 뒤 { camp, confirm: true, previewHash } 로 실행한다 (30분 보관, mcpAuditLogs 에 기록).',
         ].join(' '),

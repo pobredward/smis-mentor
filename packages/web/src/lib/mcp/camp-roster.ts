@@ -38,6 +38,8 @@ import {
   type CampRosterKind,
   type CampRosterRow,
   type CampRosterTier,
+  rosterAccountKeys,
+  rosterRowWithAccount,
 } from '@smis-mentor/shared';
 
 type Cells = Record<string, string>;
@@ -123,8 +125,10 @@ export async function getCampRosterForMcp(input: { camp: string }, viewer: Viewe
   const byId = new Map(users.map((u) => [u.id, u]));
   const strip = (kind: CampRosterKind) => {
     const keys = new Set(publicCols(kind, jc.tier).map((c) => c.key));
-    return docRows(doc, kind).map((r, index) => {
-      const u = r.userId ? byId.get(r.userId) : undefined;
+    return docRows(doc, kind).map((r0, index) => {
+      const u = r0.userId ? byId.get(r0.userId) : undefined;
+      // 멘토 영어 이름 · 성별은 지금 계정 값 (안 넣었으면 빈 칸)
+      const r = rosterRowWithAccount(kind, jc.tier, r0, u?.data ?? null);
       const exp = u?.data.jobExperiences?.find?.((e: any) => e?.id === jc.id);
       return {
         index,
@@ -348,6 +352,10 @@ export async function writeCampRosterForMcp(input: WriteRosterInput, viewer: Vie
 
   // 미리보기 — 사람별 배정 전/후
   const warnings: string[] = [];
+  const acctKeys = rosterAccountKeys('mentor', jc.tier);
+  const sentAccount = [...(input.mentors ?? []), ...(input.changes ?? []).filter((c) => c?.kind !== 'foreign')]
+    .some((r) => acctKeys.some((k) => String((r?.cells as Record<string, unknown> | undefined)?.[k] ?? '').trim()));
+  if (sentAccount) warnings.push('멘토 영어 이름 · 성별은 계정 값(멘토가 직접 넣은 값)으로 저절로 채워져서 보낸 값은 쓰지 않았습니다 — 안 넣은 멘토는 빈 칸입니다.');
   const people: Array<Record<string, unknown>> = [];
   const describe = (kind: CampRosterKind, r: Row) => {
     const u = byId.get(r.userId as string) as UserLite;
