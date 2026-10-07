@@ -1,11 +1,14 @@
 import { describe, expect, it } from './_expect';
-import { rosterAccountCells, rosterAccountKeys, rosterColumnsOf, rosterRowWithAccount } from '../src/types/campRoster';
+import { rosterAccountCells, rosterAccountKeys, rosterColumnsOf, rosterRowWithAccount, rosterTierOf } from '../src/types/campRoster';
 import { buildCampTeachers } from '../src/utils/campTeachers';
 
 describe('선생님 표 — 멘토 영어 이름 · 성별은 계정 값만', () => {
-  it('멘토 표(J·E · S)만 영어 이름 · 성별이 계정 칸', () => {
+  it('멘토 표만 계정 칸 — J·E 는 영어 이름 · 성별, 해외(S·F)는 주민번호 · 여권 · 단체티 · 휴대폰까지', () => {
     expect(rosterAccountKeys('mentor', 'JE').sort()).toEqual(['englishName', 'gender']);
-    expect(rosterAccountKeys('mentor', 'S').sort()).toEqual(['englishName', 'gender']);
+    expect(rosterAccountKeys('mentor', 'S').sort()).toEqual(['englishName', 'gender', 'passportExpiry', 'passportName', 'passportNumber', 'phoneModel', 'phoneNumber', 'rrn', 'shirtSize']);
+    expect(rosterTierOf('F29')).toBe('S');
+    expect(rosterTierOf('S29')).toBe('S');
+    expect(rosterTierOf('E29')).toBe('JE');
     expect(rosterAccountKeys('foreign', 'S')).toEqual([]);
     expect(rosterColumnsOf('foreign', 'JE').some((c) => c.fromAccount)).toBe(false);
   });
@@ -26,6 +29,9 @@ describe('선생님 표 — 멘토 영어 이름 · 성별은 계정 값만', ()
     // 계정 없는 자리표시 줄
     expect(rosterRowWithAccount('mentor', 'JE', { cells: { name: '남', gender: 'M' }, userId: null }, { englishNickname: 'X', gender: 'F' }).cells)
       .toEqual({ name: '남' });
+    // 민감 칸은 건드리지 않는다 (서버가 개인 저장소 값으로 채운다)
+    expect(rosterRowWithAccount('mentor', 'S', { cells: { name: '유세아', passportNumber: 'M123', englishName: 'X' }, userId: 'u4' }, { englishNickname: 'Sage', gender: 'F' }).cells)
+      .toEqual({ name: '유세아', passportNumber: 'M123', englishName: 'Sage', gender: 'F' });
     // 원어민 표는 그대로 (영어 이름이 찾는 이름)
     const f = { cells: { englishName: 'Berna', subject: 'Speaking' }, userId: 'u3' };
     expect(rosterRowWithAccount('foreign', 'S', f, { englishNickname: 'B' })).toEqual(f);

@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { authenticatedGet, authenticatedFetch } from '@/lib/apiClient';
-import { CAMP_PROFILE_FIELD_LABELS, groupRank, type CampProfileField } from '@smis-mentor/shared';
+import { CAMP_PROFILE_FIELD_LABELS, groupRank, isOverseasCampCode, type CampProfileField } from '@smis-mentor/shared';
 
 type Row = Record<string, string> & { userId: string; missing: CampProfileField[] };
 type Sel = { r0: number; c0: number; r1: number; c1: number };
@@ -121,7 +121,7 @@ export default function CampRosterTable({ jobCodeId, campCode, role }: { jobCode
   const [mode, setMode] = useState<'view' | 'copy' | 'edit'>('view');
   const modeRef = useRef(mode);
   modeRef.current = mode;
-  const [open, setOpen] = useState<Record<GroupKey, boolean>>({ basic: true, pay: true, intl: role === 'foreign', passport: (campCode ?? '').startsWith('S') });
+  const [open, setOpen] = useState<Record<GroupKey, boolean>>({ basic: true, pay: true, intl: role === 'foreign', passport: isOverseasCampCode(campCode) });
 
   const load = async (reveal: boolean) => {
     if (!jobCodeId) return;
@@ -145,7 +145,7 @@ export default function CampRosterTable({ jobCodeId, campCode, role }: { jobCode
 
   // 원어민을 보면 해외 송금, S 캠프면 여권 묶음을 기본으로 펼친다
   useEffect(() => {
-    setOpen((o) => ({ ...o, intl: role === 'foreign', passport: (campCode ?? '').toUpperCase().startsWith('S') }));
+    setOpen((o) => ({ ...o, intl: role === 'foreign', passport: isOverseasCampCode(campCode) }));
   }, [role, campCode]);
 
   const shown = useMemo(() => {
@@ -157,7 +157,7 @@ export default function CampRosterTable({ jobCodeId, campCode, role }: { jobCode
 
   // 보는 대상(멘토/원어민)과 캠프(S / J·E)에 맞는 열만 — 멘토는 해외 송금 없음, 원어민은 주민번호·학교 없음, J·E 는 여권 없음
   const aud: 'm' | 'f' | null = role === 'mentor' ? 'm' : role === 'foreign' ? 'f' : null;
-  const isS = (campCode ?? '').toUpperCase().startsWith('S');
+  const isS = isOverseasCampCode(campCode);   // 해외 캠프 (S · F)
   const colsOf = useCallback((g: GroupKey): Array<[string, string]> =>
     GROUPS[g].cols.filter(([k, , a]) => (!a || !aud || a === aud) && !(k === 'visaType' && isS)).map(([k, h]) => [k, h]), [aud, isS]);
   const available = useMemo(() => (Object.keys(GROUPS) as GroupKey[]).filter((g) =>

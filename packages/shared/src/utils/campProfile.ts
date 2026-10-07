@@ -3,13 +3,17 @@
  *
  * 결정(2026-09-26):
  *  - 주민번호 뒷자리는 가입 때 받지 않고, 진행 예정 캠프 코드가 생기면 앱 접속 시 필수로 받는다.
- *  - 공통(J·E·S): 영어 닉네임, 주민번호 뒷자리, 계좌번호
- *  - S 코드 추가: 여권상 영문이름, 여권 번호, 여권 만료일자, 단체티 사이즈, 휴대폰 모델명
- *  - S 와 J/E 코드를 함께 가지면 S(범위가 더 넓음) 기준
+ *  - 공통(J·E·S·F): 영어 닉네임, 주민번호 뒷자리, 계좌번호
+ *  - 해외 캠프(S·F 코드) 추가: 여권상 영문이름, 여권 번호, 여권 만료일자, 단체티 사이즈, 휴대폰 모델명 (2026-10-07: F 도 S 와 같이)
+ *  - 해외(S·F)와 J/E 코드를 함께 가지면 해외(범위가 더 넓음) 기준 — tier 이름은 'S'
  *  - 이후 마이페이지에서 수정 가능
  */
 
+/** 'S' = 해외 캠프(S · F 코드), 'JE' = 제주 캠프(J · E 코드) */
 export type CampProfileTier = 'S' | 'JE';
+
+/** 해외 캠프 코드인가 — S(싱말) · F(가족) 캠프. 여권 · 단체티 · 휴대폰 모델명을 받는다 */
+export const isOverseasCampCode = (code: string | null | undefined): boolean => /^[SF]/i.test(String(code ?? '').trim());
 
 export const CAMP_PROFILE_FIELDS = [
   'englishNickname',
@@ -77,7 +81,7 @@ export const RRN_PURPOSE_BY_TIER: Record<CampProfileTier, string> = {
 };
 export function rrnPurposeLines(codes: Array<string | null | undefined>): Array<{ tier: CampProfileTier; codes: string[]; text: string }> {
   const list = codes.filter(Boolean).map((c) => String(c).trim().toUpperCase());
-  const s = list.filter((c) => c.startsWith('S'));
+  const s = list.filter((c) => isOverseasCampCode(c));
   const je = list.filter((c) => c.startsWith('J') || c.startsWith('E'));
   const out: Array<{ tier: CampProfileTier; codes: string[]; text: string }> = [];
   if (je.length) out.push({ tier: 'JE', codes: je, text: RRN_PURPOSE_BY_TIER.JE });
@@ -171,7 +175,7 @@ export function requiredCampProfileFields(tier: CampProfileTier | null, audience
 /** 캠프 코드(J29, E29, S29, F28 …) → 필요한 입력 범위 */
 export function campProfileTierOf(codes: Array<string | null | undefined>): CampProfileTier | null {
   const letters = codes.filter(Boolean).map((c) => String(c).trim().charAt(0).toUpperCase());
-  if (letters.includes('S')) return 'S';
+  if (letters.includes('S') || letters.includes('F')) return 'S';
   if (letters.includes('J') || letters.includes('E')) return 'JE';
   return null;
 }
