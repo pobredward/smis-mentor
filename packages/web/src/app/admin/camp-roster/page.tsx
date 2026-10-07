@@ -7,8 +7,11 @@ import { compareCampCodes } from '@smis-mentor/shared';
  * - 칸을 누르고 ⌘/Ctrl+V → 그 칸부터 오른쪽·아래로 채운다 (줄이 모자라면 늘어난다). 칸은 직접 고쳐도 된다
  * - 역할·그룹이 빈 칸이면 위 줄 값을 이어받는다 (엑셀 병합 셀) — 회색으로 보인다
  * - 줄마다 이름으로 사용자를 찾아 연결한다. 동명이인은 골라 주고, 사이트에 없는 사람은 저장할 때 건너뛴다
- * - 저장하면 캠프 배정(그룹·역할·반번호), 영어 이름·성별, 반 정보(강의실·반이름·교재 → 시간표), 숙소 방,
- *   S 캠프 개인정보(주민번호·여권·단체티·휴대폰)가 반영되고, 표에서 빠진 사람은 확인 후 캠프 배정이 해제된다
+ * - 저장하면 캠프 배정(그룹·역할·반번호), 반 정보(강의실·반이름·교재 → 시간표), 숙소 방이 반영되고,
+ *   표에서 빠진 사람은 확인 후 캠프 배정이 해제된다
+ * - 영어 이름 · 성별, 해외(S·F) 캠프의 주민번호 · 여권 · 단체티 · 휴대폰은 표에서 넣지 않는다 —
+ *   멘토가 앱에서 넣은 값이 저절로 보이고, 비어 있으면 아직 안 넣은 것 (재촉용)
+ * - 불러올 때 이름 매칭도 같이 받아 온다 (연결된 계정이 바로 보이게) — 이름이 바뀔 때만 다시 묻는다
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
@@ -30,13 +33,17 @@ import {
   type CampRosterTier,
 } from '@smis-mentor/shared';
 
-type Row = CampRosterRow & { pickedFor?: string; lookup?: string };
+/** loadedUserId: 불러올 때 연결돼 있던 계정 — 민감 칸 값은 그 계정 것이라, 연결이 바뀌면 저장 뒤에 다시 보인다 */
+type Row = CampRosterRow & { pickedFor?: string; lookup?: string; loadedUserId?: string | null };
 type Cand = { userId: string; name: string; role: string; status: string; englishNickname: string; gender?: string; university: string; inCamp: boolean };
 type Match = { index: number; name: string; userId: string | null; status: 'linked' | 'auto' | 'ambiguous' | 'none'; candidates: Cand[] };
 type JobCode = { id: string; code: string; name: string; generation: string; startDate?: any };
 
 const ROLE_LABEL: Record<string, string> = { mentor: '멘토', mentor_temp: '멘토(임시)', admin: '관리자', foreign: '원어민', foreign_temp: '원어민(임시)' };
 const blankRows = (n: number): Row[] => Array.from({ length: n }, () => ({ cells: {}, userId: null }));
+/** 매칭에 영향을 주는 것만 (이름 · 연결 · 다른 이름으로 찾기, 줄 순서) */
+const matchKeyOf = (m: Row[], f: Row[]) =>
+  `${m.map((r) => `${r.cells.name ?? ''}|${r.userId ?? ''}|${r.lookup ?? ''}`).join(',')}§${f.map((r) => `${r.cells.englishName ?? ''}|${r.userId ?? ''}|${r.lookup ?? ''}`).join(',')}`;
 
 /** 엑셀에서 복사한 텍스트(TSV) → 2차원 배열. 줄바꿈이 든 칸("...")도 처리 */
 function parseTsv(text: string): string[][] {
@@ -86,18 +93,27 @@ export default function CampRosterPage() {
   const colsM = rosterColumnsOf('mentor', tier);
   const colsF = rosterColumnsOf('foreign', tier);
 
+  /** 마지막으로 매칭한 표 (이름 · 연결 · 순서) — 같으면 다시 묻지 않는다 */
+  const matchedKey = useRef('');
   const load = useCallback(async (id: string) => {
     if (dirty && !window.confirm('저장하지 않은 내용이 있습니다. 다른 캠프를 불러올까요?')) return;
     setJobCodeId(id); setResult(null); setMatches({ mentor: [], foreign: [], removals: [] });
     if (!id) return;
     setLoading(true);
     try {
-      const res = await authenticatedGet<{ doc: any; revealed: boolean }>(`/api/admin/camp-roster?jobCodeId=${encodeURIComponent(id)}`);
-      const pad = (rows: Row[], n: number) => [...rows.map((r) => ({ ...r, pickedFor: r.userId ? rosterMatchName('mentor', r) : undefined })), ...blankRows(Math.max(3, n - rows.length))];
+      const res = await authenticatedGet<{ doc: any; revealed: boolean; matches?: { mentors: Match[]; foreign: Match[]; removals: Cand[] } }>(`/api/admin/camp-roster?jobCodeId=${encodeURIComponent(id)}`);
+      // loadedUserId: 민감 칸(주민번호 · 여권 …)은 불러온 그 계정일 때만 보인다
+      const pad = (rows: Row[], n: number) => [...rows.map((r) => ({ ...r, pickedFor: r.userId ? rosterMatchName('mentor', r) : undefined, loadedUserId: r.userId ?? null })), ...blankRows(Math.max(3, n - rows.length))];
       const m: Row[] = res.doc?.mentors ?? [];
       const f: Row[] = (res.doc?.foreign ?? []).map((r: Row) => ({ ...r, pickedFor: r.userId ? rosterMatchName('foreign', r) : undefined }));
-      setMentors(pad(m, 20));
-      setForeign([...f, ...blankRows(Math.max(3, 12 - f.length))]);
+      const mm = pad(m, 20);
+      const ff = [...f, ...blankRows(Math.max(3, 12 - f.length))];
+      setMentors(mm);
+      setForeign(ff);
+      if (res.matches) {
+        setMatches({ mentor: res.matches.mentors, foreign: res.matches.foreign, removals: res.matches.removals });
+        matchedKey.current = matchKeyOf(mm, ff);   // 방금 받은 매칭 — 같은 표로 다시 묻지 않는다
+      }
       setMeta({ updatedAt: res.doc?.updatedAt, updatedByName: res.doc?.updatedByName });
       setDirty(false);
     } catch (e) {
@@ -113,6 +129,7 @@ export default function CampRosterPage() {
     if (!jobCodeId) return null;
     try {
       const res = await authenticatedPost<{ mentors: Match[]; foreign: Match[]; removals: Cand[] }>('/api/admin/camp-roster', { jobCodeId, mentors: m, foreign: f });   // lookup(다른 이름으로 찾기)도 함께
+      matchedKey.current = matchKeyOf(m, f);
       setMatches({ mentor: res.mentors, foreign: res.foreign, removals: res.removals });
       const apply = (rows: Row[], ms: Match[], kind: CampRosterKind) => {
         let changed = false;
@@ -131,14 +148,16 @@ export default function CampRosterPage() {
       return null;
     }
   }, [jobCodeId]);
+  const matchKey = matchKeyOf(mentors, foreign);
   useEffect(() => {
     if (!jobCodeId) return;
     if (timer.current) clearTimeout(timer.current);
+    if (matchKey === matchedKey.current) return;
     timer.current = setTimeout(() => { void runMatch(mentors, foreign); }, 700);
     return () => { if (timer.current) clearTimeout(timer.current); };
     // 이름·연결이 바뀔 때만 다시 매칭
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobCodeId, mentors.map((r) => `${r.cells.name ?? ''}|${r.userId ?? ''}|${r.lookup ?? ''}`).join(','), foreign.map((r) => `${r.cells.englishName ?? ''}|${r.userId ?? ''}|${r.lookup ?? ''}`).join(',')]);
+  }, [jobCodeId, matchKey]);
 
   /** 칸 값 바꾸기 — 이름이 바뀌면 연결을 풀고 다시 찾는다 */
   const setRows = (kind: CampRosterKind) => (kind === 'mentor' ? setMentors : setForeign);
@@ -201,7 +220,7 @@ export default function CampRosterPage() {
         <h1 className="text-2xl font-bold text-gray-900">선생님 명단 관리</h1>
         <p className="text-sm text-gray-500 mt-1 mb-5">
           관리시트 동기화 리스트의 값만 복사해서 칸에 붙여넣으세요 (⌘/Ctrl+V — 그 칸부터 채워집니다). 역할·그룹이 빈 칸이면 위 줄 값을 이어받습니다.
-          저장하면 캠프 배정·영어 이름·반 정보(시간표)·숙소 방{tier === 'S' ? '·여권 등 개인정보' : ''}가 앱 전체에 반영됩니다.
+          저장하면 캠프 배정·반 정보(시간표)·숙소 방이 앱 전체에 반영됩니다. 영어 이름·성별{tier === 'S' ? '·주민번호·여권·단체티·휴대폰' : ''}은 멘토가 앱에서 넣은 값이 저절로 보이고, 비어 있으면 아직 안 넣은 것입니다.
         </p>
 
         <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -246,7 +265,7 @@ export default function CampRosterPage() {
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-3 mb-3 text-sm">
-              <span className="px-2 py-1 rounded bg-gray-100">{jc?.code} · {tier === 'S' ? 'S 캠프 표' : 'J·E 캠프 표'}</span>
+              <span className="px-2 py-1 rounded bg-gray-100">{jc?.code} · {tier === 'S' ? '해외(S·F) 캠프 표' : 'J·E 캠프 표'}</span>
               <span>연결 <b className="text-green-700">{linked}</b>명</span>
               {unmatchedNames.length > 0 && <span className="text-amber-700">연결 안 됨 {unmatchedNames.length}명 (저장 시 건너뜀)</span>}
               {meta.updatedAt && <span className="text-gray-400">마지막 저장 {new Date(meta.updatedAt).toLocaleString('ko-KR')} {meta.updatedByName}</span>}
@@ -395,14 +414,16 @@ function Grid(props: {
                     if (c.fromAccount) {
                       // 계정 칸 — 연결된 계정 값만 (매칭 결과가 오기 전에는 불러온 값)
                       const acc = row.userId ? cands.find((x) => x.userId === row.userId) : undefined;
-                      const val = !row.userId ? '' : acc ? rosterAccountCells(acc)[c.key] ?? '' : row.cells[c.key] ?? '';
+                      // 민감 칸은 불러온 계정일 때만 (새로 연결하면 저장한 뒤 보인다)
+                      const pending = !!row.userId && !!c.sensitive && row.userId !== row.loadedUserId;
+                      const val = !row.userId || pending ? '' : c.sensitive || !acc ? row.cells[c.key] ?? '' : rosterAccountCells(acc)[c.key] ?? '';
                       return (
                         <td key={c.key} className="border-r p-0 bg-gray-50">
                           <input
-                            data-r={r} data-c={ci} value={val} readOnly placeholder={row.userId ? '미입력' : ''}
-                            title={row.userId ? (val ? '멘토가 직접 넣은 값' : '멘토가 아직 넣지 않았습니다') : '계정을 연결하면 저절로 채워집니다'}
+                            data-r={r} data-c={ci} value={val} readOnly placeholder={pending ? '저장 후 표시' : row.userId ? '미입력' : ''}
+                            title={pending ? '새로 연결한 계정 — 저장하면 멘토가 넣은 값이 보입니다' : row.userId ? (val ? '멘토가 직접 넣은 값' : '멘토가 아직 넣지 않았습니다') : '계정을 연결하면 저절로 채워집니다'}
                             onPaste={(e) => onPaste(e, r, ci)} onKeyDown={(e) => onKey(e, r, ci)}
-                            className="w-full cursor-default px-2 py-1.5 outline-none bg-transparent text-gray-600 placeholder:text-rose-300"
+                            className={`w-full cursor-default px-2 py-1.5 outline-none bg-transparent text-gray-600 ${pending ? 'placeholder:text-gray-300' : 'placeholder:text-rose-300'}`}
                             style={{ minWidth: c.width }}
                           />
                         </td>

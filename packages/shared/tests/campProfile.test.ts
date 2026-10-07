@@ -1,6 +1,7 @@
 import { describe, expect, it } from './_expect';
 import {
   campProfileTierOf,
+  isOverseasCampCode,
   hasDomesticCamp,
   maskAccountNumber,
   missingCampProfileFields,
@@ -16,6 +17,12 @@ describe('campProfile', () => {
     expect(campProfileTierOf(['e29'])).toBe('JE');
     expect(campProfileTierOf(['J29', 'S29'])).toBe('S');
     expect(campProfileTierOf([null, ''])).toBeNull();
+    // F(가족) 캠프도 해외 — 여권 · 단체티 · 휴대폰 모델명까지
+    expect(campProfileTierOf(['F29'])).toBe('S');
+    expect(campProfileTierOf(['J29', 'f29'])).toBe('S');
+    expect(isOverseasCampCode('F29')).toBe(true);
+    expect(isOverseasCampCode('E29')).toBe(false);
+    expect(rrnPurposeLines(['F29']).map((l) => l.tier)).toEqual(['S']);
     expect(hasDomesticCamp(['S29', 'E29'])).toBe(true);
     expect(hasDomesticCamp(['S29'])).toBe(false);
   });

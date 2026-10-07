@@ -3,13 +3,14 @@
  *
  * - 불러오기: 표 문서 + (S캠프) 민감 칸은 개인 저장소에서 원본을 채워 돌려준다
  * - 매칭: 행마다 이름으로 사용자 후보를 찾아 준다 (동명이인·없는 사람은 관리자가 고른다)
- * - 저장: 캠프 배정(그룹·역할·반번호) · 반 정보(강의실·반이름·교재) · 숙소 방 ·
- *        S캠프 개인정보를 한 번에 반영하고, 표에서 빠진 사람은 (확인받은) 캠프 배정을 해제한다
- * - 멘토 영어 이름 · 성별은 표에서 넣지 않는다 — 연결된 계정 값(멘토가 직접 넣은 값)으로 채우고, 안 넣었으면 빈 칸
+ * - 저장: 캠프 배정(그룹·역할·반번호) · 반 정보(강의실·반이름·교재) · 숙소 방을 한 번에 반영하고,
+ *        표에서 빠진 사람은 (확인받은) 캠프 배정을 해제한다
+ * - 멘토 영어 이름 · 성별과 해외(S·F) 캠프의 주민번호 · 여권 · 단체티 · 휴대폰은 표에서 넣지 않는다 —
+ *   연결된 계정 값(멘토가 직접 넣은 값)으로 채우고, 안 넣었으면 빈 칸
  */
 import { getAdminFirestore, adminFieldValue } from '@/lib/firebase-admin';
 import { privateRef } from '@/lib/campProfileServer';
-import { buildRosterRow, applyRosterEdit, RosterEditError } from '@/lib/campRosterServer';
+import { buildRosterRow } from '@/lib/campRosterServer';
 import {
   ENGLISH_NICKNAME_RE,
   normalizeNameForMatch,
@@ -67,8 +68,13 @@ async function writeRosterDoc(jc: { id: string; code: string }, data: CampRoster
   await rosterRef(jc).set(data);
 }
 
+/** 표 매칭 · 저장에 쓰는 사용자 칸만 — 자기소개 같은 큰 칸까지 받으면 users 전체가 1MB 넘게 무거워 느리다 */
+const USER_FIELDS = ['name', 'role', 'status', 'englishNickname', 'university', 'jobCodeIds', 'jobExperiences', 'gender', 'activeJobExperienceId'];
+/** 선생님 표에 들어갈 수 있는 역할 — 다른 계정이 늘어도 읽는 양이 늘지 않게 */
+const ROSTER_ROLES = [...new Set([...MENTOR_ROLES, ...FOREIGN_ROLES])];
+
 export async function loadUsers(jobCodeId: string): Promise<UserLite[]> {
-  const snap = await getAdminFirestore().collection('users').get();
+  const snap = await getAdminFirestore().collection('users').where('role', 'in', ROSTER_ROLES).select(...USER_FIELDS).get();
   return snap.docs
     .filter((d) => !['deleted', 'inactive'].includes(String(d.data().status)))
     .map((d) => {
@@ -81,18 +87,7 @@ export async function loadUsers(jobCodeId: string): Promise<UserLite[]> {
     });
 }
 
-/** 연결된 계정들의 users 문서 (영어 이름 · 성별 채우기용) */
-export async function accountsOf(ids: Array<string | null | undefined>): Promise<Map<string, Record<string, any>>> {
-  const uniq = [...new Set(ids.filter((x): x is string => !!x))];
-  const out = new Map<string, Record<string, any>>();
-  if (!uniq.length) return out;
-  const db = getAdminFirestore();
-  const snaps = await db.getAll(...uniq.map((id) => db.collection('users').doc(id)));
-  snaps.forEach((d) => { if (d.exists) out.set(d.id, d.data() ?? {}); });
-  return out;
-}
-
-/** S캠프 민감 칸 — 개인 저장소 원본 */
+/** 해외(S·F) 캠프 민감 칸 — 개인 저장소 원본 (관리자 표에서 보여 주기만) */
 export const SENSITIVE_KEYS = ['rrn', 'passportName', 'passportNumber', 'passportExpiry', 'shirtSize', 'phoneNumber', 'phoneModel'] as const;
 async function sensitiveCellsOf(uid: string, jobCodeId: string, code: string): Promise<Record<string, string>> {
   const d = await getAdminFirestore().collection('users').doc(uid).get();
@@ -102,18 +97,20 @@ async function sensitiveCellsOf(uid: string, jobCodeId: string, code: string): P
   return { rrn, passportName: r.passportName, passportNumber: r.passportNumber, passportExpiry: r.passportExpiry, shirtSize: r.shirtSize, phoneNumber: r.phoneNumber, phoneModel: r.phoneModel };
 }
 
-/** 불러오기 — 표 문서 (S 캠프 멘토 줄에는 민감 칸 원본을 채운다) */
+/** 불러오기 — 표 문서 (해외 S·F 캠프 멘토 줄에는 민감 칸 원본을 채운다) */
 export async function loadCampRoster(jobCodeId: string) {
   const jc = await getJobCode(jobCodeId);
-  const doc = await readRosterDoc(jc);
+  const [doc, users] = await Promise.all([readRosterDoc(jc), loadUsers(jobCodeId)]);
+  const byId = new Map(users.map((u) => [u.id, u]));
   // 영어 이름 · 성별은 지금 계정 값으로 (멘토가 바꾸면 바로 보이게, 안 넣었으면 빈 칸)
-  const accounts = await accountsOf((doc?.mentors ?? []).map((r) => r.userId));
-  let mentors = (doc?.mentors ?? []).map((r) => rosterRowWithAccount('mentor', jc.tier, r, r.userId ? accounts.get(r.userId) : null));
+  let mentors = (doc?.mentors ?? []).map((r) => rosterRowWithAccount('mentor', jc.tier, r, r.userId ? byId.get(r.userId)?.data : null));
   const revealed = jc.tier === 'S' && mentors.some((r) => r.userId);
   if (jc.tier === 'S') {
     mentors = await Promise.all(mentors.map(async (r) => (r.userId ? { ...r, cells: { ...r.cells, ...(await sensitiveCellsOf(r.userId, jobCodeId, jc.code)) } } : r)));
   }
-  return { jobCode: jc, doc: doc ? { ...doc, mentors } : null, revealed };
+  // 매칭 결과도 같이 — 화면이 열리자마자 연결된 계정 이름이 보이게 (따로 한 번 더 묻지 않는다)
+  const matches = matchRoster(jobCodeId, { mentors: doc?.mentors ?? [], foreign: doc?.foreign ?? [] }, users, doc);
+  return { jobCode: jc, doc: doc ? { ...doc, mentors } : null, revealed, matches };
 }
 
 /** gender: 'M' | 'F' | '' — 계정 칸(성별)을 표에 바로 보여 주려고 */
@@ -146,9 +143,13 @@ export function candidatesFor(kind: CampRosterKind, raw: string, users: UserLite
 /** 매칭 미리보기 — 행마다 후보와 자동 선택, 그리고 표에서 빠져 배정 해제될 사람 */
 export async function previewCampRoster(jobCodeId: string, input: { mentors: CampRosterRow[]; foreign: CampRosterRow[] }) {
   const jc = await getJobCode(jobCodeId);
-  const users = await loadUsers(jobCodeId);
+  const [users, prev] = await Promise.all([loadUsers(jobCodeId), readRosterDoc(jc)]);
+  return { jobCode: jc, ...matchRoster(jobCodeId, input, users, prev) };
+}
+
+/** 이름 매칭 (읽어 둔 사용자로) — 불러오기와 미리보기가 같이 쓴다 */
+export function matchRoster(jobCodeId: string, input: { mentors: CampRosterRow[]; foreign: CampRosterRow[] }, users: UserLite[], prev: CampRosterDoc | null) {
   const byId = new Map(users.map((u) => [u.id, u]));
-  const prev = await readRosterDoc(jc);
 
   const matchAll = (kind: CampRosterKind, rows: CampRosterRow[]): RosterMatch[] =>
     rows.map((r, index) => {
@@ -168,7 +169,7 @@ export async function previewCampRoster(jobCodeId: string, input: { mentors: Cam
   const mentors = matchAll('mentor', input.mentors ?? []);
   const foreign = matchAll('foreign', input.foreign ?? []);
   const keep = new Set([...mentors, ...foreign].map((m) => m.userId).filter(Boolean) as string[]);
-  return { jobCode: jc, mentors, foreign, removals: removalsOf(jobCodeId, users, keep, prev) };
+  return { mentors, foreign, removals: removalsOf(jobCodeId, users, keep, prev) };
 }
 
 export function removalsOf(jobCodeId: string, users: UserLite[], keep: Set<string>, prev: CampRosterDoc | null) {
@@ -312,29 +313,8 @@ export async function saveCampRoster(
   for (const r of mentors) if (r.userId) await assign('mentor', r);
   for (const r of foreign) if (r.userId) await assign('foreign', r);
 
-  // 2) S캠프 민감 칸 — 바뀐 칸만 기존 저장 로직(검증·암호화)으로. 빈 칸은 지우지 않는다
-  if (jc.tier === 'S') {
-    for (const r of mentors) {
-      if (!r.userId) continue;
-      const cur = await sensitiveCellsOf(r.userId, jobCodeId, jc.code);
-      for (const k of SENSITIVE_KEYS) {
-        const v = (r.cells[k] ?? '').trim();
-        if (!v || v === (cur[k] ?? '')) continue;
-        try {
-          if (k === 'rrn') {
-            const digits = v.replace(/\D/g, '');
-            if (digits.length !== 13) throw new RosterEditError(400, '주민등록번호 13자리를 확인해주세요.');
-            await applyRosterEdit(r.userId, jobCodeId, 'rrnFront', digits.slice(0, 6));
-            await applyRosterEdit(r.userId, jobCodeId, 'rrnLast', digits.slice(6));
-          } else {
-            await applyRosterEdit(r.userId, jobCodeId, k, v);
-          }
-        } catch (e) {
-          warnings.push(`${byId.get(r.userId)!.name}: ${colsM.find((c) => c.key === k)?.label} — ${e instanceof RosterEditError ? e.message : '저장 실패'}`);
-        }
-      }
-    }
-  }
+  // 2) 해외(S·F) 캠프 민감 칸(주민번호 · 여권 · 단체티 · 휴대폰)은 표에서 받지 않는다 — 멘토가 앱에서 넣은 값을 불러와 보여 줄 뿐
+  //    (prepRosterRows 가 계정 칸을 이미 뺐다)
 
   // 3) 표에서 빠진 사람 — 확인받은 사람만 배정 해제
   const keep = new Set(seen.keys());
