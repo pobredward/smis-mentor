@@ -18,6 +18,8 @@ import PushReachPanel from '@/components/admin/PushReachPanel';
 import { authenticatedGet, authenticatedPost, authenticatedPut } from '@/lib/apiClient';
 import { getAllJobCodes } from '@/lib/firebaseService';
 import {
+  rosterAccountCells,
+  rosterAccountKeys,
   rosterColumnsOf,
   rosterTierOf,
   rosterFillInherited,
@@ -29,7 +31,7 @@ import {
 } from '@smis-mentor/shared';
 
 type Row = CampRosterRow & { pickedFor?: string; lookup?: string };
-type Cand = { userId: string; name: string; role: string; status: string; englishNickname: string; university: string; inCamp: boolean };
+type Cand = { userId: string; name: string; role: string; status: string; englishNickname: string; gender?: string; university: string; inCamp: boolean };
 type Match = { index: number; name: string; userId: string | null; status: 'linked' | 'auto' | 'ambiguous' | 'none'; candidates: Cand[] };
 type JobCode = { id: string; code: string; name: string; generation: string; startDate?: any };
 
@@ -140,7 +142,11 @@ export default function CampRosterPage() {
 
   /** 칸 값 바꾸기 — 이름이 바뀌면 연결을 풀고 다시 찾는다 */
   const setRows = (kind: CampRosterKind) => (kind === 'mentor' ? setMentors : setForeign);
-  const edit = (kind: CampRosterKind, updates: Array<{ r: number; key: string; v: string }>) => {
+  const edit = (kind: CampRosterKind, updates0: Array<{ r: number; key: string; v: string }>) => {
+    // 계정 칸(멘토 영어 이름 · 성별)은 표에서 넣지 않는다 — 붙여넣기도 건너뛴다
+    const acct = new Set(rosterAccountKeys(kind, tier));
+    const updates = updates0.filter((u) => !acct.has(u.key));
+    if (!updates.length) return;
     setDirty(true);
     setRows(kind)((cur) => {
       const next = [...cur];
@@ -350,7 +356,11 @@ function Grid(props: {
               <th className="px-1 py-2 w-8 border-r" />
               <th className="px-2 py-2 border-r text-left whitespace-nowrap" style={{ minWidth: 170 }}>연결된 계정</th>
               {cols.map((c) => (
-                <th key={c.key} className={`px-2 py-2 border-r text-left whitespace-nowrap ${c.sensitive ? 'text-rose-700' : ''}`} style={{ minWidth: c.width }}>{c.label}</th>
+                <th key={c.key} className={`px-2 py-2 border-r text-left whitespace-nowrap ${c.sensitive ? 'text-rose-700' : ''}`} style={{ minWidth: c.width }}
+                  title={c.fromAccount ? '계정에서 저절로 — 멘토가 직접 넣은 값만 보입니다 (표에서 넣지 않음)' : undefined}>
+                  {c.label}
+                  {c.fromAccount && <span className="ml-1 rounded bg-green-100 px-1 text-[10px] font-normal text-green-700">자동</span>}
+                </th>
               ))}
             </tr>
           </thead>
@@ -382,6 +392,22 @@ function Grid(props: {
                     )}
                   </td>
                   {cols.map((c, ci) => {
+                    if (c.fromAccount) {
+                      // 계정 칸 — 연결된 계정 값만 (매칭 결과가 오기 전에는 불러온 값)
+                      const acc = row.userId ? cands.find((x) => x.userId === row.userId) : undefined;
+                      const val = !row.userId ? '' : acc ? rosterAccountCells(acc)[c.key] ?? '' : row.cells[c.key] ?? '';
+                      return (
+                        <td key={c.key} className="border-r p-0 bg-gray-50">
+                          <input
+                            data-r={r} data-c={ci} value={val} readOnly placeholder={row.userId ? '미입력' : ''}
+                            title={row.userId ? (val ? '멘토가 직접 넣은 값' : '멘토가 아직 넣지 않았습니다') : '계정을 연결하면 저절로 채워집니다'}
+                            onPaste={(e) => onPaste(e, r, ci)} onKeyDown={(e) => onKey(e, r, ci)}
+                            className="w-full cursor-default px-2 py-1.5 outline-none bg-transparent text-gray-600 placeholder:text-rose-300"
+                            style={{ minWidth: c.width }}
+                          />
+                        </td>
+                      );
+                    }
                     const raw = row.cells[c.key] ?? '';
                     const inherited = c.inherit && !raw ? filled[r]?.cells[c.key] ?? '' : '';
                     return (

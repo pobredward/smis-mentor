@@ -165,7 +165,7 @@ export function buildCampTeachers(jobCodeId: string, users: UserLike[], roster: 
       const name = u?.name || c.name || '';
       if (!name) return;
       out.push({
-        key: `m${i}`, kind: 'mentor', name, englishName: c.englishName || u?.englishNickname || '', photo: photoOf(r.userId),
+        key: `m${i}`, kind: 'mentor', name, englishName: String(u?.englishNickname ?? '').trim(), photo: photoOf(r.userId),   // 영어 이름은 멘토가 직접 넣은 값만 (표 칸은 쓰지 않는다)
         role: mentorRoleOf(c.role || ''), group: c.group || '', classCode: c.classCode || '', className: c.className || '', grade: c.grade || '',
         ...mentorIntroOf(u),
       });
