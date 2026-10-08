@@ -325,7 +325,8 @@ export const deactivateUser = async (db: Firestore, userId: string): Promise<boo
 
     await updateDoc(userRef, {
       status: 'inactive',
-      name: `(탈퇴)${userData.name}`,
+      // 이름은 그대로 둔다 (예전엔 '(탈퇴)'를 붙였다 — 탈퇴 여부는 status · deactivatedAt)
+      deactivatedAt: now,
       originalEmail: userData.email,
       updatedAt: now,
     });

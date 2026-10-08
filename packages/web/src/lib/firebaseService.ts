@@ -276,7 +276,8 @@ export const deactivateUser = async (userId: string) => {
     const isForeignUser = userData.role === 'foreign' || userData.role === 'foreign_temp';
     await updateDoc(userRef, {
       status: 'inactive',
-      name: `(탈퇴)${userData.name}`,
+      // 이름은 그대로 둔다 (예전엔 '(탈퇴)'를 붙였다 — 탈퇴 여부는 status · deactivatedAt)
+      deactivatedAt: now,
       originalEmail: userData.email,
       profileImage: '',
       pushTokens: {}, // 탈퇴 후 알림 발송 방지

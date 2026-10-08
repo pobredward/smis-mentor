@@ -24,7 +24,7 @@ export const deactivateUserMobile = async (userId: string, db: Firestore, auth: 
     // Firestore 사용자 정보 업데이트 (소프트 삭제)
     await updateDoc(userRef, {
       status: 'inactive',
-      name: `(탈퇴)${userData.name}`,
+      // 이름은 그대로 둔다 (예전엔 '(탈퇴)'를 붙였다 — 탈퇴 여부는 status · deactivatedAt)
       originalEmail: userData.email, // 원본 이메일 저장
       pushTokens: {}, // 탈퇴 후 알림 발송 방지
       deactivatedAt: now, // 탈퇴 일시 기록
