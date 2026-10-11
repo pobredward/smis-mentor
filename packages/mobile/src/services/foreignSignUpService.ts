@@ -1,6 +1,7 @@
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { logger } from '@smis-mentor/shared';
 import { storage } from '../config/firebase';
+import { contentTypeFor } from '../utils/imageCompression';
 
 /**
  * 원어민 회원가입용 파일 업로드 서비스
@@ -27,7 +28,7 @@ export async function uploadCV(
   try {
     const blob = await uriToBlob(fileUri);
     const storageRef = ref(storage, `foreign-teachers/${userId}/cv_${fileName}`);
-    await uploadBytes(storageRef, blob);
+    await uploadBytes(storageRef, blob, { contentType: contentTypeFor(blob, fileName || fileUri, 'application/pdf') });
     const downloadURL = await getDownloadURL(storageRef);
     return downloadURL;
   } catch (error) {
@@ -46,7 +47,7 @@ export async function uploadPassportPhoto(
   try {
     const blob = await uriToBlob(uri);
     const storageRef = ref(storage, `foreign-teachers/${userId}/passport.jpg`);
-    await uploadBytes(storageRef, blob);
+    await uploadBytes(storageRef, blob, { contentType: contentTypeFor(blob, uri, 'image/jpeg') });
     const downloadURL = await getDownloadURL(storageRef);
     return downloadURL;
   } catch (error) {
@@ -65,7 +66,7 @@ export async function uploadForeignIdCard(
   try {
     const blob = await uriToBlob(uri);
     const storageRef = ref(storage, `foreign-teachers/${userId}/foreign_id.jpg`);
-    await uploadBytes(storageRef, blob);
+    await uploadBytes(storageRef, blob, { contentType: contentTypeFor(blob, uri, 'image/jpeg') });
     const downloadURL = await getDownloadURL(storageRef);
     return downloadURL;
   } catch (error) {
@@ -85,7 +86,7 @@ export async function uploadBankBook(
   try {
     const blob = await uriToBlob(uri);
     const storageRef = ref(storage, `foreignTeachers/${userId}/bankBook/${Date.now()}-${fileName}`);
-    await uploadBytes(storageRef, blob);
+    await uploadBytes(storageRef, blob, { contentType: contentTypeFor(blob, fileName || uri) });
     const downloadURL = await getDownloadURL(storageRef);
     return downloadURL;
   } catch (error) {
@@ -105,7 +106,7 @@ export async function uploadEslCert(
   try {
     const blob = await uriToBlob(uri);
     const storageRef = ref(storage, `foreignTeachers/${userId}/eslCert/${Date.now()}-${fileName}`);
-    await uploadBytes(storageRef, blob);
+    await uploadBytes(storageRef, blob, { contentType: contentTypeFor(blob, fileName || uri) });
     const downloadURL = await getDownloadURL(storageRef);
     return downloadURL;
   } catch (error) {
