@@ -159,7 +159,9 @@ function ProfileImage() {
       await refreshUserData();
     } catch (e) {
       logger.error('프로필 사진 업로드 오류:', e);
-      Alert.alert(L('common.error'), L('profile.anErrorOccurredWhileUploading'));
+      // 원인을 알 수 있게 오류 코드(예: storage/unauthorized)를 같이 보여 준다
+      const code = (e as { code?: string })?.code;
+      Alert.alert(L('common.error'), L('profile.anErrorOccurredWhileUploading') + (code ? `\n(${code})` : ''));
     } finally {
       setUploading(false);
     }

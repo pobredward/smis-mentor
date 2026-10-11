@@ -21,7 +21,9 @@ export async function uploadProfileImage(
 ): Promise<string> {
   try {
     const storageRef = ref(storage, `profile-images/${userId}`);
-    const uploadTask = uploadBytesResumable(storageRef, blob);
+    // 형식을 꼭 명시한다 — 비어 있으면 octet-stream 으로 올라가 Storage 규칙(이미지만)에 거부된다 (compressImage 결과는 JPEG)
+    const contentType = blob.type && blob.type !== 'application/octet-stream' ? blob.type : 'image/jpeg';
+    const uploadTask = uploadBytesResumable(storageRef, blob, { contentType });
 
     return new Promise((resolve, reject) => {
       uploadTask.on(
