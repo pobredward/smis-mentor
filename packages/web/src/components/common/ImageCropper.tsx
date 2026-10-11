@@ -8,6 +8,8 @@ interface ImageCropperProps {
   onCropComplete: (croppedFile: File) => void;
   onCancel: () => void;
   aspectRatio?: number; // 미전달 시 자유 비율
+  /** 결과의 긴 변 최대 픽셀 (기본 1600) — 프로필 사진은 작게 */
+  maxSize?: number;
 }
 
 // 이미지가 로드될 때 초기 크롭 영역 계산
@@ -89,6 +91,7 @@ async function getCroppedImg(
   image: HTMLImageElement,
   crop: PixelCrop,
   fileName: string,
+  maxSize = 1600,
 ): Promise<File> {
   if (!crop || !crop.width || !crop.height) {
     throw new Error('Crop not defined');
@@ -112,10 +115,12 @@ async function getCroppedImg(
     unit: 'px'
   };
   
-  // 캔버스 생성 및 설정
+  // 캔버스 생성 및 설정 — 긴 변을 maxSize 로 줄인다.
+  // 예전에는 원본 해상도 · 품질 1.0 으로 저장해 프로필 사진이 몇 MB 였고, 40px 아바타로 띄울 때마다 그만큼 받았다 (2026-10-08 로딩 검토)
+  const scale = Math.min(1, maxSize / Math.max(pixelCrop.width, pixelCrop.height));
   const canvas = document.createElement('canvas');
-  canvas.width = pixelCrop.width;
-  canvas.height = pixelCrop.height;
+  canvas.width = Math.max(1, Math.round(pixelCrop.width * scale));
+  canvas.height = Math.max(1, Math.round(pixelCrop.height * scale));
   
   const ctx = canvas.getContext('2d');
   if (!ctx) {
@@ -131,8 +136,8 @@ async function getCroppedImg(
     pixelCrop.height,
     0,
     0,
-    pixelCrop.width,
-    pixelCrop.height
+    canvas.width,
+    canvas.height
   );
   
   return new Promise((resolve, reject) => {
@@ -147,7 +152,7 @@ async function getCroppedImg(
         resolve(file);
       },
       'image/jpeg',
-      1.0 // 최대 품질
+      0.88
     );
   });
 }
@@ -157,6 +162,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   onCropComplete, 
   onCancel,
   aspectRatio, // undefined = 자유 비율
+  maxSize,
 }) => {
   const [crop, setCrop] = useState<Crop>();
   const [completedCrop, setCompletedCrop] = useState<PixelCrop>();
@@ -242,7 +248,8 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
       const croppedFile = await getCroppedImg(
         imgRef.current,
         completedCrop,
-        file.name
+        file.name,
+        maxSize,
       );
       
       onCropComplete(croppedFile);

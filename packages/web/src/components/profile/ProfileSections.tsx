@@ -169,10 +169,16 @@ function ProfileImage() {
     setFile(null);
     setUploading(true);
     try {
+      // Storage 규칙(profileImages/) 상한 5MB — 크롭 결과가 그래도 크면 올리기 전에 막는다
+      if (cropped.size > 5 * 1024 * 1024) {
+        toast.error(L('chat.imageTooLarge', { max: 5 }));
+        return;
+      }
       await uploadProfileImage(userData.userId, cropped, () => undefined);
       await refreshUserData();
       toast.success(L('profile.profileImageUpdated'));
-    } catch {
+    } catch (e) {
+      logger.error('프로필 사진 업로드 실패:', e);
       toast.error(L('profile.failedToUploadTheImage'));
     } finally {
       setUploading(false);
@@ -207,7 +213,7 @@ function ProfileImage() {
       {file && (
         <div className="fixed inset-0 z-[1100] bg-black/60 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl p-4 max-w-lg w-full max-h-[90vh] overflow-auto">
-            <ImageCropper file={file} onCropComplete={onCropped} onCancel={() => setFile(null)} aspectRatio={1} />
+            <ImageCropper file={file} onCropComplete={onCropped} onCancel={() => setFile(null)} aspectRatio={1} maxSize={640} />
           </div>
         </div>
       )}
