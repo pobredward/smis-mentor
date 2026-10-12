@@ -11,7 +11,11 @@ export type TemplateType =
   | 'interview_pass' 
   | 'interview_fail' 
   | 'final_pass' 
-  | 'final_fail';
+  | 'final_fail'
+  // 보류 (TO 대기) 안내
+  | 'document_hold'
+  | 'interview_hold'
+  | 'final_hold';
 
 export interface SMSTemplate {
   id?: string;

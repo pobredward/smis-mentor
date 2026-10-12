@@ -85,20 +85,26 @@ export function InterviewManageScreen({
   const [showSMSMessage, setShowSMSMessage] = useState<Record<TemplateType, boolean>>({
     document_pass: false,
     document_fail: false,
+    document_hold: false,
     interview_scheduled: false,
     interview_pass: false,
     interview_fail: false,
+    interview_hold: false,
     final_pass: false,
     final_fail: false,
+    final_hold: false,
   });
   const [smsMessages, setSmsMessages] = useState<Record<TemplateType, string>>({
     document_pass: '',
     document_fail: '',
+    document_hold: '',
     interview_scheduled: '',
     interview_pass: '',
     interview_fail: '',
+    interview_hold: '',
     final_pass: '',
     final_fail: '',
+    final_hold: '',
   });
   const [fromNumber, setFromNumber] = useState<'01076567933' | '01067117933'>('01076567933');
   const [isSendingSMS, setIsSendingSMS] = useState(false);
@@ -649,11 +655,14 @@ export function InterviewManageScreen({
     const defaultMessages: Record<TemplateType, string> = {
       document_pass: `안녕하세요, ${userName}님.\n${jobBoardTitle} 채용에 지원해주셔서 감사합니다.\n서류 전형 합격을 축하드립니다.`,
       document_fail: `안녕하세요, ${userName}님.\n${jobBoardTitle} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 서류 전형에 합격하지 못하셨습니다.`,
+      document_hold: `안녕하세요, ${userName}님.\n${jobBoardTitle} 채용에 지원해주셔서 감사합니다.\n현재 서류 전형 결과가 보류된 상태입니다.\n모집 인원이 확정되는 대로 다시 안내드리겠습니다. 조금만 기다려 주시기 바랍니다.`,
       interview_scheduled: `안녕하세요, ${userName}님.\n${jobBoardTitle} 서류 전형 합격을 축하드립니다.\n\n면접 일정을 안내드립니다.`,
       interview_pass: `안녕하세요, ${userName}님.\n${jobBoardTitle} 면접에 참여해주셔서 감사합니다.\n면접 전형 합격을 축하드립니다.`,
       interview_fail: `안녕하세요, ${userName}님.\n${jobBoardTitle} 면접에 참여해주셔서 감사합니다.\n아쉽게도 이번 면접 전형에 합격하지 못하셨습니다.`,
+      interview_hold: `안녕하세요, ${userName}님.\n${jobBoardTitle} 면접에 참여해주셔서 감사합니다.\n현재 면접 전형 결과가 보류된 상태입니다.\n모집 인원이 확정되는 대로 다시 안내드리겠습니다. 조금만 기다려 주시기 바랍니다.`,
       final_pass: `축하합니다, ${userName}님!\n${jobBoardTitle}에 최종 합격하셨습니다.`,
       final_fail: `안녕하세요, ${userName}님.\n${jobBoardTitle} 채용 전형에 참여해주셔서 감사합니다.\n아쉽게도 이번 최종 전형에 합격하지 못하셨습니다.`,
+      final_hold: `안녕하세요, ${userName}님.\n${jobBoardTitle} 채용 과정에 끝까지 함께해주셔서 감사합니다.\n현재 최종 결과가 보류된 상태입니다.\n캠프 배정이 확정되는 대로 다시 안내드리겠습니다. 조금만 기다려 주시기 바랍니다.`,
     };
 
     return defaultMessages[type];

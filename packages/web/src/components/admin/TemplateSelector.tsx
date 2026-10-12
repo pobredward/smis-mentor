@@ -64,11 +64,14 @@ export const TemplateSelector: React.FC<TemplateSelectorProps> = ({
     const labels: Record<TemplateType, string> = {
       document_pass: '서류 합격',
       document_fail: '서류 불합격',
+      document_hold: '서류 보류',
       interview_scheduled: '면접 예정',
       interview_pass: '면접 합격',
       interview_fail: '면접 불합격',
+      interview_hold: '면접 보류',
       final_pass: '최종 합격',
       final_fail: '최종 불합격',
+      final_hold: '최종 보류',
     };
     return labels[type];
   };

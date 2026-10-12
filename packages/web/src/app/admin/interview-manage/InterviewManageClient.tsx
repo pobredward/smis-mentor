@@ -65,18 +65,24 @@ export function InterviewManageClient() {
   // SMS 관련 상태 추가
   const [showDocumentPassMessage, setShowDocumentPassMessage] = useState(false);
   const [showDocumentFailMessage, setShowDocumentFailMessage] = useState(false);
+  const [showDocumentHoldMessage, setShowDocumentHoldMessage] = useState(false);
   const [showInterviewScheduledMessage, setShowInterviewScheduledMessage] = useState(false);
   const [showInterviewPassMessage, setShowInterviewPassMessage] = useState(false);
   const [showInterviewFailMessage, setShowInterviewFailMessage] = useState(false);
+  const [showInterviewHoldMessage, setShowInterviewHoldMessage] = useState(false);
   const [showFinalPassMessage, setShowFinalPassMessage] = useState(false);
   const [showFinalFailMessage, setShowFinalFailMessage] = useState(false);
+  const [showFinalHoldMessage, setShowFinalHoldMessage] = useState(false);
   const [documentPassMessage, setDocumentPassMessage] = useState('');
   const [documentFailMessage, setDocumentFailMessage] = useState('');
+  const [documentHoldMessage, setDocumentHoldMessage] = useState('');
   const [interviewScheduledMessage, setInterviewScheduledMessage] = useState('');
   const [interviewPassMessage, setInterviewPassMessage] = useState('');
   const [interviewFailMessage, setInterviewFailMessage] = useState('');
+  const [interviewHoldMessage, setInterviewHoldMessage] = useState('');
   const [finalPassMessage, setFinalPassMessage] = useState('');
   const [finalFailMessage, setFinalFailMessage] = useState('');
+  const [finalHoldMessage, setFinalHoldMessage] = useState('');
   // const [isSendingSms, setIsSendingSms] = useState(false);
   const [isLoadingMessage, setIsLoadingMessage] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
@@ -1225,11 +1231,14 @@ export function InterviewManageClient() {
   const closeAllMessageBoxes = () => {
     setShowDocumentPassMessage(false);
     setShowDocumentFailMessage(false);
+    setShowDocumentHoldMessage(false);
     setShowInterviewScheduledMessage(false);
     setShowInterviewPassMessage(false);
     setShowInterviewFailMessage(false);
+    setShowInterviewHoldMessage(false);
     setShowFinalPassMessage(false);
     setShowFinalFailMessage(false);
+    setShowFinalHoldMessage(false);
   };
 
   // SMS 템플릿 로드
@@ -1270,6 +1279,15 @@ export function InterviewManageClient() {
         // 기본 서류 불합격 메시지 설정
         setDocumentFailMessage(`안녕하세요, {이름}님.\n${selectedApplication.jobBoardTitle || ''} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 서류 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
       }
+
+      // document_hold 템플릿 로드
+      const documentHoldTemplate = await getSMSTemplateByTypeAndJobBoard('document_hold', jobBoardId);
+      if (documentHoldTemplate) {
+        setDocumentHoldMessage(documentHoldTemplate.content);
+      } else {
+        // 기본 서류 보류 메시지 설정
+        setDocumentHoldMessage(`안녕하세요, {이름}님.\n${selectedApplication.jobBoardTitle || ''} 채용에 지원해주셔서 감사합니다.\n현재 서류 전형 결과가 보류된 상태입니다.\n모집 인원이 확정되는 대로 다시 안내드리겠습니다. 조금만 기다려 주시기 바랍니다.`);
+      }
       
       // interview_scheduled 템플릿 로드
       const interviewScheduledTemplate = await getSMSTemplateByTypeAndJobBoard('interview_scheduled', jobBoardId);
@@ -1297,6 +1315,15 @@ export function InterviewManageClient() {
         // 기본 면접 불합격 메시지 설정
         setInterviewFailMessage(`안녕하세요, {이름}님.\n${selectedApplication.jobBoardTitle || ''} 면접에 참여해주셔서 감사합니다.\n아쉽게도 이번 면접 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
       }
+
+      // interview_hold 템플릿 로드
+      const interviewHoldTemplate = await getSMSTemplateByTypeAndJobBoard('interview_hold', jobBoardId);
+      if (interviewHoldTemplate) {
+        setInterviewHoldMessage(interviewHoldTemplate.content);
+      } else {
+        // 기본 면접 보류 메시지 설정
+        setInterviewHoldMessage(`안녕하세요, {이름}님.\n${selectedApplication.jobBoardTitle || ''} 면접에 참여해주셔서 감사합니다.\n현재 면접 전형 결과가 보류된 상태입니다.\n모집 인원이 확정되는 대로 다시 안내드리겠습니다. 조금만 기다려 주시기 바랍니다.`);
+      }
       
       // final_pass 템플릿 로드
       const finalPassTemplate = await getSMSTemplateByTypeAndJobBoard('final_pass', jobBoardId);
@@ -1314,6 +1341,15 @@ export function InterviewManageClient() {
       } else {
         // 기본 최종 불합격 메시지 설정
         setFinalFailMessage(`안녕하세요, {이름}님.\n${selectedApplication.jobBoardTitle || ''} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 최종 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
+      }
+
+      // final_hold 템플릿 로드
+      const finalHoldTemplate = await getSMSTemplateByTypeAndJobBoard('final_hold', jobBoardId);
+      if (finalHoldTemplate) {
+        setFinalHoldMessage(finalHoldTemplate.content);
+      } else {
+        // 기본 최종 보류 메시지 설정
+        setFinalHoldMessage(`안녕하세요, {이름}님.\n${selectedApplication.jobBoardTitle || ''} 채용 과정에 끝까지 함께해주셔서 감사합니다.\n현재 최종 결과가 보류된 상태입니다.\n캠프 배정이 확정되는 대로 다시 안내드리겠습니다. 조금만 기다려 주시기 바랍니다.`);
       }
     } catch (error) {
       logger.error('템플릿 로드 실패:', error);
@@ -1420,6 +1456,9 @@ export function InterviewManageClient() {
         case 'document_fail':
           setDocumentFailMessage(content);
           break;
+        case 'document_hold':
+          setDocumentHoldMessage(content);
+          break;
         case 'interview_scheduled':
           setInterviewScheduledMessage(content);
           break;
@@ -1429,11 +1468,17 @@ export function InterviewManageClient() {
         case 'interview_fail':
           setInterviewFailMessage(content);
           break;
+        case 'interview_hold':
+          setInterviewHoldMessage(content);
+          break;
         case 'final_pass':
           setFinalPassMessage(content);
           break;
         case 'final_fail':
           setFinalFailMessage(content);
+          break;
+        case 'final_hold':
+          setFinalHoldMessage(content);
           break;
       }
       
@@ -1466,6 +1511,12 @@ export function InterviewManageClient() {
           return;
         }
         break;
+      case 'document_hold':
+        if(showDocumentHoldMessage) {
+          setShowDocumentHoldMessage(false);
+          return;
+        }
+        break;
       case 'interview_scheduled':
         if(showInterviewScheduledMessage) {
           setShowInterviewScheduledMessage(false);
@@ -1484,6 +1535,12 @@ export function InterviewManageClient() {
           return;
         }
         break;
+      case 'interview_hold':
+        if(showInterviewHoldMessage) {
+          setShowInterviewHoldMessage(false);
+          return;
+        }
+        break;
       case 'final_pass':
         if(showFinalPassMessage) {
           setShowFinalPassMessage(false);
@@ -1493,6 +1550,12 @@ export function InterviewManageClient() {
       case 'final_fail':
         if(showFinalFailMessage) {
           setShowFinalFailMessage(false);
+          return;
+        }
+        break;
+      case 'final_hold':
+        if(showFinalHoldMessage) {
+          setShowFinalHoldMessage(false);
           return;
         }
         break;
@@ -1509,6 +1572,9 @@ export function InterviewManageClient() {
       case 'document_fail':
         setShowDocumentFailMessage(true);
         break;
+      case 'document_hold':
+        setShowDocumentHoldMessage(true);
+        break;
       case 'interview_scheduled':
         setShowInterviewScheduledMessage(true);
         break;
@@ -1518,11 +1584,17 @@ export function InterviewManageClient() {
       case 'interview_fail':
         setShowInterviewFailMessage(true);
         break;
+      case 'interview_hold':
+        setShowInterviewHoldMessage(true);
+        break;
       case 'final_pass':
         setShowFinalPassMessage(true);
         break;
       case 'final_fail':
         setShowFinalFailMessage(true);
+        break;
+      case 'final_hold':
+        setShowFinalHoldMessage(true);
         break;
     }
   };
@@ -2004,6 +2076,16 @@ export function InterviewManageClient() {
                                 {showDocumentFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
+                            {selectedApplication.applicationStatus === 'hold' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => showMessageBox('document_hold')}
+                                className="text-xs md:text-sm w-full"
+                              >
+                                {showDocumentHoldMessage ? "메시지 닫기" : "메시지 열기"}
+                              </Button>
+                            )}
                           </div>
                         </div>
                         
@@ -2060,6 +2142,16 @@ export function InterviewManageClient() {
                                 {showInterviewFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
+                            {selectedApplication.interviewStatus === 'hold' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => showMessageBox('interview_hold')}
+                                className="text-xs md:text-sm w-full"
+                              >
+                                {showInterviewHoldMessage ? "메시지 닫기" : "메시지 열기"}
+                              </Button>
+                            )}
                           </div>
                         </div>
                         
@@ -2101,6 +2193,16 @@ export function InterviewManageClient() {
                                 className="text-xs md:text-sm w-full"
                               >
                                 {showFinalFailMessage ? "메시지 닫기" : "메시지 열기"}
+                              </Button>
+                            )}
+                            {selectedApplication.finalStatus === 'finalHold' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => showMessageBox('final_hold')}
+                                className="text-xs md:text-sm w-full"
+                              >
+                                {showFinalHoldMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                           </div>
@@ -2187,6 +2289,71 @@ export function InterviewManageClient() {
                               variant="danger"
                               size="sm"
                               onClick={() => sendMessage(documentFailMessage)}
+                              isLoading={isLoadingMessage}
+                            >
+                              전송
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      {showDocumentHoldMessage && (
+                        <div className="mt-4 border border-orange-200 rounded-md p-4 bg-orange-50">
+                          <label className="block text-sm font-medium text-orange-700 mb-2">
+                            서류 보류 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-orange-300 rounded-md text-sm mb-3" 
+                            rows={5}
+                            value={documentHoldMessage}
+                            onChange={(e) => setDocumentHoldMessage(e.target.value)}
+                          />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-orange-700 mb-2">
+                              발신번호 선택
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-orange-600"
+                                  name="fromNumberDocHold"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-2 text-sm">010-7656-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-orange-600"
+                                  name="fromNumberDocHold"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-2 text-sm">010-6711-7933</span>
+                              </label>
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setShowDocumentHoldMessage(false)}
+                            >
+                              취소
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => saveTemplate('document_hold', documentHoldMessage)}
+                              isLoading={isSavingTemplate}
+                            >
+                              저장
+                            </Button>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => sendMessage(documentHoldMessage)}
                               isLoading={isLoadingMessage}
                             >
                               전송
@@ -2350,6 +2517,71 @@ export function InterviewManageClient() {
                           </div>
                         </div>
                       )}
+                      {showInterviewHoldMessage && (
+                        <div className="mt-4 border border-orange-200 rounded-md p-4 bg-orange-50">
+                          <label className="block text-sm font-medium text-orange-700 mb-2">
+                            면접 보류 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-orange-300 rounded-md text-sm mb-3" 
+                            rows={5}
+                            value={interviewHoldMessage}
+                            onChange={(e) => setInterviewHoldMessage(e.target.value)}
+                          />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-orange-700 mb-2">
+                              발신번호 선택
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-orange-600"
+                                  name="fromNumberInterviewHold"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-2 text-sm">010-7656-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-orange-600"
+                                  name="fromNumberInterviewHold"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-2 text-sm">010-6711-7933</span>
+                              </label>
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setShowInterviewHoldMessage(false)}
+                            >
+                              취소
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => saveTemplate('interview_hold', interviewHoldMessage)}
+                              isLoading={isSavingTemplate}
+                            >
+                              저장
+                            </Button>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => sendMessage(interviewHoldMessage)}
+                              isLoading={isLoadingMessage}
+                            >
+                              전송
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                       
                       {/* 최종 합격 메시지 박스 */}
                       {showFinalPassMessage && (
@@ -2477,6 +2709,71 @@ export function InterviewManageClient() {
                               variant="danger"
                               size="sm"
                               onClick={() => sendMessage(finalFailMessage)}
+                              isLoading={isLoadingMessage}
+                            >
+                              전송
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      {showFinalHoldMessage && (
+                        <div className="mt-4 border border-orange-200 rounded-md p-4 bg-orange-50">
+                          <label className="block text-sm font-medium text-orange-700 mb-2">
+                            최종 보류 메시지 내용
+                          </label>
+                          <textarea
+                            className="w-full p-2 border border-orange-300 rounded-md text-sm mb-3" 
+                            rows={5}
+                            value={finalHoldMessage}
+                            onChange={(e) => setFinalHoldMessage(e.target.value)}
+                          />
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium text-orange-700 mb-2">
+                              발신번호 선택
+                            </label>
+                            <div className="flex items-center space-x-4">
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-orange-600"
+                                  name="fromNumberFinalHold"
+                                  checked={fromNumber === '01076567933'}
+                                  onChange={() => setFromNumber('01076567933')}
+                                />
+                                <span className="ml-2 text-sm">010-7656-7933</span>
+                              </label>
+                              <label className="inline-flex items-center">
+                                <input
+                                  type="radio"
+                                  className="form-radio text-orange-600"
+                                  name="fromNumberFinalHold"
+                                  checked={fromNumber === '01067117933'}
+                                  onChange={() => setFromNumber('01067117933')}
+                                />
+                                <span className="ml-2 text-sm">010-6711-7933</span>
+                              </label>
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setShowFinalHoldMessage(false)}
+                            >
+                              취소
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={() => saveTemplate('final_hold', finalHoldMessage)}
+                              isLoading={isSavingTemplate}
+                            >
+                              저장
+                            </Button>
+                            <Button
+                              variant="danger"
+                              size="sm"
+                              onClick={() => sendMessage(finalHoldMessage)}
                               isLoading={isLoadingMessage}
                             >
                               전송

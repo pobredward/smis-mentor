@@ -140,19 +140,25 @@ export function ApplicantDetailScreen({
   // 메시지 관련 상태
   const [showDocumentPassMessage, setShowDocumentPassMessage] = useState(false);
   const [showDocumentFailMessage, setShowDocumentFailMessage] = useState(false);
+  const [showDocumentHoldMessage, setShowDocumentHoldMessage] = useState(false);
   const [showInterviewScheduledMessage, setShowInterviewScheduledMessage] = useState(false);
   const [showInterviewPassMessage, setShowInterviewPassMessage] = useState(false);
   const [showInterviewFailMessage, setShowInterviewFailMessage] = useState(false);
+  const [showInterviewHoldMessage, setShowInterviewHoldMessage] = useState(false);
   const [showFinalPassMessage, setShowFinalPassMessage] = useState(false);
   const [showFinalFailMessage, setShowFinalFailMessage] = useState(false);
+  const [showFinalHoldMessage, setShowFinalHoldMessage] = useState(false);
   
   const [documentPassMessage, setDocumentPassMessage] = useState('');
   const [documentFailMessage, setDocumentFailMessage] = useState('');
+  const [documentHoldMessage, setDocumentHoldMessage] = useState('');
   const [interviewScheduledMessage, setInterviewScheduledMessage] = useState('');
   const [interviewPassMessage, setInterviewPassMessage] = useState('');
   const [interviewFailMessage, setInterviewFailMessage] = useState('');
+  const [interviewHoldMessage, setInterviewHoldMessage] = useState('');
   const [finalPassMessage, setFinalPassMessage] = useState('');
   const [finalFailMessage, setFinalFailMessage] = useState('');
+  const [finalHoldMessage, setFinalHoldMessage] = useState('');
   
   // 발신번호 선택 (기본값: 01076567933)
   const [fromNumber, setFromNumber] = useState<'01076567933' | '01067117933'>('01076567933');
@@ -313,6 +319,14 @@ export function ApplicantDetailScreen({
       } else {
         setDocumentFailMessage(DEFAULT_SMS_TEMPLATES['document_fail']);
       }
+
+      // document_hold 템플릿 로드
+      const documentHoldTemplate = await getSMSTemplateByTypeAndJobBoard(db, 'document_hold', jobBoardId);
+      if (documentHoldTemplate) {
+        setDocumentHoldMessage(documentHoldTemplate.content);
+      } else {
+        setDocumentHoldMessage(DEFAULT_SMS_TEMPLATES['document_hold']);
+      }
       
       // interview_scheduled 템플릿 로드
       const interviewScheduledTemplate = await getSMSTemplateByTypeAndJobBoard(db, 'interview_scheduled', jobBoardId);
@@ -337,6 +351,14 @@ export function ApplicantDetailScreen({
       } else {
         setInterviewFailMessage(DEFAULT_SMS_TEMPLATES['interview_fail']);
       }
+
+      // interview_hold 템플릿 로드
+      const interviewHoldTemplate = await getSMSTemplateByTypeAndJobBoard(db, 'interview_hold', jobBoardId);
+      if (interviewHoldTemplate) {
+        setInterviewHoldMessage(interviewHoldTemplate.content);
+      } else {
+        setInterviewHoldMessage(DEFAULT_SMS_TEMPLATES['interview_hold']);
+      }
       
       // final_pass 템플릿 로드
       const finalPassTemplate = await getSMSTemplateByTypeAndJobBoard(db, 'final_pass', jobBoardId);
@@ -352,6 +374,14 @@ export function ApplicantDetailScreen({
         setFinalFailMessage(finalFailTemplate.content);
       } else {
         setFinalFailMessage(DEFAULT_SMS_TEMPLATES['final_fail']);
+      }
+
+      // final_hold 템플릿 로드
+      const finalHoldTemplate = await getSMSTemplateByTypeAndJobBoard(db, 'final_hold', jobBoardId);
+      if (finalHoldTemplate) {
+        setFinalHoldMessage(finalHoldTemplate.content);
+      } else {
+        setFinalHoldMessage(DEFAULT_SMS_TEMPLATES['final_hold']);
       }
     } catch (error) {
       logger.error('템플릿 로드 실패:', error);
@@ -401,6 +431,8 @@ export function ApplicantDetailScreen({
       setShowDocumentPassMessage(true);
     } else if (newStatus === 'rejected') {
       setShowDocumentFailMessage(true);
+    } else if (newStatus === 'hold') {
+      setShowDocumentHoldMessage(true);
     }
 
     // DB 업데이트는 백그라운드로
@@ -467,6 +499,8 @@ export function ApplicantDetailScreen({
       setShowInterviewPassMessage(true);
     } else if (newStatus === 'failed') {
       setShowInterviewFailMessage(true);
+    } else if (newStatus === 'hold') {
+      setShowInterviewHoldMessage(true);
     }
     
     // DB 업데이트는 백그라운드로
@@ -496,6 +530,8 @@ export function ApplicantDetailScreen({
       setShowFinalPassMessage(true);
     } else if (newStatus === 'finalRejected') {
       setShowFinalFailMessage(true);
+    } else if (newStatus === 'finalHold') {
+      setShowFinalHoldMessage(true);
     }
     
     // DB 업데이트는 백그라운드로
@@ -528,6 +564,12 @@ export function ApplicantDetailScreen({
           return;
         }
         break;
+      case 'document_hold':
+        if(showDocumentHoldMessage) {
+          setShowDocumentHoldMessage(false);
+          return;
+        }
+        break;
       case 'interview_scheduled':
         if(showInterviewScheduledMessage) {
           setShowInterviewScheduledMessage(false);
@@ -546,6 +588,12 @@ export function ApplicantDetailScreen({
           return;
         }
         break;
+      case 'interview_hold':
+        if(showInterviewHoldMessage) {
+          setShowInterviewHoldMessage(false);
+          return;
+        }
+        break;
       case 'final_pass':
         if(showFinalPassMessage) {
           setShowFinalPassMessage(false);
@@ -558,16 +606,25 @@ export function ApplicantDetailScreen({
           return;
         }
         break;
+      case 'final_hold':
+        if(showFinalHoldMessage) {
+          setShowFinalHoldMessage(false);
+          return;
+        }
+        break;
     }
 
     // 모든 메시지 박스 숨기기
     setShowDocumentPassMessage(false);
     setShowDocumentFailMessage(false);
+    setShowDocumentHoldMessage(false);
     setShowInterviewScheduledMessage(false);
     setShowInterviewPassMessage(false);
     setShowInterviewFailMessage(false);
+    setShowInterviewHoldMessage(false);
     setShowFinalPassMessage(false);
     setShowFinalFailMessage(false);
+    setShowFinalHoldMessage(false);
     
     // 선택된 타입의 메시지 박스만 표시
     switch (type) {
@@ -576,6 +633,9 @@ export function ApplicantDetailScreen({
         break;
       case 'document_fail':
         setShowDocumentFailMessage(true);
+        break;
+      case 'document_hold':
+        setShowDocumentHoldMessage(true);
         break;
       case 'interview_scheduled':
         setShowInterviewScheduledMessage(true);
@@ -586,11 +646,17 @@ export function ApplicantDetailScreen({
       case 'interview_fail':
         setShowInterviewFailMessage(true);
         break;
+      case 'interview_hold':
+        setShowInterviewHoldMessage(true);
+        break;
       case 'final_pass':
         setShowFinalPassMessage(true);
         break;
       case 'final_fail':
         setShowFinalFailMessage(true);
+        break;
+      case 'final_hold':
+        setShowFinalHoldMessage(true);
         break;
     }
   };
@@ -636,6 +702,9 @@ export function ApplicantDetailScreen({
         case 'document_fail':
           setDocumentFailMessage(content);
           break;
+        case 'document_hold':
+          setDocumentHoldMessage(content);
+          break;
         case 'interview_scheduled':
           setInterviewScheduledMessage(content);
           break;
@@ -645,11 +714,17 @@ export function ApplicantDetailScreen({
         case 'interview_fail':
           setInterviewFailMessage(content);
           break;
+        case 'interview_hold':
+          setInterviewHoldMessage(content);
+          break;
         case 'final_pass':
           setFinalPassMessage(content);
           break;
         case 'final_fail':
           setFinalFailMessage(content);
+          break;
+        case 'final_hold':
+          setFinalHoldMessage(content);
           break;
       }
       
@@ -706,11 +781,14 @@ export function ApplicantDetailScreen({
         // 메시지 박스 닫기
         setShowDocumentPassMessage(false);
         setShowDocumentFailMessage(false);
+        setShowDocumentHoldMessage(false);
         setShowInterviewScheduledMessage(false);
         setShowInterviewPassMessage(false);
         setShowInterviewFailMessage(false);
+        setShowInterviewHoldMessage(false);
         setShowFinalPassMessage(false);
         setShowFinalFailMessage(false);
+        setShowFinalHoldMessage(false);
         
         // 데이터 새로고침
         await loadData();
@@ -933,6 +1011,16 @@ export function ApplicantDetailScreen({
                   </Text>
                 </TouchableOpacity>
               )}
+              {application?.applicationStatus === 'hold' && (
+                <TouchableOpacity
+                  style={styles.statusMessageButton}
+                  onPress={() => showMessageBox('document_hold')}
+                >
+                  <Text style={styles.statusMessageButtonText}>
+                    {showDocumentHoldMessage ? '메시지 닫기' : '메시지 열기'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* 면접 상태 */}
@@ -1015,6 +1103,16 @@ export function ApplicantDetailScreen({
                   </Text>
                 </TouchableOpacity>
               )}
+              {application?.interviewStatus === 'hold' && (
+                <TouchableOpacity
+                  style={styles.statusMessageButton}
+                  onPress={() => showMessageBox('interview_hold')}
+                >
+                  <Text style={styles.statusMessageButtonText}>
+                    {showInterviewHoldMessage ? '메시지 닫기' : '메시지 열기'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* 최종 상태 */}
@@ -1086,6 +1184,16 @@ export function ApplicantDetailScreen({
                   </Text>
                 </TouchableOpacity>
               )}
+              {application?.finalStatus === 'finalHold' && (
+                <TouchableOpacity
+                  style={styles.statusMessageButton}
+                  onPress={() => showMessageBox('final_hold')}
+                >
+                  <Text style={styles.statusMessageButtonText}>
+                    {showFinalHoldMessage ? '메시지 닫기' : '메시지 열기'}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
@@ -1131,6 +1239,27 @@ export function ApplicantDetailScreen({
               backgroundColor="#fee2e2"
               buttonColor="#ef4444"
               title="서류 불합격 메시지 내용"
+            />
+          )}
+          {showDocumentHoldMessage && (
+            <SMSMessageBox
+              type="document_hold"
+              currentJobBoardId={jobBoardId}
+              message={documentHoldMessage}
+              onMessageChange={setDocumentHoldMessage}
+              fromNumber={fromNumber}
+              onFromNumberChange={setFromNumber}
+              onSave={() => saveTemplate('document_hold', documentHoldMessage)}
+              onSend={() => sendSMS('document_hold', documentHoldMessage, 'hold')}
+              onCancel={() => {
+                setShowDocumentHoldMessage(false);
+                setDocumentStatus(application?.applicationStatus || 'pending');
+              }}
+              isSaving={isSavingTemplate}
+              isSending={isSendingSMS}
+              backgroundColor="#ffedd5"
+              buttonColor="#f97316"
+              title="서류 보류 메시지 내용"
             />
           )}
           
@@ -1199,6 +1328,27 @@ export function ApplicantDetailScreen({
               title="면접 불합격 메시지 내용"
             />
           )}
+          {showInterviewHoldMessage && (
+            <SMSMessageBox
+              type="interview_hold"
+              currentJobBoardId={jobBoardId}
+              message={interviewHoldMessage}
+              onMessageChange={setInterviewHoldMessage}
+              fromNumber={fromNumber}
+              onFromNumberChange={setFromNumber}
+              onSave={() => saveTemplate('interview_hold', interviewHoldMessage)}
+              onSend={() => sendSMS('interview_hold', interviewHoldMessage, undefined, 'hold')}
+              onCancel={() => {
+                setShowInterviewHoldMessage(false);
+                setInterviewStatus(application?.interviewStatus || '');
+              }}
+              isSaving={isSavingTemplate}
+              isSending={isSendingSMS}
+              backgroundColor="#ffedd5"
+              buttonColor="#f97316"
+              title="면접 보류 메시지 내용"
+            />
+          )}
           
           {/* 최종 메시지 박스들 - 전체 너비 */}
           {showFinalPassMessage && (
@@ -1242,6 +1392,27 @@ export function ApplicantDetailScreen({
               backgroundColor="#fee2e2"
               buttonColor="#ef4444"
               title="최종 불합격 메시지 내용"
+            />
+          )}
+          {showFinalHoldMessage && (
+            <SMSMessageBox
+              type="final_hold"
+              currentJobBoardId={jobBoardId}
+              message={finalHoldMessage}
+              onMessageChange={setFinalHoldMessage}
+              fromNumber={fromNumber}
+              onFromNumberChange={setFromNumber}
+              onSave={() => saveTemplate('final_hold', finalHoldMessage)}
+              onSend={() => sendSMS('final_hold', finalHoldMessage, undefined, undefined, 'finalHold')}
+              onCancel={() => {
+                setShowFinalHoldMessage(false);
+                setFinalStatus(application?.finalStatus || '');
+              }}
+              isSaving={isSavingTemplate}
+              isSending={isSendingSMS}
+              backgroundColor="#ffedd5"
+              buttonColor="#f97316"
+              title="최종 보류 메시지 내용"
             />
           )}
         </View>

@@ -88,20 +88,26 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   // 서류 합격/불합격 메시지 관련 상태
   const [documentPassMessage, setDocumentPassMessage] = useState('');
   const [documentFailMessage, setDocumentFailMessage] = useState('');
+  const [documentHoldMessage, setDocumentHoldMessage] = useState('');
   const [interviewScheduledMessage, setInterviewScheduledMessage] = useState('');
   const [interviewPassMessage, setInterviewPassMessage] = useState('');
   const [interviewFailMessage, setInterviewFailMessage] = useState('');
+  const [interviewHoldMessage, setInterviewHoldMessage] = useState('');
   const [finalPassMessage, setFinalPassMessage] = useState('');
   const [finalFailMessage, setFinalFailMessage] = useState('');
+  const [finalHoldMessage, setFinalHoldMessage] = useState('');
 
   // 메시지 박스 표시 상태
   const [showDocumentPassMessage, setShowDocumentPassMessage] = useState(false);
   const [showDocumentFailMessage, setShowDocumentFailMessage] = useState(false);
+  const [showDocumentHoldMessage, setShowDocumentHoldMessage] = useState(false);
   const [showInterviewScheduledMessage, setShowInterviewScheduledMessage] = useState(false);
   const [showInterviewPassMessage, setShowInterviewPassMessage] = useState(false);
   const [showInterviewFailMessage, setShowInterviewFailMessage] = useState(false);
+  const [showInterviewHoldMessage, setShowInterviewHoldMessage] = useState(false);
   const [showFinalPassMessage, setShowFinalPassMessage] = useState(false);
   const [showFinalFailMessage, setShowFinalFailMessage] = useState(false);
+  const [showFinalHoldMessage, setShowFinalHoldMessage] = useState(false);
 
   const [isLoadingMessage, setIsLoadingMessage] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
@@ -1114,11 +1120,14 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
   const closeAllMessageBoxes = () => {
     setShowDocumentPassMessage(false);
     setShowDocumentFailMessage(false);
+    setShowDocumentHoldMessage(false);
     setShowInterviewScheduledMessage(false);
     setShowInterviewPassMessage(false);
     setShowInterviewFailMessage(false);
+    setShowInterviewHoldMessage(false);
     setShowFinalPassMessage(false);
     setShowFinalFailMessage(false);
+    setShowFinalHoldMessage(false);
   };
 
   // 상태별 템플릿 로드 함수
@@ -1144,6 +1153,15 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       } else {
         // 기본 서류 불합격 메시지 설정
         setDocumentFailMessage(`안녕하세요, {이름}님.\n${jobBoard.title} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 서류 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
+      }
+
+      // document_hold 템플릿 로드
+      const documentHoldTemplate = await getSMSTemplateByTypeAndJobBoard('document_hold', jobBoard.id);
+      if (documentHoldTemplate) {
+        setDocumentHoldMessage(documentHoldTemplate.content);
+      } else {
+        // 기본 서류 보류 메시지 설정
+        setDocumentHoldMessage(`안녕하세요, {이름}님.\n${jobBoard.title} 채용에 지원해주셔서 감사합니다.\n현재 서류 전형 결과가 보류된 상태입니다.\n모집 인원이 확정되는 대로 다시 안내드리겠습니다. 조금만 기다려 주시기 바랍니다.`);
       }
       
       // interview_scheduled 템플릿 로드
@@ -1172,6 +1190,15 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         // 기본 면접 불합격 메시지 설정
         setInterviewFailMessage(`안녕하세요, {이름}님.\n${jobBoard.title} 면접에 참여해주셔서 감사합니다.\n아쉽게도 이번 면접 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
       }
+
+      // interview_hold 템플릿 로드
+      const interviewHoldTemplate = await getSMSTemplateByTypeAndJobBoard('interview_hold', jobBoard.id);
+      if (interviewHoldTemplate) {
+        setInterviewHoldMessage(interviewHoldTemplate.content);
+      } else {
+        // 기본 면접 보류 메시지 설정
+        setInterviewHoldMessage(`안녕하세요, {이름}님.\n${jobBoard.title} 면접에 참여해주셔서 감사합니다.\n현재 면접 전형 결과가 보류된 상태입니다.\n모집 인원이 확정되는 대로 다시 안내드리겠습니다. 조금만 기다려 주시기 바랍니다.`);
+      }
       
       // final_pass 템플릿 로드
       const finalPassTemplate = await getSMSTemplateByTypeAndJobBoard('final_pass', jobBoard.id);
@@ -1189,6 +1216,15 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       } else {
         // 기본 최종 불합격 메시지 설정
         setFinalFailMessage(`안녕하세요, {이름}님.\n${jobBoard.title} 채용에 지원해주셔서 감사합니다.\n아쉽게도 이번 최종 전형에 합격하지 못하셨습니다. 다음 기회에 다시 만나뵙기를 희망합니다.`);
+      }
+
+      // final_hold 템플릿 로드
+      const finalHoldTemplate = await getSMSTemplateByTypeAndJobBoard('final_hold', jobBoard.id);
+      if (finalHoldTemplate) {
+        setFinalHoldMessage(finalHoldTemplate.content);
+      } else {
+        // 기본 최종 보류 메시지 설정
+        setFinalHoldMessage(`안녕하세요, {이름}님.\n${jobBoard.title} 채용 과정에 끝까지 함께해주셔서 감사합니다.\n현재 최종 결과가 보류된 상태입니다.\n캠프 배정이 확정되는 대로 다시 안내드리겠습니다. 조금만 기다려 주시기 바랍니다.`);
       }
     } catch (error) {
       logger.error('템플릿 로드 실패:', error);
@@ -1300,6 +1336,9 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         case 'document_fail':
           setDocumentFailMessage(content);
           break;
+        case 'document_hold':
+          setDocumentHoldMessage(content);
+          break;
         case 'interview_scheduled':
           setInterviewScheduledMessage(content);
           break;
@@ -1309,11 +1348,17 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         case 'interview_fail':
           setInterviewFailMessage(content);
           break;
+        case 'interview_hold':
+          setInterviewHoldMessage(content);
+          break;
         case 'final_pass':
           setFinalPassMessage(content);
           break;
         case 'final_fail':
           setFinalFailMessage(content);
+          break;
+        case 'final_hold':
+          setFinalHoldMessage(content);
           break;
       }
       
@@ -1348,6 +1393,12 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           return;
         }
         break;
+      case 'document_hold':
+        if(showDocumentHoldMessage) {
+          setShowDocumentHoldMessage(false);
+          return;
+        }
+        break;
       case 'interview_scheduled':
         if(showInterviewScheduledMessage) {
           setShowInterviewScheduledMessage(false);
@@ -1366,6 +1417,12 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           return;
         }
         break;
+      case 'interview_hold':
+        if(showInterviewHoldMessage) {
+          setShowInterviewHoldMessage(false);
+          return;
+        }
+        break;
       case 'final_pass':
         if(showFinalPassMessage) {
           setShowFinalPassMessage(false);
@@ -1378,16 +1435,25 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           return;
         }
         break;
+      case 'final_hold':
+        if(showFinalHoldMessage) {
+          setShowFinalHoldMessage(false);
+          return;
+        }
+        break;
     }
 
     // 모든 메시지 박스 숨기기
     setShowDocumentPassMessage(false);
     setShowDocumentFailMessage(false);
+    setShowDocumentHoldMessage(false);
     setShowInterviewScheduledMessage(false);
     setShowInterviewPassMessage(false);
     setShowInterviewFailMessage(false);
+    setShowInterviewHoldMessage(false);
     setShowFinalPassMessage(false);
     setShowFinalFailMessage(false);
+    setShowFinalHoldMessage(false);
     
     // 선택된 타입의 메시지 박스만 표시
     switch (type) {
@@ -1396,6 +1462,9 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
         break;
       case 'document_fail':
         setShowDocumentFailMessage(true);
+        break;
+      case 'document_hold':
+        setShowDocumentHoldMessage(true);
         break;
       case 'interview_scheduled':
         setShowInterviewScheduledMessage(true);
@@ -1406,11 +1475,17 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       case 'interview_fail':
         setShowInterviewFailMessage(true);
         break;
+      case 'interview_hold':
+        setShowInterviewHoldMessage(true);
+        break;
       case 'final_pass':
         setShowFinalPassMessage(true);
         break;
       case 'final_fail':
         setShowFinalFailMessage(true);
+        break;
+      case 'final_hold':
+        setShowFinalHoldMessage(true);
         break;
     }
   };
@@ -1820,6 +1895,18 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 {showDocumentFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
+                            {selectedApplication.applicationStatus === 'hold' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => {
+                                  showMessageBox('document_hold');
+                                }}
+                                className="text-xs md:text-sm w-full"
+                              >
+                                {showDocumentHoldMessage ? "메시지 닫기" : "메시지 열기"}
+                              </Button>
+                            )}
                           </div>
                         </div>
                         
@@ -1876,6 +1963,16 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 {showInterviewFailMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
+                            {selectedApplication.interviewStatus === 'hold' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => showMessageBox('interview_hold')}
+                                className="text-xs md:text-sm w-full"
+                              >
+                                {showInterviewHoldMessage ? "메시지 닫기" : "메시지 열기"}
+                              </Button>
+                            )}
                           </div>
                         </div>
                         
@@ -1917,6 +2014,16 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                                 className="text-xs md:text-sm w-full"
                               >
                                 {showFinalFailMessage ? "메시지 닫기" : "메시지 열기"}
+                              </Button>
+                            )}
+                            {selectedApplication.finalStatus === 'finalHold' && (
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => showMessageBox('final_hold')}
+                                className="text-xs md:text-sm w-full"
+                              >
+                                {showFinalHoldMessage ? "메시지 닫기" : "메시지 열기"}
                               </Button>
                             )}
                           </div>
@@ -1961,6 +2068,24 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                           isSending={isLoadingMessage}
                           backgroundColor="#fee2e2"
                           buttonColor="#ef4444"
+                        />
+                      )}
+                      {showDocumentHoldMessage && (
+                        <SMSMessageBox
+                          title="서류 보류 메시지 내용"
+                          type="document_hold"
+                          message={documentHoldMessage}
+                          onMessageChange={setDocumentHoldMessage}
+                          fromNumber={fromNumber}
+                          onFromNumberChange={setFromNumber}
+                          currentJobBoardId={jobBoard?.id || ''}
+                          onSave={() => saveTemplate('document_hold', documentHoldMessage)}
+                          onSend={() => sendMessage(documentHoldMessage)}
+                          onCancel={() => setShowDocumentHoldMessage(false)}
+                          isSaving={isSavingTemplate}
+                          isSending={isLoadingMessage}
+                          backgroundColor="#ffedd5"
+                          buttonColor="#f97316"
                         />
                       )}
                       
@@ -2023,6 +2148,24 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                           buttonColor="#ef4444"
                         />
                       )}
+                      {showInterviewHoldMessage && (
+                        <SMSMessageBox
+                          title="면접 보류 메시지 내용"
+                          type="interview_hold"
+                          message={interviewHoldMessage}
+                          onMessageChange={setInterviewHoldMessage}
+                          fromNumber={fromNumber}
+                          onFromNumberChange={setFromNumber}
+                          currentJobBoardId={jobBoard?.id || ''}
+                          onSave={() => saveTemplate('interview_hold', interviewHoldMessage)}
+                          onSend={() => sendMessage(interviewHoldMessage)}
+                          onCancel={() => setShowInterviewHoldMessage(false)}
+                          isSaving={isSavingTemplate}
+                          isSending={isLoadingMessage}
+                          backgroundColor="#ffedd5"
+                          buttonColor="#f97316"
+                        />
+                      )}
                       
                       {/* 최종 합격 메시지 박스 */}
                       {showFinalPassMessage && (
@@ -2061,6 +2204,24 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                           isSending={isLoadingMessage}
                           backgroundColor="#fee2e2"
                           buttonColor="#ef4444"
+                        />
+                      )}
+                      {showFinalHoldMessage && (
+                        <SMSMessageBox
+                          title="최종 보류 메시지 내용"
+                          type="final_hold"
+                          message={finalHoldMessage}
+                          onMessageChange={setFinalHoldMessage}
+                          fromNumber={fromNumber}
+                          onFromNumberChange={setFromNumber}
+                          currentJobBoardId={jobBoard?.id || ''}
+                          onSave={() => saveTemplate('final_hold', finalHoldMessage)}
+                          onSend={() => sendMessage(finalHoldMessage)}
+                          onCancel={() => setShowFinalHoldMessage(false)}
+                          isSaving={isSavingTemplate}
+                          isSending={isLoadingMessage}
+                          backgroundColor="#ffedd5"
+                          buttonColor="#f97316"
                         />
                       )}
                       
