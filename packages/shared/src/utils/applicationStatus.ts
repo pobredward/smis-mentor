@@ -5,11 +5,15 @@
  * 1. 서류 검토 → 서류 합격
  * 2. 서류 합격 → 면접 진행 가능
  * 3. 면접 합격 → 최종 결정 가능
+ *
+ * 보류 (2026-10-08): TO 가 애매해 결정을 미뤄 둔 상태 — 서류 'hold' · 면접 'hold' · 최종 'finalHold'.
+ * 관리자 · 지원자 모두 '보류'로 본다 (2026-10-12 — 처음엔 지원자에게 결정 전처럼 보였다).
+ * 서류가 검토중 · 보류면 지원자가 지원을 취소할 수 있다 (canCancelApplication · firestore.rules 와 같게).
  */
 
-export type ApplicationStatus = 'pending' | 'accepted' | 'rejected';
-export type InterviewStatus = '' | 'pending' | 'complete' | 'passed' | 'failed' | 'absent';
-export type FinalStatus = '' | 'finalAccepted' | 'finalRejected' | 'finalAbsent';
+export type ApplicationStatus = 'pending' | 'accepted' | 'rejected' | 'hold';
+export type InterviewStatus = '' | 'pending' | 'complete' | 'passed' | 'failed' | 'absent' | 'hold';
+export type FinalStatus = '' | 'finalAccepted' | 'finalRejected' | 'finalAbsent' | 'finalHold';
 
 /**
  * 면접 상태 변경이 가능한지 확인
@@ -78,6 +82,7 @@ export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
   pending: '검토중',
   accepted: '합격',
   rejected: '불합격',
+  hold: '보류',
 };
 
 export const INTERVIEW_STATUS_LABELS: Record<string, string> = {
@@ -87,6 +92,7 @@ export const INTERVIEW_STATUS_LABELS: Record<string, string> = {
   passed: '합격',
   failed: '불합격',
   absent: '면접불참',
+  hold: '보류',
 };
 
 export const FINAL_STATUS_LABELS: Record<string, string> = {
@@ -94,6 +100,7 @@ export const FINAL_STATUS_LABELS: Record<string, string> = {
   finalAccepted: '합격',
   finalRejected: '불합격',
   finalAbsent: '최종불참',
+  finalHold: '보류',
 };
 
 // ── 지원자에게 보여 주는 상태 배지 (웹·앱 공용 — 화면마다 따로 쓰던 라벨을 하나로) ──
@@ -106,6 +113,7 @@ const BADGES: Record<RecruitStage, Record<string, { label: string; tone: StatusT
     pending: { label: '검토중', tone: 'wait' },
     accepted: { label: '서류합격', tone: 'ok' },
     rejected: { label: '서류불합격', tone: 'bad' },
+    hold: { label: '서류보류', tone: 'wait' },
   },
   interview: {
     pending: { label: '면접예정', tone: 'wait' },
@@ -113,16 +121,23 @@ const BADGES: Record<RecruitStage, Record<string, { label: string; tone: StatusT
     passed: { label: '면접합격', tone: 'ok' },
     failed: { label: '면접불합격', tone: 'bad' },
     absent: { label: '면접불참', tone: 'muted' },
+    hold: { label: '면접보류', tone: 'wait' },
   },
   final: {
     finalAccepted: { label: '최종합격', tone: 'ok' },
     finalRejected: { label: '최종불합격', tone: 'bad' },
     finalAbsent: { label: '최종불참', tone: 'muted' },
     absent: { label: '최종불참', tone: 'muted' }, // 옛 데이터 호환
+    finalHold: { label: '최종보류', tone: 'wait' },
   },
 };
 
-/** 단계·상태 → 배지 라벨과 색 계열 (모르는 값은 '미정') */
+/** 단계·상태 → 배지 라벨과 색 계열 (모르는 값은 '미정', 보류는 '서류보류' · '면접보류' · '최종보류') */
 export function recruitStatusBadge(stage: RecruitStage, status: string | null | undefined): { label: string; tone: StatusTone } {
   return (status && BADGES[stage][status]) || { label: '미정', tone: 'muted' };
+}
+
+/** 지원자가 지원을 취소할 수 있나 — 서류가 검토중이거나 보류일 때 (firestore.rules applicationHistories 와 같게) */
+export function canCancelApplication(applicationStatus: string | null | undefined): boolean {
+  return applicationStatus === 'pending' || applicationStatus === 'hold';
 }

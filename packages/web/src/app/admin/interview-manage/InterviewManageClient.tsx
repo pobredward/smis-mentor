@@ -1852,6 +1852,11 @@ export function InterviewManageClient() {
                                 불참
                               </span>
                             )}
+                            {app.interviewStatus === 'hold' && (
+                              <span className="px-2 py-1 text-xs rounded-full bg-orange-100 text-orange-800 whitespace-nowrap">
+                                보류
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1973,6 +1978,7 @@ export function InterviewManageClient() {
                             <option value="pending">검토중</option>
                             <option value="accepted">서류합격</option>
                             <option value="rejected">서류불합격</option>
+                            <option value="hold">보류</option>
                           </select>
                           
                           {/* 상태에 따라 적절한 버튼 표시 */}
@@ -2017,6 +2023,7 @@ export function InterviewManageClient() {
                             <option value="passed">면접합격</option>
                             <option value="failed">면접불합격</option>
                             <option value="absent">면접불참</option>
+                            <option value="hold">보류</option>
                           </select>
                           
                           {/* 상태에 따라 적절한 버튼 표시 */}
@@ -2070,6 +2077,7 @@ export function InterviewManageClient() {
                             <option value="finalAccepted">합격</option>
                             <option value="finalRejected">불합격</option>
                             <option value="finalAbsent">불참</option>
+                            <option value="finalHold">보류</option>
                           </select>
                           
                           {/* 상태에 따라 적절한 버튼 표시 */}

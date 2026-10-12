@@ -585,6 +585,9 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       finalRejected: { bg: 'bg-red-100', text: 'text-red-800', label: '불합격' },
       finalAbsent: { bg: 'bg-red-100', text: 'text-red-800', label: '불참' },
       absent: { bg: 'bg-red-100', text: 'text-red-800', label: '불참' },
+      // 보류 (TO 대기) — 지원자에게도 '보류'로 보인다 (shared recruitStatusBadge)
+      hold: { bg: 'bg-orange-100', text: 'text-orange-800', label: '보류' },
+      finalHold: { bg: 'bg-orange-100', text: 'text-orange-800', label: '보류' },
     };
 
     // 특별히 면접 상태가 'pending'인 경우 '면접 예정' 대신 '예정'으로 표시
@@ -626,7 +629,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
       // 상태 타입에 따라 업데이트할 필드 설정
       switch (statusType) {
         case 'application':
-          updateData.applicationStatus = newStatus as 'pending' | 'accepted' | 'rejected';
+          updateData.applicationStatus = newStatus as ApplicationHistory['applicationStatus'];
           firestoreUpdateData.applicationStatus = newStatus;
           
           // 서류 불합격 시 면접과 최종 상태 초기화
@@ -651,7 +654,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           }
           break;
         case 'interview':
-          updateData.interviewStatus = newStatus as 'pending' | 'passed' | 'failed' | 'absent';
+          updateData.interviewStatus = newStatus as ApplicationHistory['interviewStatus'];
           firestoreUpdateData.interviewStatus = newStatus;
           
           // 면접 불합격 시 최종 상태 초기화
@@ -664,7 +667,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
           }
           break;
         case 'final':
-          updateData.finalStatus = newStatus as 'finalAccepted' | 'finalRejected' | 'finalAbsent';
+          updateData.finalStatus = newStatus as ApplicationHistory['finalStatus'];
           firestoreUpdateData.finalStatus = newStatus;
           break;
       }
@@ -1787,6 +1790,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             <option value="pending">검토중</option>
                             <option value="accepted">서류합격</option>
                             <option value="rejected">서류불합격</option>
+                            <option value="hold">보류</option>
                           </select>
 
                           {/* 상태에 따라 적절한 버튼 표시 */}
@@ -1835,6 +1839,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             <option value="passed">면접합격</option>
                             <option value="failed">면접불합격</option>
                             <option value="absent">면접불참</option>
+                            <option value="hold">보류</option>
                           </select>
 
                           {/* 상태에 따라 적절한 버튼 표시 */}
@@ -1888,6 +1893,7 @@ export function ApplicantsManageClient({ jobBoardId }: Props) {
                             <option value="finalAccepted">최종합격</option>
                             <option value="finalRejected">최종불합격</option>
                             <option value="finalAbsent">불참</option>
+                            <option value="finalHold">보류</option>
                           </select>
 
                           {/* 상태에 따라 적절한 버튼 표시 */}

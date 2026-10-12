@@ -33,7 +33,7 @@ import {
   ApplicationWithJobDetails,
   ReviewWithId,
 } from '../services/recruitmentService';
-import { recruitStatusBadge, type ApplicantInterviewInfoResponse } from '@smis-mentor/shared';
+import { canCancelApplication, recruitStatusBadge, type ApplicantInterviewInfoResponse } from '@smis-mentor/shared';
 import { mobileAuthenticatedGet } from '../services/apiClient';
 import { htmlToPlainText } from '@smis-mentor/shared';
 
@@ -226,7 +226,7 @@ export function ApplicationStatusScreen() {
         </View>
       </View>
 
-      {item.applicationStatus === 'pending' && (
+      {canCancelApplication(item.applicationStatus) && (
         <TouchableOpacity
           style={styles.cancelButton}
           onPress={() => handleCancelClick(item.applicationHistoryId)}

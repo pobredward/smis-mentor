@@ -1069,6 +1069,11 @@ export function InterviewManageScreen({
                           <Text style={styles.statusBadgeText}>불참</Text>
                         </View>
                       )}
+                      {app.interviewStatus === 'hold' && (
+                        <View style={[styles.statusBadge, styles.statusBadgeHold]}>
+                          <Text style={styles.statusBadgeText}>보류</Text>
+                        </View>
+                      )}
                     </View>
                   </View>
 
@@ -1482,6 +1487,10 @@ const styles = StyleSheet.create({
   },
   statusBadgeDanger: {
     backgroundColor: '#fee2e2',
+  },
+  // 보류 (TO 대기) — 관리자 화면에만
+  statusBadgeHold: {
+    backgroundColor: '#ffedd5',
   },
   statusBadgeText: {
     fontSize: 12,

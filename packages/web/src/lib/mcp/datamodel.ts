@@ -344,9 +344,9 @@ export const COLLECTIONS: Record<string, CollectionSpec> = {
     fields: {
       refUserId: str('지원자 uid (users)'),
       refJobBoardId: str('공고 ID (jobBoards)'),
-      applicationStatus: str('서류: pending | accepted | rejected'),
-      interviewStatus: str('면접: pending | complete | passed | failed | absent'),
-      finalStatus: str('최종: finalAccepted | finalRejected | finalAbsent'),
+      applicationStatus: str('서류: pending | accepted | rejected | hold(보류 — TO 대기)'),
+      interviewStatus: str('면접: pending | complete | passed | failed | absent | hold(보류)'),
+      finalStatus: str('최종: finalAccepted | finalRejected | finalAbsent | finalHold(보류)'),
       applicationDate: ts('지원일'),
       interviewDate: ts('면접 일시'),
       interviewFeedback: str('면접 메모'),

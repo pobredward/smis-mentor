@@ -197,24 +197,24 @@ service cloud.firestore {
       );
       allow update: if (
         isAdmin() ||
-        // 본인이 본인 지원을 'cancelled'로만 변경 가능 (pending 상태에서만)
+        // 본인이 본인 지원을 'cancelled'로만 변경 가능 (서류 검토중 · 보류에서만 — shared canCancelApplication)
         (
           isAuthenticated() &&
           resource.data.refUserId == request.auth.uid &&
-          resource.data.applicationStatus == 'pending' &&
+          resource.data.applicationStatus in ['pending', 'hold'] &&
           request.resource.data.applicationStatus == 'cancelled' &&
           // refUserId, refJobBoardId 변경 불가
           fieldUnchanged('refUserId') &&
           fieldUnchanged('refJobBoardId')
         )
       );
-      // 삭제: admin 또는 본인 (pending 상태만)
+      // 삭제: admin 또는 본인 (서류 검토중 · 보류만 — shared canCancelApplication)
       allow delete: if (
         isAdmin() ||
         (
           isAuthenticated() &&
           resource.data.refUserId == request.auth.uid &&
-          resource.data.applicationStatus == 'pending'
+          resource.data.applicationStatus in ['pending', 'hold']
         )
       );
     }

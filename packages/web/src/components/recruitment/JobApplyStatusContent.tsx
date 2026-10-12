@@ -11,7 +11,7 @@ import { Timestamp } from 'firebase/firestore';
 import Button from '@/components/common/Button';
 import { getApplicationsByUserId, getJobBoardById, cancelApplication, getMyInterviewInfo } from '@/lib/firebaseService';
 import { ApplicationHistory, JobBoard } from '@/types';
-import { recruitStatusBadge, type StatusTone, type ApplicantInterviewInfo } from '@smis-mentor/shared';
+import { canCancelApplication, recruitStatusBadge, type StatusTone, type ApplicantInterviewInfo } from '@smis-mentor/shared';
 
 const TONE_CLASS: Record<StatusTone, string> = {
   wait: 'bg-yellow-100 text-yellow-800', info: 'bg-purple-100 text-purple-800', ok: 'bg-green-100 text-green-800',
@@ -210,7 +210,7 @@ export default function JobApplyStatusContent() {
               </div>
             </div>
 
-            {app.applicationStatus === 'pending' && (
+            {canCancelApplication(app.applicationStatus) && (
               <Button
                 variant="danger"
                 onClick={() => handleCancelClick(app.applicationHistoryId)}

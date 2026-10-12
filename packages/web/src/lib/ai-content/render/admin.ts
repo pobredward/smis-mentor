@@ -36,6 +36,7 @@ const APP_STATUS_KO: Record<string, string> = {
   pending: '서류 대기',
   accepted: '서류 합격',
   rejected: '서류 불합격',
+  hold: '서류 보류',
 };
 const INTERVIEW_STATUS_KO: Record<string, string> = {
   pending: '면접 대기',
@@ -43,11 +44,13 @@ const INTERVIEW_STATUS_KO: Record<string, string> = {
   passed: '면접 합격',
   failed: '면접 불합격',
   absent: '면접 불참',
+  hold: '면접 보류',
 };
 const FINAL_STATUS_KO: Record<string, string> = {
   finalAccepted: '최종 합격',
   finalRejected: '최종 불합격',
   finalAbsent: '최종 불참',
+  finalHold: '최종 보류',
 };
 
 function roleKo(role: string): string {

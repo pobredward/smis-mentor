@@ -212,6 +212,10 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
           color = '#ef4444';
           label = L('home.documentsFailed2');
           break;
+        case 'hold':
+          color = '#f97316';
+          label = L('home.onHold');
+          break;
         default:
           color = '#94a3b8';
           label = L('lodging.tbd');
@@ -238,6 +242,10 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
           color = '#ef4444';
           label = L('home.absent');
           break;
+        case 'hold':
+          color = '#f97316';
+          label = L('home.onHold');
+          break;
         default:
           color = '#94a3b8';
           label = L('lodging.tbd');
@@ -256,6 +264,10 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
           color = '#ef4444';
           label = L('home.absent');
           break;
+        case 'finalHold':
+          color = '#f97316';
+          label = L('home.onHold');
+          break;
         default:
           color = '#94a3b8';
           label = L('lodging.tbd');
@@ -271,6 +283,10 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
       return { label: L('home.documentsPending'), color: '#f59e0b' };
     }
     
+    if (application.applicationStatus === 'hold') {
+      return { label: L('home.documentsOnHold'), color: '#f97316' };
+    }
+
     if (application.applicationStatus === 'rejected') {
       return { label: L('home.documentsFailed'), color: '#ef4444' };
     }
@@ -283,6 +299,9 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
       }
       if (application.finalStatus === 'finalRejected') {
         return { label: L('home.finalFail'), color: '#ef4444' };
+      }
+      if (application.finalStatus === 'finalHold') {
+        return { label: L('home.finalOnHold'), color: '#f97316' };
       }
       if (application.finalStatus === 'finalAbsent') {
         return { label: L('home.finalAbsent'), color: '#64748b' };
@@ -300,6 +319,9 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
       }
       if (application.interviewStatus === 'failed') {
         return { label: L('home.interviewFailed'), color: '#ef4444' };
+      }
+      if (application.interviewStatus === 'hold') {
+        return { label: L('home.interviewOnHold'), color: '#f97316' };
       }
       if (application.interviewStatus === 'absent') {
         return { label: L('home.interviewAbsent'), color: '#64748b' };
@@ -321,6 +343,8 @@ export function HomeScreen({ navigation }: MainTabScreenProps<'Home'>) {
         return { label: L('home.passed'), color: '#10b981' };
       case 'rejected':
         return { label: L('home.failed'), color: '#ef4444' };
+      case 'hold':
+        return { label: L('home.onHold'), color: '#f97316' };
       default:
         return { label: status, color: '#64748b' };
     }

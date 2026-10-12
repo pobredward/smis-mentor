@@ -118,6 +118,7 @@ export function ApplicantDetailScreen({
     { label: '검토중', value: 'pending' },
     { label: '합격', value: 'accepted' },
     { label: '불합격', value: 'rejected' },
+    { label: '보류', value: 'hold' },
   ]);
   const [interviewItems, setInterviewItems] = useState([
     { label: '미정', value: '' },
@@ -126,12 +127,14 @@ export function ApplicantDetailScreen({
     { label: '합격', value: 'passed' },
     { label: '불합격', value: 'failed' },
     { label: '면접불참', value: 'absent' },
+    { label: '보류', value: 'hold' },
   ]);
   const [finalItems, setFinalItems] = useState([
     { label: '미정', value: '' },
     { label: '합격', value: 'finalAccepted' },
     { label: '불합격', value: 'finalRejected' },
     { label: '최종불참', value: 'finalAbsent' },
+    { label: '보류', value: 'finalHold' },
   ]);
 
   // 메시지 관련 상태

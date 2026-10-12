@@ -12,7 +12,7 @@ import Layout from '@/components/common/Layout';
 import Button from '@/components/common/Button';
 import { getApplicationsByUserId, getJobBoardById, cancelApplication, getMyInterviewInfo } from '@/lib/firebaseService';
 import { ApplicationHistory, JobBoard } from '@/types';
-import { recruitStatusBadge, type StatusTone, type ApplicantInterviewInfo } from '@smis-mentor/shared';
+import { canCancelApplication, recruitStatusBadge, type StatusTone, type ApplicantInterviewInfo } from '@smis-mentor/shared';
 
 const TONE_CLASS: Record<StatusTone, string> = {
   wait: 'bg-yellow-100 text-yellow-800', info: 'bg-purple-100 text-purple-800', ok: 'bg-green-100 text-green-800',
@@ -278,8 +278,8 @@ export default function JobApplyStatus() {
                     </div>
                   </div>
                   
-                  {/* 취소 버튼 (검토중 상태일 때만 표시) */}
-                  {app.applicationStatus === 'pending' && (
+                  {/* 취소 버튼 (서류 검토중 · 보류일 때만) */}
+                  {canCancelApplication(app.applicationStatus) && (
                     <div className="mt-4 flex justify-end">
                       <Button
                         variant="danger"

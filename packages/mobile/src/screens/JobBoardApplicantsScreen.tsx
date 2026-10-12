@@ -504,7 +504,9 @@ export function JobBoardApplicantsScreen({
                           styles.statusBadgeSmall,
                           {
                             backgroundColor:
-                              app.applicationStatus === 'pending'
+                              app.applicationStatus === 'hold'
+                                ? '#ffedd5'
+                                : app.applicationStatus === 'pending'
                                 ? '#dbeafe'
                                 : app.applicationStatus === 'accepted'
                                 ? '#d1fae5'
@@ -517,7 +519,9 @@ export function JobBoardApplicantsScreen({
                             styles.statusBadgeSmallText,
                             {
                               color:
-                                app.applicationStatus === 'pending'
+                                app.applicationStatus === 'hold'
+                                  ? '#c2410c'
+                                  : app.applicationStatus === 'pending'
                                   ? '#1e40af'
                                   : app.applicationStatus === 'accepted'
                                   ? '#047857'
@@ -525,7 +529,9 @@ export function JobBoardApplicantsScreen({
                             },
                           ]}
                         >
-                          {app.applicationStatus === 'pending'
+                          {app.applicationStatus === 'hold'
+                            ? '보류'
+                            : app.applicationStatus === 'pending'
                             ? '검토중'
                             : app.applicationStatus === 'accepted'
                             ? '합격'
@@ -551,7 +557,9 @@ export function JobBoardApplicantsScreen({
                             styles.statusBadgeSmall,
                             {
                               backgroundColor:
-                                app.interviewStatus === 'pending'
+                                app.interviewStatus === 'hold'
+                                  ? '#ffedd5'
+                                  : app.interviewStatus === 'pending'
                                   ? '#fef3c7'
                                   : app.interviewStatus === 'complete'
                                   ? '#f3e8ff'
@@ -566,7 +574,9 @@ export function JobBoardApplicantsScreen({
                               styles.statusBadgeSmallText,
                               {
                                 color:
-                                  app.interviewStatus === 'pending'
+                                  app.interviewStatus === 'hold'
+                                    ? '#c2410c'
+                                    : app.interviewStatus === 'pending'
                                     ? '#92400e'
                                     : app.interviewStatus === 'complete'
                                     ? '#7e22ce'
@@ -576,7 +586,9 @@ export function JobBoardApplicantsScreen({
                               },
                             ]}
                           >
-                            {app.interviewStatus === 'pending'
+                            {app.interviewStatus === 'hold'
+                              ? '보류'
+                              : app.interviewStatus === 'pending'
                               ? '예정'
                               : app.interviewStatus === 'complete'
                               ? '완료'
@@ -615,6 +627,8 @@ export function JobBoardApplicantsScreen({
                               backgroundColor:
                                 app.finalStatus === 'finalAccepted' 
                                   ? '#e0e7ff' 
+                                  : app.finalStatus === 'finalHold'
+                                  ? '#ffedd5'
                                   : '#fee2e2',
                             },
                           ]}
@@ -625,6 +639,8 @@ export function JobBoardApplicantsScreen({
                               {
                                 color: app.finalStatus === 'finalAccepted' 
                                   ? '#4338ca' 
+                                  : app.finalStatus === 'finalHold'
+                                  ? '#c2410c'
                                   : '#dc2626',
                               },
                             ]}
@@ -633,6 +649,8 @@ export function JobBoardApplicantsScreen({
                               ? '합격' 
                               : app.finalStatus === 'finalAbsent'
                               ? '불참'
+                              : app.finalStatus === 'finalHold'
+                              ? '보류'
                               : '불합격'}
                           </Text>
                         </View>

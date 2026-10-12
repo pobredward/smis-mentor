@@ -80,15 +80,18 @@ export function SharedApplicantsClient({ token }: Props) {
     if (app.finalStatus === 'finalAccepted') return '최종 합격';
     if (app.finalStatus === 'finalRejected') return '최종 불합격';
     if (app.finalStatus === 'finalAbsent') return '최종 불참';
+    if (app.finalStatus === 'finalHold') return '최종 보류';
     
     if (app.interviewStatus === 'passed') return '면접 합격';
     if (app.interviewStatus === 'failed') return '면접 불합격';
     if (app.interviewStatus === 'absent') return '면접 불참';
+    if (app.interviewStatus === 'hold') return '면접 보류';
     if (app.interviewStatus === 'complete') return '면접 완료';
     if (app.interviewStatus === 'pending') return '면접 대기';
     
     if (app.applicationStatus === 'accepted') return '서류 합격';
     if (app.applicationStatus === 'rejected') return '서류 불합격';
+    if (app.applicationStatus === 'hold') return '서류 보류';
     
     return '서류 검토 중';
   };
@@ -97,6 +100,7 @@ export function SharedApplicantsClient({ token }: Props) {
     if (app.finalStatus === 'finalAccepted') return 'text-green-600 bg-green-50';
     if (app.finalStatus === 'finalRejected') return 'text-red-600 bg-red-50';
     if (app.finalStatus === 'finalAbsent') return 'text-gray-600 bg-gray-50';
+    if (app.finalStatus === 'finalHold' || (app.interviewStatus === 'hold' && !app.finalStatus) || app.applicationStatus === 'hold') return 'text-orange-600 bg-orange-50';
     
     if (app.interviewStatus === 'passed') return 'text-blue-600 bg-blue-50';
     if (app.interviewStatus === 'failed') return 'text-orange-600 bg-orange-50';

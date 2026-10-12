@@ -195,9 +195,10 @@ export type JobBoardWithId = JobBoard & { id: string };
 export interface ApplicationHistory {
   applicationHistoryId: string;
   applicationDate: Timestamp;
-  applicationStatus: 'pending' | 'accepted' | 'rejected';
-  interviewStatus?: 'pending' | 'complete' | 'passed' | 'failed' | 'absent';
-  finalStatus?: 'finalAccepted' | 'finalRejected' | 'finalAbsent';
+  /** 'hold' = 보류 (TO 대기) */
+  applicationStatus: 'pending' | 'accepted' | 'rejected' | 'hold';
+  interviewStatus?: 'pending' | 'complete' | 'passed' | 'failed' | 'absent' | 'hold';
+  finalStatus?: 'finalAccepted' | 'finalRejected' | 'finalAbsent' | 'finalHold';
   refJobBoardId: string;
   refUserId: string;
   interviewDate?: Timestamp;
