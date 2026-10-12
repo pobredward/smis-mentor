@@ -21,6 +21,14 @@ GIT_OPTIONAL_LOCKS=0 git diff --stat
 rm -f .git/index.lock      # 실행 중인 git 프로세스가 없을 때만
 ```
 
+## 브랜치 — main 하나만
+
+- smis-mentor.com · 옛 앱(SMIS Mentor) 은 `main` 에서 배포된다. 작업 · 커밋은 모두 `main` 에 한다.
+- 새 앱 SMIS CAMP 는 별도 저장소(`pobredward/smiscamp`)다. SMIS CAMP 로 이관하기 전까지 옛 사이트 · 앱에 필요한 수정은 그때그때 이 저장소 `main` 에 반영한다.
+- 작업을 시작하기 전에 `git branch --show-current` 가 `main` 인지 확인한다.
+  (예전 이관 작업용 `smiscamp` 브랜치는 2026-10-12 에 지웠다 — 그 내용은 smiscamp 저장소와 `main` 에 들어 있다.)
+- Firebase 프로젝트는 `smis-mentor` (`.firebaserc` 기본값). SMIS CAMP 의 `smiscamp-bacba` 와 데이터 · 규칙이 따로다.
+
 ## 캠프 그룹 순서 (공통)
 - 그룹 순서는 `packages/shared/src/types/campTimetable.ts` 의 `CAMP_GROUP_ORDER` 한 곳에서 관리한다: Junior → Middle → Senior → Spring → Summer → Autumn → Winter → (그 밖) → Common → 단기1~4 → 매니저.
 - 정렬은 `compareGroupNames(a, b)` 또는 `groupRank(g)` 를 쓴다 (매니저를 맨 위로 두는 명단은 `{ managerFirst: true }`). 화면마다 순서 배열을 새로 만들지 않는다.
