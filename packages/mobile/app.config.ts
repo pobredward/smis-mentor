@@ -414,7 +414,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name: 'SMIS Mentor',
     slug: 'smis-mentor',
-    version: '1.9.0',
+    // 종료 안내 코드푸시: 스토어에 나가 있는 앱 버전마다 OTA_APP_VERSION=1.8.0 처럼 바꿔 가며 eas update 한다 (runtimeVersion = appVersion)
+    version: process.env.OTA_APP_VERSION || '1.9.0',
     // 코드푸시(EAS Update) — 같은 앱 버전의 스토어 빌드에만 JS 업데이트를 보낸다.
     // 네이티브 변경(라이브러리·권한·app.config 네이티브 설정)이 있으면 버전을 올려 새로 빌드할 것.
     runtimeVersion: { policy: 'appVersion' },
