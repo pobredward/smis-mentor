@@ -1,81 +1,108 @@
 /**
- * Next.js 16 proxy (구 middleware) — AI 에이전트용 콘텐츠 협상
+ * smis-mentor.com 운영 종료 (2026-10-15) — 어떤 주소로 들어와도 SMIS CAMP 안내만 보여 준다.
  *
- * AI 에이전트(Claude, ChatGPT, Perplexity 등)의 fetch 도구나 `Accept: text/markdown` 요청이
- * 일반 페이지 URL(예: https://smis-mentor.com/)을 열면, 브라우저용 HTML(대부분 클라이언트 렌더링이라
- * 본문이 비어 있음) 대신 같은 페이지의 마크다운(/api/md/...)을 돌려준다.
- * → "링크만 줘도" 루트에서 llms.txt 안내와 하위 페이지 링크까지 바로 읽힌다.
+ *  - 화면 · 마크다운 미러(.md) · llms.txt · sitemap · robots · MCP · API 전부 막는다.
+ *    통과시키는 것은 Next 빌드 파일(_next/static · _next/image)과 아이콘뿐.
+ *  - API(/api/*) 는 410 JSON. 나머지는 안내 화면 (옛 앱 웹뷰에서도 보이게 200 + noindex).
+ *  - 데이터는 SMIS CAMP(Firebase smiscamp-bacba)로 옮겼다. 새 서비스: https://smiscamp.com (저장소 pobredward/smiscamp)
  *
- * 사람(브라우저)·검색엔진 요청은 건드리지 않는다. Cloudflare "Markdown for Agents" 와 같은 방식.
- *
- * 점검 모드 (이관 · 리허설) — Vercel 환경 변수
- *   MAINTENANCE_MODE=1    화면만 막는다 (API 는 그대로 — 앱 시험용)
- *   MAINTENANCE_MODE=all  화면 + API 모두 막는다 (전환 당일 옛 사이트: 복사하는 동안 쓰기 금지)
- *   MAINTENANCE_BYPASS_TOKEN=<임의 문자열>  주소 뒤에 ?bypass=<값> 을 붙여 한 번 열면 그 브라우저는 14일 동안 통과
- *   MAINTENANCE_MESSAGE   안내 문구 (없으면 기본 문구)
+ * 예전 proxy(AI 에이전트 마크다운 협상 · 점검 모드)는 git 기록에 있다.
  */
 import { NextRequest, NextResponse } from 'next/server';
 
-const AI_USER_AGENTS =
-  /(Claude-User|ClaudeBot|Claude-SearchBot|anthropic-ai|ChatGPT-User|GPTBot|OAI-SearchBot|PerplexityBot|Perplexity-User|cohere-ai|Applebot-Extended|meta-externalagent|Bytespider|DuckAssistBot|YouBot|MistralAI-User)/i;
+const NEW_URL = 'https://smiscamp.com';
+const API_MESSAGE =
+  'SMIS Mentor 서비스가 종료되었습니다. https://smiscamp.com 을 이용해 주세요. / SMIS Mentor has closed. Please use https://smiscamp.com.';
 
-/** 마크다운 버전이 존재하는 페이지 경로만 협상 대상 */
-const NEGOTIABLE_PATH =
-  /^\/(|job-board(\/[^/]+)?|recruitment(\/reviews)?|privacy-policy|terms-of-service|sign-in|sign-up|profile|camp(\/.*)?|admin(\/.*)?)$/;
+const CLOSED_HTML = `<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="color-scheme" content="light dark">
+<title>SMIS CAMP로 옮겼습니다</title>
+<link rel="icon" href="/favicon.ico">
+<style>
+:root{--brand:#2E26D3;--brand-soft:#EEEDFF;--bg:#F5F6FB;--card:#FFFFFF;--text:#14142B;--sub:#555872;--line:#E6E7F0}
+@media (prefers-color-scheme:dark){:root{--brand:#7C75FF;--brand-soft:#232046;--bg:#0E0E16;--card:#17172A;--text:#F2F2F8;--sub:#A6A8C0;--line:#2A2A40}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{min-height:100vh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Pretendard','Noto Sans KR','Malgun Gothic',system-ui,sans-serif;-webkit-font-smoothing:antialiased;word-break:keep-all;line-height:1.6;display:flex;justify-content:center;padding:40px 16px calc(40px + env(safe-area-inset-bottom))}
+main{width:100%;max-width:520px}
+.mark{font-weight:900;letter-spacing:.04em;color:var(--brand);font-size:15px;margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:28px 24px}
+.badge{display:inline-block;font-size:12px;font-weight:700;color:var(--brand);background:var(--brand-soft);border-radius:999px;padding:4px 10px;margin-bottom:14px}
+h1{font-size:23px;line-height:1.35;letter-spacing:-.02em;margin:0 0 12px}
+p{margin:0 0 10px;font-size:15px;color:var(--sub)}
+p strong{color:var(--text)}
+.btn{display:block;text-align:center;margin:22px 0 4px;background:var(--brand);color:#fff;text-decoration:none;font-weight:700;font-size:16px;border-radius:14px;padding:15px 16px}
+.app{margin-top:22px;padding-top:20px;border-top:1px solid var(--line)}
+h2{font-size:16px;margin:0 0 8px;color:var(--text)}
+ul{margin:0;padding-left:18px}
+li{font-size:14.5px;color:var(--sub);margin-bottom:6px}
+li strong{color:var(--text)}
+.en{margin-top:16px}
+.en h1{font-size:19px}
+.en p,.en li{font-size:14px}
+.foot{font-size:12.5px;color:var(--sub);text-align:center;margin-top:20px}
+.foot a{color:inherit}
+</style>
+</head>
+<body>
+<main>
+<p class="mark">SMIS CAMP</p>
 
-function prefersMarkdown(req: NextRequest): boolean {
-  if (req.method !== 'GET') return false;
-  const accept = req.headers.get('accept') ?? '';
-  // 브라우저는 text/markdown 을 보내지 않는다. 명시적으로 원하면 협상.
-  if (/text\/markdown/i.test(accept)) return true;
-  const ua = req.headers.get('user-agent') ?? '';
-  return AI_USER_AGENTS.test(ua);
-}
+<section class="card" lang="ko">
+<span class="badge">서비스 종료 안내</span>
+<h1>SMIS Mentor는<br>SMIS CAMP로 옮겼습니다</h1>
+<p>smis-mentor.com은 2026년 10월 15일부로 운영을 마쳤습니다. 앞으로는 <strong>smiscamp.com</strong>에서 이용해 주세요.</p>
+<p>지원서, 캠프 기록, 수업자료, 채팅 등 지금까지의 정보는 모두 옮겨 두었습니다. 쓰시던 계정 그대로 로그인하시면 됩니다.</p>
+<a class="btn" href="https://smiscamp.com">smiscamp.com으로 이동</a>
+<div class="app">
+<h2>📱 앱 안내</h2>
+<ul>
+<li>새 <strong>SMIS CAMP 앱</strong>은 출시를 준비하고 있습니다. 출시되면 App Store와 Google Play에서 ‘SMIS CAMP’를 검색해 바로 내려받으실 수 있습니다.</li>
+<li><strong>기존 SMIS Mentor 앱은 이제 사용하지 말아 주세요.</strong> 기존 앱에서 입력한 내용은 새 서비스에 반영되지 않습니다.</li>
+<li>새 앱이 나오기 전까지는 smiscamp.com(웹)에서 이용해 주세요.</li>
+</ul>
+</div>
+</section>
 
-const MAINTENANCE = process.env.MAINTENANCE_MODE ?? '';
-const BYPASS = process.env.MAINTENANCE_BYPASS_TOKEN ?? '';
-const BYPASS_COOKIE = 'smis_maintenance_bypass';
-const escapeHtml = (v: string) => v.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+<section class="card en" lang="en">
+<h1>SMIS Mentor has moved to SMIS CAMP</h1>
+<p>smis-mentor.com closed on October 15, 2026. Please use <strong>smiscamp.com</strong> from now on. Your applications, camp records, lesson materials and chats have all been moved — just sign in with the same account.</p>
+<ul>
+<li>The new <strong>SMIS CAMP app</strong> is coming soon. Search “SMIS CAMP” on the App Store or Google Play and download it as soon as it’s released.</li>
+<li><strong>Please stop using the old SMIS Mentor app.</strong> Anything entered there will not carry over.</li>
+<li>Until the new app is out, please use smiscamp.com in your browser.</li>
+</ul>
+<a class="btn" href="https://smiscamp.com">Go to smiscamp.com</a>
+</section>
 
-function maintenance(req: NextRequest): NextResponse | null {
-  if (MAINTENANCE !== '1' && MAINTENANCE !== 'all') return null;
-  const { pathname, searchParams } = req.nextUrl;
-  if (BYPASS && searchParams.get('bypass') === BYPASS) {
-    const url = req.nextUrl.clone();
-    url.searchParams.delete('bypass');
-    const res = NextResponse.redirect(url);
-    res.cookies.set(BYPASS_COOKIE, BYPASS, { httpOnly: true, secure: true, sameSite: 'lax', maxAge: 60 * 60 * 24 * 14, path: '/' });
-    return res;
-  }
-  if (BYPASS && req.cookies.get(BYPASS_COOKIE)?.value === BYPASS) return null;
-  const isApi = pathname.startsWith('/api/');
-  if (isApi && MAINTENANCE !== 'all') return null;
-  const message = process.env.MAINTENANCE_MESSAGE || '서비스 점검 중입니다. 잠시 후 다시 접속해주세요.';
-  if (isApi) {
-    return NextResponse.json({ error: message, maintenance: true }, { status: 503, headers: { 'Retry-After': '3600' } });
-  }
-  const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>점검 중 · SMIS CAMP</title>
-<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:system-ui,-apple-system,'Apple SD Gothic Neo',sans-serif;background:#f8fafc;color:#0f172a}main{max-width:420px;padding:32px 24px;text-align:center}h1{font-size:22px;margin:0 0 12px}p{font-size:15px;line-height:1.6;color:#475569;margin:0}</style></head>
-<body><main><h1>SMIS CAMP</h1><p>${escapeHtml(message)}</p></main></body></html>`;
-  return new NextResponse(html, { status: 503, headers: { 'content-type': 'text/html; charset=utf-8', 'Retry-After': '3600' } });
-}
+<p class="foot">(주)에스엠아이에스 · <a href="https://smiscamp.com">smiscamp.com</a></p>
+</main>
+</body>
+</html>`;
 
 export default function proxy(req: NextRequest) {
-  const blocked = maintenance(req);
-  if (blocked) return blocked;
-  const { pathname, search } = req.nextUrl;
-  if (!NEGOTIABLE_PATH.test(pathname) || !prefersMarkdown(req)) return NextResponse.next();
-
-  const target = req.nextUrl.clone();
-  target.pathname = `/api/md${pathname === '/' ? '/index' : pathname}`;
-  target.search = search;
-
-  const headers = new Headers(req.headers);
-  headers.set('x-smis-md-negotiated', '1');
-  return NextResponse.rewrite(target, { request: { headers } });
+  if (req.nextUrl.pathname.startsWith('/api/')) {
+    return NextResponse.json(
+      { error: API_MESSAGE, closed: true, movedTo: NEW_URL },
+      { status: 410, headers: { 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' } },
+    );
+  }
+  return new NextResponse(CLOSED_HTML, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      'Cache-Control': 'public, max-age=0, s-maxage=300',
+      'X-Robots-Tag': 'noindex, nofollow',
+    },
+  });
 }
 
 export const config = {
-  // 정적 파일 · Next 내부 경로 · 앱 링크 파일 제외 (API 는 점검 모드 때문에 포함 — 마크다운 협상은 페이지 경로만 본다)
-  matcher: ['/((?!_next|monitoring|\\.well-known|.*\\.[a-zA-Z0-9]+$).*)'],
+  // 모든 주소 — Next 빌드 파일과 아이콘만 빼고
+  matcher: ['/((?!_next/static|_next/image|favicon|apple-icon|android-icon|ms-icon).*)'],
 };
