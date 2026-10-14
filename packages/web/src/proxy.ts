@@ -37,6 +37,8 @@ h1{font-size:23px;line-height:1.35;letter-spacing:-.02em;margin:0 0 12px}
 p{margin:0 0 10px;font-size:15px;color:var(--sub)}
 p strong{color:var(--text)}
 .btn{display:block;text-align:center;margin:22px 0 4px;background:var(--brand);color:#fff;text-decoration:none;font-weight:700;font-size:16px;border-radius:14px;padding:15px 16px}
+.btn.ghost{background:transparent;color:var(--brand);border:1.5px solid var(--brand);margin-top:12px;padding:13.5px 16px}
+.app .btn.ghost{margin-top:16px}
 .app{margin-top:22px;padding-top:20px;border-top:1px solid var(--line)}
 h2{font-size:16px;margin:0 0 8px;color:var(--text)}
 ul{margin:0;padding-left:18px}
@@ -62,10 +64,11 @@ li strong{color:var(--text)}
 <div class="app">
 <h2>📱 앱 안내</h2>
 <ul>
-<li>새 <strong>SMIS CAMP 앱</strong>은 출시를 준비하고 있습니다. 출시되면 App Store와 Google Play에서 ‘SMIS CAMP’를 검색해 바로 내려받으실 수 있습니다.</li>
+<li><strong>아이폰</strong>은 지금 App Store에서 새 <strong>SMIS CAMP 앱</strong>을 내려받으실 수 있습니다.</li>
+<li><strong>안드로이드</strong>는 Google Play 출시를 준비하고 있습니다. 출시되면 ‘SMIS CAMP’를 검색해 바로 내려받으실 수 있고, 그전까지는 smiscamp.com(웹)에서 이용해 주세요.</li>
 <li><strong>기존 SMIS Mentor 앱은 이제 사용하지 말아 주세요.</strong> 기존 앱에서 입력한 내용은 새 서비스에 반영되지 않습니다.</li>
-<li>새 앱이 나오기 전까지는 smiscamp.com(웹)에서 이용해 주세요.</li>
 </ul>
+<a class="btn ghost" href="https://apps.apple.com/kr/app/smis-camp/id6819282081">App Store에서 SMIS CAMP 받기</a>
 </div>
 </section>
 
@@ -73,11 +76,12 @@ li strong{color:var(--text)}
 <h1>SMIS Mentor has moved to SMIS CAMP</h1>
 <p>smis-mentor.com closed on October 15, 2026. Please use <strong>smiscamp.com</strong> from now on. Your applications, camp records, lesson materials and chats have all been moved — just sign in with the same account.</p>
 <ul>
-<li>The new <strong>SMIS CAMP app</strong> is coming soon. Search “SMIS CAMP” on the App Store or Google Play and download it as soon as it’s released.</li>
+<li><strong>iPhone:</strong> the new <strong>SMIS CAMP app</strong> is available on the App Store now.</li>
+<li><strong>Android:</strong> coming soon to Google Play — search “SMIS CAMP” once it’s released. Until then, please use smiscamp.com in your browser.</li>
 <li><strong>Please stop using the old SMIS Mentor app.</strong> Anything entered there will not carry over.</li>
-<li>Until the new app is out, please use smiscamp.com in your browser.</li>
 </ul>
 <a class="btn" href="https://smiscamp.com">Go to smiscamp.com</a>
+<a class="btn ghost" href="https://apps.apple.com/kr/app/smis-camp/id6819282081">Get SMIS CAMP on the App Store</a>
 </section>
 
 <p class="foot">(주)에스엠아이에스 · <a href="https://smiscamp.com">smiscamp.com</a></p>
