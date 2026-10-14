@@ -3,7 +3,7 @@ import Sentry from './sentry.config';
 import './src/services/locationSharingService';
 import React, { useCallback, useEffect, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { StatusBar } from 'expo-status-bar';
+import { StatusBar } from 'expo-status-bar'; 
 import * as SplashScreen from 'expo-splash-screen';
 import Constants from 'expo-constants';
 import { RootNavigator } from './src/navigation';
